@@ -211,6 +211,16 @@ pub struct Entry {
     pub summary: Summary,
     pub reading: Option<Reading>,
     pub quotes: bool,
+    pub mine: bool,
+}
+
+impl Entry {
+    pub fn sender_shown(&self, sender: &Address) -> String {
+        match self.mine {
+            true => tr!(context = "sender", "You"),
+            false => sender_name(sender),
+        }
+    }
 }
 
 pub struct Thread {
@@ -540,8 +550,12 @@ fn header(
     let id = entry.summary.id;
     let top = writer.y;
     let envelope = &reading.content.envelope;
-    let shown = sender_name(&envelope.sender());
-    avatar(writer, &shown, Rect::new(MARGIN, top, AVATAR, AVATAR));
+    let shown = entry.sender_shown(&envelope.sender());
+    avatar(
+        writer,
+        &sender_name(&envelope.sender()),
+        Rect::new(MARGIN, top, AVATAR, AVATAR),
+    );
     let text_x = MARGIN + AVATAR + AVATAR_GAP;
     let date = envelope
         .date
@@ -623,13 +637,14 @@ fn header(
     writer.y += SECTION_GAP;
 }
 
-fn collapsed(writer: &mut Writer<'_>, summary: &Summary, clock: &Clock<'_>) {
+fn collapsed(writer: &mut Writer<'_>, entry: &Entry, clock: &Clock<'_>) {
     let palette = *writer.palette;
     let top = writer.y;
-    let shown = sender_name(&summary.sender);
+    let summary = &entry.summary;
+    let shown = entry.sender_shown(&summary.sender);
     avatar(
         writer,
-        &shown,
+        &sender_name(&summary.sender),
         Rect::new(MARGIN, top, SMALL_AVATAR, SMALL_AVATAR),
     );
     let text_x = MARGIN + SMALL_AVATAR + AVATAR_GAP;
@@ -1023,7 +1038,7 @@ pub fn lay_out(
         match &entry.reading {
             Some(reading) => expanded(&mut writer, entry, reading, many, &clock),
             None => {
-                collapsed(&mut writer, &entry.summary, &clock);
+                collapsed(&mut writer, entry, &clock);
                 writer.y += SECTION_GAP;
             }
         }

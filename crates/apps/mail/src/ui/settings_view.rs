@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::os::fd::BorrowedFd;
 use std::path::PathBuf;
 use std::rc::Rc;
+use std::sync::atomic::AtomicBool;
 use std::time::Instant;
 
 use bande_l10n::{Text, text, tr, trn};
@@ -19,7 +20,7 @@ use bande_app::View;
 use bande_app_settings::{Stored, settings_folder};
 use bande_keyring::Keyring;
 use bande_toolkit::ui::{
-    Alert, Axis, Button, Cell, Column, Context, Event, Form, FormLine, FreeLayout,
+    Alert, Axis, BUTTON_HEIGHT, Button, Cell, Column, Context, Event, Form, FormLine, FreeLayout,
     Heading as TableHeading, Label, PopUpButton, Row as TableRow, ScrollView, Stack, Table,
     TextField, TextView, Toggle, Ui, Widget, WidgetId,
 };
@@ -29,6 +30,8 @@ use bande_toolkit::{
 
 pub const SETTINGS_SIZE: (u32, u32) = (780, 640);
 const SIDEBAR_WIDTH: f32 = 180.0;
+const ADD_ACCOUNT_FOOT: f32 = 48.0;
+const ADD_ACCOUNT_INSET: f32 = 12.0;
 const SIGNATURE_LINES: u16 = 4;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -48,8 +51,6 @@ const PAGES: [Page; 5] = [
     Page::Privacy,
     Page::Rules,
 ];
-
-const ADD_ACCOUNT: &str = "add-account";
 
 impl Page {
     fn title(self) -> String {
@@ -85,6 +86,7 @@ impl Page {
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Signal {
     Page(String),
+    AddAccount,
     Settings,
     Identity,
     Enabled(bool),
@@ -271,6 +273,8 @@ pub struct SettingsView {
     ui: Ui,
     host: WidgetId,
     sidebar: WidgetId,
+    add_account: WidgetId,
+    notes: Option<Vec<AccountId>>,
     content: WidgetId,
     page: Page,
     titled: Option<String>,
@@ -278,7 +282,6 @@ pub struct SettingsView {
     folder: Option<PathBuf>,
     store: Option<Store>,
     accounts: Vec<Account>,
-    account: usize,
     status: Option<(String, bool)>,
     checking: Option<AccountId>,
     store_path: Option<PathBuf>,
@@ -329,6 +332,13 @@ impl SettingsView {
         let mut host = FreeLayout::new();
         let host_id = Widget::id(&host);
         let sidebar = host.insert(sidebar, Rect::default());
+        let add = Rc::clone(&state);
+        let add_account = host.insert(
+            Button::new(&tr!("Add Account…"), move || {
+                add.borrow_mut().signals.push(Signal::AddAccount);
+            }),
+            Rect::default(),
+        );
         let content = host.insert(Label::new(""), Rect::default());
         let mut ui = Ui::new(Box::new(host), Context::new(text, appearance.palette()));
         ui.set_appearance(appearance);
@@ -345,6 +355,8 @@ impl SettingsView {
             ui,
             host: host_id,
             sidebar,
+            add_account,
+            notes: None,
             content,
             page: Page::General,
             titled: None,
@@ -352,7 +364,6 @@ impl SettingsView {
             folder,
             accounts: Vec::new(),
             store,
-            account: 0,
             status: None,
             checking: None,
             store_path,
@@ -366,6 +377,7 @@ impl SettingsView {
             identity: Identity::default(),
         };
         view.refresh_keys();
+        view.load_notes();
         view.load_accounts();
         view.refresh_sidebar();
         view.rebuild();
@@ -383,6 +395,13 @@ impl SettingsView {
             .ok()
     }
 
+    fn load_notes(&mut self) {
+        self.notes = bande_xdg::is_installed("org.bande.Notes").then(|| {
+            self.read("the Notes accounts", Store::notes)
+                .unwrap_or_default()
+        });
+    }
+
     fn load_accounts(&mut self) -> bool {
         let accounts = self
             .read("the accounts", Store::accounts)
@@ -391,7 +410,7 @@ impl SettingsView {
             return false;
         }
         self.accounts = accounts;
-        self.choose_account(self.account.min(self.accounts.len().saturating_sub(1)));
+        self.choose_account();
         true
     }
 
@@ -409,7 +428,7 @@ impl SettingsView {
     }
 
     fn save_keys(&mut self) {
-        let Some(account) = self.accounts.get(self.account) else {
+        let Some(account) = self.current() else {
             return;
         };
         let saved = self
@@ -513,7 +532,7 @@ impl SettingsView {
     }
 
     fn generate_key(&mut self) {
-        let Some(account) = self.accounts.get(self.account) else {
+        let Some(account) = self.current() else {
             return;
         };
         let user_id = crate::message::Address::from(account).full();
@@ -574,8 +593,19 @@ impl SettingsView {
         });
     }
 
-    fn choose_account(&mut self, index: usize) {
-        self.account = index;
+    fn account_index(&self) -> Option<usize> {
+        match self.page {
+            Page::Account(id) => self.accounts.iter().position(|account| account.id == id),
+            _ => None,
+        }
+    }
+
+    fn current(&self) -> Option<&Account> {
+        self.accounts.get(self.account_index()?)
+    }
+
+    fn choose_account(&mut self) {
+        let index = self.account_index().unwrap_or(usize::MAX);
         self.status = None;
         self.identity = self
             .accounts
@@ -613,10 +643,6 @@ impl SettingsView {
                 vec![Cell::new(account.label())],
             )
         }));
-        rows.push(TableRow::new(
-            ADD_ACCOUNT,
-            vec![Cell::new(tr!("Add Account…"))],
-        ));
         if let Page::Account(id) = self.page
             && !self.accounts.iter().any(|account| account.id == id)
         {
@@ -631,22 +657,12 @@ impl SettingsView {
     }
 
     fn show_page(&mut self, key: &str) {
-        if key == ADD_ACCOUNT {
-            announce(Change::AddAccount);
-            let selected = self.page.key();
-            if let Some(sidebar) = self.ui.widget_as::<Table>(self.sidebar) {
-                sidebar.select(&[selected]);
-            }
-            return;
-        }
         let Some(page) = Page::from_key(key).filter(|page| *page != self.page) else {
             return;
         };
         self.page = page;
-        if let Page::Account(id) = page
-            && let Some(index) = self.accounts.iter().position(|account| account.id == id)
-        {
-            self.choose_account(index);
+        if let Page::Account(_) = page {
+            self.choose_account();
         }
         self.rebuild();
     }
@@ -814,7 +830,7 @@ impl SettingsView {
             .chain([
                 heading(text!("Links")),
                 note(text!("When a link shows one address and leads to another, Mail asks before opening it.")),
-                note(text!("Mail connects only to your mail servers, and fetches pictures and keys only when you ask for them.")),
+                note(text!("Mail connects only to your mail servers, and fetches pictures and keys only when you ask for them or allow them above.")),
                 heading(text!("Security")),
                 row(
                     text!("Find decrypted messages in search"),
@@ -1159,7 +1175,7 @@ impl SettingsView {
     }
 
     fn account_page(&self) -> Form {
-        let Some(account) = self.accounts.get(self.account) else {
+        let Some(account) = self.current() else {
             return Form::new(&self.page_title(), Vec::new());
         };
         let editing = self.state.borrow().editing.clone();
@@ -1203,10 +1219,8 @@ impl SettingsView {
             row(text!("Full name"), name),
             row(text!("Email address"), Label::new(&account.email)),
         ];
-        if bande_xdg::is_installed("org.bande.Notes") {
-            let used = self
-                .read("the Notes accounts", Store::notes)
-                .is_some_and(|used| used.contains(&account.id));
+        if let Some(notes) = &self.notes {
+            let used = notes.contains(&account.id);
             let state = Rc::clone(&self.state);
             lines.push(row(
                 text!("Also use this account for Notes"),
@@ -1303,8 +1317,11 @@ impl SettingsView {
 
     fn save_identity(&mut self) {
         let editing = self.state.borrow().editing.clone();
-        let (Some(store), Some(account)) = (&self.store, self.accounts.get_mut(self.account))
-        else {
+        let (Some(store), Some(account)) = (
+            &self.store,
+            self.account_index()
+                .and_then(|index| self.accounts.get_mut(index)),
+        ) else {
             return;
         };
         account.name = editing.name.trim().to_owned();
@@ -1318,7 +1335,7 @@ impl SettingsView {
 
     fn save_servers(&mut self) {
         let (Some(account), Some(mailroom), Some(store_path)) = (
-            self.accounts.get(self.account),
+            self.current().cloned(),
             &self.mailroom,
             self.store_path.clone(),
         ) else {
@@ -1351,7 +1368,13 @@ impl SettingsView {
                     .map_err(crate::error::Error::from)
                 {
                     Ok((Some(password), keyring)) => {
-                        match check(&servers, &password, &network, |_| {}) {
+                        match check(
+                            &servers,
+                            &password,
+                            &network,
+                            &AtomicBool::new(false),
+                            |_| {},
+                        ) {
                             Outcome::Ready(checked) => {
                                 let kept = Store::open(&store_path)
                                     .and_then(|store| store.update_servers(id, &servers))
@@ -1407,11 +1430,12 @@ impl SettingsView {
                 (tr!("The server settings were saved."), false)
             }
             Outcome::Failed(_, problem) => (problem.message(), true),
+            Outcome::Stopped => return,
         });
     }
 
     fn confirm_removal(&mut self) {
-        let Some(account) = self.accounts.get(self.account) else {
+        let Some(account) = self.current() else {
             return;
         };
         let (state, id) = (Rc::clone(&self.state), account.id);
@@ -1435,6 +1459,7 @@ impl SettingsView {
         for signal in signals {
             match signal {
                 Signal::Page(key) => self.show_page(&key),
+                Signal::AddAccount => announce(Change::AddAccount),
                 Signal::Settings => {
                     self.save_settings();
                     if !self.state.borrow().settings.index_decrypted
@@ -1449,17 +1474,25 @@ impl SettingsView {
                     self.refresh_sidebar();
                 }
                 Signal::Enabled(on) => {
-                    if let Some(account) = self.accounts.get_mut(self.account) {
+                    if let Some(account) = self
+                        .account_index()
+                        .and_then(|index| self.accounts.get_mut(index))
+                    {
                         account.enabled = on;
                     }
                     self.save_identity();
                 }
                 Signal::Notes(on) => {
-                    if let Some((store, account)) =
-                        self.store.as_ref().zip(self.accounts.get(self.account))
-                    {
-                        match store.set_notes(account.id, on) {
-                            Ok(()) => announce(Change::Accounts),
+                    if let Some((store, account)) = self.store.as_ref().zip(self.current()) {
+                        let id = account.id;
+                        match store.set_notes(id, on) {
+                            Ok(()) => {
+                                if let Some(notes) = &mut self.notes {
+                                    notes.retain(|known| *known != id);
+                                    notes.extend(on.then_some(id));
+                                }
+                                announce(Change::Accounts);
+                            }
                             Err(error) => {
                                 tracing::warn!("cannot change Notes for {}: {error}", account.email)
                             }
@@ -1552,7 +1585,7 @@ impl SettingsView {
                 }
                 Signal::GenerateKey => self.generate_key(),
                 Signal::Generate => {
-                    if let Some(account) = self.accounts.get(self.account) {
+                    if let Some(account) = self.current() {
                         let user_id = crate::message::Address::from(account).full();
                         self.in_background(move |gnupg| {
                             gnupg.generate(&user_id)?;
@@ -1586,8 +1619,7 @@ impl SettingsView {
                 Signal::ExportKey => {
                     let fingerprint = self.identity.openpgp.clone();
                     let email = self
-                        .accounts
-                        .get(self.account)
+                        .current()
                         .map(|account| account.email.clone())
                         .unwrap_or_default();
                     self.in_background(move |gnupg| {
@@ -1609,8 +1641,8 @@ impl SettingsView {
                 Signal::Remove(id) => {
                     announce(Change::Remove(id));
                     self.accounts.retain(|account| account.id != id);
-                    self.choose_account(0);
                     self.refresh_sidebar();
+                    self.choose_account();
                     rebuild = true;
                 }
             }
@@ -1623,11 +1655,18 @@ impl SettingsView {
 
     fn layout(&mut self, width: f32, height: f32) {
         let inset = SHEET_INSET as f32;
+        let foot = (height - ADD_ACCOUNT_FOOT).max(TOOLBAR_HEIGHT);
         let sidebar = Rect::new(
             0.0,
             TOOLBAR_HEIGHT,
             SIDEBAR_WIDTH,
-            (height - TOOLBAR_HEIGHT).max(0.0),
+            (foot - TOOLBAR_HEIGHT).max(0.0),
+        );
+        let add_account = Rect::new(
+            ADD_ACCOUNT_INSET,
+            foot + ((ADD_ACCOUNT_FOOT - BUTTON_HEIGHT) / 2.0).round(),
+            SIDEBAR_WIDTH - 2.0 * ADD_ACCOUNT_INSET,
+            BUTTON_HEIGHT,
         );
         let content = Rect::new(
             SIDEBAR_WIDTH,
@@ -1635,9 +1674,10 @@ impl SettingsView {
             (width - SIDEBAR_WIDTH - inset).max(0.0),
             (height - TOOLBAR_HEIGHT - inset).max(0.0),
         );
-        let (sidebar_id, content_id) = (self.sidebar, self.content);
+        let (sidebar_id, content_id, add_id) = (self.sidebar, self.content, self.add_account);
         if let Some(host) = self.ui.widget_as::<FreeLayout>(self.host) {
             host.set_frame(sidebar_id, sidebar);
+            host.set_frame(add_id, add_account);
             host.set_frame(content_id, content);
         }
     }
@@ -1692,6 +1732,7 @@ impl View for SettingsView {
         if !active {
             return;
         }
+        self.load_notes();
         let stored = self
             .folder
             .as_deref()

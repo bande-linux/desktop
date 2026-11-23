@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use bande_l10n::tr;
 
 use crate::imap::Role;
@@ -76,7 +78,11 @@ pub fn role_title(role: Role) -> String {
     }
 }
 
-pub fn rows(accounts: &[(Account, Vec<Mailbox>)], unread: impl Fn(&Scope) -> usize) -> Vec<Row> {
+pub fn rows(
+    accounts: &[(Account, Vec<Mailbox>)],
+    collapsed: &HashSet<AccountId>,
+    unread: impl Fn(&Scope) -> usize,
+) -> Vec<Row> {
     let mut rows = Vec::new();
     for role in UNIFIED {
         let present = accounts
@@ -108,6 +114,9 @@ pub fn rows(accounts: &[(Account, Vec<Mailbox>)], unread: impl Fn(&Scope) -> usi
     }
     for (account, mailboxes) in accounts {
         rows.push(Row::Heading(account.label().to_owned(), Some(account.id)));
+        if collapsed.contains(&account.id) {
+            continue;
+        }
         let mut ordered = mailboxes.iter().collect::<Vec<_>>();
         ordered.sort_by_key(|mailbox| {
             (

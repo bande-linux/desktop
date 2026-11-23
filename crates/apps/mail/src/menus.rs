@@ -4,8 +4,8 @@ use bande_mail::ui::{MailView, SHORTCUTS};
 
 fn item(message: Text, action: &str) -> Entry {
     let entry = Entry::item(&message.tr(), action);
-    match SHORTCUTS.iter().find(|(known, _)| *known == action) {
-        Some((_, shortcut)) => entry.shortcut(shortcut),
+    match SHORTCUTS.iter().find(|(known, ..)| *known == action) {
+        Some((_, shortcut, _)) => entry.shortcut(shortcut),
         None => entry,
     }
 }

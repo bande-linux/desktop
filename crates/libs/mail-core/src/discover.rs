@@ -1,4 +1,5 @@
 use std::net::{TcpStream, ToSocketAddrs};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use bande_discovery::domain_of;
@@ -121,7 +122,7 @@ fn from_services(domain: &str, email: &str, network: &Network) -> Option<Setting
                 .into_iter()
                 .next()
                 .map(|target| Server {
-                    host: target.host,
+                    host: target.host.trim_end_matches('.').to_ascii_lowercase(),
                     port: target.port,
                     security,
                 })
@@ -150,16 +151,19 @@ fn answers(host: &str, port: u16) -> bool {
         .is_some_and(|address| TcpStream::connect_timeout(&address, PROBE_TIMEOUT).is_ok())
 }
 
-fn guess(domain: &str, email: &str) -> Option<Settings> {
+fn guess(domain: &str, email: &str, going_on: &dyn Fn() -> bool) -> Option<Settings> {
     let probe = |candidates: &[(&str, u16, Security)]| {
-        candidates.iter().find_map(|(prefix, port, security)| {
-            let host = format!("{prefix}.{domain}");
-            answers(&host, *port).then_some(Server {
-                host,
-                port: *port,
-                security: *security,
+        candidates
+            .iter()
+            .take_while(|_| going_on())
+            .find_map(|(prefix, port, security)| {
+                let host = format!("{prefix}.{domain}");
+                answers(&host, *port).then_some(Server {
+                    host,
+                    port: *port,
+                    security: *security,
+                })
             })
-        })
     };
     let imap = probe(&[
         ("imap", 993, Security::Tls),
@@ -180,12 +184,17 @@ fn guess(domain: &str, email: &str) -> Option<Settings> {
     })
 }
 
-pub fn discover(email: &str, network: &Network) -> Option<(Settings, Source)> {
+pub fn discover(
+    email: &str,
+    network: &Network,
+    cancelled: &AtomicBool,
+) -> Option<(Settings, Source)> {
     let email = email.trim();
     let domain = domain_of(email)?;
     if let Some(found) = from_services(&domain, email, network) {
         return Some((found, Source::Services));
     }
+    let going_on = || !cancelled.load(Ordering::Relaxed);
     let published = [
         format!(
             "https://autoconfig.{domain}/mail/config-v1.1.xml?emailaddress={}",
@@ -195,9 +204,13 @@ pub fn discover(email: &str, network: &Network) -> Option<(Settings, Source)> {
     ];
     if let Some(found) = published
         .iter()
+        .take_while(|_| going_on())
         .find_map(|url| from_config(url, email, network))
     {
         return Some((found, Source::Domain));
     }
-    guess(&domain, email).map(|found| (found, Source::Guess))
+    going_on()
+        .then(|| guess(&domain, email, &going_on))
+        .flatten()
+        .map(|found| (found, Source::Guess))
 }

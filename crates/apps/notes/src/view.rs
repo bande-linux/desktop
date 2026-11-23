@@ -679,6 +679,8 @@ impl NotesView {
         let options = Options {
             icon: ICON,
             offer_notes: false,
+            server_settings: false,
+            ready_note: String::new(),
             taken: Vec::new(),
             network: self.network.clone(),
             reporter: Arc::new(move |report| {
@@ -732,8 +734,10 @@ impl NotesView {
                         .into_iter()
                         .find(|known| known.email.eq_ignore_ascii_case(&email))
                     {
-                        Some(known) => accounts::set_description(&mail, known.id, &description),
-                        None => Ok(()),
+                        Some(known) if !description.trim().is_empty() => {
+                            accounts::set_description(&mail, known.id, &description)
+                        }
+                        _ => Ok(()),
                     }
                 });
                 if let Err(error) = described {
@@ -741,7 +745,7 @@ impl NotesView {
                 }
             }
             Done::Renewed { email, password } => self.renew_password(&email, password),
-            Done::ServerSettings => self.present_setup(Mode::Address),
+            Done::ServerSettings => self.close_setup(),
         }
     }
 

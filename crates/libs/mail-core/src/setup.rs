@@ -1,3 +1,5 @@
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use bande_l10n::tr;
 
 use crate::discover::{Settings, Source};
@@ -65,6 +67,7 @@ pub enum Problem {
 pub enum Outcome {
     Ready(Settings),
     Failed(Settings, Problem),
+    Stopped,
 }
 
 impl Problem {
@@ -106,7 +109,7 @@ impl Problem {
                 server = server.clone()
             ),
             Self::NoPasswordSignIn(server) => tr!(
-                "{server} does not accept a password from mail apps. Your provider’s help may describe how to enable IMAP access.",
+                "{server} does not accept a password from mail apps. Your provider’s help may describe how to allow mail apps to sign in with a password.",
                 server = server.clone()
             ),
             Self::Server(server, detail) => tr!(
@@ -125,10 +128,10 @@ impl Problem {
     }
 }
 
-pub fn find(email: &str, network: &Network) -> Found {
+pub fn find(email: &str, network: &Network, cancelled: &AtomicBool) -> Found {
     Found {
         domain: bande_discovery::domain_of(email).unwrap_or_default(),
-        settings: crate::discover::discover(email, network),
+        settings: crate::discover::discover(email, network, cancelled),
     }
 }
 
@@ -142,6 +145,7 @@ pub fn check(
     settings: &Settings,
     password: &str,
     network: &Network,
+    cancelled: &AtomicBool,
     progress: impl Fn(Stage),
 ) -> Outcome {
     progress(Stage::Incoming);
@@ -154,6 +158,7 @@ pub fn check(
     };
     let problem = match imap() {
         Err(error) => Some(Problem::of(&settings.imap, error)),
+        Ok(()) if cancelled.load(Ordering::Relaxed) => return Outcome::Stopped,
         Ok(()) => {
             progress(Stage::Outgoing);
             smtp::verify(&settings.smtp, network, &settings.user, password)

@@ -24,7 +24,7 @@ pub fn list_date(seconds: i64, now: Timestamp, zone: &TimeZone, formats: &DateFo
 
 pub fn day_group(seconds: i64, now: Timestamp, zone: &TimeZone, formats: &DateFormats) -> String {
     let Ok(time) = Timestamp::from_second(seconds) else {
-        return String::new();
+        return tr!("Unknown Date");
     };
     let (day, today) = (
         time.to_zoned(zone.clone()).date(),
@@ -33,7 +33,9 @@ pub fn day_group(seconds: i64, now: Timestamp, zone: &TimeZone, formats: &DateFo
     match (today - day).get_days() {
         days if days <= 0 => tr!("Today"),
         1 => tr!("Yesterday"),
-        2..=6 => tr!("This Week"),
+        2..=6 if day.iso_week_date().week() == today.iso_week_date().week() => {
+            tr!("This Week")
+        }
         _ if day.year() == today.year() => formats.month_name(day.month()),
         _ => formats.month_title(day.first_of_month()),
     }

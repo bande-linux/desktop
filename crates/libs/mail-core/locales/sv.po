@@ -58,6 +58,9 @@ msgstr "Loggar in på {server}"
 msgid "Checking sending via {server}"
 msgstr "Kontrollerar sändning via {server}"
 
+msgid "{host}, port {port}, {security}"
+msgstr "{host}, port {port}, {security}"
+
 msgid "Incoming: {server}"
 msgstr "Inkommande: {server}"
 
@@ -124,8 +127,8 @@ msgstr "{server} erbjuder ingen krypterad anslutning. Välj TLS eller STARTTLS, 
 msgid "{server} did not accept the user name or password. Check both; some providers need a separate app password for mail apps."
 msgstr "{server} godtog inte användarnamnet eller lösenordet. Kontrollera båda. Vissa leverantörer kräver ett separat applösenord för e-postappar."
 
-msgid "{server} does not accept a password from mail apps. Your provider’s help may describe how to enable IMAP access."
-msgstr "{server} godtar inte lösenord från e-postprogram. Din leverantörs hjälp kan beskriva hur du slår på IMAP-åtkomst."
+msgid "{server} does not accept a password from mail apps. Your provider’s help may describe how to allow mail apps to sign in with a password."
+msgstr "{server} godtar inte lösenord från e-postprogram. Din leverantörs hjälp kan beskriva hur du låter e-postprogram logga in med lösenord."
 
 msgid "{server} answered with an error: {detail}. Check the server settings, or try again later."
 msgstr "{server} svarade med ett fel: {detail}. Kontrollera serverinställningarna eller försök igen senare."
@@ -229,8 +232,8 @@ msgstr "Ange de inställningar för IMAP och SMTP som din e-postleverantör ange
 msgid "Account Added"
 msgstr "Kontot har lagts till"
 
-msgid "{email} is ready. Mail is downloading your mail; you can start reading now."
-msgstr "{email} är klart. E-post hämtar din e-post; du kan börja läsa redan nu."
+msgid "{email} is ready."
+msgstr "{email} är klart."
 
 msgid "Enter Your Password"
 msgstr "Ange ditt lösenord"

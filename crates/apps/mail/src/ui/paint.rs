@@ -13,7 +13,7 @@ use crate::ui::toolbar::{
 };
 use crate::ui::view::{Hit, MailView, Pane, Panes, Quick, READER_MAX_WIDTH, TOOLBAR_HEIGHT};
 use bande_toolkit::Color;
-use bande_toolkit::ui::{BUTTON_HEIGHT, Key, Scroll, ScrollPhase, ScrollSource, Size};
+use bande_toolkit::ui::{BUTTON_HEIGHT, Key, Scroll, ScrollPhase, ScrollSource, Size, chevron};
 use bande_toolkit::{
     Elevation, Item, Paragraph, Point, Radius, Rect, Scene, Shape, TextAlign, TextRole, TextStyle,
 };
@@ -40,6 +40,7 @@ const DOT: f32 = 8.0;
 const ROW_INSET: f32 = 6.0;
 const BADGE_GAP: f32 = 10.0;
 const SMALL_SYMBOL: f32 = 13.0;
+const CHEVRON: f32 = 10.0;
 const LIST_HEADER_INSET: f32 = 14.0;
 const ACCOUNT_MARK: f32 = 3.0;
 const ACCOUNT_MARK_INSET: f32 = 2.0;
@@ -71,15 +72,22 @@ impl MailView {
     }
 
     fn sidebar_width(&self) -> f32 {
-        match self.panes() == Panes::Three || self.overlay {
+        match self.panes() == Panes::Three || self.slid > 0.0 {
             true => self.sidebar_size(),
             false => 0.0,
         }
     }
 
+    fn sidebar_x(&self) -> f32 {
+        match self.panes() {
+            Panes::Three => 0.0,
+            Panes::Two | Panes::One => ((self.slid - 1.0) * self.sidebar_size()).round(),
+        }
+    }
+
     pub(crate) fn sidebar_frame(&self) -> Rect {
         Rect::new(
-            0.0,
+            self.sidebar_x(),
             TOOLBAR_HEIGHT,
             self.sidebar_width(),
             (self.size.1 - TOOLBAR_HEIGHT - SIDEBAR_FOOT_HEIGHT).max(0.0),
@@ -88,7 +96,7 @@ impl MailView {
 
     pub(crate) fn sidebar_foot_frame(&self) -> Rect {
         Rect::new(
-            0.0,
+            self.sidebar_x(),
             (self.size.1 - SIDEBAR_FOOT_HEIGHT).max(TOOLBAR_HEIGHT),
             self.sidebar_width(),
             SIDEBAR_FOOT_HEIGHT,
@@ -183,6 +191,7 @@ impl MailView {
     pub fn scene(&mut self, width: u32, height: u32) -> Scene {
         self.size = (width as f32, height as f32);
         self.hits.clear();
+        self.advance_motion();
         self.layout_toolbar();
         if let Some(guide) = self.setup.as_ref().filter(|_| self.welcoming()) {
             let area = Rect::new(
@@ -220,7 +229,7 @@ impl MailView {
                 items,
             };
         }
-        let overlay = self.overlay && self.panes() != Panes::Three;
+        let overlay = self.slid > 0.0 && self.panes() != Panes::Three;
         if !overlay {
             self.paint_sidebar(&mut items);
         }
@@ -301,30 +310,7 @@ impl MailView {
     }
 
     fn text_line(&mut self, text: &str, style: TextStyle, width: f32) -> Paragraph {
-        let paragraph = self
-            .ui
-            .context()
-            .text
-            .paragraph(text, style, None, TextAlign::Start);
-        match paragraph.width() <= width {
-            true => paragraph,
-            false => {
-                let mut shortened = text.chars().collect::<Vec<_>>();
-                while !shortened.is_empty() {
-                    shortened.pop();
-                    let candidate = format!("{}…", shortened.iter().collect::<String>().trim_end());
-                    let paragraph =
-                        self.ui
-                            .context()
-                            .text
-                            .paragraph(&candidate, style, None, TextAlign::Start);
-                    if paragraph.width() <= width {
-                        return paragraph;
-                    }
-                }
-                paragraph
-            }
-        }
+        self.ui.context().text.fitted(text, style, width)
     }
 
     fn put_symbol(
@@ -359,41 +345,22 @@ impl MailView {
             scroll.set_extent(content, frame.height);
             scroll.offset(self.ui.context())
         };
+        let sidebar = std::mem::take(&mut self.sidebar);
         let mut drawn = Vec::new();
         let mut y = frame.y + SIDEBAR_INSET / 2.0 - offset;
-        for (index, row) in self.sidebar.clone().iter().enumerate() {
+        for (index, row) in sidebar.iter().enumerate() {
+            let height = match row {
+                Row::Heading(..) => heading_height,
+                Row::Place { .. } => row_height,
+            };
+            let top = y;
+            y += height;
+            if top + height <= frame.y || top >= frame.y + frame.height {
+                continue;
+            }
             match row {
                 Row::Heading(title, account) => {
-                    let style = TextStyle::role(TextRole::Label, palette.ink3);
-                    let paragraph =
-                        self.text_line(title, style, frame.width - 2.0 * SIDEBAR_TEXT_X);
-                    let text_y = y + heading_height - paragraph.height() - 4.0;
-                    drawn.push(Item::Text {
-                        origin: Point::new(SIDEBAR_TEXT_X, text_y),
-                        paragraph,
-                    });
-                    let offline = account.filter(|account| self.offline(*account));
-                    if let Some(account) = offline {
-                        let ink = match self.hover == Some(Hit::Offline(account)) {
-                            true => palette.ink,
-                            false => palette.ink3,
-                        };
-                        let paragraph = self.text_line(
-                            &tr!("Offline"),
-                            TextStyle::role(TextRole::Callout, ink),
-                            80.0,
-                        );
-                        let origin = Point::new(
-                            frame.width - SIDEBAR_INSET - 8.0 - paragraph.width(),
-                            y + heading_height - paragraph.height() - 4.0,
-                        );
-                        self.hits.push((
-                            Rect::new(origin.x, origin.y, paragraph.width(), paragraph.height()),
-                            Hit::Offline(account),
-                        ));
-                        drawn.push(Item::Text { origin, paragraph });
-                    }
-                    y += heading_height;
+                    self.paint_heading(&mut drawn, frame, top, heading_height, title, *account);
                 }
                 Row::Place {
                     place,
@@ -403,12 +370,12 @@ impl MailView {
                     depth,
                 } => {
                     let rect = Rect::new(
-                        SIDEBAR_INSET,
-                        y,
+                        frame.x + SIDEBAR_INSET,
+                        top,
                         frame.width - 2.0 * SIDEBAR_INSET,
                         row_height,
                     );
-                    let selected = *place == self.place;
+                    let selected = *place == self.place && !self.searching_everywhere();
                     let dropping = self.drag.is_some_and(|drag| drag.over == Some(index));
                     if dropping {
                         drawn.push(Item::Fill {
@@ -433,14 +400,14 @@ impl MailView {
                             paint: palette.well.with_opacity(0.5).into(),
                         });
                     }
-                    let x = SIDEBAR_TEXT_X + *depth as f32 * SIDEBAR_INDENT;
+                    let x = frame.x + SIDEBAR_TEXT_X + *depth as f32 * SIDEBAR_INDENT;
                     let tint = match selected {
                         true => palette.accent,
                         false => palette.ink2,
                     };
                     let icon = Rect::new(
                         x,
-                        y + ((row_height - ICON_SIZE) / 2.0).round(),
+                        top + ((row_height - ICON_SIZE) / 2.0).round(),
                         ICON_SIZE,
                         ICON_SIZE,
                     );
@@ -457,7 +424,7 @@ impl MailView {
                         drawn.push(Item::Text {
                             origin: Point::new(
                                 right,
-                                y + ((row_height - badge.height()) / 2.0).round(),
+                                top + ((row_height - badge.height()) / 2.0).round(),
                             ),
                             paragraph: badge,
                         });
@@ -472,17 +439,15 @@ impl MailView {
                     drawn.push(Item::Text {
                         origin: Point::new(
                             text_x,
-                            y + ((row_height - paragraph.height()) / 2.0).round(),
+                            top + ((row_height - paragraph.height()) / 2.0).round(),
                         ),
                         paragraph,
                     });
-                    if rect.y + rect.height > frame.y && rect.y < frame.y + frame.height {
-                        self.hits.push((rect, Hit::Place(index)));
-                    }
-                    y += row_height;
+                    self.hits.push((rect, Hit::Place(index)));
                 }
             }
         }
+        self.sidebar = sidebar;
         items.push(Item::Clip {
             shape: Shape::rect(frame),
             items: drawn,
@@ -490,6 +455,71 @@ impl MailView {
         let scroll = &self.scrolls[0];
         let cx = self.ui.context();
         scroll.paint_scrollbar(cx, frame, items);
+    }
+
+    fn paint_heading(
+        &mut self,
+        drawn: &mut Vec<Item>,
+        frame: Rect,
+        top: f32,
+        height: f32,
+        title: &str,
+        account: Option<AccountId>,
+    ) {
+        let palette = self.palette;
+        let row = Rect::new(
+            frame.x + SIDEBAR_INSET,
+            top,
+            frame.width - 2.0 * SIDEBAR_INSET,
+            height,
+        );
+        let mut right = row.x + row.width - 8.0;
+        if let Some(account) = account {
+            let ink = match self.hover == Some(Hit::Section(account)) {
+                true => palette.ink,
+                false => palette.ink3,
+            };
+            let turn = match self.collapsed.contains(&account) {
+                true => 0.0,
+                false => 1.0,
+            };
+            let centre = Point::new(right - CHEVRON / 2.0, top + height - CHEVRON);
+            chevron(centre, turn, ink, drawn);
+            right -= CHEVRON + BADGE_GAP;
+            self.hits.push((row, Hit::Section(account)));
+        }
+        let offline = account.filter(|account| self.offline(*account));
+        if let Some(account) = offline {
+            let ink = match self.hover == Some(Hit::Offline(account)) {
+                true => palette.ink,
+                false => palette.ink3,
+            };
+            let paragraph = self.text_line(
+                &tr!("Offline"),
+                TextStyle::role(TextRole::Callout, ink),
+                80.0,
+            );
+            let origin = Point::new(
+                right - paragraph.width(),
+                top + height - paragraph.height() - 4.0,
+            );
+            right = origin.x - BADGE_GAP;
+            self.hits.push((
+                Rect::new(origin.x, origin.y, paragraph.width(), paragraph.height()),
+                Hit::Offline(account),
+            ));
+            drawn.push(Item::Text { origin, paragraph });
+        }
+        let text_x = frame.x + SIDEBAR_TEXT_X;
+        let paragraph = self.text_line(
+            title,
+            TextStyle::role(TextRole::Label, palette.ink3),
+            (right - text_x).max(0.0),
+        );
+        drawn.push(Item::Text {
+            origin: Point::new(text_x, top + height - paragraph.height() - 4.0),
+            paragraph,
+        });
     }
 
     fn paint_list_header(&mut self, items: &mut Vec<Item>) {
@@ -570,7 +600,13 @@ impl MailView {
             Some(width),
             TextAlign::Center,
         );
-        let mut y = frame.y + (frame.height / 3.0).round();
+        let mut y = match self.offers_everywhere() {
+            true => {
+                let block = EMPTY_SYMBOL + 12.0 + heading.height() + 4.0 + detail.height();
+                frame.y + (frame.height / 2.0).round() - block
+            }
+            false => frame.y + (frame.height / 3.0).round(),
+        };
         self.put_symbol(
             items,
             symbol,
@@ -644,7 +680,7 @@ impl MailView {
             let y = frame.y + self.row_top(index, row_height) - offset;
             let rect = Rect::new(frame.x, y, frame.width, row_height);
             self.hits.push((rect, Hit::Message(summary.id)));
-            match self.swipe.filter(|(id, _)| *id == summary.id) {
+            match self.swipe_shown.filter(|(id, _)| *id == summary.id) {
                 Some((_, moved)) => {
                     let (paint, symbol, x) = match moved > 0.0 {
                         true => (palette.success, Symbol::Archive, rect.x + LIST_TEXT_X),
@@ -747,7 +783,7 @@ impl MailView {
             TextAlign::End,
         );
         let line = (18.0 * scale).round();
-        let hovered = self.swipe.is_none()
+        let hovered = self.swipe_shown.is_none()
             && matches!(&self.hover, Some(Hit::Message(id) | Hit::Quick(id, _)) if *id == summary.id);
         let mut date_x = match hovered {
             true => self.paint_quick(items, summary.id, right, y, line, ink2),
@@ -1062,13 +1098,11 @@ impl MailView {
         match (self.swipe, scroll.phase) {
             (Some((id, moved)), ScrollPhase::Ended) => {
                 self.swipe = None;
-                if moved.abs() >= SWIPE_COMMIT {
-                    let quick = match moved > 0.0 {
-                        true => Quick::Archive,
-                        false => Quick::Delete,
-                    };
-                    self.quick(id, quick);
-                }
+                let quick = (moved.abs() >= SWIPE_COMMIT).then(|| match moved > 0.0 {
+                    true => Quick::Archive,
+                    false => Quick::Delete,
+                });
+                self.release_swipe(id, moved, quick);
                 true
             }
             (Some((id, moved)), _) => {
@@ -1076,8 +1110,7 @@ impl MailView {
                 self.swipe = Some((id, (moved - scroll.delta.x).clamp(-width, width)));
                 true
             }
-            (None, ScrollPhase::Ended) => false,
-            (None, _) if sideways => match row {
+            (None, ScrollPhase::Began) if sideways => match row {
                 Some(id) => {
                     self.swipe = Some((id, -scroll.delta.x));
                     true

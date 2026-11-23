@@ -291,6 +291,9 @@ msgstr "Avbryt"
 msgid "Yesterday"
 msgstr "Igår"
 
+msgid "Unknown Date"
+msgstr "Okänt datum"
+
 msgid "Today"
 msgstr "Idag"
 
@@ -346,6 +349,10 @@ msgstr "Ämne: {subject}"
 
 msgid "Date: {date}"
 msgstr "Datum: {date}"
+
+msgctxt "sender"
+msgid "You"
+msgstr "Du"
 
 msgid "Decrypting the message…"
 msgstr "Dekrypterar meddelandet…"
@@ -626,8 +633,8 @@ msgstr "Länkar"
 msgid "When a link shows one address and leads to another, Mail asks before opening it."
 msgstr "När en länk visar en adress men leder till en annan frågar E-post innan den öppnas."
 
-msgid "Mail connects only to your mail servers, and fetches pictures and keys only when you ask for them."
-msgstr "E-post ansluter bara till dina e-postservrar och hämtar bilder och nycklar bara när du ber om det."
+msgid "Mail connects only to your mail servers, and fetches pictures and keys only when you ask for them or allow them above."
+msgstr "E-post ansluter bara till dina e-postservrar och hämtar bilder och nycklar bara när du ber om det eller tillåter det ovan."
 
 msgid "Find decrypted messages in search"
 msgstr "Hitta dekrypterade meddelanden vid sökning"
@@ -879,6 +886,9 @@ msgstr "Visa"
 msgid "Sort by"
 msgstr "Sortera efter"
 
+msgid "Search All Mailboxes"
+msgstr "Sök i alla brevlådor"
+
 msgid "Back"
 msgstr "Tillbaka"
 
@@ -903,6 +913,15 @@ msgstr "Lita på"
 msgid "The issuer could not be trusted"
 msgstr "Det gick inte att lita på utfärdaren"
 
+msgid "Show or Hide Sidebar"
+msgstr "Visa eller dölj sidofältet"
+
+msgid "Undo"
+msgstr "Ångra"
+
+msgid "Next Pane"
+msgstr "Nästa ruta"
+
 msgid "Red"
 msgstr "Röd"
 
@@ -923,6 +942,9 @@ msgstr "Lila"
 
 msgid "Gray"
 msgstr "Grå"
+
+msgid "All Mailboxes"
+msgstr "Alla brevlådor"
 
 msgid "A Message Could Not Be Restored"
 msgid_plural "{count} Messages Could Not Be Restored"
@@ -979,6 +1001,9 @@ msgstr "{count} nya meddelanden"
 msgid "Open Message File…"
 msgstr "Öppna meddelandefil…"
 
+msgid "Mail is downloading your mail; you can start reading now."
+msgstr "E-post hämtar din e-post; du kan börja läsa redan nu."
+
 msgid "Open Message File"
 msgstr "Öppna meddelandefil"
 
@@ -994,23 +1019,11 @@ msgstr "Skriv namnet på en brevlåda"
 msgid "No mailbox matches"
 msgstr "Ingen brevlåda matchar"
 
-msgid "Ctrl+N: New Message"
-msgstr "Ctrl+N: Nytt meddelande"
+msgid "{shortcut}: {action}"
+msgstr "{shortcut}: {action}"
 
-msgid "Ctrl+R: Reply · Shift+Ctrl+R: Reply All · Shift+Ctrl+F: Forward"
-msgstr "Ctrl+R: Svara · Skift+Ctrl+R: Svara alla · Skift+Ctrl+F: Vidarebefordra"
-
-msgid "Shift+Ctrl+A: Archive · Delete: Delete · Shift+Ctrl+M: Move To…"
-msgstr "Skift+Ctrl+A: Arkivera · Delete: Radera · Skift+Ctrl+M: Flytta till…"
-
-msgid "Ctrl+F: Search · F5: Get Mail · Ctrl+Z: Undo"
-msgstr "Ctrl+F: Sök · F5: Hämta e-post · Ctrl+Z: Ångra"
-
-msgid "Ctrl+1 to Ctrl+9: the first nine mailboxes in the sidebar"
-msgstr "Ctrl+1 till Ctrl+9: de nio första brevlådorna i sidofältet"
-
-msgid "Shift+Ctrl+S: Hide or Show Sidebar · F6: next pane"
-msgstr "Skift+Ctrl+S: Dölj eller visa sidofältet · F6: nästa ruta"
+msgid "{first} to {last}: the first nine mailboxes in the sidebar"
+msgstr "{first} till {last}: de nio första brevlådorna i sidofältet"
 
 msgid "In the list and the reader: J, K next and previous · E Archive · # Delete · R Reply · A Reply All · F Forward · S Flag · U Mark as Unread · V Move To… · C New Message · / Search · ? this list"
 msgstr "I listan och läsaren: J, K nästa och föregående · E Arkivera · # Radera · R Svara · A Svara alla · F Vidarebefordra · S Flagga · U Markera som oläst · V Flytta till… · C Nytt meddelande · / Sök · ? den här listan"

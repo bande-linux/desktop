@@ -50,6 +50,8 @@ pub enum Signal {
     RenameMailbox(crate::store::MailboxId, String),
     DeleteMailbox(crate::store::MailboxId),
     TryAgain(crate::store::AccountId),
+    TryOffline,
+    SearchEverywhere,
     ServerSettings,
     OpenMessageFile,
     OpenLink(String),
@@ -79,8 +81,10 @@ pub struct Toolbar {
     pub more: WidgetId,
     pub status: WidgetId,
     pub get_mail: WidgetId,
+    pub try_again: WidgetId,
     pub selection: [WidgetId; 5],
     pub reply_field: WidgetId,
+    pub search_all: WidgetId,
 }
 
 impl Default for Toolbar {
@@ -105,14 +109,16 @@ impl Default for Toolbar {
             more: WidgetId::next(),
             status: WidgetId::next(),
             get_mail: WidgetId::next(),
-            selection: [WidgetId::next(); 5],
+            try_again: WidgetId::next(),
+            selection: std::array::from_fn(|_| WidgetId::next()),
             reply_field: WidgetId::next(),
+            search_all: WidgetId::next(),
         }
     }
 }
 
 impl Toolbar {
-    fn widgets(&self) -> [WidgetId; 23] {
+    fn widgets(&self) -> [WidgetId; 25] {
         let [archive, delete, read, move_to, flag] = self.selection;
         [
             self.sidebar,
@@ -131,12 +137,14 @@ impl Toolbar {
             self.flag,
             self.more,
             self.status,
+            self.try_again,
             self.get_mail,
             archive,
             delete,
             read,
             move_to,
             flag,
+            self.search_all,
             self.reply_field,
         ]
     }
@@ -181,6 +189,9 @@ const SELECTION_WIDTH: f32 = 128.0;
 pub const SELECTION_TOP: f32 = 24.0;
 pub const QUICK_REPLY_BAR: f32 = 52.0;
 const REPLY_INSET: f32 = 24.0;
+const TRY_AGAIN_WIDTH: f32 = 96.0;
+const SEARCH_ALL_WIDTH: f32 = 200.0;
+pub const SEARCH_ALL_GAP: f32 = 16.0;
 
 pub fn sort_title(sort: SortBy) -> String {
     match sort {
@@ -269,6 +280,12 @@ impl MailView {
             .collect::<Vec<_>>();
         let status = Label::new("").secondary();
         let get_mail = self.symbol_button(Symbol::GetMail, &tr!("Get Mail"), Signal::GetMail);
+        let send = sender(&self.signals);
+        let try_again = Button::new(&tr!("Try Again"), move || send(Signal::TryOffline));
+        let send = sender(&self.signals);
+        let search_all = Button::new(&tr!("Search All Mailboxes"), move || {
+            send(Signal::SearchEverywhere);
+        });
         let sidebar =
             self.symbol_button(Symbol::Sidebar, &tr!("Show Sidebar"), Signal::ToggleSidebar);
         let back = self.symbol_button(Symbol::Back, &tr!("Back"), Signal::Back);
@@ -292,8 +309,10 @@ impl MailView {
             .map(|button| host.insert_in_header(button, Rect::default()))
             .collect::<Vec<_>>();
         let status = host.insert(status, Rect::default());
+        let try_again = host.insert(try_again, Rect::default());
         let get_mail = host.insert(get_mail, Rect::default());
         let selection = selection.map(|button| host.insert(button, Rect::default()));
+        let search_all = host.insert(search_all, Rect::default());
         let reply_field = host.insert(reply_field, Rect::default());
         if let [reply, reply_all, forward, archive, junk, delete, flag, more] = ids[..] {
             self.toolbar = Toolbar {
@@ -316,8 +335,10 @@ impl MailView {
                 more,
                 status,
                 get_mail,
+                try_again,
                 selection,
                 reply_field,
+                search_all,
             };
         }
     }
@@ -455,6 +476,22 @@ impl MailView {
             ),
         ]);
         frames.extend(self.selection_frames());
+        let empty = self.list_frame();
+        let search_all = match self.offers_everywhere() && empty.width > 0.0 {
+            true => {
+                let width = SEARCH_ALL_WIDTH
+                    .min(empty.width - 2.0 * COLUMN_INSET)
+                    .max(0.0);
+                Rect::new(
+                    empty.x + ((empty.width - width) / 2.0).round(),
+                    empty.y + (empty.height / 2.0).round() + SEARCH_ALL_GAP,
+                    width,
+                    BUTTON_HEIGHT,
+                )
+            }
+            false => Rect::default(),
+        };
+        frames.push((toolbar.search_all, search_all));
         let reader = self.reader_frame();
         let reply = match self.reader.thread.is_some() && reader.width > 0.0 {
             true => Rect::new(
@@ -470,22 +507,31 @@ impl MailView {
         if foot.width <= 0.0 {
             frames.extend([
                 (toolbar.status, Rect::default()),
+                (toolbar.try_again, Rect::default()),
                 (toolbar.get_mail, Rect::default()),
             ]);
             return frames;
         }
         let get_mail_x = foot.x + foot.width - COLUMN_INSET - BUTTON_HEIGHT;
         let foot_y = foot.y + ((foot.height - BUTTON_HEIGHT) / 2.0).round();
+        let (try_again, status_end) = match self.offline_accounts().is_empty() {
+            true => (Rect::default(), get_mail_x),
+            false => {
+                let x = get_mail_x - CONTROL_GAP - TRY_AGAIN_WIDTH;
+                (Rect::new(x, foot_y, TRY_AGAIN_WIDTH, BUTTON_HEIGHT), x)
+            }
+        };
         frames.extend([
             (
                 toolbar.status,
                 Rect::new(
                     foot.x + STATUS_INSET,
                     foot_y,
-                    (get_mail_x - foot.x - STATUS_INSET - CONTROL_GAP).max(0.0),
+                    (status_end - foot.x - STATUS_INSET - CONTROL_GAP).max(0.0),
                     BUTTON_HEIGHT,
                 ),
             ),
+            (toolbar.try_again, try_again),
             (
                 toolbar.get_mail,
                 Rect::new(get_mail_x, foot_y, BUTTON_HEIGHT, BUTTON_HEIGHT),
@@ -547,6 +593,13 @@ impl MailView {
             }
         }
         let frames = self.toolbar_frames();
+        let focus = self.ui.focus();
+        let hides_focus = frames
+            .iter()
+            .any(|(id, frame)| Some(*id) == focus && (frame.width <= 0.0 || frame.height <= 0.0));
+        if hides_focus {
+            self.ui.clear_focus();
+        }
         if let Some(host) = self.host_mut() {
             for (id, frame) in frames {
                 host.set_frame(id, frame);

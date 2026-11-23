@@ -2,6 +2,7 @@
 
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
@@ -177,6 +178,8 @@ fn the_setup_guide_asks_before_signing_in_off_domain_and_shows_each_problem_at_i
     let options = Options {
         icon: b"<svg xmlns='http://www.w3.org/2000/svg'/>",
         offer_notes: true,
+        server_settings: true,
+        ready_note: String::new(),
         taken: Vec::new(),
         network: network.clone(),
         reporter: Arc::new(move |report| {
@@ -252,7 +255,13 @@ fn the_setup_guide_asks_before_signing_in_off_domain_and_shows_each_problem_at_i
 
     let mut token_only = settings;
     token_only.smtp = local(token_only_smtp());
-    let refused = check(&token_only, PASSWORD, &network, |_| {});
+    let refused = check(
+        &token_only,
+        PASSWORD,
+        &network,
+        &AtomicBool::new(false),
+        |_| {},
+    );
     assert!(
         matches!(refused, Outcome::Failed(_, Problem::NoPasswordSignIn(_))),
         "{refused:?}"

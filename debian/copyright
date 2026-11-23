@@ -2178,10 +2178,6 @@ Copyright: Steven Fackler <sfackler@gmail.com>
  Steffen Butzer <steffen.butzer@outlook.com>
 License: MIT
 
-Files: vendor/scoped-tls-1.0.1/*
-Copyright: Alex Crichton <alex@alexcrichton.com>
-License: MIT or Apache-2.0
-
 Files: vendor/scopeguard-1.2.0/*
 Copyright: bluss
 License: MIT or Apache-2.0

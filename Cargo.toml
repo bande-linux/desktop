@@ -70,7 +70,6 @@ proc-macro2 = "1.0.107"
 quick-xml = "0.38"
 rcgen = { version = "0.14.7", default-features = false, features = ["ring"] }
 quote = "1.0.47"
-raw-window-handle = "0.6.2"
 regex = "1.13.1"
 reis = { version = "0.7.1", default-features = false }
 resvg = { version = "0.48", default-features = false }

@@ -2,7 +2,8 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt;
 use std::ops::Range;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, PoisonError};
+use std::thread;
 
 use bande_design::{Color, TextRole, TextSize, Typeface};
 use parley::fontique::GenericFamily;
@@ -294,10 +295,31 @@ impl Default for TextSystem {
     }
 }
 
+static FONTS: Mutex<Option<FontContext>> = Mutex::new(None);
+
+fn installed_fonts() -> FontContext {
+    FONTS
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .get_or_insert_with(FontContext::new)
+        .clone()
+}
+
 impl TextSystem {
+    /// Starts reading the installed fonts on another thread, so the first `TextSystem` finds
+    /// them ready.
+    pub fn preload() {
+        if let Err(error) = thread::Builder::new()
+            .name("fonts".to_owned())
+            .spawn(installed_fonts)
+        {
+            tracing::warn!("reading the installed fonts when the first window needs them: {error}");
+        }
+    }
+
     pub fn new() -> Self {
         Self {
-            fonts: FontContext::new(),
+            fonts: installed_fonts(),
             layouts: LayoutContext::new(),
             size: TextSize::DEFAULT,
             monospace: None,

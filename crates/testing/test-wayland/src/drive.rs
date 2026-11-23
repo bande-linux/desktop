@@ -1,7 +1,7 @@
 use std::thread;
 use std::time::{Duration, Instant};
 
-use bande_compositor::{Compositor, FrameClock, FrameScheduler, REFRESH, Renderer};
+use bande_compositor::{Compositor, FrameClock, FrameScheduler, REFRESH, Renderer, Snapshot};
 use smithay::utils::Size;
 use wayland_client::protocol::wl_shm::Format;
 
@@ -62,6 +62,12 @@ impl Frames {
 
     pub fn rendered(&self) -> u64 {
         self.renderer.frames()
+    }
+
+    pub fn snapshot(&mut self, server: &Compositor) -> Snapshot {
+        self.renderer
+            .snapshot(server)
+            .expect("snapshot of the output")
     }
 
     pub fn run_until(&mut self, server: &mut Compositor, mut done: impl FnMut() -> bool) {

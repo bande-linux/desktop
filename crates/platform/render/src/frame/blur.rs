@@ -12,6 +12,8 @@ use crate::{
 const MAX_PASSES: u32 = 6;
 pub(crate) const KEEP_UNUSED_FRAMES: u64 = 120;
 
+type Level = (vk::Image, vk::ImageView, i32, i32);
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Blur {
     pub region: RoundedRect,
@@ -154,7 +156,7 @@ impl VulkanFrame<'_, '_> {
         passes: u32,
         backdrop: Option<Backdrop>,
         whole: bool,
-    ) -> Result<(Vec<(vk::Image, vk::ImageView, i32, i32)>, Usage, bool), RenderError> {
+    ) -> Result<(Vec<Level>, Usage, bool), RenderError> {
         let key = BlurKey {
             owner: backdrop.map_or(0, |backdrop| backdrop.owner),
             source: match backdrop {
@@ -234,12 +236,7 @@ impl VulkanFrame<'_, '_> {
         self.bound = None;
     }
 
-    fn copy_into(
-        &mut self,
-        source: Rect,
-        level: (vk::Image, vk::ImageView, i32, i32),
-        prior: Usage,
-    ) {
+    fn copy_into(&mut self, source: Rect, level: Level, prior: Usage) {
         let device = &self.renderer.device;
         let commands = self.renderer.command_buffer;
         barrier(device, commands, self.image, ATTACHMENT, TRANSFER_SOURCE);
@@ -278,8 +275,8 @@ impl VulkanFrame<'_, '_> {
     fn filter(
         &mut self,
         program: Program,
-        from: (vk::Image, vk::ImageView, i32, i32),
-        (to, prior): ((vk::Image, vk::ImageView, i32, i32), Usage),
+        from: Level,
+        (to, prior): (Level, Usage),
         offset: f32,
     ) -> Result<(), RenderError> {
         let bounds = Rect::new(0, 0, to.2, to.3);

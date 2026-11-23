@@ -782,8 +782,10 @@ what the one before could not save:
   exits.
 - **Memory runs out**: the low-memory window, systemd-oomd on `app.slice` and the notification of
   a closed app ([decision 0004](../decisions/0004-memory-pressure.md)). The compositor sits at
-  `OOMScoreAdjust=100` with oomd `avoid`; the session bus, PipeWire, WirePlumber and the portal
-  get oomd `avoid` from `bande-session` at start; apps sit at 200.
+  `OOMScoreAdjust=100` with oomd `avoid` and `OOMPolicy=continue`; the session clients it starts,
+  apps and services sit at 200, so a kernel OOM kill takes one of them and the compositor starts a
+  killed shell again; the session bus, PipeWire, WirePlumber and the portal get oomd `avoid` from
+  `bande-session` at start.
 - **Session services crash**: every Bande user service has `Restart=on-failure` with systemd's
   start limit, runs in `session.slice`, and is D-Bus activated again on the next call after that.
 - **Too many processes**: each app scope gets the default `TasksMax` (15 % of the kernel's limit)
@@ -957,6 +959,13 @@ checks and announces what is available. `update-check-every` sets
 the interval (When available, Every day, 7 or 31 days); security updates follow it. Each check
 leaves its outcome in `$XDG_STATE_HOME/bande/software-badge`, so Settings starts PackageKit only
 when the pane opens or a check is due.
+
+The daily check is `bande-update-check.timer`: 5 minutes after login plus up to 15 random, so it
+never competes with the session starting, then at midnight (with the same random delay) while
+the session runs. It does not catch up a missed day at login. Its service hands one
+`bande-settings --check-updates` to a transient unit in `background.slice` at nice 10 with idle
+I/O, which checks for updates and translations on two threads and stays only while its
+notification waits for an answer, so a check is never skipped because an old one is still open.
 
 **Classes.** Software Update (`bande-packages`, through PackageKit) classifies each update:
 

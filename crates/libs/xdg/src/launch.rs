@@ -36,7 +36,7 @@ use zbus::{MatchRule, message};
 pub const TERMINAL: &str = "bande-terminal";
 pub const TERMINAL_APP_ID: &str = "org.bande.Terminal";
 pub const ACTIVATION_TOKEN: &str = "XDG_ACTIVATION_TOKEN";
-const APP_OOM_SCORE: &[u8] = b"200";
+const SERVICE_OOM_SCORE: &[u8] = b"200";
 const LANGUAGE: &str = "LANGUAGE";
 const SESSION_LANGUAGE: &str = "BANDE_SESSION_LANGUAGE";
 
@@ -425,6 +425,20 @@ fn set_language(process: &mut Command, app_id: &str) {
     }
 }
 
+/// Raises the calling process's `oom_score_adj` to that of user services (200), above the
+/// compositor's 100, so the kernel's OOM killer picks it first. It only opens and writes a file,
+/// which is async-signal-safe and does not allocate, so it may run between fork and exec. On
+/// failure the score stays inherited.
+pub fn adopt_service_oom_score() {
+    if let Ok(score) = rustix::fs::open(
+        c"/proc/self/oom_score_adj",
+        OFlags::WRONLY | OFlags::CLOEXEC,
+        Mode::empty(),
+    ) {
+        let _ = rustix::io::write(&score, SERVICE_OOM_SCORE);
+    }
+}
+
 pub fn spawn_detached(
     app_id: &str,
     command: &[impl AsRef<OsStr>],
@@ -448,18 +462,12 @@ pub fn spawn_detached(
     {
         process.current_dir(directory);
     }
-    // SAFETY: the closure runs between fork and exec and only makes the setsid, open and write
-    // system calls, which are async-signal-safe and do not allocate.
+    // SAFETY: the closure runs between fork and exec and only calls setsid and
+    // adopt_service_oom_score, which are async-signal-safe and do not allocate.
     unsafe {
         process.pre_exec(|| {
             rustix::process::setsid().map_err(io::Error::from)?;
-            if let Ok(score) = rustix::fs::open(
-                c"/proc/self/oom_score_adj",
-                OFlags::WRONLY | OFlags::CLOEXEC,
-                Mode::empty(),
-            ) {
-                let _ = rustix::io::write(&score, APP_OOM_SCORE);
-            }
+            adopt_service_oom_score();
             Ok(())
         });
     }

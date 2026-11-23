@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::error::Error;
 use std::fs;
 use std::os::fd::OwnedFd;
@@ -13,7 +14,9 @@ const OUTPUT: (i32, i32) = (2928, 1818);
 const SETTLE: Duration = Duration::from_secs(4);
 const HOVER_CHANGES: u32 = 40;
 const HOVER_SETTLE: Duration = Duration::from_millis(120);
-const DEVICE_MEMORY: &str = "/memfd:allocation";
+const SOFTWARE_DEVICE_MEMORY: &str = "/memfd:allocation";
+const DRM_CLIENT: &str = "drm-client-id:";
+const DRM_TOTAL: &str = "drm-total-";
 
 struct Hover {
     from: (f64, f64),
@@ -183,10 +186,48 @@ fn cpu_ticks(pid: u32) -> Result<u64, Box<dyn Error>> {
     Ok(field(11)? + field(12)?)
 }
 
+fn kib(value: &str) -> Option<u64> {
+    let mut words = value.split_whitespace();
+    let number: u64 = words.next()?.parse().ok()?;
+    match words.next() {
+        None => Some(number / 1024),
+        Some("KiB") => Some(number),
+        Some("MiB") => Some(number * 1024),
+        Some("GiB") => Some(number * 1024 * 1024),
+        Some(_) => None,
+    }
+}
+
+fn drm_kib(pid: u32) -> Result<u64, Box<dyn Error>> {
+    let mut clients = HashSet::new();
+    let mut total = 0;
+    for entry in fs::read_dir(format!("/proc/{pid}/fdinfo"))? {
+        let Ok(info) = fs::read_to_string(entry?.path()) else {
+            continue;
+        };
+        let Some(client) = info
+            .lines()
+            .find_map(|line| line.strip_prefix(DRM_CLIENT))
+            .map(|id| id.trim().to_owned())
+        else {
+            continue;
+        };
+        if !clients.insert(client) {
+            continue;
+        }
+        total += info
+            .lines()
+            .filter_map(|line| line.strip_prefix(DRM_TOTAL)?.split_once(':'))
+            .filter_map(|(_, value)| kib(value))
+            .sum::<u64>();
+    }
+    Ok(total)
+}
+
 fn memory(pid: u32) -> Result<(f64, f64), Box<dyn Error>> {
     let smaps = fs::read_to_string(format!("/proc/{pid}/smaps"))?;
     let mut total = 0;
-    let mut device = 0;
+    let mut device = drm_kib(pid)?;
     let mut in_device = false;
     for line in smaps.lines() {
         let mut words = line.split_whitespace();
@@ -194,7 +235,7 @@ fn memory(pid: u32) -> Result<(f64, f64), Box<dyn Error>> {
             continue;
         };
         if first.contains('-') && !first.ends_with(':') {
-            in_device = line.contains(DEVICE_MEMORY);
+            in_device = line.contains(SOFTWARE_DEVICE_MEMORY);
             continue;
         }
         if first == "Rss:" || first == "Swap:" {

@@ -77,6 +77,7 @@ pub struct StatusClient {
     can_sleep: bool,
     cannot_sleep: Inbox<()>,
     dates: DateFormats,
+    minute_turned: bool,
 }
 
 fn confirm_session_end(window: &mut Window, ending: SessionEnd) {
@@ -530,6 +531,10 @@ impl StatusClient {
 
 impl App for StatusClient {
     fn scene(&mut self, window: &mut Window) -> Scene {
+        if std::mem::take(&mut self.minute_turned) {
+            self.bar.set_time(&bande_datetime::now(), &self.dates);
+            self.status.clock_shown();
+        }
         let (width, height) = window.size();
         let scale = window.scale();
         let scene = self.bar.scene(width, height, scale);
@@ -698,9 +703,7 @@ impl App for StatusClient {
                     self.dates = DateFormats::for_language().with_clock_format(&format);
                     self.bar.set_time(&bande_datetime::now(), &self.dates);
                 }
-                Update::Minute => {
-                    self.bar.set_time(&bande_datetime::now(), &self.dates);
-                }
+                Update::Minute => self.minute_turned = true,
                 Update::AppMenuChanged => {
                     if !self.menu_key.is_empty() {
                         self.status.errand(Errand::AppMenu(self.menu_key.clone()));
@@ -781,6 +784,7 @@ impl StatusClient {
             can_sleep: true,
             cannot_sleep: bande_status::devices::hear_if_cannot_sleep()?,
             dates,
+            minute_turned: false,
         })
     }
 }

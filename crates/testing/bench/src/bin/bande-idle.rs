@@ -206,6 +206,9 @@ fn measure_cases(session: &mut Session, options: &Options) -> Result<Vec<Case>, 
         return Err("the lock screen did not start".into());
     }
     cases.push(("screen locked", session.measure(window)?));
+    session.server.blank_when_idle(now(), Duration::ZERO);
+    session.run_for(settle)?;
+    cases.push(("screen locked, displays off", session.measure(window)?));
     Ok(cases)
 }
 

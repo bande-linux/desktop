@@ -59,6 +59,7 @@ struct Locker {
     answered: bool,
     pending: Option<Zeroizing<String>>,
     minutes: MinuteTimer,
+    minute_turned: bool,
     backdrop: Option<Inbox<(Look, Image)>>,
     backdrop_requested: bool,
     picture: Option<Inbox<(usize, Image)>>,
@@ -266,6 +267,12 @@ impl App for Locker {
                 Err(error) => tracing::warn!("cannot load the wallpaper: {error}"),
             }
         }
+        if std::mem::take(&mut self.minute_turned) {
+            self.screen.set_clock(&bande_datetime::now());
+            if let Err(error) = self.minutes.arm() {
+                tracing::warn!("cannot follow the clock: {error}");
+            }
+        }
         self.screen.advance(frame_time().presentation);
         self.screen.set_scale(window.scale());
         self.screen.scene(width, height)
@@ -333,10 +340,10 @@ impl App for Locker {
         };
         match source {
             Source::Minutes => {
-                if let Err(error) = self.minutes.wait() {
+                if let Err(error) = self.minutes.take() {
                     tracing::warn!("cannot follow the clock: {error}");
                 }
-                self.screen.set_clock(&bande_datetime::now());
+                self.minute_turned = true;
             }
             Source::Transaction => self.follow(window),
             Source::Devices => {
@@ -487,6 +494,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         answered: false,
         pending: None,
         minutes: MinuteTimer::new()?,
+        minute_turned: false,
         backdrop: None,
         backdrop_requested: false,
         picture,

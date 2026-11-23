@@ -32,9 +32,14 @@ memory settings stay the system's own.
   (`bande_xdg::spawn_detached`).
 - The compositor (and with it the shell and every session client it starts) runs in
   `bande-compositor.service` in `session.slice`, with `ManagedOOMPreference=avoid` and
-  `OOMScoreAdjust=100`. `avoid` is honoured because the candidate and the monitored
-  `user@.service` cgroup have the same owner. `avoid` is not inherited, so it is set on the leaf
-  unit itself.
+  `OOMScoreAdjust=100`, the lowest a user unit can set. `avoid` is honoured because the candidate
+  and the monitored `user@.service` cgroup have the same owner. `avoid` is not inherited, so it is
+  set on the leaf unit itself. The session clients (shell, lock screen, screenshot tool,
+  clipboard daemon) start at 200 like the services (`bande_xdg::adopt_service_oom_score` before
+  `exec`), so the kernel kills one of them before the compositor, which then starts it again:
+  the unit has `OOMPolicy=continue`, since systemd's default `stop` would end the whole session
+  when the kernel kills the shell. The unit sets no `MemoryLow=`: `user.slice` protects no
+  memory, and a child cannot be given more than its parents have.
 - The session services (config, power, sound, tray, polkit agent, automount, portal) move from
   the default `app.slice` to `session.slice`. They are not apps, and no app-level kill should
   ever pick them.

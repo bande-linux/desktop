@@ -13,11 +13,13 @@ reach a running session.
 
 - **The whole session at idle:** `bande-idle --binaries <dir>` runs the compositor, the shell,
   the services and the apps found in `<dir>` with a private home folder and reports RSS and
-  wake-ups per process with windows open, minimized and locked.
+  wake-ups per process with windows open, minimized, locked, and locked with the displays off.
 - **One client's memory and CPU:** `bande-footprint` starts a client as a shell client on a
   2928×1818 output at 1.5×, lets it settle (`--settle <seconds>`), optionally moves the pointer
-  over it, and prints RSS + swap, Vulkan device memory, threads and CPU per pointer move. For an
-  exact number read `Anonymous` from `/proc/<pid>/smaps_rollup`. `BANDE_RENDERER=gpu` or `=cpu`
+  over it, and prints RSS + swap, device memory, threads and CPU per pointer move. Device memory
+  is the GPU driver's `drm-total-*` in `/proc/<pid>/fdinfo`, once per DRM client, plus
+  lavapipe's `/memfd:allocation` mappings. For an exact number read `Anonymous` from
+  `/proc/<pid>/smaps_rollup`. `BANDE_RENDERER=gpu` or `=cpu`
   picks the path.
 
   ```sh
@@ -50,11 +52,11 @@ need a real GPU.
 
 ## Footprint
 
-Idle at the login window on an arm64 machine (installed dist packages, one
-2560×1440 display): the greeter's compositor 50 MB RSS and the greeter 40 MB, every user service
-2–4 MB and asleep in `epoll` with no timer; the compositor wakes only for its systemd watchdog.
-Under `bande-footprint` on the CPU path the shell holds about 78 MiB anonymous memory and the
-greeter about 26 MiB. Hidden windows drop their renderer after 30 s, decoded wallpapers are freed
+Under `bande-idle` on amd64 with an Intel GPU (installed dist binaries, 2928×1818 at 1.5×) the
+compositor holds about 79 MB RSS, the shell 105 MB, the screenshot tool 38 MB and every session
+service 4–11 MB, each asleep in `epoll`. Every process that draws with wgpu also holds GPU memory
+(on an integrated GPU this is system memory): about 190–310 MiB each, which `bande-footprint`
+shows as device memory. Hidden windows drop their renderer after 30 s, decoded wallpapers are freed
 once uploaded (the other appearance's at once, redrawn from the cache when shown), and animations, sampling and timers run only while something on screen needs
 them, so an idle process should not wake at all. A redraw whose scene is unchanged commits nothing,
 so a D-Bus change that does not alter what is shown wakes only the client, never the
@@ -72,14 +74,22 @@ eventfds. These are the only timers left; each runs only while its condition hol
 | What | When | Why |
 | :--- | :--- | :--- |
 | Compositor | every 10 s | systemd watchdog (`WatchdogSec=20s`) |
+| The login window's compositor | every 10 s | re-arms `alarm(20)`, which ends a hung login window |
 | Night light | at the next scheduled change | real-time deadline; clock and time zone changes are events |
-| Bar clock; Calendar's today while on screen | at each minute boundary | the display unit |
+| Night light fading | every 250 ms through the 60 s scheduled fade, every 50 ms through the 1.5 s fade when switched | 240 steps of at most about 25 K, too small to see |
+| Bar clock, the lock screen's clock | at each minute boundary while drawn | the display unit; a clock waits for its frame before it arms the next minute, and the compositor sends no frame while locked (the bar) or with the displays off, so neither wakes then |
+| The login window's clock; Calendar's today while on screen | at each minute boundary | the display unit |
 | Countdowns (log out, screenshot timer), Now Playing | at each second boundary while shown | the display unit |
 | Notifications | when an age label next changes, while open | the display unit (minutes, hours, midnight) |
 | Banners, alarms, calendar alerts | at their deadline | real deadlines |
 | System Monitor, the low memory window | every 2 s while a window is on screen | `/proc` has no change events |
-| Settings' Sound pane | 20 times a second while on screen | the input level meter |
-| Disk space (automount) | every 10 min | free space has no kernel event |
+| Settings' Sound pane, Quick Settings with an input device | 20 times a second while on screen | the input level meter |
+| A spinner or an indeterminate progress bar | every frame while shown | the animation |
+| Automatic appearance (portal) | at the next sunrise or sunset | real-time deadline |
+| Stall watch (compositor) | once, 6 s after the event loop got busy | catches an event loop that does not come back |
+| Disk space (automount) | every 10 min, with a minute of timer slack | free space has no kernel event; the slack lets the kernel fire it with another wake-up |
+| Resource reports (`bande-reporter resources`, a system service) | every 10 min, with 5 minutes of timer slack, also at the login window | samples every unit's CPU, wake-ups and writes; nothing signals a runaway process |
+| Software Update (`bande-update-check.timer`) | once 5 to 20 min after login, then daily | see [Updates](session.md#updates) |
 | Server health (automount) | every 8 s while a server is connected | a server that stops answering sends nothing |
 | Files | once a day | emptying old Trash items |
 | Files, a server folder in the active window | every 10 s | servers send no change events; re-lists the folder and reads its free space off the UI thread |
@@ -97,8 +107,9 @@ well-known sender locally, so a `MessageIterator` whose rule names only a sender
 every other signal of its connection: give such a rule a path or an interface too, as Settings
 does for BlueZ.
 
-Installed dist binaries are 14–21 MB for each GUI program (`bande-shell` 21, Settings 19, Files
-17, the compositor 14) and about 2–3 MB for each service. Every GUI binary carries its own copy of
+Installed amd64 dist binaries are 15–38 MB for each GUI program (`bande-shell` 38, Settings 34,
+Files about 34, Mail 32, Viewer 31, the compositor about 25, Calculator 17) and 2–9 MB for each
+service. Every GUI binary carries its own copy of
 the toolkit, Vello, wgpu, Parley and zbus, including about 2.9 MB of ICU segmentation data for
 Thai, Lao, Khmer, Burmese and CJK text. They stay separate binaries, linked with packed relative
 relocations ([decision 0006](../decisions/0006-separate-gui-binaries.md)).

@@ -1,5 +1,5 @@
 use std::fs::{File, OpenOptions};
-use std::io::{self, Write};
+use std::io;
 use std::os::fd::AsFd;
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
@@ -57,21 +57,6 @@ fn ask_for_display() -> io::Result<bool> {
         }
     }
     Ok(true)
-}
-
-/// Empties the login window's text console and paints it in the login window's background with
-/// no cursor, so that whenever the kernel shows that console between two sessions it shows only
-/// that colour.
-pub fn blank_console() {
-    let background = bande_splash::splash_background();
-    let blank = format!(
-        "\x1b[?25l\x1b]P0{:02x}{:02x}{:02x}\x1b[H\x1b[2J",
-        background.r, background.g, background.b
-    );
-    if let Err(error) = own_terminal().and_then(|mut terminal| terminal.write_all(blank.as_bytes()))
-    {
-        tracing::warn!("the console may show text between sessions: {error}");
-    }
 }
 
 /// Takes the display over from Plymouth while the boot screen still shows: keeps the kernel's

@@ -1,7 +1,7 @@
 debian/build/bin/bande-greeter usr/bin/
+debian/build/bin/bande-login usr/libexec/
 crates/shell/greeter/data/bande-greeter-session usr/libexec/
 crates/shell/greeter/data/bande-console-fallback.service usr/lib/systemd/system/
-crates/shell/greeter/data/greetd-config.toml usr/share/bande-greeter/
 crates/shell/greeter/data/bande-greeter.service usr/lib/systemd/system/
 crates/shell/greeter/data/bande-greeter-handover.path usr/lib/systemd/system/
 crates/shell/greeter/data/bande-greeter-handover.service usr/lib/systemd/system/

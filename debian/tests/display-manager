@@ -1,7 +1,6 @@
 #!/bin/bash
 # Next to another display manager, installing the login window offers it and does not impose it,
-# leaves greetd's own service and configuration alone, dpkg-reconfigure switches both ways, and
-# removing the login window hands the display back.
+# dpkg-reconfigure switches both ways, and removing the login window hands the display back.
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 default_display_manager() {
@@ -17,8 +16,6 @@ default_display_manager /usr/sbin/lightdm
 apt-get install -y -q --no-install-recommends bande-greeter < /dev/null
 default_display_manager /usr/sbin/lightdm
 echo metaget shared/default-x-display-manager choices | debconf-communicate | grep -qw bande-greeter
-test ! -e /usr/lib/systemd/system/greetd.service.d
-dpkg --verify greetd
 choose bande-greeter bande-greeter
 default_display_manager /usr/bin/bande-greeter
 choose lightdm lightdm

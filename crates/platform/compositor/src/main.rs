@@ -7,10 +7,10 @@ use bande_compositor::{
     Awaited, CLIPBOARD_DAEMON, Compositor, CursorTheme, DisplaysHandle, DrmBackend, DrmNotifiers,
     FirstMode, FrameClock, FrameOutput, FrameRecovery, FrameScheduler, GREETER, InputSettings,
     REFRESH, REVIEW, RecoveryStep, Renderer, SCREENSHOT, SESSION_CLIENT_RESTART_THROTTLE, SHELL,
-    SessionRequest, SessionRole, SessionUpkeep, Sleep, blank_console, export_session_environment,
-    follow_alerts, follow_appearance, follow_input_settings, follow_lid, follow_login_settings,
-    follow_session, follow_shutdown, follow_sleep, handle_power_key, notify_service_manager,
-    raise_priority, render_material, serve_app_states, serve_displays, serve_global_shortcuts,
+    SessionRequest, SessionRole, SessionUpkeep, Sleep, export_session_environment, follow_alerts,
+    follow_appearance, follow_input_settings, follow_lid, follow_login_settings, follow_session,
+    follow_shutdown, follow_sleep, handle_power_key, notify_service_manager, raise_priority,
+    render_material, serve_app_states, serve_displays, serve_global_shortcuts,
     serve_keyboard_monitor, take_display_from_boot_screen, user_config,
     watchdog_keepalive_interval,
 };
@@ -48,6 +48,7 @@ const GREETER_HANG_LIMIT_SECONDS: u32 = 20;
 const GREETER_HANG_CHECK: Duration = Duration::from_secs(10);
 const LOGIN_DISPLAY_OFF: Duration = Duration::from_secs(10 * 60);
 const LOGIN_WINDOW_SHOWN: &str = "/run/bande-greeter/shown";
+const DESKTOP_SHOWN: &str = "bande-desktop-shown";
 const MINIMUM_UPTIME_TO_RESTART: Duration = Duration::from_secs(300);
 
 enum Backend {
@@ -436,10 +437,7 @@ fn page_flipped(app: &mut App<DrmBackend>, crtc: crtc::Handle, metadata: Option<
             && let Some(marker) = app.first_frame_marker.take()
             && let Err(error) = std::fs::write(&marker, b"")
         {
-            tracing::warn!(
-                "cannot mark {} for the start screen: {error}",
-                marker.display()
-            );
+            tracing::warn!("cannot mark {} as shown: {error}", marker.display());
         }
         let App {
             compositor,
@@ -491,7 +489,6 @@ fn run_drm(
     }
     let first_mode = match session {
         Session::Greeter => {
-            blank_console();
             take_display_from_boot_screen();
             FirstMode::OnScreen
         }
@@ -954,6 +951,10 @@ where
                 app.started,
                 now() + SHELL_READY_TIMEOUT,
             );
+            let shown = app.output.frames_on_screen();
+            app.compositor.fade_in_over(shown);
+            app.first_frame_marker =
+                bande_xdg::runtime_dir().map(|runtime| runtime.join(DESKTOP_SHOWN));
             (None, start_user_session(event_loop, &mut app)?)
         }
         Session::Greeter => {

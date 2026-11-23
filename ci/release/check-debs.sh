@@ -92,11 +92,14 @@ test -s "$root/usr/share/icons/hicolor/scalable/apps/org.bande.Files.svg"
 root=$(extract bande-settings)
 grep -qx 'Exec=bande-settings' "$root/usr/share/applications/org.bande.Settings.desktop"
 root=$(extract bande-greeter)
-grep -qx 'command = "/usr/libexec/bande-greeter-session"' "$root/usr/share/bande-greeter/greetd-config.toml"
-field bande-greeter Depends | grep -qF 'greetd (>= 0.10.3-6)'
+test -x "$root/usr/libexec/bande-login"
+test -x "$root/usr/libexec/bande-greeter-session"
 field bande-greeter Provides | grep -qx x-display-manager
-grep -qx 'ExecStart=/usr/sbin/greetd --config /usr/share/bande-greeter/greetd-config.toml' "$root/usr/lib/systemd/system/bande-greeter.service"
-test ! -e "$root/usr/lib/systemd/system/greetd.service.d"
+field bande-greeter Depends | grep -q libpam-systemd
+grep -qx 'ExecStart=/usr/libexec/bande-login' "$root/usr/lib/systemd/system/bande-greeter.service"
+grep -q '^u _bande-greeter ' "$root/usr/lib/sysusers.d/bande-greeter.conf"
+grep -q pam_systemd "$root/etc/pam.d/bande-greeter-session"
+grep -q pam_loginuid "$root/etc/pam.d/bande-greeter"
 root=$(extract bande-lock)
 grep -qx '@include common-auth' "$root/etc/pam.d/bande-lock"
 field bande-lock Depends | grep -q libpam0g

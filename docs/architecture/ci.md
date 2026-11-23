@@ -113,7 +113,8 @@ cancels the older one, and `source` fails a tag whose commit is not on `main`.
   x-display-manager`, `pipewire` and `wireplumber`, recommends `bande-greeter`,
   `bande-reporter`, `bande-crash-reports`, `pipewire-pulse` and `bande-browser` and otherwise only
   Bande packages built here,
-  that `bande-greeter` provides `x-display-manager` from its own unit,
+  that `bande-greeter` provides `x-display-manager` from its own unit running `bande-login`,
+  with its account and PAM services,
   and that the language packs hold only catalogs; then `lintian --fail-on error,warning` on the
   `.changes` and the `.dsc`. The job uploads `bande-debs-<suite>-<arch>`, amd64 also
   `bande-debs-<suite>-all`, and the `-dbgsym` packages as `bande-debug-symbols-<suite>-<arch>`.

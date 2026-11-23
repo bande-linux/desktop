@@ -34,7 +34,7 @@ time from exec to the first buffer the compositor receives, 45–48 launches per
   - Every process relocates the whole binary: about 1.05 MB of dirty RELRO instead of 0.3–0.9 MB,
     and 3–6 MB more RSS at start for each program alone.
   - The keyring identifies apps by `/proc/<pid>/exe`: nine programs would share one identity and
-    read each other's items. The login window, run by greetd before anyone signs in, would map
+    read each other's items. The login window, run before anyone signs in, would map
     every app's code and `libpipewire`.
   - `/proc/self/exe` re-execs (content workers, the shell's dialogs), the taskbar's match of a
     process to its app, Settings' check for programs running replaced code and coredump names

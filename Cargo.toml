@@ -155,6 +155,7 @@ bande-l10n-source = { path = "crates/libs/l10n-source" }
 bande-launcher = { path = "crates/shell/launcher" }
 bande-lock = { path = "crates/shell/lock" }
 bande-log = { path = "crates/libs/log" }
+bande-login = { path = "crates/services/login" }
 bande-lookup = { path = "crates/apps/lookup" }
 bande-mail-core = { path = "crates/libs/mail-core" }
 bande-media = { path = "crates/libs/media" }
@@ -163,6 +164,7 @@ bande-network = { path = "crates/libs/network" }
 bande-notifications = { path = "crates/shell/notifications" }
 bande-notify = { path = "crates/services/notify" }
 bande-packages = { path = "crates/libs/packages" }
+bande-pam = { path = "crates/libs/pam" }
 bande-pdf = { path = "crates/toolkit/pdf" }
 bande-polkit = { path = "crates/services/polkit" }
 bande-power = { path = "crates/services/power" }

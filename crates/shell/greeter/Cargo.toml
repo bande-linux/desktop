@@ -1,6 +1,6 @@
 [package]
 name = "bande-greeter"
-description = "Bande login window: signs users in through greetd"
+description = "Bande login window: signs users in through bande-login"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -21,6 +21,7 @@ bande-datetime.workspace = true
 bande-keyboard.workspace = true
 bande-l10n.workspace = true
 bande-lock.workspace = true
+bande-login.workspace = true
 bande-log.workspace = true
 bande-status.workspace = true
 bande-toolkit.workspace = true

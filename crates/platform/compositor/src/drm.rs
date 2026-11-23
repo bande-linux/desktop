@@ -4,7 +4,7 @@ use std::os::fd::{AsFd, AsRawFd};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use smithay::backend::allocator::dmabuf::AsDmabuf;
+use smithay::backend::allocator::dmabuf::{AsDmabuf, Dmabuf, DmabufFlags};
 use smithay::backend::allocator::{Allocator, Buffer, Fourcc, Modifier};
 use smithay::backend::allocator::dumb::DumbAllocator;
 use smithay::backend::allocator::format::FormatSet;
@@ -1011,7 +1011,12 @@ fn current_crtc(
     device.get_crtc(crtc).map(Some)
 }
 
-fn shown_frame(device: &DrmDevice, connector: connector::Handle) -> io::Result<Option<Snapshot>> {
+enum OnScreen {
+    Pixels(Snapshot),
+    Buffer(Dmabuf),
+}
+
+fn shown_frame(device: &DrmDevice, connector: connector::Handle) -> io::Result<Option<OnScreen>> {
     let Some(framebuffer) = current_crtc(device, connector)?.and_then(|crtc| crtc.framebuffer())
     else {
         return Ok(None);
@@ -1033,13 +1038,43 @@ fn shown_frame(device: &DrmDevice, connector: connector::Handle) -> io::Result<O
             info.size(),
             info.pitches()[0],
             info.offsets()[0],
-        ),
-        false => Ok(None),
+        )
+        .map(|frame| frame.map(OnScreen::Pixels)),
+        false => exported_buffer(device, &info).map(|frame| frame.map(OnScreen::Buffer)),
     };
-    if let Err(error) = device.close_buffer(buffer) {
-        tracing::warn!("cannot let go of the frame on screen: {error}");
+    let mut handles: Vec<_> = info.buffers().into_iter().flatten().collect();
+    handles.dedup();
+    for handle in handles {
+        if let Err(error) = device.close_buffer(handle) {
+            tracing::warn!("cannot let go of the frame on screen: {error}");
+        }
     }
     frame
+}
+
+fn exported_buffer(
+    device: &DrmDevice,
+    info: &framebuffer::PlanarInfo,
+) -> io::Result<Option<Dmabuf>> {
+    let Some(modifier) = info.modifier() else {
+        return Ok(None);
+    };
+    let (width, height) = info.size();
+    let size = (
+        i32::try_from(width).map_err(io::Error::other)?,
+        i32::try_from(height).map_err(io::Error::other)?,
+    );
+    let mut builder = Dmabuf::builder(size, info.pixel_format(), modifier, DmabufFlags::empty());
+    let flags = u32::try_from(libc::O_CLOEXEC).map_err(io::Error::other)?;
+    for (index, handle) in info.buffers().into_iter().enumerate() {
+        let Some(handle) = handle else {
+            break;
+        };
+        let plane = u32::try_from(index).map_err(io::Error::other)?;
+        let fd = device.buffer_to_prime_fd(handle, flags)?;
+        builder.add_plane(fd, plane, info.offsets()[index], info.pitches()[index]);
+    }
+    Ok(builder.build())
 }
 
 fn read_buffer(
@@ -1179,7 +1214,7 @@ impl FrameOutput for DrmBackend {
 
     fn frames_on_screen(&mut self) -> Vec<ShownFrame> {
         let splash_shown = Path::new(PLYMOUTH_PID).exists();
-        let frames: Vec<(String, Snapshot)> = self
+        let frames: Vec<(String, OnScreen)> = self
             .heads
             .iter()
             .filter_map(|head| {
@@ -1192,20 +1227,23 @@ impl FrameOutput for DrmBackend {
                 splash_shown
                     .then(|| splash_for(&self.device, head))
                     .flatten()
-                    .map(|frame| (name.clone(), frame))
+                    .map(|frame| (name.clone(), OnScreen::Pixels(frame)))
             })
             .collect();
         let context = self.renderer.context_id();
         frames
             .into_iter()
             .filter_map(|(output, frame)| {
-                self.renderer
-                    .import_memory(
+                let imported = match frame {
+                    OnScreen::Pixels(frame) => self.renderer.import_memory(
                         &frame.rgba,
                         Fourcc::Abgr8888,
                         (frame.size.w, frame.size.h).into(),
                         false,
-                    )
+                    ),
+                    OnScreen::Buffer(buffer) => self.renderer.import_dmabuf(&buffer, None),
+                };
+                imported
                     .inspect_err(|error| {
                         tracing::warn!("cannot fade in over what {output} shows: {error}")
                     })

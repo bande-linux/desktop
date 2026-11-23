@@ -406,7 +406,7 @@ PipeWire's socket.
   `QT_QPA_PLATFORMTHEME` (each unless already set), and takes the language and formats from
   `/etc/locale.conf` (or Debian's `/etc/default/locale` where there is none), then
   `~/.config/locale.conf`, into the user manager and D-Bus activation:
-  greetd and a lingering user manager keep what they had, so a choice in Settings would
+  bande-login and a lingering user manager keep what they had, so a choice in Settings would
   otherwise need a restart. The login window reads the same file through
   `bande-greeter-session`.
 - Settings ▸ Language & Region writes only the person's file, asking for an administrator only
@@ -576,23 +576,39 @@ graph TD
 
 ## Display manager and greeter
 
-Bande uses `greetd` for the privileged part of login and keeps its own UI unprivileged:
+Bande's login manager is `bande-login` (`crates/services/login`), which keeps the privileged
+part of login small and the UI unprivileged:
 
-1. **The daemon**: `greetd` runs as root on `seat0` and owns PAM, through Bande's own service
-   `/etc/pam.d/bande-greeter` (`[general] service` in Bande's greetd configuration). It follows
-   Debian's `gdm-password`: `pam_nologin`, no root login, `common-auth`, `common-account`,
-   `pam_loginuid`, `pam_keyinit`, `pam_limits`, `pam_env` (with `/etc/default/locale`),
-   `common-session` (`pam_systemd`, and the keyring module through `pam-auth-update`) and
-   `common-password`.
-2. **The greeter**: `bande-greeter` runs as greetd's user (`_greetd`), talks to greetd over its
-   JSON IPC socket inside `bande-compositor --greeter`, and shows the lock screen's layout
-   (`bande_lock::LockScreen`, announced as "Sign in") with battery, Wi-Fi or cable or Offline,
-   input source, and Sleep, Restart and Shut Down. Logind's answers are asked again when the
-   devices change or the screen wakes, so a dock that changes them is followed.
-3. **Handover**: after authentication the greeter asks greetd to start `bande-session` (which
-   starts `bande-compositor.service` in the user's manager) with `XDG_SESSION_TYPE=wayland`,
-   `XDG_CURRENT_DESKTOP=X-Bande` and `XDG_SESSION_DESKTOP=bande`, then exits, releasing the seat
-   and VT before greetd opens the session through `pam_systemd`.
+1. **The daemon**: `bande-login` runs as root on `seat0` (`bande-greeter.service`). For every
+   session it starts a worker, itself again (`/proc/self/exe --worker`) with a socket for its
+   standard input, so each session's PAM transaction lives in a process of its own that
+   `pam_systemd` makes the session's leader. A worker authenticates, checks the account (changing
+   an expired password with `pam_chauthtok`), establishes credentials, opens the session, runs
+   the session's processes as the person (`setsid`, the virtual terminal as controlling
+   terminal, their groups, `PR_SET_PDEATHSIG`), and closes the session when they end. People
+   sign in through `/etc/pam.d/bande-greeter`, which follows Debian's `gdm-password`:
+   `pam_nologin`, no root login, `common-auth`, `common-account`, `pam_loginuid`, `pam_keyinit`,
+   `pam_limits`, `pam_env` (with `/etc/default/locale`), `common-session` (`pam_systemd`, and the
+   keyring module through `pam-auth-update`) and `common-password`. The worker sets
+   `XDG_SEAT=seat0`, `XDG_VTNR`, `XDG_SESSION_CLASS=user`, `XDG_SESSION_TYPE=wayland`,
+   `XDG_SESSION_DESKTOP=bande` and `XDG_CURRENT_DESKTOP=X-Bande` before `pam_open_session`, and
+   runs `/usr/bin/bande-session` through `/bin/sh` after `/etc/profile` and `~/.profile`.
+2. **The greeter**: `bande-greeter` runs as `_bande-greeter` (a system account from
+   `debian/bande-greeter.sysusers`, home `/var/lib/bande-greeter/home`) in a session of class
+   `greeter` (`/etc/pam.d/bande-greeter-session`, which admits only that account), inside
+   `bande-compositor --greeter` on VT 1, and talks to `bande-login` over
+   `/run/bande-login/greeter.sock` (`BANDE_LOGIN_SOCK`), which only that uid may open and whose
+   peer `bande-login` checks again. It shows the lock screen's layout (`bande_lock::LockScreen`,
+   announced as "Sign in") with battery, Wi-Fi or cable or Offline, input source, and Sleep,
+   Restart and Shut Down. Logind's answers are asked again when the devices change or the screen
+   wakes, so a dock that changes them is followed.
+3. **The protocol**: length-prefixed JSON, one response for each request:
+   `create_session`, `post_auth_message_response`, `start_session` and `cancel_session`
+   (`bande_login::protocol`). Messages either way are refused above 64 KiB, a message the login
+   window starts must arrive within a second, answers are zeroized, and `start_session` passes on
+   only `BANDE_LOGIN_…` variables, so the login window cannot choose the session's class, seat or
+   program. Which worker the login window talks to, and what happens when either goes away, is
+   decided by `bande_login::manager`, which does no I/O.
 
 **People.** The greeter lists AccountsService's `ListCachedUsers` (no `SystemAccount`, no locked
 account, no `nologin` or `false` shell), or without it `/etc/passwd` uids 1000–59999, and always
@@ -601,25 +617,25 @@ The list is a row of avatars and names (an AccessKit list box) that a click, a t
 or Up and Down choose from; with no one listed, the window asks for a name.
 
 **The conversation.** The greeter and the lock screen share one model (`bande_lock::Prompt`,
-`Refusal`, `Messages`, `Backoff`): the greeter starts greetd's `CreateSession` as soon as a person
+`Refusal`, `Messages`, `Backoff`): the greeter starts `bande-login`'s `create_session` as soon as a person
 is shown, and the lock screen its PAM transaction (`bande-lock`, on its own thread) when it
 wakes, so a fingerprint module's "Place your finger…" comes first. Each prompt becomes the
 field's placeholder, a visible prompt (a user name, a code) shows what is typed, and a password
 typed before the first prompt answers it. PAM's info and error messages stay under the field,
 the last three of them, each at most 400 characters. Escape cancels; while checking it lets go
-of the conversation and starts a new one (greetd answers a cancel only once the module returns).
-greetd's and PAM's codes become sentences (wrong password, expired password or account, not
+of the conversation and starts a new one (`bande-login` ends the worker running the module at
+once). PAM's codes become sentences (wrong password, expired password or account, not
 allowed, too many attempts, unavailable); the raw text goes to the journal. A refusal after an
 answer starts a new conversation at once; one before any prompt (`pam_nologin`, a PAM that cannot
 load) waits for the next answer, Escape or another person. After four wrong answers for the same
 login name each further one waits 5 s, doubling to a minute, with a countdown under the field;
 the login window keeps the count per name across switching people. While a session is starting,
 the field holds text or a power confirmation is open, Up and Down do not switch people. At login
-greetd changes an expired password with `pam_chauthtok` through the same conversation (the
+`bande-login` changes an expired password with `pam_chauthtok` through the same conversation (the
 `password` stack of `bande-greeter`). The lock screen cannot change one, as it runs as the user
 with no `password` stack: when `account` answers that the password has expired it unlocks the
 session it already holds and a notification asks the person to choose a new one in Settings ▸
-Users, which runs `passwd`. greetd's messages are refused above 64 KiB.
+Users, which runs `passwd`.
 
 **Keyboard.** The field shows Caps Lock and, with several layouts, the active one as a button
 that switches to the next, as `Super+Space` does. The layouts and `XKBOPTIONS` are those in
@@ -627,7 +643,7 @@ that switches to the next, as `Super+Space` does. The layouts and `XKBOPTIONS` a
 `bande-locale-helper`.
 
 **Accessibility.** The login window's compositor runs the screen reader and serves
-`org.freedesktop.a11y.KeyboardMonitor` as the session does, and `_greetd`'s user manager starts
+`org.freedesktop.a11y.KeyboardMonitor` as the session does, and `_bande-greeter`'s user manager starts
 PipeWire and WirePlumber, so Orca speaks before anyone signs in. Its defaults are
 `/etc/bande/login.kdl` (the `accessibility` block), written by Settings ▸ Accessibility's "Use at
 Login Screen" through `bande-locale-helper accessibility` and followed by the compositor; the
@@ -648,19 +664,43 @@ still running, `bande-session` writes a keyword to `failed` in that person's log
 folder (below); the greeter shows that person why their
 last session ended, and the next session that starts removes the note.
 
-**Between the login window and the desktop.** greetd and the sessions it starts share VT 1.
-Each time greetd starts a session it sets VT 1 to text mode and clears it, and logind does the
-same when a session's compositor lets go of the display; with the kernel's console bound to
-VT 1, either puts the console's framebuffer on screen in place of the last frame. The login
-window's compositor therefore empties that console, hides its cursor and paints its background
-in Datum's `deep` (`blank_console`), and its output goes to the journal (`systemd-cat`), so the
-screen shows only `deep` until the desktop fades in over that same colour; nothing writes text
-to VT 1. A compositor leaving the screen still closes its framebuffers with
-`DRM_IOCTL_MODE_CLOSEFB`, which leaves them on their planes until something else is shown.
-Unlocking is one compositor: the last lock frame fades out over the desktop, so input reaches
-the desktop at once. `Ctrl+Alt+F2` reaches a text console at any time, and when greetd gives up
+**Between the login window and the desktop.** The login window stays on screen until the
+desktop has drawn its first frame, then the desktop fades in over it:
+
+1. Once the password is accepted, the login window's content fades out over the person's own
+   wallpaper, and then it asks for the session (`start_session`).
+2. The worker opens the session on a virtual terminal no one has open (`VT_OPENQRY`). Before
+   bringing it to the front it empties that terminal's console, hides its cursor and paints its
+   background in Datum's `deep`, sets it to graphics mode, and acknowledges every switch of it
+   (`VT_PROCESS`) until the session's compositor takes it over through logind. Logind pauses the
+   login window's devices and its compositor stops drawing without touching the display, so its
+   last frame stays on screen; nothing sets a terminal on screen to text mode. The worker waits
+   until logind calls the session active, then starts it.
+3. The session's compositor starts in its own mode (no modeset when that is the mode on screen)
+   and, before its first commit, imports each display's framebuffer, the login window's last
+   frame, as a dma-buf through `DRM_IOCTL_MODE_GETFB2` and PRIME (it is tiled, with compression
+   on Intel; only linear dumb buffers, as Plymouth's and the console's, are read through a
+   mapping). It holds its frames until the wallpaper and the Taskbar can be drawn, then fades
+   that frame out over the desktop with the `standard` spring (`fade` with Reduce Motion).
+4. Once a frame with the desktop is on screen, the compositor creates
+   `$XDG_RUNTIME_DIR/bande-desktop-shown` (the worker removed any older one and watches for it
+   with inotify), `bande-login` answers `start_session` and ends the login window's session.
+
+When the session ends before its first frame (`bande-session` failing, the compositor
+crashing), the worker brings VT 1 back and `bande-login` answers `start_session` with an error;
+the login window, still running, comes back with its content and the reason `bande-session` left
+for it (above). Logging out ends the session: logind gives the terminal back to the console,
+which shows only `deep`, and `bande-login` starts the login window again on VT 1, set to
+graphics mode before it comes to the front, which fades in over that colour. A compositor
+leaving the screen closes its framebuffers with `DRM_IOCTL_MODE_CLOSEFB`, which leaves them on
+their planes until something else is shown. Unlocking is one compositor: the last lock frame
+fades out over the desktop, so input reaches the desktop at once. A session takes the first free
+virtual terminal, usually VT 2, and `bande-login` keeps VT 1 open, so logind starts no `getty`
+there (which would conflict with `bande-greeter.service`); `Ctrl+Alt+F3` and above reach a text
+console at any time. When the login window ends three times within 10 s of starting while no
+session runs, `bande-login` exits with a failure; after five failed starts in 30 s
 `bande-console-fallback.service` resets VT 1's console, quits Plymouth, starts `getty@tty1` and
-brings the console forward.
+brings the console forward. Stopping `bande-greeter.service` ends every session it started.
 
 The boot screen (`bande-plymouth-theme`, which `bande-desktop` recommends) shows when GRUB starts
 the kernel with `splash` and `loglevel=3`, which the package's
@@ -668,16 +708,14 @@ the kernel with `splash` and `loglevel=3`, which the package's
 Show a boot screen turns off and on. It keeps playing until the login window is on screen and
 hands over without a blank frame or console text. `bande-greeter.service` starts after
 `plymouth-start.service` and conflicts with `plymouth-quit.service`, so the end of boot does not
-quit it. greetd and the sessions it starts use VT 1, Plymouth's terminal, so nothing switches
-VT; greetd sets it to text mode and clears it, which puts the kernel's console on screen until
-Plymouth's next frame, as Plymouth puts its own framebuffer back whenever it finds another one
-shown. While Plymouth runs (`/run/plymouth/pid`), the login window's compositor sets its
+quit it. The login window runs on VT 1, Plymouth's terminal, so nothing switches VT, and
+`bande-login` leaves the mode of a terminal already on screen alone. While Plymouth runs (`/run/plymouth/pid`), the login window's compositor sets its
 terminal to graphics mode, so the kernel's console cannot draw once Plymouth lets go, and asks
 for the display: only root may talk to Plymouth, so it creates `handover` in
-`/run/bande-greeter` (a `_greetd` folder from `debian/bande-greeter.tmpfiles`) and the root
+`/run/bande-greeter` (a `_bande-greeter` folder from `debian/bande-greeter.tmpfiles`) and the root
 `bande-greeter-handover.path` runs `plymouth deactivate`, which stops Plymouth drawing and gives
 up the display with its last frame on screen, then makes the folder `handed-over` there (a
-`mkdir`, which follows no link `_greetd` could plant). The
+`mkdir`, which follows no link `_bande-greeter` could plant). The
 compositor waits for that for at most 3 s and only then takes the seat and the display through
 logind, whose own graphics mode Plymouth would otherwise reset. The theme has no end animation,
 which would wait for the indicator's 2 s cycle; Plymouth hides the indicator when it stops.
@@ -701,8 +739,8 @@ compositor logs it and takes the display anyway. The background is Datum's `deep
 which is also the compositor's clear colour. On a system without Plymouth none of this runs.
 
 **Ending the session.** Log Out stops `bande-compositor.service` in the user's manager, never
-logind's `Session.Terminate`, which would leave the compositor holding the seat while greetd
-starts the greeter and refuse the next login where the manager outlives the session. `BindsTo`
+logind's `Session.Terminate`, which would leave the compositor holding the seat while `bande-login`
+starts the login window and refuse the next login where the manager outlives the session. `BindsTo`
 then stops `graphical-session.target` and everything `PartOf` it, including app scopes
 (`TimeoutStopSec=5s`, so a hung app holds up neither a log out nor a shutdown). If something else
 ends the login scope, `bande-session` traps the signal and stops the service. Restart and Shut
@@ -711,16 +749,15 @@ a refusal.
 
 **Installation.** `bande-greeter` is a display manager of its own, the way Debian's display
 managers are: it provides `x-display-manager`, shares the debconf question
-`shared/default-x-display-manager` and ships `bande-greeter.service`, which runs greetd with
-`/usr/share/bande-greeter/greetd-config.toml` on VT 1 (where it conflicts with `getty@tty1`),
-conflicts with `greetd.service` and starts `bande-console-fallback.service` when greetd gives up. greetd's own
-`greetd.service` and its conffile `/etc/greetd/config.toml` stay untouched. The chosen display
+`shared/default-x-display-manager` and ships `bande-greeter.service`, which runs `/usr/libexec/bande-login` with the login window on
+VT 1 (where it conflicts with `getty@tty1`) and starts `bande-console-fallback.service` when the
+login window keeps failing. The chosen display
 manager is the daemon named in `/etc/X11/default-display-manager` (`/usr/bin/bande-greeter`
 for the login window), and `/etc/systemd/system/display-manager.service` links to its unit;
 every display manager's maintainer scripts keep the two in step with the debconf answer.
 
-- Where no display manager is chosen yet, debconf offers the login window and greetd (which
-  `bande-greeter` depends on) with the login window preselected, so a non-interactive install
+- Where no display manager is chosen yet, debconf offers the login window with every other
+  installed display manager, the login window preselected, so a non-interactive install
   chooses it. Next to another display manager the existing choice is preselected, so a
   non-interactive install keeps it.
 - `dpkg-reconfigure bande-greeter` (or any display manager's package) switches.
@@ -729,16 +766,14 @@ every display manager's maintainer scripts keep the two in step with the debconf
   else is installed), and links it; with none left, the link goes and the computer starts to
   the text console. Only these scripts touch the link: `deb-systemd-helper`, whose purge
   removes an alias whatever it points to, never manages `bande-greeter.service`.
-- Another greetd configuration for the login window: `systemctl edit bande-greeter` and set
-  `ExecStart=` and a new `ExecStart=/usr/sbin/greetd --config …`.
 
 A switch takes effect at the next start, or at once with `systemctl restart
 display-manager.service`, which ends the sessions it started.
 
 **Wallpaper at login.** The login window shows the wallpaper of the person it offers, starting
-with whoever signed in last (`$XDG_STATE_HOME/bande-greeter/last-user` in greetd's home,
-`/var/lib/greetd`). Homes are 0700, so each person has a folder the login window reads,
-`/var/lib/bande-greeter/users/<uid>`, owned by them, group `_greetd`, mode 2750: systemd makes it
+with whoever signed in last (`$XDG_STATE_HOME/bande-greeter/last-user` in the login window's
+home, `/var/lib/bande-greeter/home`). Homes are 0700, so each person has a folder the login window reads,
+`/var/lib/bande-greeter/users/<uid>`, owned by them, group `_bande-greeter`, mode 2750: systemd makes it
 (`bande-greeter-share@<uid>.service`, a `StateDirectory=` that `user@.service` wants through a
 drop-in) whenever their user manager starts, and the folder above it is root's, so no one can
 create or replace another person's files or list theirs. `bande-config` copies the dark picture
@@ -772,7 +807,7 @@ what the one before could not save:
   state; after 15 s it exits. The login window, with no work to lose, asks logind to restart a
   computer up for over 5 minutes when it cannot reach the display for 15 s.
 - **The compositor crashes or hangs**: `bande-compositor.service` has `WatchdogSec=20s`, pinged
-  from the event loop, and `TimeoutAbortSec=10s`; the session ends, greetd shows the login window
+  from the event loop, and `TimeoutAbortSec=10s`; the session ends, `bande-login` shows the login window
   and the next session offers the open apps again. The login window's compositor arms
   `alarm(20)` every 10 s. `Ctrl+Alt+F1`…`F12` switch virtual terminals through logind while the
   compositor runs.
@@ -950,7 +985,7 @@ when the pane opens or a check is due.
 
 - **Offline** (installed at the next restart): `libc6`, `systemd`, `libsystemd0`, `udev`,
   `dbus*`, the running kernel's own packages (an upgrade replaces them in place), security
-  updates to `greetd` or `libpam*`, and anything PackageKit says needs a system restart.
+  updates to `bande-greeter` or `libpam*`, and anything PackageKit says needs a system restart.
 - **Boot** (installed now, "Restart to finish updating"): other kernels, `firmware-*`,
   `initramfs-tools` and bootloaders.
 - **Live**: everything else. Update Now simulates the live set first; if it would pull in an

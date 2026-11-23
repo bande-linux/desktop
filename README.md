@@ -112,7 +112,7 @@ sudo apt update
 sudo apt install bande-desktop
 ```
 
-`bande-desktop` brings the desktop, its login window under greetd, NetworkManager and PipeWire,
+`bande-desktop` brings the desktop, its login window, NetworkManager and PipeWire,
 and recommends the Bande apps (all but Velox) and Bande's Browser; other apps install from Software. With `--no-install-recommends` it
 brings only the desktop, a login and sound. Pick the **Bande** session at login. Updates arrive with `sudo apt upgrade` or
 Settings ▸ Software Update. The archive is signed with the key

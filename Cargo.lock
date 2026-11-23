@@ -1061,6 +1061,7 @@ dependencies = [
  "bande-l10n",
  "bande-lock",
  "bande-log",
+ "bande-login",
  "bande-status",
  "bande-toolkit",
  "bande-xdg",
@@ -1211,6 +1212,7 @@ dependencies = [
  "bande-l10n",
  "bande-log",
  "bande-notify",
+ "bande-pam",
  "bande-spring",
  "bande-status",
  "bande-test-wayland",
@@ -1219,7 +1221,6 @@ dependencies = [
  "bande-xdg",
  "jiff",
  "libc",
- "libloading",
  "rustix 1.1.6",
  "tracing",
  "zbus",
@@ -1234,6 +1235,24 @@ dependencies = [
  "tracing",
  "tracing-journald",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "bande-login"
+version = "0.2.0"
+dependencies = [
+ "bande-bus",
+ "bande-design",
+ "bande-log",
+ "bande-pam",
+ "libc",
+ "rustix 1.1.6",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tracing",
+ "zbus",
+ "zeroize",
 ]
 
 [[package]]
@@ -1432,6 +1451,15 @@ dependencies = [
  "serde",
  "tracing",
  "zbus",
+]
+
+[[package]]
+name = "bande-pam"
+version = "0.2.0"
+dependencies = [
+ "libc",
+ "libloading",
+ "zeroize",
 ]
 
 [[package]]

@@ -13,7 +13,7 @@ reach a running session.
 
 - **The whole session at idle:** `bande-idle --binaries <dir>` runs the compositor, the shell,
   the services and the apps found in `<dir>` with a private home folder and reports RSS and
-  wake-ups per process with windows open, minimized and locked.
+  wake-ups per process with windows open, minimized, locked, and locked with the displays off.
 - **One client's memory and CPU:** `bande-footprint` starts a client as a shell client on a
   2928×1818 output at 1.5×, lets it settle (`--settle <seconds>`), optionally moves the pointer
   over it, and prints RSS + swap, Vulkan device memory, threads and CPU per pointer move. For an
@@ -73,7 +73,8 @@ eventfds. These are the only timers left; each runs only while its condition hol
 | :--- | :--- | :--- |
 | Compositor | every 10 s | systemd watchdog (`WatchdogSec=20s`) |
 | Night light | at the next scheduled change | real-time deadline; clock and time zone changes are events |
-| Bar clock; Calendar's today while on screen | at each minute boundary | the display unit |
+| Bar clock, the lock screen's clock | at each minute boundary while drawn | the display unit; a clock waits for its frame before it arms the next minute, and the compositor sends no frame while locked (the bar) or with the displays off, so neither wakes then |
+| The login window's clock; Calendar's today while on screen | at each minute boundary | the display unit |
 | Countdowns (log out, screenshot timer), Now Playing | at each second boundary while shown | the display unit |
 | Notifications | when an age label next changes, while open | the display unit (minutes, hours, midnight) |
 | Banners, alarms, calendar alerts | at their deadline | real deadlines |

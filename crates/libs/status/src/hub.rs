@@ -65,6 +65,7 @@ pub struct StatusHub {
     devices: Option<Sender<Control>>,
     sound: Option<Sender<SoundControl>>,
     errands: Option<Sender<Errand>>,
+    clock_shown: Sender<()>,
     #[cfg(feature = "audio")]
     audio: Option<Arc<Audio>>,
     worker_lost: Arc<AtomicBool>,
@@ -126,8 +127,9 @@ impl StatusHub {
             tracing::warn!("the clock does not follow time zone changes: {error}");
         }
         let minutes = source.clone();
+        let (clock_shown, shown) = mpsc::channel();
         spawn("status-clock", move || {
-            if let Err(error) = follow_minutes(&minutes) {
+            if let Err(error) = follow_minutes(&minutes, &shown) {
                 tracing::warn!("the clock does not advance: {error}");
             }
         });
@@ -163,6 +165,7 @@ impl StatusHub {
             devices,
             sound,
             errands,
+            clock_shown,
             #[cfg(feature = "audio")]
             audio,
             worker_lost: Arc::default(),
@@ -180,6 +183,13 @@ impl StatusHub {
     #[cfg(feature = "audio")]
     pub fn audio(&self) -> Option<Arc<Audio>> {
         self.audio.clone()
+    }
+
+    /// Tells the clock that a bar drew the minute it last sent, so it wakes at the next one.
+    /// Until then it sleeps: the compositor sends no frame while the session is locked or the
+    /// displays are off, so a bar nobody sees never draws and never asks again.
+    pub fn clock_shown(&self) {
+        let _ = self.clock_shown.send(());
     }
 
     pub fn control(&self, control: Control) {

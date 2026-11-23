@@ -32,8 +32,10 @@ debhelper compat 14, built with Debian's `rustc` and `cargo` through dh-cargo's 
   asks for the others at `>= ${source:Version}`, which a binNMU of them still meets).
   `debian/<package>.install` lists what each ships: the programs from `debian/build/bin`
   (the cargo output), files from the crates' `data/` and `data/` at the root under their
-  installed names, and what `debian/rules` generates in `debian/build`: the pointers
-  (`bande-cursor-theme`), the catalogs (`bande-l10n-tool pack`) and each metainfo with its
+  installed names, and what `debian/rules` generates in `debian/build`, each directory by the
+  target of its name, which `ci/dev-install.sh` runs too: the pointers in `cursors`
+  (`bande-cursor-theme`), the catalogs in `l10n` (`bande-l10n-tool pack`), the PAM module in
+  `security`, the boot splash in `plymouth` and each metainfo in `metainfo` with its
   releases (`debian/metainfo.py`: one per upstream version in `debian/changelog`, dated by its
   newest entry and described by its entries' items). After `dh_install`,
   `debian/manpages.py` writes a manual page for each program in `/usr/bin`: the crate's

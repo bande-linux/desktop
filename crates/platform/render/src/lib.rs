@@ -29,7 +29,7 @@ use smithay::backend::renderer::{
 use smithay::reexports::rustix::mm;
 use smithay::utils::{Buffer as BufferCoords, Physical, Size, Transform};
 
-pub use frame::{Blur, RoundedRect, Shadow, VulkanFrame};
+pub use frame::{Backdrop, Blur, RoundedRect, Shadow, VulkanFrame};
 pub use rect::{Rect, disjoint};
 
 const SPIRV: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/compose.spv"));
@@ -426,7 +426,8 @@ pub struct VulkanRenderer {
     staging: Vec<Staging>,
     copies: Vec<PendingCopy>,
     counters: Counters,
-    blur_chains: HashMap<(i32, i32, vk::Format, u32), frame::BlurChain>,
+    blur_chains: HashMap<frame::BlurKey, frame::BlurChain>,
+    blur_frames: u64,
     lost: AtomicBool,
     exhausted: AtomicBool,
     created: Instant,
@@ -855,6 +856,7 @@ impl VulkanRenderer {
             copies: Vec::new(),
             counters: Counters::default(),
             blur_chains: HashMap::new(),
+            blur_frames: 0,
             lost: AtomicBool::new(false),
             exhausted: AtomicBool::new(false),
             created: Instant::now(),
@@ -1045,9 +1047,11 @@ impl VulkanRenderer {
     }
 
     fn retire_unused_blur_chains(&mut self) {
+        self.blur_frames += 1;
+        let oldest = self.blur_frames.saturating_sub(frame::KEEP_UNUSED_FRAMES);
         let (kept, retired): (HashMap<_, _>, HashMap<_, _>) = std::mem::take(&mut self.blur_chains)
             .into_iter()
-            .partition(|(_, chain)| chain.used);
+            .partition(|(_, chain)| chain.last_used >= oldest);
         for chain in retired.values() {
             chain
                 .levels
@@ -1055,9 +1059,6 @@ impl VulkanRenderer {
                 .for_each(|image| self.destroy_image(image));
         }
         self.blur_chains = kept;
-        for chain in self.blur_chains.values_mut() {
-            chain.used = false;
-        }
     }
 
     pub fn set_output_colour(&mut self, colour: Option<OutputColour>) {

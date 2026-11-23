@@ -16,8 +16,8 @@ use crate::{
 
 mod blur;
 
-pub use blur::Blur;
-pub(crate) use blur::BlurChain;
+pub use blur::{Backdrop, Blur};
+pub(crate) use blur::{BlurChain, BlurKey, KEEP_UNUSED_FRAMES};
 
 pub(crate) const QUAD_BYTES: u32 = 112;
 

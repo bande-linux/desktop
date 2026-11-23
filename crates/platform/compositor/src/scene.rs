@@ -29,7 +29,7 @@ use bande_graphics::{
     BackdropTone, Color, Elevation, Palette, Radius, Scheme, window_edge_opacity,
 };
 use bande_render::{
-    Blur, RenderError, RoundedRect, Shadow, VulkanFrame, VulkanRenderer, VulkanTexture,
+    Backdrop, Blur, RenderError, RoundedRect, Shadow, VulkanFrame, VulkanRenderer, VulkanTexture,
 };
 
 pub(crate) const CORNER_RADIUS: f64 = Radius::XL as f64;
@@ -509,6 +509,7 @@ impl BlurElement {
             offset: (BLUR_OFFSET * scale) as f32,
             alpha,
             tone,
+            backdrop: None,
         };
         let mut hasher = DefaultHasher::new();
         for value in [
@@ -531,6 +532,14 @@ impl BlurElement {
 
     pub(crate) fn depend_on(&mut self, below: u64) {
         self.commit = CommitCounter::from((self.params ^ below) as usize);
+        let mut owner = DefaultHasher::new();
+        self.id.hash(&mut owner);
+        let mut backdrop = DefaultHasher::new();
+        (below, self.blur.offset.to_bits(), self.blur.passes).hash(&mut backdrop);
+        self.blur.backdrop = Some(Backdrop {
+            owner: owner.finish(),
+            below: backdrop.finish(),
+        });
     }
 }
 
@@ -688,7 +697,10 @@ pub(crate) fn tie_blurs_to_what_lies_below(elements: &mut [OutputElement], scale
                 continue;
             }
             below.id().hash(&mut hasher);
-            format!("{:?}", below.current_commit()).hash(&mut hasher);
+            below
+                .current_commit()
+                .distance(Some(CommitCounter::default()))
+                .hash(&mut hasher);
             (
                 geometry.loc.x,
                 geometry.loc.y,

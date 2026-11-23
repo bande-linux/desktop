@@ -7,7 +7,7 @@ use crate::imap::Role;
 use crate::settings::SortBy;
 use crate::store::Filter;
 use crate::ui::symbols::Symbol;
-use crate::ui::view::{MailView, SIDEBAR_WIDTH, TOOLBAR_HEIGHT};
+use crate::ui::view::{MailView, Panes, TOOLBAR_HEIGHT};
 use bande_toolkit::ui::{
     BUTTON_HEIGHT, Button, FreeLayout, Label, PopUpButton, SEGMENTED_HEIGHT, SearchField,
     SegmentedControl, TEXT_FIELD_HEIGHT, WidgetId,
@@ -38,6 +38,8 @@ pub enum Signal {
     Forward,
     Flag,
     More,
+    ToggleSidebar,
+    Back,
     Search(String),
     Filter(Filter),
     Sort(SortBy),
@@ -56,6 +58,8 @@ pub type Signals = Rc<RefCell<Vec<Signal>>>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Toolbar {
+    pub sidebar: WidgetId,
+    pub back: WidgetId,
     pub compose: WidgetId,
     pub labelled: bool,
     pub search: WidgetId,
@@ -78,6 +82,8 @@ pub struct Toolbar {
 impl Default for Toolbar {
     fn default() -> Self {
         Self {
+            sidebar: WidgetId::next(),
+            back: WidgetId::next(),
             compose: WidgetId::next(),
             labelled: true,
             search: WidgetId::next(),
@@ -100,8 +106,10 @@ impl Default for Toolbar {
 }
 
 impl Toolbar {
-    fn widgets(&self) -> [WidgetId; 15] {
+    fn widgets(&self) -> [WidgetId; 17] {
         [
+            self.sidebar,
+            self.back,
             self.compose,
             self.search,
             self.filter,
@@ -237,9 +245,14 @@ impl MailView {
             .collect::<Vec<_>>();
         let status = Label::new("").secondary();
         let get_mail = self.symbol_button(Symbol::GetMail, &tr!("Get Mail"), Signal::GetMail);
+        let sidebar =
+            self.symbol_button(Symbol::Sidebar, &tr!("Show Sidebar"), Signal::ToggleSidebar);
+        let back = self.symbol_button(Symbol::Back, &tr!("Back"), Signal::Back);
         let Some(host) = self.host_mut() else {
             return;
         };
+        let sidebar = host.insert_in_header(sidebar, Rect::default());
+        let back = host.insert_in_header(back, Rect::default());
         let compose = host.insert_in_header(compose, Rect::default());
         let search = host.insert_in_header(search, Rect::default());
         let filter = host.insert(filter, Rect::default());
@@ -253,6 +266,8 @@ impl MailView {
         let get_mail = host.insert(get_mail, Rect::default());
         if let [reply, reply_all, forward, archive, junk, delete, flag, more] = ids[..] {
             self.toolbar = Toolbar {
+                sidebar,
+                back,
                 compose,
                 labelled,
                 search,
@@ -284,35 +299,68 @@ impl MailView {
     }
 
     fn compose_labelled(&self) -> bool {
-        SIDEBAR_WIDTH - self.header_insets.leading.max(COLUMN_INSET) - COLUMN_INSET
-            >= LABELLED_COMPOSE
+        self.panes() == Panes::Three
+            && self.sidebar_size() - self.header_insets.leading.max(COLUMN_INSET) - COLUMN_INSET
+                >= LABELLED_COMPOSE
     }
 
     fn header_frames(&self) -> Vec<(WidgetId, Rect)> {
         let toolbar = self.toolbar;
         let button_y = centred(BUTTON_HEIGHT);
         let button = |x: f32| Rect::new(x, button_y, BUTTON_HEIGHT, BUTTON_HEIGHT);
+        let hidden = Rect::default();
         let leading = self.header_insets.leading.max(COLUMN_INSET);
-        let compose = match toolbar.labelled {
-            true => Rect::new(
-                leading,
-                button_y,
-                SIDEBAR_WIDTH - leading - COLUMN_INSET,
-                BUTTON_HEIGHT,
-            ),
-            false => button(SIDEBAR_WIDTH - COLUMN_INSET - BUTTON_HEIGHT),
+        let reading_alone = self.panes() == Panes::One && self.single_reader;
+        let (sidebar, back, compose, after) = match (self.panes(), reading_alone) {
+            (Panes::Three, _) if toolbar.labelled => {
+                let width = self.sidebar_size() - leading - COLUMN_INSET;
+                let compose = Rect::new(leading, button_y, width, BUTTON_HEIGHT);
+                (hidden, hidden, compose, leading + width)
+            }
+            (Panes::Three, _) => {
+                let x = self.sidebar_size() - COLUMN_INSET - BUTTON_HEIGHT;
+                (hidden, hidden, button(x), x + BUTTON_HEIGHT)
+            }
+            (_, true) => (hidden, button(leading), hidden, leading + BUTTON_HEIGHT),
+            _ => {
+                let compose_x = leading + BUTTON_HEIGHT + CONTROL_GAP;
+                (
+                    button(leading),
+                    hidden,
+                    button(compose_x),
+                    compose_x + BUTTON_HEIGHT,
+                )
+            }
         };
         let list = self.list_frame();
-        let search = Rect::new(
-            list.x + COLUMN_INSET,
-            centred(TEXT_FIELD_HEIGHT),
-            (list.width - 2.0 * COLUMN_INSET).max(0.0),
-            TEXT_FIELD_HEIGHT,
-        );
-        let mut frames = vec![(toolbar.compose, compose), (toolbar.search, search)];
-        let mut x = self.reader_frame().x + COLUMN_INSET;
+        let search_x = (list.x + COLUMN_INSET).max(after + COLUMN_INSET);
+        let search_end = match self.panes() {
+            Panes::One => self.size.0 - self.header_insets.trailing.max(COLUMN_INSET),
+            Panes::Two | Panes::Three => list.x + list.width - COLUMN_INSET,
+        };
+        let search = match list.width > 0.0 {
+            true => Rect::new(
+                search_x,
+                centred(TEXT_FIELD_HEIGHT),
+                (search_end - search_x).max(0.0),
+                TEXT_FIELD_HEIGHT,
+            ),
+            false => hidden,
+        };
+        let mut frames = vec![
+            (toolbar.sidebar, sidebar),
+            (toolbar.back, back),
+            (toolbar.compose, compose),
+            (toolbar.search, search),
+        ];
+        let reader = self.reader_frame();
+        let mut x = (reader.x + COLUMN_INSET).max(after + GROUP_GAP);
         for (index, id) in toolbar.actions().into_iter().enumerate() {
-            frames.push((id, button(x)));
+            let frame = match reader.width > 0.0 {
+                true => button(x),
+                false => hidden,
+            };
+            frames.push((id, frame));
             x += BUTTON_HEIGHT;
             if GROUP_ENDS.contains(&(index + 1)) {
                 x += GROUP_GAP;
@@ -340,36 +388,47 @@ impl MailView {
         let filter_width = FILTER_WIDTH
             .min(sort_x - CONTROL_GAP - row.x - COLUMN_INSET)
             .max(0.0);
+        let shown = |frame: Rect| match list.width > 0.0 {
+            true => frame,
+            false => Rect::default(),
+        };
         frames.extend([
             (
                 toolbar.filter,
-                Rect::new(
+                shown(Rect::new(
                     row.x + COLUMN_INSET,
                     centred_in_row(SEGMENTED_HEIGHT),
                     filter_width,
                     SEGMENTED_HEIGHT,
-                ),
+                )),
             ),
             (
                 toolbar.sort,
-                Rect::new(
+                shown(Rect::new(
                     sort_x,
                     centred_in_row(BUTTON_HEIGHT),
                     SORT_WIDTH,
                     BUTTON_HEIGHT,
-                ),
+                )),
             ),
             (
                 toolbar.direction,
-                Rect::new(
+                shown(Rect::new(
                     direction_x,
                     centred_in_row(BUTTON_HEIGHT),
                     BUTTON_HEIGHT,
                     BUTTON_HEIGHT,
-                ),
+                )),
             ),
         ]);
         let foot = self.sidebar_foot_frame();
+        if foot.width <= 0.0 {
+            frames.extend([
+                (toolbar.status, Rect::default()),
+                (toolbar.get_mail, Rect::default()),
+            ]);
+            return frames;
+        }
         let get_mail_x = foot.x + foot.width - COLUMN_INSET - BUTTON_HEIGHT;
         let foot_y = foot.y + ((foot.height - BUTTON_HEIGHT) / 2.0).round();
         frames.extend([
@@ -431,6 +490,7 @@ impl MailView {
                     .header_frames()
                     .into_iter()
                     .map(|(_, frame)| frame)
+                    .filter(|frame| frame.width > 0.0)
                     .collect(),
             },
             tabs: Vec::new(),
@@ -470,6 +530,11 @@ impl MailView {
             (self.toolbar.forward, reading),
             (self.toolbar.flag, selected),
             (self.toolbar.more, selected),
+            (self.toolbar.sidebar, self.panes() != Panes::Three),
+            (
+                self.toolbar.back,
+                self.panes() == Panes::One && self.single_reader,
+            ),
         ];
         for (id, enabled) in states {
             if let Some(button) = self.ui.widget_as::<Button>(id) {

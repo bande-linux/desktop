@@ -27,6 +27,8 @@ pub enum Symbol {
     More,
     SortAscending,
     SortDescending,
+    Back,
+    Sidebar,
 }
 
 impl Symbol {
@@ -53,6 +55,8 @@ impl Symbol {
             Self::More => include_bytes!("../../data/symbols/more.svg"),
             Self::SortAscending => include_bytes!("../../data/symbols/sort-ascending.svg"),
             Self::SortDescending => include_bytes!("../../data/symbols/sort-descending.svg"),
+            Self::Back => include_bytes!("../../data/symbols/back.svg"),
+            Self::Sidebar => include_bytes!("../../data/symbols/sidebar.svg"),
         }
     }
 

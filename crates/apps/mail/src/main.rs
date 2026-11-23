@@ -18,7 +18,7 @@ use bande_mail::portal::choose_save_path;
 use bande_mail::settings::{Change, MailSettings, listen};
 use bande_mail::ui::{
     COMPOSE_SIZE, ComposeRequest, ComposeView, MESSAGE_SIZE, MailView, MessageView, Mode, Place,
-    Request, SETTINGS_SIZE, SIDEBAR_WIDTH, SettingsView,
+    Request, SETTINGS_SIZE, SettingsView,
 };
 use bande_toolkit::ui::ClipboardRequest;
 use bande_toolkit::{
@@ -75,12 +75,12 @@ impl View for Pane {
         let (width, height) = window.size();
         match self {
             Self::Main(view) => {
-                window.set_frame_regions(FrameRegions {
-                    sidebar: SIDEBAR_WIDTH,
-                    toolbar: 0.0,
-                });
                 view.set_full_screen(full_screen);
                 let scene = view.scene(width, height);
+                window.set_frame_regions(FrameRegions {
+                    sidebar: view.sidebar_region(),
+                    toolbar: 0.0,
+                });
                 window.set_header(view.header());
                 scene
             }

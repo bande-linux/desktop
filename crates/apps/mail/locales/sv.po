@@ -124,6 +124,12 @@ msgstr "Sök"
 msgid "View"
 msgstr "Visa"
 
+msgid "Hide Sidebar"
+msgstr "Dölj sidofältet"
+
+msgid "Show Sidebar"
+msgstr "Visa sidofältet"
+
 msgid "Bcc Address Field"
 msgstr "Fält för hemlig kopia"
 
@@ -835,6 +841,9 @@ msgstr "Visa"
 
 msgid "Sort by"
 msgstr "Sortera efter"
+
+msgid "Back"
+msgstr "Tillbaka"
 
 msgid "The key could not be found"
 msgstr "Nyckeln kunde inte hittas"

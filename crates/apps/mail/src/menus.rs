@@ -71,6 +71,14 @@ pub fn app_menus(view: &MailView, shown: Shown) -> Vec<Entry> {
         Entry::submenu(
             &tr!("View"),
             vec![
+                item(
+                    match view.sidebar_shown() {
+                        true => text!("Hide Sidebar"),
+                        false => text!("Show Sidebar"),
+                    },
+                    "toggle-sidebar",
+                ),
+                Entry::separator(),
                 Entry::item(&tr!("Bcc Address Field"), "bcc-field")
                     .check(view.settings().bcc_field),
             ],

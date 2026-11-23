@@ -74,6 +74,9 @@ pub struct MailSettings {
     pub index_decrypted: bool,
     pub badge: bool,
     pub mark_read: MarkRead,
+    pub sidebar_width: u16,
+    pub list_width: u16,
+    pub hide_sidebar: bool,
 }
 
 impl Default for MailSettings {
@@ -94,6 +97,9 @@ impl Default for MailSettings {
             index_decrypted: false,
             badge: true,
             mark_read: MarkRead::OnOpen,
+            sidebar_width: 220,
+            list_width: 340,
+            hide_sidebar: false,
         }
     }
 }
@@ -136,6 +142,13 @@ impl Stored for MailSettings {
                     settings.index_decrypted = flag(value).unwrap_or(settings.index_decrypted);
                 }
                 "badge" => settings.badge = flag(value).unwrap_or(settings.badge),
+                "sidebar-width" => {
+                    settings.sidebar_width = value.parse().unwrap_or(settings.sidebar_width);
+                }
+                "list-width" => settings.list_width = value.parse().unwrap_or(settings.list_width),
+                "hide-sidebar" => {
+                    settings.hide_sidebar = flag(value).unwrap_or(settings.hide_sidebar);
+                }
                 "mark-read" => {
                     settings.mark_read = MarkRead::ALL
                         .into_iter()
@@ -150,7 +163,7 @@ impl Stored for MailSettings {
 
     fn to_text(&self) -> String {
         format!(
-            "notify = {}\nsound = {}\nload-remote = {}\npreview-lines = {}\nconversations = {}\nplain-text = {}\nfixed-width = {}\nquote = {}\nsend-from = {}\nsort = {}\nascending = {}\nbcc-field = {}\nindex-decrypted = {}\nbadge = {}\nmark-read = {}\n",
+            "notify = {}\nsound = {}\nload-remote = {}\npreview-lines = {}\nconversations = {}\nplain-text = {}\nfixed-width = {}\nquote = {}\nsend-from = {}\nsort = {}\nascending = {}\nbcc-field = {}\nindex-decrypted = {}\nbadge = {}\nmark-read = {}\nsidebar-width = {}\nlist-width = {}\nhide-sidebar = {}\n",
             self.notify,
             self.sound,
             self.load_remote,
@@ -166,6 +179,9 @@ impl Stored for MailSettings {
             self.index_decrypted,
             self.badge,
             self.mark_read.name(),
+            self.sidebar_width,
+            self.list_width,
+            self.hide_sidebar,
         )
     }
 }

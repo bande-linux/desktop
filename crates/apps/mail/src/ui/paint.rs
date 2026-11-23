@@ -7,11 +7,11 @@ use crate::ui::reader_pane::{Look, paint_link_target};
 use crate::ui::sidebar::Row;
 use crate::ui::symbols::Symbol;
 use crate::ui::toolbar::{LIST_HEADER_HEIGHT, LIST_TITLE_HEIGHT, SIDEBAR_FOOT_HEIGHT};
-use crate::ui::view::{Hit, LIST_WIDTH, MailView, Pane, SIDEBAR_WIDTH, TOOLBAR_HEIGHT};
+use crate::ui::view::{Hit, MailView, Pane, Panes, READER_MAX_WIDTH, TOOLBAR_HEIGHT};
 use bande_toolkit::Color;
 use bande_toolkit::ui::{BUTTON_HEIGHT, Key, Scroll, Size};
 use bande_toolkit::{
-    Item, Paragraph, Point, Radius, Rect, Scene, Shape, TextAlign, TextRole, TextStyle,
+    Elevation, Item, Paragraph, Point, Radius, Rect, Scene, Shape, TextAlign, TextRole, TextStyle,
 };
 use jiff::Timestamp;
 
@@ -46,19 +46,30 @@ impl MailView {
     }
 
     pub(crate) fn sheet_frame(&self) -> Rect {
+        let x = match self.panes() {
+            Panes::Three => self.sidebar_size(),
+            Panes::Two | Panes::One => self.sheet_inset,
+        };
         Rect::new(
-            SIDEBAR_WIDTH,
+            x,
             TOOLBAR_HEIGHT,
-            (self.size.0 - SIDEBAR_WIDTH - self.sheet_inset).max(0.0),
+            (self.size.0 - x - self.sheet_inset).max(0.0),
             (self.size.1 - TOOLBAR_HEIGHT - self.sheet_inset).max(0.0),
         )
+    }
+
+    fn sidebar_width(&self) -> f32 {
+        match self.panes() == Panes::Three || self.overlay {
+            true => self.sidebar_size(),
+            false => 0.0,
+        }
     }
 
     pub(crate) fn sidebar_frame(&self) -> Rect {
         Rect::new(
             0.0,
             TOOLBAR_HEIGHT,
-            SIDEBAR_WIDTH,
+            self.sidebar_width(),
             (self.size.1 - TOOLBAR_HEIGHT - SIDEBAR_FOOT_HEIGHT).max(0.0),
         )
     }
@@ -67,17 +78,22 @@ impl MailView {
         Rect::new(
             0.0,
             (self.size.1 - SIDEBAR_FOOT_HEIGHT).max(TOOLBAR_HEIGHT),
-            SIDEBAR_WIDTH,
+            self.sidebar_width(),
             SIDEBAR_FOOT_HEIGHT,
         )
     }
 
     pub(crate) fn list_header_frame(&self) -> Rect {
         let sheet = self.sheet_frame();
+        let width = match (self.panes(), self.single_reader) {
+            (Panes::One, true) => 0.0,
+            (Panes::One, false) => sheet.width,
+            _ => self.list_size().min(sheet.width),
+        };
         Rect::new(
             sheet.x,
             sheet.y,
-            LIST_WIDTH.min(sheet.width),
+            width,
             LIST_HEADER_HEIGHT.min(sheet.height),
         )
     }
@@ -93,14 +109,28 @@ impl MailView {
         )
     }
 
-    pub(crate) fn reader_frame(&self) -> Rect {
+    pub(crate) fn reader_area(&self) -> Rect {
         let sheet = self.sheet_frame();
         let list = self.list_header_frame();
+        let divider = match list.width > 0.0 {
+            true => 1.0,
+            false => 0.0,
+        };
+        let width = match (self.panes(), self.single_reader) {
+            (Panes::One, false) => 0.0,
+            _ => (sheet.width - list.width - divider).max(0.0),
+        };
+        Rect::new(list.x + list.width + divider, sheet.y, width, sheet.height)
+    }
+
+    pub(crate) fn reader_frame(&self) -> Rect {
+        let area = self.reader_area();
+        let width = area.width.min(READER_MAX_WIDTH);
         Rect::new(
-            list.x + list.width + 1.0,
-            sheet.y,
-            (sheet.width - list.width - 1.0).max(0.0),
-            sheet.height,
+            area.x + ((area.width - width) / 2.0).round(),
+            area.y,
+            width,
+            area.height,
         )
     }
 
@@ -157,7 +187,10 @@ impl MailView {
                 items,
             };
         }
-        self.paint_sidebar(&mut items);
+        let overlay = self.overlay && self.panes() != Panes::Three;
+        if !overlay {
+            self.paint_sidebar(&mut items);
+        }
         let sheet_frame = self.sheet_frame();
         let radius = match self.sheet_inset > 0.0 {
             true => Radius::concentric(Radius::XL, self.sheet_inset),
@@ -171,6 +204,26 @@ impl MailView {
             shape: Shape::rounded(sheet_frame, radius),
             items: content,
         });
+        if overlay {
+            let frame = self.sidebar_frame();
+            let panel = Rect::new(
+                frame.x,
+                frame.y,
+                frame.width,
+                frame.height + SIDEBAR_FOOT_HEIGHT,
+            );
+            items.extend(Item::shadows(
+                Shape::rect(panel),
+                Elevation::Overlay,
+                self.palette.scheme,
+                true,
+            ));
+            items.push(Item::Fill {
+                shape: Shape::rect(panel),
+                paint: self.palette.chassis.into(),
+            });
+            self.paint_sidebar(&mut items);
+        }
         self.paint_drag(&mut items);
         items.extend(controls);
         items.extend(sheet);
@@ -280,7 +333,7 @@ impl MailView {
                 Row::Heading(title, account) => {
                     let style = TextStyle::role(TextRole::Label, palette.ink3);
                     let paragraph =
-                        self.text_line(title, style, SIDEBAR_WIDTH - 2.0 * SIDEBAR_TEXT_X);
+                        self.text_line(title, style, frame.width - 2.0 * SIDEBAR_TEXT_X);
                     let text_y = y + heading_height - paragraph.height() - 4.0;
                     drawn.push(Item::Text {
                         origin: Point::new(SIDEBAR_TEXT_X, text_y),
@@ -298,7 +351,7 @@ impl MailView {
                             80.0,
                         );
                         let origin = Point::new(
-                            SIDEBAR_WIDTH - SIDEBAR_INSET - 8.0 - paragraph.width(),
+                            frame.width - SIDEBAR_INSET - 8.0 - paragraph.width(),
                             y + heading_height - paragraph.height() - 4.0,
                         );
                         self.hits.push((
@@ -319,7 +372,7 @@ impl MailView {
                     let rect = Rect::new(
                         SIDEBAR_INSET,
                         y,
-                        SIDEBAR_WIDTH - 2.0 * SIDEBAR_INSET,
+                        frame.width - 2.0 * SIDEBAR_INSET,
                         row_height,
                     );
                     let selected = *place == self.place;

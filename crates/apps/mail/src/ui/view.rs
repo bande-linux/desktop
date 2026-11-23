@@ -50,7 +50,8 @@ use zeroize::Zeroizing;
 
 pub(crate) mod security;
 
-pub const SHORTCUTS: [(&str, &str); 9] = [
+pub const SHORTCUTS: [(&str, &str); 10] = [
+    ("toggle-sidebar", "Shift+Ctrl+S"),
     ("compose", "Ctrl+N"),
     ("get-mail", "F5"),
     ("find", "Ctrl+F"),
@@ -61,8 +62,12 @@ pub const SHORTCUTS: [(&str, &str); 9] = [
     ("delete", "Delete"),
     ("send", "Ctrl+Enter"),
 ];
-pub const SIDEBAR_WIDTH: f32 = 220.0;
-pub const LIST_WIDTH: f32 = 340.0;
+pub const READER_MAX_WIDTH: f32 = 860.0;
+const SIDEBAR_SIZES: (f32, f32) = (180.0, 320.0);
+const LIST_SIZES: (f32, f32) = (280.0, 560.0);
+const THREE_PANES: f32 = 1040.0;
+const TWO_PANES: f32 = 720.0;
+const EDGE_GRAB: f32 = 4.0;
 pub const TOOLBAR_HEIGHT: f32 = WINDOW_HEADER_HEIGHT as f32;
 const NOTIFIED_AT_ONCE: usize = 3;
 const UNDO_TRIES: u8 = 3;
@@ -113,6 +118,19 @@ pub enum Hit {
     Conversation(MessageId),
     Reader(Target),
     Offline(AccountId),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Panes {
+    Three,
+    Two,
+    One,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Edge {
+    Sidebar,
+    List,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -241,6 +259,10 @@ pub struct MailView {
     pub(crate) open_file: Option<WidgetId>,
     read_later: Option<(Instant, Vec<MessageId>)>,
     pub(crate) filter: Filter,
+    pub(crate) overlay: bool,
+    pub(crate) single_reader: bool,
+    resizing: Option<(Edge, f32)>,
+    on_edge: bool,
     pub(crate) synced: Option<Timestamp>,
     waiting: Vec<Draft>,
     pub(crate) settings: MailSettings,
@@ -311,6 +333,10 @@ impl MailView {
             open_file: None,
             read_later: None,
             filter: Filter::All,
+            overlay: false,
+            single_reader: false,
+            resizing: None,
+            on_edge: false,
             synced: None,
             waiting: Vec::new(),
             settings,
@@ -548,6 +574,72 @@ impl MailView {
             .unwrap_or_else(|| tr!("Mail"))
     }
 
+    pub fn panes(&self) -> Panes {
+        match self.size.0 {
+            width if width < TWO_PANES => Panes::One,
+            width if width < THREE_PANES || self.settings.hide_sidebar => Panes::Two,
+            _ => Panes::Three,
+        }
+    }
+
+    pub(crate) fn sidebar_size(&self) -> f32 {
+        f32::from(self.settings.sidebar_width).clamp(SIDEBAR_SIZES.0, SIDEBAR_SIZES.1)
+    }
+
+    pub(crate) fn list_size(&self) -> f32 {
+        f32::from(self.settings.list_width).clamp(LIST_SIZES.0, LIST_SIZES.1)
+    }
+
+    pub fn sidebar_region(&self) -> f32 {
+        match self.panes() {
+            Panes::Three => self.sidebar_size(),
+            Panes::Two | Panes::One => 0.0,
+        }
+    }
+
+    pub fn toggle_sidebar(&mut self) {
+        match self.size.0 >= THREE_PANES {
+            true => {
+                self.settings.hide_sidebar = !self.settings.hide_sidebar;
+                self.overlay = false;
+                self.keep_settings();
+            }
+            false => self.overlay = !self.overlay,
+        }
+    }
+
+    pub fn sidebar_shown(&self) -> bool {
+        self.panes() == Panes::Three || self.overlay
+    }
+
+    fn edge_at(&self, at: Point) -> Option<Edge> {
+        if at.y < TOOLBAR_HEIGHT || self.panes() == Panes::One {
+            return None;
+        }
+        let near = |x: f32| (at.x - x).abs() <= EDGE_GRAB;
+        let list = self.list_header_frame();
+        match self.panes() {
+            Panes::Three if near(self.sidebar_size()) => Some(Edge::Sidebar),
+            _ if near(list.x + list.width) => Some(Edge::List),
+            _ => None,
+        }
+    }
+
+    fn resize(&mut self, edge: Edge, by: f32) {
+        let clamp = |value: f32, (low, high): (f32, f32)| value.clamp(low, high).round() as u16;
+        match edge {
+            Edge::Sidebar => {
+                self.settings.sidebar_width = clamp(self.sidebar_size() + by, SIDEBAR_SIZES);
+            }
+            Edge::List => self.settings.list_width = clamp(self.list_size() + by, LIST_SIZES),
+        }
+    }
+
+    pub(crate) fn back_to_list(&mut self) {
+        self.single_reader = false;
+        self.focus = Pane::List;
+    }
+
     pub(crate) fn unread_here(&self) -> usize {
         self.sidebar
             .iter()
@@ -563,6 +655,9 @@ impl MailView {
     }
 
     pub fn cursor(&self) -> Cursor {
+        if self.on_edge || self.resizing.is_some() {
+            return Cursor::ColumnResize;
+        }
         match &self.hover {
             Some(Hit::Conversation(_) | Hit::Offline(_)) => Cursor::Pointer,
             Some(Hit::Reader(Target::Card(_))) => Cursor::Text,
@@ -2379,6 +2474,8 @@ impl MailView {
                     self.keep_settings();
                 }
                 Signal::More => self.show_more(),
+                Signal::ToggleSidebar => self.toggle_sidebar(),
+                Signal::Back => self.back_to_list(),
                 signal @ (Signal::NewMailbox(..)
                 | Signal::RenameMailbox(..)
                 | Signal::DeleteMailbox(_)) => self.change_mailboxes(signal),
@@ -2426,6 +2523,35 @@ impl MailView {
         }
         match event {
             Event::Key { key, modifiers } => self.key(*key, *modifiers),
+            Event::PointerDown(pointer)
+                if pointer.is_primary() && self.edge_at(pointer.position).is_some() =>
+            {
+                self.resizing = self
+                    .edge_at(pointer.position)
+                    .map(|edge| (edge, pointer.position.x));
+                true
+            }
+            Event::PointerMove(pointer) if self.resizing.is_some() => {
+                if let Some((edge, from)) = self.resizing {
+                    self.resize(edge, pointer.position.x - from);
+                    self.resizing = Some((edge, pointer.position.x));
+                }
+                true
+            }
+            Event::PointerUp(_) if self.resizing.take().is_some() => {
+                self.keep_settings();
+                true
+            }
+            Event::PointerDown(pointer)
+                if self.overlay
+                    && self.panes() != Panes::Three
+                    && !self.sidebar_frame().contains(pointer.position)
+                    && !self.sidebar_foot_frame().contains(pointer.position)
+                    && !self.over_control(pointer.position) =>
+            {
+                self.overlay = false;
+                true
+            }
             Event::PointerDown(pointer) => {
                 if self.over_control(pointer.position) {
                     return self.ui.handle(event);
@@ -2452,6 +2578,7 @@ impl MailView {
             Event::PointerUp(_) => self.ui.handle(event),
             Event::PointerMove(pointer) if self.drag.is_some() => self.drag_to(pointer.position),
             Event::PointerMove(pointer) | Event::PointerEnter(pointer) => {
+                self.on_edge = self.edge_at(pointer.position).is_some();
                 let ui = self.ui.handle(event);
                 let hover = self.hit(pointer.position);
                 let changed = hover != self.hover;
@@ -2615,6 +2742,25 @@ impl MailView {
             Key::Down if plain && modifiers.shift => self.extend(1),
             Key::Enter if plain && self.focus == Pane::Sidebar => {
                 self.focus = Pane::List;
+                self.overlay = false;
+                true
+            }
+            Key::Enter
+                if plain
+                    && self.focus == Pane::List
+                    && self.panes() == Panes::One
+                    && self.selected.is_some() =>
+            {
+                self.single_reader = true;
+                self.focus = Pane::Reader;
+                true
+            }
+            Key::Escape if self.single_reader && self.panes() == Panes::One => {
+                self.back_to_list();
+                true
+            }
+            Key::Escape if self.overlay => {
+                self.overlay = false;
                 true
             }
             _ if opens_menu(key, modifiers) => self.keyboard_menu(),
@@ -2671,28 +2817,36 @@ impl MailView {
     }
 
     fn cycle_pane(&mut self, forward: bool) -> bool {
-        const PANES: [Pane; 3] = [Pane::Sidebar, Pane::List, Pane::Reader];
+        let panes = [
+            (Pane::Sidebar, self.sidebar_shown()),
+            (Pane::List, self.list_frame().width > 0.0),
+            (Pane::Reader, self.reader_frame().width > 0.0),
+        ]
+        .into_iter()
+        .filter_map(|(pane, shown)| shown.then_some(pane))
+        .collect::<Vec<_>>();
         if self.ui.focus().is_some() {
             self.ui.clear_focus();
-            self.focus = match forward {
-                true => Pane::Sidebar,
-                false => Pane::Reader,
+            let edge = match forward {
+                true => panes.first(),
+                false => panes.last(),
             };
+            self.focus = edge.copied().unwrap_or(Pane::List);
             if !forward && let Some(&last) = self.reader.stops().last() {
                 self.reader.set_target(self.ui.context(), last);
             }
             return true;
         }
-        let index = PANES
+        let index = panes
             .iter()
             .position(|pane| *pane == self.focus)
-            .unwrap_or(1);
+            .unwrap_or(0);
         let next = match forward {
-            true => Some(index + 1).filter(|next| *next < PANES.len()),
+            true => Some(index + 1).filter(|next| *next < panes.len()),
             false => index.checked_sub(1),
         };
         match next {
-            Some(next) => self.focus = PANES[next],
+            Some(next) => self.focus = panes[next],
             None => {
                 let modifiers = Modifiers {
                     shift: !forward,
@@ -2892,6 +3046,7 @@ impl MailView {
                             .push(Request::ShowMenu(menu, pointer.position));
                     } else {
                         self.choose_place(place);
+                        self.overlay = false;
                     }
                 }
             }
@@ -2902,6 +3057,9 @@ impl MailView {
             }
             Hit::Message(id) => {
                 self.focus = Pane::List;
+                if !secondary && self.panes() == Panes::One {
+                    self.single_reader = true;
+                }
                 let collapse = !secondary && self.is_chosen(id) && !self.also.is_empty();
                 if !self.is_chosen(id) {
                     self.select(id);
@@ -3323,6 +3481,7 @@ impl MailView {
                 }
             }
             "apply-rules" => self.apply_rules_to_chosen(),
+            "toggle-sidebar" => self.toggle_sidebar(),
             "bcc-field" => {
                 self.settings.bcc_field = !self.settings.bcc_field;
                 self.keep_settings();

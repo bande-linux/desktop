@@ -45,6 +45,7 @@ const IMPORT: &str = "import";
 const EXPORT: &str = "export";
 const WINDOW_SIZE: (u32, u32) = (1120, 740);
 const VIEW_FILE: &str = "calendar-view";
+const WELCOME_FILE: &str = "calendar-welcome";
 const FEED_COLOR_PROPERTIES: [&str; 2] = ["COLOR", "X-APPLE-CALENDAR-COLOR"];
 const PUSH_DELAY: Duration = Duration::from_secs(2);
 const RETRY: SignedDuration = SignedDuration::from_mins(15);
@@ -1146,6 +1147,9 @@ impl Program for CalendarApp {
         let title = view.title();
         let directory = std::env::current_dir().unwrap_or_default();
         open_arguments(&mut view, &arguments, &directory);
+        if let Some(file) = cx.state_file(WELCOME_FILE) {
+            view.welcome(file);
+        }
         let worker = Worker::start()?;
         let changes = Inbox::new()?;
         listen(changes.outbox());

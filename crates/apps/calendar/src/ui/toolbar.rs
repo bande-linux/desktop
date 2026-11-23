@@ -26,7 +26,6 @@ pub struct Toolbar {
     pub next: WidgetId,
     pub modes: WidgetId,
     pub search: WidgetId,
-    pub add_account: WidgetId,
 }
 
 fn symbol(svg: &str, label: &str, on_click: impl FnMut() + 'static) -> Button {
@@ -77,11 +76,6 @@ impl Toolbar {
             }),
             Rect::default(),
         );
-        let send = sender(signals);
-        let add_account = host.insert(
-            Button::new(&tr!("Add Account…"), move || send(Signal::AddAccount)).quiet(),
-            Rect::default(),
-        );
         Self {
             add,
             previous,
@@ -89,7 +83,6 @@ impl Toolbar {
             next,
             modes,
             search,
-            add_account,
         }
     }
 

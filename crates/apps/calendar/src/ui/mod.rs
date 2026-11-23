@@ -17,6 +17,7 @@ mod toolbar;
 
 use std::cell::RefCell;
 use std::collections::VecDeque;
+use std::path::PathBuf;
 use std::rc::Rc;
 
 use accesskit::{ActionRequest, TreeUpdate};
@@ -256,6 +257,7 @@ pub(crate) enum Confirm {
     RemoveAccount(String),
     Import(Vec<CalendarObject>, usize),
     DeleteCalendar(usize),
+    Welcome(PathBuf),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1207,6 +1209,28 @@ impl CalendarView {
         self.open_setup(setup::Start::Add);
     }
 
+    /// Offers once, while Calendar has no account, to add one or to keep the calendar on this
+    /// computer; `remembered` is the file that keeps the answer.
+    pub fn welcome(&mut self, remembered: PathBuf) {
+        let connected = self
+            .library
+            .accounts
+            .iter()
+            .any(|account| account.kind != AccountKind::Local);
+        if connected || remembered.exists() || self.ui.has_sheet() {
+            return;
+        }
+        self.confirm = Some(Confirm::Welcome(remembered));
+        let alert = Alert::new(
+            &tr!("Set Up Calendar"),
+            &tr!("Sync with a CalDAV account, or keep your calendar on this computer only."),
+            self.choice(),
+        )
+        .cancel(&tr!("Use on This Computer"), "cancel")
+        .primary(&tr!("Add Account…"), "accept");
+        self.ui.present_dialog(alert);
+    }
+
     fn offer_import(&mut self, objects: Vec<CalendarObject>, file: &str) -> bool {
         let Some(calendar) = self.default_calendar() else {
             return false;
@@ -1280,7 +1304,7 @@ impl CalendarView {
                 0.0,
                 TOOLBAR_HEIGHT,
                 SIDEBAR_WIDTH,
-                self.size.1 - TOOLBAR_HEIGHT - 48.0,
+                self.size.1 - TOOLBAR_HEIGHT,
             ),
             &mut painter,
         );
@@ -1338,8 +1362,6 @@ impl CalendarView {
 
     fn layout(&mut self) {
         let frames = self.toolbar.frames(self.size.0);
-        let add = self.toolbar.add_account;
-        let add_frame = Rect::new(12.0, self.size.1 - 40.0, SIDEBAR_WIDTH - 24.0, 28.0);
         let sheet = self.sheet();
         let inspector_frame = self.inspector.as_ref().map(|inspector| {
             (
@@ -1352,7 +1374,6 @@ impl CalendarView {
             for (id, frame) in frames {
                 host.set_frame(id, frame);
             }
-            host.set_frame(add, add_frame);
             if let Some((id, frame, _)) = inspector_frame {
                 host.set_frame(id, frame);
             }

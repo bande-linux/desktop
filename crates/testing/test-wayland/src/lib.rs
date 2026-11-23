@@ -21,7 +21,7 @@ use std::os::fd::AsFd;
 use std::os::unix::net::UnixStream;
 
 pub use bande_compositor::Compositor;
-use wayland_client::protocol::wl_buffer::WlBuffer;
+use wayland_client::protocol::wl_buffer::{self, WlBuffer};
 use wayland_client::protocol::wl_compositor::WlCompositor;
 use wayland_client::protocol::wl_registry::{self, WlRegistry};
 use wayland_client::protocol::wl_shm::{Format, WlShm};
@@ -76,6 +76,7 @@ struct Globals {
     lock: lock::SessionLock,
     input_method: ime::InputMethod,
     frames_done: u32,
+    released: Vec<WlBuffer>,
 }
 
 pub struct TestClient {
@@ -143,10 +144,27 @@ impl TestClient {
         self.windows.push((surface, xdg_surface, toplevel));
     }
 
-    pub fn commit_buffer(&mut self, index: usize, image: &ShmImage, damage: (i32, i32, i32, i32)) {
+    pub fn commit_buffer(
+        &mut self,
+        index: usize,
+        image: &ShmImage,
+        damage: (i32, i32, i32, i32),
+    ) -> WlBuffer {
         let surface = self.windows[index].0.clone();
-        self.attach(&surface, image, damage);
+        let buffer = self.attach(&surface, image, damage);
         self.connection.flush().expect("client flush");
+        buffer
+    }
+
+    pub fn withdraw_window(&mut self, index: usize) {
+        let (_, xdg_surface, toplevel) = &self.windows[index];
+        toplevel.destroy();
+        xdg_surface.destroy();
+        self.connection.flush().expect("client flush");
+    }
+
+    pub fn released(&self, buffer: &WlBuffer) -> bool {
+        self.globals.released.contains(buffer)
     }
 
     fn attach(
@@ -154,11 +172,12 @@ impl TestClient {
         surface: &WlSurface,
         image: &ShmImage,
         (x, y, width, height): (i32, i32, i32, i32),
-    ) {
+    ) -> WlBuffer {
         let buffer = self.shm_buffer(image);
         surface.attach(Some(&buffer), 0, 0);
         surface.damage_buffer(x, y, width, height);
         surface.commit();
+        buffer
     }
 
     pub(crate) fn shm_buffer(&self, image: &ShmImage) -> WlBuffer {
@@ -225,6 +244,21 @@ impl Dispatch<WlRegistry, ()> for Globals {
     }
 }
 
+impl Dispatch<WlBuffer, ()> for Globals {
+    fn event(
+        globals: &mut Self,
+        buffer: &WlBuffer,
+        event: wl_buffer::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        if let wl_buffer::Event::Release = event {
+            globals.released.push(buffer.clone());
+        }
+    }
+}
+
 impl Dispatch<XdgWmBase, ()> for Globals {
     fn event(
         _: &mut Self,
@@ -260,4 +294,3 @@ delegate_noop!(Globals: WlCompositor);
 delegate_noop!(Globals: WlShmPool);
 delegate_noop!(Globals: ignore WlShm);
 delegate_noop!(Globals: ignore WlSurface);
-delegate_noop!(Globals: ignore WlBuffer);

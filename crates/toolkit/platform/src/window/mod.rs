@@ -1753,9 +1753,6 @@ impl Drop for Window {
         if let Some(fading) = self.fading.take() {
             fading.destroy();
         }
-        self.wait_for_gpu();
-        self.gpu = Gpu::Unavailable;
-        self.shm_target.destroy();
         match &self.role {
             ShellSurface::Toplevel(xdg_surface, toplevel) => {
                 toplevel.destroy();
@@ -1764,6 +1761,10 @@ impl Drop for Window {
             ShellSurface::Layer(layer_surface) => layer_surface.destroy(),
             ShellSurface::Lock(_) => {}
         }
+        let _ = self.connection.flush();
+        self.wait_for_gpu();
+        self.gpu = Gpu::Unavailable;
+        self.shm_target.destroy();
         self.surface.destroy();
         self.state.release();
         let _ = self.connection.flush();

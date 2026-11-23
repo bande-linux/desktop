@@ -31,19 +31,31 @@ pub fn crashed_apps_file() -> Option<PathBuf> {
     state_file(CRASHED_FILE)
 }
 
+pub fn saved_windows_file(app_id: &str) -> Option<PathBuf> {
+    state_file(RESUME_FOLDER).map(|folder| folder.join(app_id))
+}
+
+pub fn reopening_marker(saved_windows: &Path) -> PathBuf {
+    saved_windows.with_added_extension("reopening")
+}
+
 pub fn set_aside_apps_of_unclean_end(
     running: &Path,
     reopen: &Path,
     crashed: &Path,
 ) -> io::Result<()> {
-    if !running.exists() {
-        return Ok(());
+    unless_missing(fs::remove_file(crashed))?;
+    match reopen.exists() {
+        true => unless_missing(fs::remove_file(running)),
+        false => unless_missing(fs::rename(running, crashed)),
     }
-    if reopen.exists() {
-        let _ = fs::remove_file(crashed);
-        return fs::remove_file(running);
+}
+
+fn unless_missing(result: io::Result<()>) -> io::Result<()> {
+    match result {
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        result => result,
     }
-    fs::rename(running, crashed)
 }
 
 pub fn running_apps_contents(apps: &[String]) -> String {
@@ -91,24 +103,21 @@ pub fn listed_apps(file: &Path) -> Vec<String> {
 }
 
 pub fn forget_saved_windows(apps: &[String]) {
-    let Some(state) = crate::state_home() else {
-        return;
-    };
     for app in apps {
-        let file = state.join(RESUME_FOLDER).join(app);
-        if let Err(error) = fs::remove_file(&file)
-            && error.kind() != io::ErrorKind::NotFound
-        {
-            tracing::warn!("cannot forget the windows of {app}: {error}");
+        let Some(file) = saved_windows_file(app) else {
+            return;
+        };
+        for forgotten in [reopening_marker(&file), file] {
+            if let Err(error) = unless_missing(fs::remove_file(&forgotten)) {
+                tracing::warn!("cannot forget the windows of {app}: {error}");
+            }
         }
     }
 }
 
 pub fn take_apps_to_reopen(file: &Path) -> Vec<String> {
     let listed = listed_apps(file);
-    if let Err(error) = fs::remove_file(file)
-        && error.kind() != io::ErrorKind::NotFound
-    {
+    if let Err(error) = unless_missing(fs::remove_file(file)) {
         tracing::warn!("cannot forget the apps to reopen: {error}");
     }
     listed

@@ -16,6 +16,7 @@ reis = { workspace = true, features = ["calloop"] }
 rustix = { workspace = true, features = ["fs", "net", "rand", "thread", "time"] }
 serde.workspace = true
 serde_json.workspace = true
+signal-hook.workspace = true
 smithay = { workspace = true, features = ["backend_drm", "backend_gbm", "backend_libinput", "backend_session_libseat", "backend_udev", "desktop"] }
 tracing.workspace = true
 bande-bus.workspace = true

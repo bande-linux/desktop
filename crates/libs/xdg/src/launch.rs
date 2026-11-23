@@ -667,6 +667,7 @@ const SETTINGS_APP: &str = "org.bande.Settings";
 const SETTINGS_PROGRAM: &str = "bande-settings";
 const DIAGNOSTICS_PANE: &str = "diagnostics";
 const APP_STOP_TIMEOUT_USEC: u64 = 5_000_000;
+const COMPOSITOR_UNIT: &str = "bande-compositor.service";
 
 fn failure(status: ExitStatus, ran: Duration) -> Option<Failure> {
     if let Some(signal) = status.signal() {
@@ -687,6 +688,7 @@ fn place_in_scope(bus: &Connection, app_id: &str, pid: u32) -> zbus::Result<()> 
         ("Slice", Value::from("app.slice")),
         ("CollectMode", Value::from("inactive-or-failed")),
         ("PartOf", Value::from(vec!["graphical-session.target"])),
+        ("Before", Value::from(vec![COMPOSITOR_UNIT])),
         ("TimeoutStopUSec", Value::from(APP_STOP_TIMEOUT_USEC)),
     ];
     bus.call_method(

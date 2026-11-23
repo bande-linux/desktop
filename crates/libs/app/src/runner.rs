@@ -106,6 +106,7 @@ pub(crate) fn run<P: Program>(
         program.reopen(&mut cx);
     }
     if cx.windows.is_empty() && !background && !windowless && !P::waits_for_activation() {
+        cx.resume.discard(&mut cx.link);
         return Ok(());
     }
     let menu = cx.session().cloned().and_then(|session| {
@@ -129,7 +130,11 @@ pub(crate) fn run<P: Program>(
         instance,
         sources: RefCell::new(Vec::new()),
     };
-    runner.run()
+    let ran = runner.run();
+    if ran.is_err() {
+        runner.cx.resume.finish_writing();
+    }
+    ran
 }
 
 struct StartFailure {

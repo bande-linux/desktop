@@ -16,7 +16,6 @@ use serde_json::Value;
 use crate::cx::Content;
 use crate::{Cx, Kind, Program, WindowId};
 
-const RESUME_FOLDER: &str = "bande/resume";
 const SAVE_AFTER: Duration = Duration::from_secs(1);
 const SAFE_AFTER: Duration = Duration::from_secs(5);
 const REOPEN: &str = "reopen";
@@ -85,7 +84,7 @@ pub(crate) struct Resume {
 
 impl Resume {
     pub(crate) fn load(app_id: &str) -> Self {
-        let file = bande_xdg::state_home().map(|state| state.join(RESUME_FOLDER).join(app_id));
+        let file = bande_xdg::saved_windows_file(app_id);
         let saved: SavedApp = file
             .as_ref()
             .and_then(|file| fs::read_to_string(file).ok())
@@ -107,9 +106,7 @@ impl Resume {
     }
 
     fn marker(&self) -> Option<PathBuf> {
-        self.file
-            .as_ref()
-            .map(|file| file.with_extension("reopening"))
+        self.file.as_deref().map(bande_xdg::reopening_marker)
     }
 
     pub(crate) fn died_while_reopening(&self) -> bool {

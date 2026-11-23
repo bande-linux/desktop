@@ -11,9 +11,10 @@ use smithay::reexports::wayland_server::{
 
 use std::io;
 use std::os::fd::OwnedFd;
-use std::path::PathBuf;
-use std::sync::mpsc::{self, Sender};
-use std::time::Duration;
+use std::path::{Path, PathBuf};
+use std::sync::mpsc::{self, Receiver, Sender};
+use std::thread::JoinHandle;
+use std::time::{Duration, Instant};
 
 use bande_graphics::Modifiers;
 use bande_xdg::{remember_running_apps, running_apps_contents};
@@ -26,31 +27,46 @@ use crate::state::{Compositor, State, client_pid};
 const SESSION_ENDING_SINCE: u32 = 9;
 const STATE_WRITE_PAUSE: Duration = Duration::from_secs(1);
 
-pub(crate) struct StateWriter(Sender<String>);
+pub(crate) struct StateWriter {
+    contents: Sender<String>,
+    thread: JoinHandle<()>,
+}
 
 impl StateWriter {
     pub(crate) fn start(file: PathBuf) -> io::Result<Self> {
-        let (sender, receiver) = mpsc::channel::<String>();
-        std::thread::Builder::new()
+        let (contents, receiver) = mpsc::channel::<String>();
+        let thread = std::thread::Builder::new()
             .name("state-writer".to_owned())
-            .spawn(move || {
-                while let Ok(mut contents) = receiver.recv() {
-                    while let Ok(newer) = receiver.try_recv() {
-                        contents = newer;
-                    }
-                    if let Err(error) = bande_xdg::replace_file(&file, &contents) {
-                        tracing::warn!("cannot write {}: {error}", file.display());
-                    }
-                    std::thread::sleep(STATE_WRITE_PAUSE);
-                }
-            })?;
-        Ok(Self(sender))
+            .spawn(move || write_calmly(&file, &receiver))?;
+        Ok(Self { contents, thread })
     }
 
     pub(crate) fn write(&self, contents: String) {
-        if self.0.send(contents).is_err() {
+        if self.contents.send(contents).is_err() {
             tracing::warn!("the state writer has stopped");
         }
+    }
+
+    pub(crate) fn finish(self) {
+        drop(self.contents);
+        if self.thread.join().is_err() {
+            tracing::warn!("the state writer failed");
+        }
+    }
+}
+
+fn write_calmly(file: &Path, receiver: &Receiver<String>) {
+    let mut calm_until = Instant::now();
+    while let Ok(mut contents) = receiver.recv() {
+        while let Ok(newer) =
+            receiver.recv_timeout(calm_until.saturating_duration_since(Instant::now()))
+        {
+            contents = newer;
+        }
+        if let Err(error) = bande_xdg::replace_file(file, &contents) {
+            tracing::warn!("cannot write {}: {error}", file.display());
+        }
+        calm_until = Instant::now() + STATE_WRITE_PAUSE;
     }
 }
 
@@ -309,26 +325,23 @@ impl State {
 
     pub(crate) fn confirm_session_end(&mut self, ending: bande_shell_v1::SessionEnd) {
         self.session_end_requested = Some(ending);
-        self.remember_apps_to_reopen(None);
     }
 
-    pub(crate) fn remember_apps_to_reopen(&self, delay: Option<OwnedFd>) {
+    fn remember_apps_to_reopen(&self) {
         let Some(file) = self.reopen_file.clone() else {
             return;
         };
         let running = self.apps_with_windows();
         let remembered = std::thread::Builder::new()
             .name("reopen".to_owned())
-            .spawn(move || {
-                remember_running_apps(&file, &running);
-                drop(delay);
-            });
+            .spawn(move || remember_running_apps(&file, &running));
         if let Err(error) = remembered {
             tracing::warn!("cannot remember the apps to reopen: {error}");
         }
     }
 
     pub(crate) fn quit_all_apps(&mut self, requester: BandeShellV1) {
+        self.remember_apps_to_reopen();
         for (owner, _) in self.app_owners() {
             for app in self
                 .app_resources
@@ -383,14 +396,19 @@ impl Compositor {
     }
 
     pub fn shutting_down(&mut self, delay: OwnedFd) {
-        self.state.resume.freeze();
-        let remembered = self
+        self.end_session_cleanly();
+        drop(delay);
+    }
+
+    pub fn end_session_cleanly(&mut self) {
+        self.state.finish_window_sessions();
+        if let Some(file) = self
             .state
             .reopen_file
             .as_ref()
-            .is_some_and(|file| file.exists());
-        if !remembered {
-            self.state.remember_apps_to_reopen(Some(delay));
+            .filter(|file| !file.exists())
+        {
+            remember_running_apps(file, &self.state.apps_with_windows());
         }
     }
 }

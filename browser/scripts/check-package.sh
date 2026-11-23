@@ -1,6 +1,7 @@
 #!/bin/bash
 # check-package.sh <deb>: as root in a debian:<suite> container with the Bande archive: installs the
-# package and proves a fresh profile stays silent for 10 minutes. No release passes without this.
+# package, checks that --version names it and proves a fresh profile stays silent for 10 minutes.
+# No release passes without this.
 set -euo pipefail
 deb=$(realpath "$1")
 repo=$(dirname "$(dirname "$(realpath "$0")")")
@@ -16,6 +17,7 @@ curl -fsSL -o "$sources/bande-apt-source-$suite.deb" "$release/bande-apt-source-
 apt-get install -y -qq "$sources/bande-archive-keyring.deb" "$sources/bande-apt-source-$suite.deb" > /dev/null
 apt-get update -qq
 apt-get install -y -qq --no-install-recommends bande-compositor bande-config xdg-desktop-portal-bande "$deb" > /dev/null
+bande-browser --version | grep -q '^bande-browser ' || { echo "bande-browser --version does not name bande-browser"; exit 1; }
 profile=$(mktemp -d)
 "$repo/scripts/capture.sh" 600 /tmp/capture.log "$repo/scripts/session.sh" timeout 598 \
     /usr/lib/bande-browser/bande-browser --no-remote --profile "$profile"

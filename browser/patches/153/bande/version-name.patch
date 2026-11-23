@@ -1,7 +1,7 @@
-Description: Name the browser in --version
+Description: Name the browser by its package in --version, as every Bande program does
 Author: Mikael Hug <mikaelhug@gmail.com>
 Forwarded: not-needed
-Last-Update: 2026-11-07
+Last-Update: 2026-11-23
 
 --- a/toolkit/xre/nsAppRunner.cpp
 +++ b/toolkit/xre/nsAppRunner.cpp
@@ -10,7 +10,7 @@ Last-Update: 2026-11-07
  
  static inline void DumpVersion() {
 -  printf("%s ", (const char*)gAppData->name);
-+  printf("Bande's Browser ");
++  printf("bande-browser ");
  
    // Use the displayed version
    // For example, for beta, we would display 42.0b2 instead of 42.0
@@ -19,7 +19,7 @@ Last-Update: 2026-11-07
  
  static inline void DumpFullVersion() {
 -  printf("%s ", (const char*)gAppData->name);
-+  printf("Bande's Browser ");
++  printf("bande-browser ");
  
    // Use the displayed version
    // For example, for beta, we would display 42.0b2 instead of 42.0

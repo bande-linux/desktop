@@ -389,10 +389,12 @@ impl Compositor {
             ) => command.env("WAYLAND_DISPLAY", name),
             _ => command.env_remove("WAYLAND_DISPLAY"),
         };
-        // SAFETY: the closure runs between fork and exec and only calls fcntl, which is async-
-        // signal-safe; inherited is client_end's fd, which stays open until after spawn returns.
+        // SAFETY: the closure runs between fork and exec and only calls fcntl and
+        // adopt_service_oom_score, which are async-signal-safe and do not allocate; inherited is
+        // client_end's fd, which stays open until after spawn returns.
         unsafe {
             command.pre_exec(move || {
+                bande_xdg::adopt_service_oom_score();
                 fcntl_setfd(BorrowedFd::borrow_raw(inherited), FdFlags::empty())
                     .map_err(io::Error::from)
             });

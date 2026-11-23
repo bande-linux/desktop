@@ -124,12 +124,6 @@ msgstr "Sök"
 msgid "View"
 msgstr "Visa"
 
-msgid "Descending"
-msgstr "Fallande"
-
-msgid "Ascending"
-msgstr "Stigande"
-
 msgid "Bcc Address Field"
 msgstr "Fält för hemlig kopia"
 
@@ -181,21 +175,6 @@ msgstr "Flytta till"
 
 msgid "Delete"
 msgstr "Radera"
-
-msgid "Sort by Date"
-msgstr "Sortera efter datum"
-
-msgid "Sort by From"
-msgstr "Sortera efter avsändare"
-
-msgid "Sort by Subject"
-msgstr "Sortera efter ämne"
-
-msgid "Sort by Size"
-msgstr "Sortera efter storlek"
-
-msgid "Sort by Unread"
-msgstr "Sortera efter olästa"
 
 msgid "Offline"
 msgstr "Offline"
@@ -305,6 +284,11 @@ msgstr "Meddelandet är större än {limit}."
 
 msgid "Opening the message…"
 msgstr "Öppnar meddelandet…"
+
+msgid "{count} unread"
+msgid_plural "{count} unread"
+msgstr[0] "{count} oläst"
+msgstr[1] "{count} olästa"
 
 msgid "No messages"
 msgstr "Inga meddelanden"
@@ -825,8 +809,32 @@ msgstr "Papperskorg"
 msgid "All Mail"
 msgstr "All e-post"
 
+msgid "More"
+msgstr "Mer"
+
+msgid "Date"
+msgstr "Datum"
+
+msgid "Size"
+msgstr "Storlek"
+
+msgid "Ascending"
+msgstr "Stigande"
+
+msgid "Descending"
+msgstr "Fallande"
+
 msgid "Search"
 msgstr "Sök"
+
+msgid "All"
+msgstr "Alla"
+
+msgid "Show"
+msgstr "Visa"
+
+msgid "Sort by"
+msgstr "Sortera efter"
 
 msgid "The key could not be found"
 msgstr "Nyckeln kunde inte hittas"
@@ -954,6 +962,15 @@ msgstr "Markera som oläst"
 
 msgid "Mark as Read"
 msgstr "Markera som läst"
+
+msgid "Getting mail…"
+msgstr "Hämtar e-post…"
+
+msgid "Offline: {accounts}"
+msgstr "Frånkopplad: {accounts}"
+
+msgid "Updated {time}"
+msgstr "Uppdaterad {time}"
 
 msgid "Unflag"
 msgstr "Ta bort flagga"

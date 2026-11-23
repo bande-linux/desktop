@@ -14,11 +14,13 @@ use crate::error::Result;
 use crate::imap::{Flag, Role};
 use crate::message::{Address, Content, Envelope, parse_addresses};
 use crate::net::Network;
-use crate::settings::{MailSettings, MarkRead, SortBy};
-use crate::store::{Account, AccountId, Mailbox, MailboxId, MessageId, RuleAction, Store, Summary};
+use crate::settings::{MailSettings, MarkRead};
+use crate::store::{
+    Account, AccountId, Filter, Mailbox, MailboxId, MessageId, RuleAction, Store, Summary,
+};
 use crate::ui::Mode;
 use crate::ui::compose_view::attachable;
-use crate::ui::format::full_date;
+use crate::ui::format::{full_date, list_date};
 use crate::ui::reader::{Entry, Reading, Respond, Target, Thread};
 use crate::ui::reader_pane::{
     ReaderPane, address_menu, attachment_menu, fetch_remote, link_alert, link_menu,
@@ -238,6 +240,8 @@ pub struct MailView {
     pub(crate) setup: Option<Guide>,
     pub(crate) open_file: Option<WidgetId>,
     read_later: Option<(Instant, Vec<MessageId>)>,
+    pub(crate) filter: Filter,
+    pub(crate) synced: Option<Timestamp>,
     waiting: Vec<Draft>,
     pub(crate) settings: MailSettings,
     held: Vec<(AccountId, Command)>,
@@ -306,6 +310,8 @@ impl MailView {
             setup: None,
             open_file: None,
             read_later: None,
+            filter: Filter::All,
+            synced: None,
             waiting: Vec::new(),
             settings,
             held: Vec::new(),
@@ -542,6 +548,16 @@ impl MailView {
             .unwrap_or_else(|| tr!("Mail"))
     }
 
+    pub(crate) fn unread_here(&self) -> usize {
+        self.sidebar
+            .iter()
+            .find_map(|row| match row {
+                Row::Place { place, unread, .. } if *place == self.place => Some(*unread),
+                _ => None,
+            })
+            .unwrap_or(0)
+    }
+
     pub fn header(&self) -> Header {
         self.toolbar_header()
     }
@@ -713,6 +729,7 @@ impl MailView {
             .listing(
                 &self.place.scope(),
                 &self.search,
+                self.filter,
                 self.settings.sort,
                 self.settings.ascending,
                 self.listed,
@@ -1870,6 +1887,9 @@ impl MailView {
                     }
                     self.statuses.retain(|(known, _)| *known != account);
                     self.statuses.push((account, status));
+                    if status == Status::Ready {
+                        self.synced = Some(Timestamp::now());
+                    }
                 }
                 MailEvent::Changed(_) => stale = true,
                 MailEvent::Synced(account, mailbox) => {
@@ -2346,6 +2366,19 @@ impl MailView {
                 Signal::Forward => self.forward_selected(),
                 Signal::Flag => self.toggle_flag(),
                 Signal::Search(text) => self.search_for(&text),
+                Signal::Filter(filter) => {
+                    self.filter = filter;
+                    self.reload();
+                }
+                Signal::Sort(sort) => {
+                    self.settings.sort = sort;
+                    self.keep_settings();
+                }
+                Signal::Direction => {
+                    self.settings.ascending = !self.settings.ascending;
+                    self.keep_settings();
+                }
+                Signal::More => self.show_more(),
                 signal @ (Signal::NewMailbox(..)
                 | Signal::RenameMailbox(..)
                 | Signal::DeleteMailbox(_)) => self.change_mailboxes(signal),
@@ -2627,14 +2660,8 @@ impl MailView {
     }
 
     fn left_toolbar(&self, before: WidgetId, forward: bool) -> bool {
-        let frames = self.toolbar_frames();
-        let x = |id: Option<WidgetId>| {
-            frames
-                .iter()
-                .find(|(known, _)| Some(*known) == id)
-                .map(|(_, frame)| frame.x)
-        };
-        match (x(Some(before)), x(self.ui.focus())) {
+        let order = |id: Option<WidgetId>| id.and_then(|id| self.toolbar_order(id));
+        match (order(Some(before)), order(self.ui.focus())) {
             (Some(from), Some(to)) => match forward {
                 true => to <= from,
                 false => to >= from,
@@ -3156,6 +3183,79 @@ impl MailView {
         }
     }
 
+    fn show_more(&mut self) {
+        let Some(at) = self
+            .toolbar_frames()
+            .into_iter()
+            .find(|(id, _)| *id == self.toolbar.more)
+            .map(|(_, frame)| Point::new(frame.x, frame.y + frame.height))
+        else {
+            return;
+        };
+        let read = self
+            .first_target()
+            .is_some_and(|summary| summary.flags.seen);
+        let menu = Menu::new(vec![
+            MenuItem::submenu(
+                &tr!("Move To"),
+                Menu::new(
+                    self.move_targets()
+                        .into_iter()
+                        .map(|(name, id)| MenuItem::new(&name, &format!("move-to:{id}")))
+                        .collect(),
+                ),
+            ),
+            MenuItem::new(
+                &match read {
+                    true => tr!("Mark as Unread"),
+                    false => tr!("Mark as Read"),
+                },
+                "toggle-read",
+            ),
+            MenuItem::submenu(
+                &tr!("Flag"),
+                Menu::new(
+                    Self::flag_colors()
+                        .into_iter()
+                        .map(|(name, action)| MenuItem::new(&name, &action))
+                        .collect(),
+                ),
+            ),
+            MenuItem::separator(),
+            MenuItem::new(&tr!("Apply Rules"), "apply-rules"),
+        ]);
+        self.requests.push(Request::ShowMenu(menu, at));
+    }
+
+    pub(crate) fn sync_line(&self) -> String {
+        let busy = self
+            .statuses
+            .iter()
+            .any(|(_, status)| matches!(status, Status::Connecting | Status::Syncing));
+        let offline = self
+            .accounts
+            .iter()
+            .map(|(account, _)| account)
+            .filter(|account| self.offline(account.id))
+            .map(|account| account.label().to_owned())
+            .collect::<Vec<_>>();
+        if busy {
+            tr!("Getting mail…")
+        } else if !offline.is_empty() {
+            tr!("Offline: {accounts}", accounts = offline.join(", "))
+        } else if let Some(synced) = self.synced {
+            let when = list_date(
+                synced.as_second(),
+                Timestamp::now(),
+                &self.zone,
+                &self.formats,
+            );
+            tr!("Updated {time}", time = when)
+        } else {
+            String::new()
+        }
+    }
+
     pub fn message_menu(&self) -> Menu {
         let summary = self.first_target();
         let read = summary.as_ref().is_some_and(|summary| summary.flags.seen);
@@ -3226,19 +3326,6 @@ impl MailView {
             "bcc-field" => {
                 self.settings.bcc_field = !self.settings.bcc_field;
                 self.keep_settings();
-            }
-            "sort-ascending" | "sort-descending" => {
-                self.settings.ascending = action == "sort-ascending";
-                self.keep_settings();
-            }
-            action if action.starts_with("sort-") => {
-                if let Some(sort) = SortBy::ALL
-                    .into_iter()
-                    .find(|sort| action.strip_prefix("sort-") == Some(sort.name()))
-                {
-                    self.settings.sort = sort;
-                    self.keep_settings();
-                }
             }
             "archive" => self.move_selected(Role::Archive),
             "junk" => self.move_selected(Role::Junk),

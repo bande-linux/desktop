@@ -55,7 +55,7 @@ apt install bande-mail
   store. Plain text is refused for anything but this computer (`localhost`, `127.0.0.1`, `::1`),
   so a local bridge or test server still works. Passwords live in the Secret Service,
   under `application=org.bande.Mail`, never in a file.
-- **Window.** A window that was open at log out comes back in its place, showing the mailbox it showed. The sidebar lists Inbox, Flagged, Drafts, Sent, Archive, Junk and Trash across all
+- **Window.** A window that was open at log out comes back in its place, showing the mailbox it showed. Each pane owns its part of the header: New Message over the sidebar (a symbol when the window buttons sit on that side), Search over the list, and over the reader Reply, Reply All, Forward, Archive, Junk, Delete, Flag and More (Move To, Mark as Read or Unread, a flag colour, Apply Rules); the window title is not painted, but stays the window's name. The list's own header shows the mailbox, its unread count, All, Unread and Flagged, and the sort order (date, sender, subject, size or unread first, either way). The foot of the sidebar says whether Mail is getting mail, which accounts are offline or when it last updated, next to Get Mail. The sidebar lists Inbox, Flagged, Drafts, Sent, Archive, Junk and Trash across all
   accounts, then each account's folders with unread counts. The list shows sender, subject, a
   preview (two lines unless Settings says otherwise), the date, an unread dot, a flag and a
   paperclip. Messages of one conversation (the first `References` entry, else the
@@ -67,7 +67,7 @@ apt install bande-mail
   unread ones open, the others as a line that opens on a click. Each open message shows its
   headers, the plain text or sanitised HTML, quoted text folded behind Show Quoted Text, and the
   attachments, pictures shown in the text included; a message forwarded as an attachment (`message/rfc822`) is shown below with its
-  own headers, and its attachments join the others; Reply, Reply All and Forward (in the message or the toolbar) act on the message
+  own headers, and its attachments join the others; Reply, Reply All and Forward (in the message or the header) act on the message
   last clicked, marked with a bar in the accent colour while the reader has focus. Delete, Flag,
   Mark as Read or Unread, Move, Junk, Archive and Apply Rules act on that message too when the
   reader has focus (after a click in it), and on the selected rows when the list has focus; a
@@ -119,7 +119,7 @@ apt install bande-mail
   banner, which Mail then remembers for that sender (or by themselves when Settings ▸ Privacy
   allows it), and then only over HTTPS, at
   most 20 per message, 10 MB each, decoded with limits on their size.
-- **Toolbar and keys.** Get Mail (F5), New Message (Ctrl+N), Archive (Shift+Ctrl+A),
+- **Keys.** Get Mail (F5), New Message (Ctrl+N), Archive (Shift+Ctrl+A),
   Delete (Delete or Backspace), Junk, Reply (Ctrl+R), Reply All (Shift+Ctrl+R),
   Forward (Shift+Ctrl+F), Flag (Message ▸ Flag picks one of seven colours, kept
   on the server), Mark as Read or Unread, Send
@@ -127,13 +127,12 @@ apt install bande-mail
   with every word in their sender, recipients, subject or text; `from:`, `to:` and `subject:`
   keep a word to that field, and quotes keep words together. Words of three or more characters are
   looked up in an SQLite FTS5 trigram index, so a search stays fast in a large mailbox; the list
-  shows the first 500 messages and loads more as you scroll. View sorts the list by date, sender, subject, size or unread first,
-  either way. Mailbox ▸ Mark All as Read marks the shown mailbox read, and Message ▸ Move To files the
+  shows the first 500 messages and loads more as you scroll. Mailbox ▸ Mark All as Read marks the shown mailbox read, and Message ▸ Move To files the
   message in any mailbox of its account. Ctrl+click, Shift+click, Shift+Up/Down and Select All
   (Ctrl+A, in the list) select several messages; Delete, Archive, Junk, Move To, Flag and Mark as Read then
   act on all of them, and dragging them onto a mailbox in the sidebar moves them.
   Tab and F6 (Shift for backwards) move between the sidebar, the list, the reader and the
-  toolbar; Up, Down, Home, End, Page Up and Page Down choose a mailbox in the sidebar, move the
+  header controls; Up, Down, Home, End, Page Up and Page Down choose a mailbox in the sidebar, move the
   selection in the list and scroll the reader, and the Menu key (or Shift+F10) opens the
   mailbox's or the message's menu. In the reader, Tab also steps through its links, addresses,
   attachments and buttons such as Load Remote Content; Enter or Space presses the one with the

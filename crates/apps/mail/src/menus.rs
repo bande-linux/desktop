@@ -1,6 +1,5 @@
 use bande_app_menu::{Entry, edit_submenu};
 use bande_l10n::{Text, text, tr};
-use bande_mail::settings::SortBy;
 use bande_mail::ui::{MailView, SHORTCUTS};
 
 fn item(message: Text, action: &str) -> Entry {
@@ -61,39 +60,25 @@ pub fn app_menus(view: &MailView, shown: Shown) -> Vec<Entry> {
             vec![
                 item(text!("New Message"), "compose").primary(),
                 Entry::separator(),
-                item(text!("Add Account…"), "add-account"),
+                item(text!("Add Account…"), "add-account").primary(),
                 Entry::separator(),
-                selection(text!("Find"), "find").primary(),
+                selection(text!("Find"), "find"),
                 Entry::separator(),
                 bande_app_menu::print_item(viewer),
             ],
         ),
         edit_submenu(Vec::new()),
-        Entry::submenu(&tr!("View"), {
-            let settings = view.settings();
-            let mut entries = SortBy::ALL
-                .into_iter()
-                .map(|sort| {
-                    Entry::item(&sort_title(sort.name()), &format!("sort-{}", sort.name()))
-                        .radio(settings.sort == sort)
-                })
-                .collect::<Vec<_>>();
-            entries.push(Entry::separator());
-            entries.push(
-                Entry::item(&tr!("Descending"), "sort-descending").radio(!settings.ascending),
-            );
-            entries
-                .push(Entry::item(&tr!("Ascending"), "sort-ascending").radio(settings.ascending));
-            entries.push(Entry::separator());
-            entries.push(
-                Entry::item(&tr!("Bcc Address Field"), "bcc-field").check(settings.bcc_field),
-            );
-            entries
-        }),
+        Entry::submenu(
+            &tr!("View"),
+            vec![
+                Entry::item(&tr!("Bcc Address Field"), "bcc-field")
+                    .check(view.settings().bcc_field),
+            ],
+        ),
         Entry::submenu(
             &tr!("Mailbox"),
             vec![
-                item(text!("Get Mail"), "get-mail").primary(),
+                item(text!("Get Mail"), "get-mail"),
                 Entry::separator(),
                 selection(text!("Mark All as Read"), "mark-all-read"),
                 Entry::separator(),
@@ -130,15 +115,4 @@ pub fn app_menus(view: &MailView, shown: Shown) -> Vec<Entry> {
             ],
         ),
     ]
-}
-
-fn sort_title(name: &str) -> String {
-    match name {
-        "date" => tr!("Sort by Date"),
-        "from" => tr!("Sort by From"),
-        "subject" => tr!("Sort by Subject"),
-        "size" => tr!("Sort by Size"),
-        "unread" => tr!("Sort by Unread"),
-        other => other.to_owned(),
-    }
 }

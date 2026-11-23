@@ -20,7 +20,7 @@ use bande_mail_core::sheet::Mode;
 use bande_mail_core::testing::{Dovecot, PASSWORD, USER, local};
 use bande_search::Offer;
 use bande_toolkit::ui::{Context, Event as Input, FreeLayout, Key, Modifiers, Size, Ui, Widget};
-use bande_toolkit::{Palette, Scheme, TextSystem};
+use bande_toolkit::{Appearance, HeaderInsets, Palette, Scheme, TextSystem, WindowButtons};
 use zbus::blocking::Connection;
 
 const WAIT: Duration = Duration::from_secs(20);
@@ -509,4 +509,63 @@ fn an_eml_file_opens_read_only_with_its_text_and_attachment() {
         node.label()
             .is_some_and(|label| label.starts_with("The message couldn’t be opened"))
     }));
+}
+
+#[test]
+fn every_pane_keeps_its_header_controls_clear_of_the_window_buttons_on_either_side() {
+    let folder = tempfile::tempdir().unwrap();
+    let store_path = folder.path().join("mail.sqlite3");
+    let store = Store::open(&store_path).unwrap();
+    store
+        .add_account(&account(USER, local(1), local(1)))
+        .unwrap();
+    let mut view = bande_mail::ui::MailView::new(
+        store_path,
+        bande_mail::settings::MailSettings::default(),
+        Palette::for_scheme(Scheme::Light),
+        TextSystem::new(),
+    )
+    .unwrap();
+    view.reload();
+    let (width, height) = (1280, 800);
+    for buttons in [WindowButtons::Right, WindowButtons::Left] {
+        view.set_appearance(Appearance {
+            window_buttons: buttons,
+            ..Appearance::default()
+        });
+        view.scene(width, height);
+        let insets = HeaderInsets::of(buttons);
+        let header = view.header();
+        assert!(header.title_x >= width as f32, "the panes own the header");
+        for item in &header.items {
+            assert!(item.x >= 0.0 && item.x + item.width <= width as f32);
+            let controls = match buttons {
+                WindowButtons::Right => item.x + item.width <= width as f32 - insets.trailing,
+                WindowButtons::Left => item.x >= insets.leading,
+            };
+            assert!(
+                controls,
+                "{item:?} runs into the window buttons on the {buttons:?}"
+            );
+        }
+        let names = view
+            .accessibility()
+            .nodes
+            .into_iter()
+            .filter_map(|(_, node)| node.label().map(str::to_owned))
+            .collect::<Vec<_>>();
+        for name in [
+            "New Message",
+            "Reply",
+            "Archive",
+            "More",
+            "Get Mail",
+            "Sort by",
+        ] {
+            assert!(
+                names.iter().any(|known| known == name),
+                "no {name} with the buttons on the {buttons:?}"
+            );
+        }
+    }
 }

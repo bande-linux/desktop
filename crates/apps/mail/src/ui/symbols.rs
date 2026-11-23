@@ -24,6 +24,9 @@ pub enum Symbol {
     Remote,
     Remove,
     Security,
+    More,
+    SortAscending,
+    SortDescending,
 }
 
 impl Symbol {
@@ -47,6 +50,9 @@ impl Symbol {
             Self::Remote => include_bytes!("../../data/symbols/remote.svg"),
             Self::Remove => include_bytes!("../../data/symbols/remove.svg"),
             Self::Security => include_bytes!("../../data/symbols/security.svg"),
+            Self::More => include_bytes!("../../data/symbols/more.svg"),
+            Self::SortAscending => include_bytes!("../../data/symbols/sort-ascending.svg"),
+            Self::SortDescending => include_bytes!("../../data/symbols/sort-descending.svg"),
         }
     }
 

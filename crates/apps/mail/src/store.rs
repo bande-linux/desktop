@@ -191,6 +191,26 @@ pub struct Summary {
     pub size: i64,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Filter {
+    #[default]
+    All,
+    Unread,
+    Flagged,
+}
+
+impl Filter {
+    pub const ALL: [Self; 3] = [Self::All, Self::Unread, Self::Flagged];
+
+    fn condition(self) -> &'static str {
+        match self {
+            Self::All => "",
+            Self::Unread => " AND m.seen = 0",
+            Self::Flagged => " AND m.flagged = 1",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Scope {
     Mailbox(MailboxId),
@@ -884,13 +904,14 @@ impl Store {
     }
 
     pub fn summaries(&self, scope: &Scope, search: &str) -> Result<Vec<Summary>> {
-        self.listing(scope, search, SortBy::Date, false, usize::MAX)
+        self.listing(scope, search, Filter::All, SortBy::Date, false, usize::MAX)
     }
 
     pub fn listing(
         &self,
         scope: &Scope,
         search: &str,
+        shown: Filter,
         sort: SortBy,
         ascending: bool,
         limit: usize,
@@ -905,7 +926,8 @@ impl Store {
         let order = order_by(sort, ascending);
         let query = format!(
             "SELECT {SUMMARY_COLUMNS} FROM messages m JOIN mailboxes b ON b.id = m.mailbox \
-             WHERE {filter} AND m.deleted = 0{search_filter}{ENABLED} ORDER BY {order} LIMIT ?2"
+             WHERE {filter} AND m.deleted = 0{shown}{search_filter}{ENABLED} ORDER BY {order} LIMIT ?2",
+            shown = shown.condition()
         );
         let mut statement = self.connection.prepare(&query)?;
         let mut values: Vec<Box<dyn rusqlite::ToSql>> = vec![

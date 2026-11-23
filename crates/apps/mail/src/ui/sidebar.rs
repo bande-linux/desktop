@@ -77,7 +77,7 @@ pub fn role_title(role: Role) -> String {
 }
 
 pub fn rows(accounts: &[(Account, Vec<Mailbox>)], unread: impl Fn(&Scope) -> usize) -> Vec<Row> {
-    let mut rows = vec![Row::Heading(tr!("Mailboxes"), None)];
+    let mut rows = Vec::new();
     for role in UNIFIED {
         let present = accounts
             .iter()

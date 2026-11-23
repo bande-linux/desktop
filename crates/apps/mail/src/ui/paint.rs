@@ -1,4 +1,4 @@
-use bande_l10n::tr;
+use bande_l10n::{tr, trn};
 
 use crate::store::Summary;
 use crate::ui::format::list_date;
@@ -6,6 +6,7 @@ use crate::ui::reader::{Clock, Target};
 use crate::ui::reader_pane::{Look, paint_link_target};
 use crate::ui::sidebar::Row;
 use crate::ui::symbols::Symbol;
+use crate::ui::toolbar::{LIST_HEADER_HEIGHT, LIST_TITLE_HEIGHT, SIDEBAR_FOOT_HEIGHT};
 use crate::ui::view::{Hit, LIST_WIDTH, MailView, Pane, SIDEBAR_WIDTH, TOOLBAR_HEIGHT};
 use bande_toolkit::Color;
 use bande_toolkit::ui::{BUTTON_HEIGHT, Key, Scroll, Size};
@@ -35,6 +36,7 @@ const DOT: f32 = 8.0;
 const ROW_INSET: f32 = 6.0;
 const BADGE_GAP: f32 = 10.0;
 const SMALL_SYMBOL: f32 = 13.0;
+const LIST_HEADER_INSET: f32 = 14.0;
 const OPEN_FILE_WIDTH: f32 = 240.0;
 const OPEN_FILE_BOTTOM: f32 = 64.0;
 
@@ -57,18 +59,43 @@ impl MailView {
             0.0,
             TOOLBAR_HEIGHT,
             SIDEBAR_WIDTH,
-            (self.size.1 - TOOLBAR_HEIGHT).max(0.0),
+            (self.size.1 - TOOLBAR_HEIGHT - SIDEBAR_FOOT_HEIGHT).max(0.0),
+        )
+    }
+
+    pub(crate) fn sidebar_foot_frame(&self) -> Rect {
+        Rect::new(
+            0.0,
+            (self.size.1 - SIDEBAR_FOOT_HEIGHT).max(TOOLBAR_HEIGHT),
+            SIDEBAR_WIDTH,
+            SIDEBAR_FOOT_HEIGHT,
+        )
+    }
+
+    pub(crate) fn list_header_frame(&self) -> Rect {
+        let sheet = self.sheet_frame();
+        Rect::new(
+            sheet.x,
+            sheet.y,
+            LIST_WIDTH.min(sheet.width),
+            LIST_HEADER_HEIGHT.min(sheet.height),
         )
     }
 
     pub(crate) fn list_frame(&self) -> Rect {
+        let header = self.list_header_frame();
         let sheet = self.sheet_frame();
-        Rect::new(sheet.x, sheet.y, LIST_WIDTH.min(sheet.width), sheet.height)
+        Rect::new(
+            header.x,
+            header.y + header.height,
+            header.width,
+            (sheet.height - header.height).max(0.0),
+        )
     }
 
     pub(crate) fn reader_frame(&self) -> Rect {
         let sheet = self.sheet_frame();
-        let list = self.list_frame();
+        let list = self.list_header_frame();
         Rect::new(
             list.x + list.width + 1.0,
             sheet.y,
@@ -137,6 +164,7 @@ impl MailView {
             false => 0.0,
         };
         let mut content = Vec::new();
+        self.paint_list_header(&mut content);
         self.paint_list(&mut content);
         self.paint_reader(&mut content);
         items.push(Item::Clip {
@@ -378,6 +406,48 @@ impl MailView {
         scroll.paint_scrollbar(cx, frame, items);
     }
 
+    fn paint_list_header(&mut self, items: &mut Vec<Item>) {
+        let palette = self.palette;
+        let frame = self.list_header_frame();
+        let unread = self.unread_here();
+        let count = match unread {
+            0 => String::new(),
+            unread => trn!("{count} unread", "{count} unread", count = unread),
+        };
+        let count = self.text_line(
+            &count,
+            TextStyle::role(TextRole::Callout, palette.ink3).tabular(),
+            frame.width / 2.0,
+        );
+        let title_width = frame.width - 2.0 * LIST_HEADER_INSET - count.width() - BADGE_GAP;
+        let title = self.text_line(
+            &self.title(),
+            TextStyle::role(TextRole::Heading, palette.ink),
+            title_width.max(0.0),
+        );
+        let row_y = frame.y + (LIST_TITLE_HEIGHT - title.height()).max(0.0).round() + 4.0;
+        items.push(Item::Text {
+            origin: Point::new(frame.x + LIST_HEADER_INSET, row_y),
+            paragraph: title,
+        });
+        items.push(Item::Text {
+            origin: Point::new(
+                frame.x + frame.width - LIST_HEADER_INSET - count.width(),
+                row_y,
+            ),
+            paragraph: count,
+        });
+        items.push(Item::Fill {
+            shape: Shape::rect(Rect::new(
+                frame.x,
+                frame.y + frame.height - 1.0,
+                frame.width,
+                1.0,
+            )),
+            paint: palette.hairline.into(),
+        });
+    }
+
     fn paint_list(&mut self, items: &mut Vec<Item>) {
         let palette = self.palette;
         let frame = self.list_frame();
@@ -429,8 +499,9 @@ impl MailView {
             shape: Shape::rect(frame),
             items: drawn,
         });
+        let sheet = self.sheet_frame();
         items.push(Item::Fill {
-            shape: Shape::rect(Rect::new(frame.x + frame.width, frame.y, 1.0, frame.height)),
+            shape: Shape::rect(Rect::new(frame.x + frame.width, sheet.y, 1.0, sheet.height)),
             paint: palette.hairline.into(),
         });
         let scroll = &self.scrolls[1];

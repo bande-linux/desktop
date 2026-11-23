@@ -808,7 +808,9 @@ what the one before could not save:
   keeps its saved windows. A session
   that leaves `running` without `reopen` (a panic, a crash signal, the watchdog or `SIGKILL`)
   crashed: the next login moves the list to `bande/crashed` and asks "Reopen your apps?" once;
-  the next start discards an unanswered question, so it never repeats.
+  the next start discards an unanswered question, so it never repeats. A cancelled ending (Cancel
+  in the dialog, or `PrepareForShutdown(false)`) removes `reopen` again and resumes saving the
+  window places, so a later crash still asks.
 - **The record**: every failure of a Bande program leaves one report, kept on the computer unless
   sending is on ([fault reports](fault-reports.md)). Core dumps go to `systemd-coredump`
   (`bande-crash-reports` depends on it), whose own `user.conf.d` and `system.conf.d` drop-ins

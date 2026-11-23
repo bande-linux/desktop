@@ -9,12 +9,12 @@ use bande_compositor::{
     Awaited, CLIPBOARD_DAEMON, Compositor, CursorTheme, DisplaysHandle, DrmBackend, DrmNotifiers,
     FirstMode, FrameClock, FrameOutput, FrameRecovery, FrameScheduler, GREETER, InputSettings,
     REFRESH, REVIEW, RecoveryStep, Renderer, SCREENSHOT, SESSION_CLIENT_RESTART_THROTTLE, SHELL,
-    SessionRequest, SessionRole, SessionUpkeep, Sleep, blank_console, export_session_environment,
-    follow_alerts, follow_appearance, follow_input_settings, follow_lid, follow_login_settings,
-    follow_session, follow_shutdown, follow_sleep, handle_power_key, notify_service_manager,
-    raise_priority, render_material, serve_app_states, serve_displays, serve_global_shortcuts,
-    serve_keyboard_monitor, take_display_from_boot_screen, user_config,
-    watchdog_keepalive_interval,
+    SessionRequest, SessionRole, SessionUpkeep, Shutdown, Sleep, blank_console,
+    export_session_environment, follow_alerts, follow_appearance, follow_input_settings,
+    follow_lid, follow_login_settings, follow_session, follow_shutdown, follow_sleep,
+    handle_power_key, notify_service_manager, raise_priority, render_material, serve_app_states,
+    serve_displays, serve_global_shortcuts, serve_keyboard_monitor, take_display_from_boot_screen,
+    user_config, watchdog_keepalive_interval,
 };
 use bande_config::{BUS_NAME, CARRIED_ACCESSIBILITY, OBJECT_PATH, login_accessibility_file};
 use bande_datetime::ClockChanges;
@@ -936,7 +936,10 @@ fn start_user_session<O: FrameOutput + 'static>(
                 &handle,
                 "shutdown to remember the apps",
                 |sender| follow_shutdown(system, sender),
-                |app, delay| app.compositor.shutting_down(delay),
+                |app, shutdown| match shutdown {
+                    Shutdown::Starting(delay) => app.compositor.shutting_down(delay),
+                    Shutdown::Cancelled => app.compositor.shutdown_cancelled(window_sessions()),
+                },
             )?;
         }
     }

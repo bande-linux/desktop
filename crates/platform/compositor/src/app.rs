@@ -17,7 +17,7 @@ use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use bande_graphics::Modifiers;
-use bande_xdg::{remember_running_apps, running_apps_contents};
+use bande_xdg::{remember_running_apps, running_apps_contents, take_apps_to_reopen};
 use smithay::utils::Rectangle;
 use smithay::wayland::xdg_activation::XdgActivationTokenData;
 
@@ -327,21 +327,10 @@ impl State {
         self.session_end_requested = Some(ending);
     }
 
-    fn remember_apps_to_reopen(&self) {
-        let Some(file) = self.reopen_file.clone() else {
-            return;
-        };
-        let running = self.apps_with_windows();
-        let remembered = std::thread::Builder::new()
-            .name("reopen".to_owned())
-            .spawn(move || remember_running_apps(&file, &running));
-        if let Err(error) = remembered {
-            tracing::warn!("cannot remember the apps to reopen: {error}");
-        }
-    }
-
     pub(crate) fn quit_all_apps(&mut self, requester: BandeShellV1) {
-        self.remember_apps_to_reopen();
+        if let Some(file) = &self.reopen_file {
+            remember_running_apps(file, &self.apps_with_windows());
+        }
         for (owner, _) in self.app_owners() {
             for app in self
                 .app_resources
@@ -398,6 +387,15 @@ impl Compositor {
     pub fn shutting_down(&mut self, delay: OwnedFd) {
         self.end_session_cleanly();
         drop(delay);
+    }
+
+    pub fn shutdown_cancelled(&mut self, window_sessions: Option<PathBuf>) {
+        if let Some(file) = &self.state.reopen_file {
+            take_apps_to_reopen(file);
+        }
+        if let Some(path) = window_sessions {
+            self.remember_sessions_in(path);
+        }
     }
 
     pub fn end_session_cleanly(&mut self) {

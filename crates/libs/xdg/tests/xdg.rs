@@ -111,6 +111,14 @@ fn only_a_crash_asks_to_reopen_and_only_once() {
 }
 
 #[test]
+fn a_crash_after_a_cancelled_ending_still_asks() {
+    let session = LastSession::new();
+    session.ended(true);
+    take_apps_to_reopen(&session.reopen);
+    assert_eq!(session.next_login(), ["org.bande.Files"]);
+}
+
+#[test]
 fn each_app_notes_its_own_reopening() {
     let viewer = saved_windows_file("org.bande.Viewer").expect("state");
     let files = saved_windows_file("org.bande.Files").expect("state");

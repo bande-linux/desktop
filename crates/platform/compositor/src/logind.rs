@@ -127,6 +127,12 @@ pub enum SessionRequest {
     Lock,
 }
 
+#[derive(Debug)]
+pub enum Shutdown {
+    Starting(OwnedFd),
+    Cancelled,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SessionReport {
     LockStarted,
@@ -243,7 +249,7 @@ pub fn handle_power_key(connection: &Connection, presses: Receiver<()>) -> zbus:
     Ok(true)
 }
 
-pub fn follow_shutdown(connection: &Connection, sender: Sender<OwnedFd>) -> zbus::Result<()> {
+pub fn follow_shutdown(connection: &Connection, sender: Sender<Shutdown>) -> zbus::Result<()> {
     let manager = ManagerProxyBlocking::new(connection)?;
     let changes = manager.receive_prepare_for_shutdown()?;
     let take = move || -> zbus::Result<OwnedFd> {
@@ -263,11 +269,14 @@ pub fn follow_shutdown(connection: &Connection, sender: Sender<OwnedFd>) -> zbus
             };
             if *arguments.start() {
                 if let Some(delay) = held.take()
-                    && sender.send(delay).is_err()
+                    && sender.send(Shutdown::Starting(delay)).is_err()
                 {
                     return;
                 }
             } else if held.is_none() {
+                if sender.send(Shutdown::Cancelled).is_err() {
+                    return;
+                }
                 held = take()
                     .inspect_err(|error| {
                         tracing::warn!("cannot delay shutdown to remember the apps: {error}")

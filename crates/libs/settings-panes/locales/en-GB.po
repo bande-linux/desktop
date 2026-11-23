@@ -10,14 +10,8 @@ msgstr ""
 msgid "Light, dark or automatic, accent color, wallpaper and text size"
 msgstr "Light, dark or automatic, accent colour, wallpaper and text size"
 
-msgid "Refresh rate, variable refresh rate and color profile of each display"
-msgstr "Refresh rate, variable refresh rate and colour profile of each display"
-
 msgid "Warmer colors after dark"
 msgstr "Warmer colours after dark"
 
 msgid "Accent color"
 msgstr "Accent colour"
-
-msgid "Color profile"
-msgstr "Colour profile"

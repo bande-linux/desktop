@@ -1773,7 +1773,6 @@ dependencies = [
  "bande-backup",
  "bande-bluetooth",
  "bande-bus",
- "bande-colour",
  "bande-config",
  "bande-datetime",
  "bande-discovery",

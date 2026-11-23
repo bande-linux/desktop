@@ -6,7 +6,6 @@ mod boot_screen;
 mod brightness;
 mod client;
 mod clock;
-mod colour;
 mod consent;
 mod crypt;
 mod defaults;

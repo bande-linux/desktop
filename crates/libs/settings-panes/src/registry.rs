@@ -223,7 +223,7 @@ impl PaneId {
             }
             Self::Displays => tr!("Arrangement, resolution and size of each display"),
             Self::DisplaysAdvanced => {
-                tr!("Refresh rate, variable refresh rate and color profile of each display")
+                tr!("Refresh rate and variable refresh rate of each display")
             }
             Self::NightLight => tr!("Warmer colors after dark"),
             Self::Sound => tr!("Output, input and sound effects"),
@@ -275,9 +275,9 @@ impl PaneId {
             Self::Search => tr!("launcher, super, results, recents, privacy"),
             Self::Accessibility => tr!("a11y, disability, assistive, vision, hearing, motor"),
             Self::Displays => tr!("monitor, screen, resolution, brightness, night light"),
-            Self::DisplaysAdvanced => tr!(
-                "advanced, monitor, refresh rate, hertz, hz, variable refresh, vrr, color profile, colour profile, icc"
-            ),
+            Self::DisplaysAdvanced => {
+                tr!("advanced, monitor, refresh rate, hertz, hz, variable refresh, vrr")
+            }
             Self::NightLight => tr!(
                 "night shift, blue light, warm, redshift, colour temperature, color temperature, eye strain"
             ),
@@ -434,7 +434,6 @@ pub enum SettingId {
     DisplayResolution,
     DisplayScale,
     RefreshRate,
-    ColourProfile,
     DisplaysAdvancedPage,
     DisplayRotation,
     VariableRefresh,
@@ -678,7 +677,6 @@ pub enum Kind {
     },
     RefreshRates,
     Resolutions,
-    ColourProfiles,
     TextSizes,
     DisplayUses,
     Pictures,
@@ -700,7 +698,6 @@ impl Kind {
             | Self::Range { .. }
             | Self::RefreshRates
             | Self::Resolutions
-            | Self::ColourProfiles
             | Self::TextSizes
             | Self::DisplayUses
             | Self::Pictures
@@ -1564,12 +1561,6 @@ fn displays_advanced_pane() -> Pane {
                     SettingId::VariableRefresh,
                     tr!("Variable refresh rate in full screen"),
                     tr!("vrr, adaptive sync, freesync, games, video, smooth"),
-                ),
-                setting(
-                    SettingId::ColourProfile,
-                    tr!("Color profile"),
-                    tr!("colour, color, profile, icc, srgb, p3, wide gamut, calibration"),
-                    Kind::ColourProfiles,
                 ),
             ],
         )],

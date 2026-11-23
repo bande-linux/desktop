@@ -153,8 +153,8 @@ msgstr "Gör skärmen, ljudet, tangentbordet och pekaren enklare att använda"
 msgid "Arrangement, resolution and size of each display"
 msgstr "Placering, upplösning och storlek för varje skärm"
 
-msgid "Refresh rate, variable refresh rate and color profile of each display"
-msgstr "Uppdateringsfrekvens, variabel uppdateringsfrekvens och färgprofil för varje skärm"
+msgid "Refresh rate and variable refresh rate of each display"
+msgstr "Uppdateringsfrekvens och variabel uppdateringsfrekvens för varje skärm"
 
 msgid "Warmer colors after dark"
 msgstr "Varmare färger efter mörkrets inbrott"
@@ -255,8 +255,8 @@ msgstr "a11y, funktionsnedsättning, hjälpmedel, syn, hörsel, motorik"
 msgid "monitor, screen, resolution, brightness, night light"
 msgstr "bildskärm, skärm, upplösning, ljusstyrka, nattljus"
 
-msgid "advanced, monitor, refresh rate, hertz, hz, variable refresh, vrr, color profile, colour profile, icc"
-msgstr "avancerat, bildskärm, uppdateringsfrekvens, hertz, hz, variabel uppdatering, vrr, färgprofil, icc"
+msgid "advanced, monitor, refresh rate, hertz, hz, variable refresh, vrr"
+msgstr "avancerat, bildskärm, uppdateringsfrekvens, hertz, hz, variabel uppdatering, vrr"
 
 msgid "night shift, blue light, warm, redshift, colour temperature, color temperature, eye strain"
 msgstr "night shift, blått ljus, varm, redshift, färgtemperatur, ansträngda ögon"
@@ -851,12 +851,6 @@ msgstr "Variabel uppdateringsfrekvens i helskärm"
 
 msgid "vrr, adaptive sync, freesync, games, video, smooth"
 msgstr "vrr, adaptiv synk, freesync, spel, video, jämn"
-
-msgid "Color profile"
-msgstr "Färgprofil"
-
-msgid "colour, color, profile, icc, srgb, p3, wide gamut, calibration"
-msgstr "färg, profil, icc, srgb, p3, färgomfång, kalibrering"
 
 msgid "on, off, night shift, blue light"
 msgstr "på, av, night shift, blått ljus"

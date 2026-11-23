@@ -12,8 +12,8 @@ use crate::pictures::{Pair, PictureCommand, expand};
 use crate::privilege::Privilege;
 use crate::state::{Answer, Display, Question};
 use crate::view::{
-    ADD_COLOUR_PROFILE, Anchor, Intent, Intents, MIRROR_PREFIX, PICK_RESULTS, Picker, SettingsView,
-    USE_EXTENDED, USE_MAIN, intent,
+    Anchor, Intent, Intents, MIRROR_PREFIX, PICK_RESULTS, Picker, SettingsView, USE_EXTENDED,
+    USE_MAIN, intent,
 };
 use crate::widgets::{
     Caption, Captioned, Card, Check, Column, Fade, Row, SIDEBAR_SYMBOL, Swatch, Swatches, Text,
@@ -128,12 +128,6 @@ fn display_value(
                 .refresh_rate
                 .map(|rate| rate.round() as u32)
                 .or_else(|| display.current.map(|mode| mode.hertz()))?,
-        ),
-        SettingId::ColourProfile => Value::Keyword(
-            output
-                .colour_profile
-                .clone()
-                .unwrap_or_else(|| bande_colour::UNMANAGED.to_owned()),
         ),
         SettingId::DisplayResolution => {
             let (width, height) = output.resolution.or_else(|| {
@@ -551,31 +545,6 @@ impl SettingsView {
                 choice_control(&setting.label, &labels, selected, move |index| {
                     if let Some((_, value)) = choices.get(index) {
                         set(value.clone());
-                    }
-                })
-            }
-            Kind::ColourProfiles => {
-                let mut choices: Vec<(String, String)> = [
-                    (tr!("None"), bande_colour::UNMANAGED),
-                    (tr!("This display"), bande_colour::DISPLAY),
-                    (tr!("sRGB"), bande_colour::SRGB),
-                    (tr!("Display P3"), bande_colour::DISPLAY_P3),
-                ]
-                .into_iter()
-                .map(|(label, value)| (label, value.to_owned()))
-                .collect();
-                choices.extend(self.colour_profiles.iter().cloned());
-                choices.push((tr!("Add Profile…"), ADD_COLOUR_PROFILE.to_owned()));
-                let selected = match &value {
-                    Some(Value::Keyword(current)) => {
-                        choices.iter().position(|(_, choice)| choice == current)
-                    }
-                    _ => None,
-                };
-                let labels: Vec<String> = choices.iter().map(|(label, _)| label.clone()).collect();
-                choice_control(&setting.label, &labels, selected, move |index| {
-                    if let Some((_, value)) = choices.get(index) {
-                        set(Value::Keyword(value.clone()));
                     }
                 })
             }
@@ -1670,12 +1639,11 @@ impl SettingsView {
         let mut body: Widgets = notice.into_iter().collect();
         let sections: &[Section] = if body.is_empty() { &pane.sections } else { &[] };
         for section in sections {
-            if section.settings.iter().any(|setting| {
-                matches!(
-                    setting.id,
-                    SettingId::DisplayUse | SettingId::RefreshRate | SettingId::ColourProfile
-                )
-            }) {
+            if section
+                .settings
+                .iter()
+                .any(|setting| matches!(setting.id, SettingId::DisplayUse | SettingId::RefreshRate))
+            {
                 body.extend(self.display_sections(section, &matched));
                 continue;
             }

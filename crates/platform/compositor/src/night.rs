@@ -13,6 +13,7 @@ const MOST_WARM: f64 = 2700.0;
 const SCHEDULED_FADE: Duration = Duration::from_secs(60);
 const SWITCHED_FADE: Duration = Duration::from_millis(1500);
 const FADE_STEP: Duration = Duration::from_millis(50);
+const FADE_STEPS: u32 = 240;
 const PREVIEW_FADE: Duration = Duration::from_millis(250);
 const PREVIEW_HOLD: Duration = Duration::from_secs(3);
 
@@ -105,6 +106,10 @@ impl Fade {
 
     fn done(&self, now: Duration) -> bool {
         now >= self.start + self.length
+    }
+
+    fn step(&self) -> Duration {
+        (self.length / FADE_STEPS).max(FADE_STEP)
     }
 }
 
@@ -216,7 +221,7 @@ impl NightLight {
             kelvin: changed.then_some(kelvin),
             wake_at: self
                 .fade
-                .map(|_| now + FADE_STEP)
+                .map(|fade| now + fade.step())
                 .into_iter()
                 .chain(self.check_at)
                 .chain(self.preview_until)

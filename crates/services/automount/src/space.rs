@@ -1,3 +1,4 @@
+use std::num::NonZeroU64;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
@@ -12,6 +13,7 @@ use zbus::blocking::{Connection, MessageIterator};
 use zbus::{MatchRule, message};
 
 pub const CHECK_EVERY: Duration = Duration::from_secs(10 * 60);
+const CHECK_SLACK_NS: u64 = 60_000_000_000;
 const GIGABYTE: u64 = 1_000_000_000;
 const ALWAYS_LOW: u64 = GIGABYTE;
 const NEVER_LOW: u64 = 10 * GIGABYTE;
@@ -173,6 +175,10 @@ pub fn watch_space(watch: SpaceWatch, open: impl Fn() + Send + 'static) -> Arc<S
     }
     let checks = Arc::clone(&watch);
     thread::spawn(move || {
+        if let Err(error) = rustix::thread::set_current_timer_slack(NonZeroU64::new(CHECK_SLACK_NS))
+        {
+            tracing::debug!("cannot set the timer slack: {error}");
+        }
         loop {
             checks.check();
             thread::sleep(CHECK_EVERY);

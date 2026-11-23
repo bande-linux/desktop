@@ -73,6 +73,7 @@ eventfds. These are the only timers left; each runs only while its condition hol
 | :--- | :--- | :--- |
 | Compositor | every 10 s | systemd watchdog (`WatchdogSec=20s`) |
 | Night light | at the next scheduled change | real-time deadline; clock and time zone changes are events |
+| Night light fading | every 250 ms through the 60 s scheduled fade, every 50 ms through the 1.5 s fade when switched | 240 steps of at most about 25 K, too small to see |
 | Bar clock, the lock screen's clock | at each minute boundary while drawn | the display unit; a clock waits for its frame before it arms the next minute, and the compositor sends no frame while locked (the bar) or with the displays off, so neither wakes then |
 | The login window's clock; Calendar's today while on screen | at each minute boundary | the display unit |
 | Countdowns (log out, screenshot timer), Now Playing | at each second boundary while shown | the display unit |
@@ -80,7 +81,7 @@ eventfds. These are the only timers left; each runs only while its condition hol
 | Banners, alarms, calendar alerts | at their deadline | real deadlines |
 | System Monitor, the low memory window | every 2 s while a window is on screen | `/proc` has no change events |
 | Settings' Sound pane | 20 times a second while on screen | the input level meter |
-| Disk space (automount) | every 10 min | free space has no kernel event |
+| Disk space (automount) | every 10 min, with a minute of timer slack | free space has no kernel event; the slack lets the kernel fire it with another wake-up |
 | Server health (automount) | every 8 s while a server is connected | a server that stops answering sends nothing |
 | Files | once a day | emptying old Trash items |
 | Files, a server folder in the active window | every 10 s | servers send no change events; re-lists the folder and reads its free space off the UI thread |

@@ -35,6 +35,7 @@ pub enum Signal {
     DeleteMailbox(crate::store::MailboxId),
     TryAgain(crate::store::AccountId),
     ServerSettings,
+    OpenMessageFile,
     OpenLink(String),
     TrustIssuer(crate::store::MessageId),
 }

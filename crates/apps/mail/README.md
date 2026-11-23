@@ -11,7 +11,8 @@ apt install bande-mail
 ## What it does
 
 - **Accounts.** The setup guide asks for a name, an address and a password; with no account yet
-  it fills the window, Add Account… shows it as a sheet. Mail then looks up the servers of the
+  it fills the window, with Open Message File… below it for reading a saved `.eml` message, and
+  Add Account… shows it as a sheet. Mail then looks up the servers of the
   address's domain and checks them, in a checklist that shows each step (finding the servers,
   signing in to IMAP, checking sending over SMTP); Cancel stops at any point. The password goes
   only to servers in the address's own domain found in its DNS records or its published settings;

@@ -637,6 +637,7 @@ impl Mail {
                     self.open_compose(cx, *outgoing);
                 }
                 Request::OpenSettings => cx.open_settings(),
+                Request::OpenMessage(path) => self.open_message(cx, path),
                 Request::Attach(paths) => self.picker.read(SHARED_FILES, paths),
                 Request::OpenLink(url) => self.open_url(cx, window, &url),
                 Request::OpenAttachment(path) => {

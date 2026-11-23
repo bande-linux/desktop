@@ -34,8 +34,8 @@ use bande_datetime::DateFormats;
 use bande_keyring::Keyring;
 use bande_mail_core::guide::{Done, Guide, Host, Options, Report};
 use bande_toolkit::ui::{
-    Alert, ClipboardRequest, Context, Cursor, Event, FreeLayout, Key, Menu, MenuItem, Modifiers,
-    Pointer, PointerButton, ScrollState, TextField, Ui, Widget, WidgetId, opens_menu,
+    Alert, Button, ClipboardRequest, Context, Cursor, Event, FreeLayout, Key, Menu, MenuItem,
+    Modifiers, Pointer, PointerButton, ScrollState, TextField, Ui, Widget, WidgetId, opens_menu,
     past_drag_slop, shortcut_pressed,
 };
 use bande_toolkit::{
@@ -100,6 +100,7 @@ pub enum Request {
     Clipboard(ClipboardRequest),
     OpenSettings,
     Attach(Vec<PathBuf>),
+    OpenMessage(PathBuf),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -233,6 +234,7 @@ pub struct MailView {
     pub(crate) now: Option<Timestamp>,
     requests: Vec<Request>,
     pub(crate) setup: Option<Guide>,
+    pub(crate) open_file: Option<WidgetId>,
     waiting: Vec<Draft>,
     pub(crate) settings: MailSettings,
     held: Vec<(AccountId, Command)>,
@@ -298,6 +300,7 @@ impl MailView {
             now: None,
             requests: Vec::new(),
             setup: None,
+            open_file: None,
             waiting: Vec::new(),
             settings,
             held: Vec::new(),
@@ -1894,6 +1897,7 @@ impl MailView {
                 MailEvent::Opened(id, content) => self.opened(id, *content),
                 MailEvent::LookedUp(id, result) => self.looked_up(id, result),
                 MailEvent::Setup(_) | MailEvent::KeysChanged(_) => {}
+                MailEvent::Chosen(path) => self.requests.push(Request::OpenMessage(path)),
                 MailEvent::Pictures(id, pictures) => self.reader.add_pictures(id, pictures),
             }
         }
@@ -2026,6 +2030,13 @@ impl MailView {
         let host = match self.accounts.is_empty() && mode == Mode::Address {
             true => {
                 self.remove_toolbar();
+                let send = Rc::clone(&self.signals);
+                let open = Button::new(&tr!("Open Message File…"), move || {
+                    send.borrow_mut().push(Signal::OpenMessageFile);
+                });
+                self.open_file = self
+                    .host_mut()
+                    .map(|host| host.insert(open, Rect::default()));
                 Host::Inline(self.host)
             }
             false => Host::Sheet,
@@ -2045,6 +2056,17 @@ impl MailView {
         self.setup = Some(Guide::open(&mut self.ui, host, mode, options));
     }
 
+    fn choose_message_file(&self) {
+        let notifier = self.mailroom.notifier();
+        std::thread::spawn(move || {
+            match crate::portal::choose_message(&tr!("Open Message File"), &tr!("Messages")) {
+                Ok(Some(path)) => notifier.send(MailEvent::Chosen(path)),
+                Ok(None) => {}
+                Err(error) => tracing::warn!("cannot choose a message file: {error}"),
+            }
+        });
+    }
+
     pub(crate) fn welcoming(&self) -> bool {
         self.setup
             .as_ref()
@@ -2057,6 +2079,11 @@ impl MailView {
             guide.close(&mut self.ui);
         }
         if welcomed {
+            if let Some(open) = self.open_file.take()
+                && let Some(host) = self.host_mut()
+            {
+                host.remove(open);
+            }
             self.insert_toolbar();
         }
     }
@@ -2289,6 +2316,7 @@ impl MailView {
                     self.send_command(account, Command::Sync);
                 }
                 Signal::ServerSettings => self.requests.push(Request::OpenSettings),
+                Signal::OpenMessageFile => self.choose_message_file(),
                 Signal::OpenLink(url) => self.requests.push(Request::OpenLink(url)),
                 Signal::TrustIssuer(id) => self.trust_issuer(id),
             }

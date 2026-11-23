@@ -11,7 +11,7 @@ const CHOOSER: &str = "org.freedesktop.portal.FileChooser";
 const REQUEST: &str = "org.freedesktop.portal.Request";
 const SUCCESS: u32 = 0;
 
-fn ask(method: &str, title: &str, option: (&str, Value<'_>)) -> zbus::Result<Vec<PathBuf>> {
+fn ask(method: &str, title: &str, chosen: Vec<(&str, Value<'_>)>) -> zbus::Result<Vec<PathBuf>> {
     let connection = Connection::session()?;
     let sender = connection
         .unique_name()
@@ -22,7 +22,8 @@ fn ask(method: &str, title: &str, option: (&str, Value<'_>)) -> zbus::Result<Vec
         .map_err(zbus::Error::from)?;
     let request = Proxy::new(&connection, DESKTOP, handle, REQUEST)?;
     let mut responses = request.receive_signal("Response")?;
-    let options = HashMap::from([("handle_token", Value::from(token.as_str())), option]);
+    let mut options = HashMap::from([("handle_token", Value::from(token.as_str()))]);
+    options.extend(chosen);
     connection.call_method(
         Some(DESKTOP),
         DESKTOP_PATH,
@@ -48,11 +49,22 @@ fn ask(method: &str, title: &str, option: (&str, Value<'_>)) -> zbus::Result<Vec
 }
 
 pub fn choose_files(title: &str) -> zbus::Result<Vec<PathBuf>> {
-    ask("OpenFile", title, ("multiple", Value::from(true)))
+    ask("OpenFile", title, vec![("multiple", Value::from(true))])
 }
 
 pub fn choose_save_path(title: &str, name: &str) -> zbus::Result<Option<PathBuf>> {
-    Ok(ask("SaveFile", title, ("current_name", Value::from(name)))?
-        .into_iter()
-        .next())
+    Ok(
+        ask("SaveFile", title, vec![("current_name", Value::from(name))])?
+            .into_iter()
+            .next(),
+    )
+}
+
+pub fn choose_message(title: &str, filter: &str) -> zbus::Result<Option<PathBuf>> {
+    let filters = vec![(filter.to_owned(), vec![(1u32, "message/rfc822".to_owned())])];
+    Ok(
+        ask("OpenFile", title, vec![("filters", Value::from(filters))])?
+            .into_iter()
+            .next(),
+    )
 }

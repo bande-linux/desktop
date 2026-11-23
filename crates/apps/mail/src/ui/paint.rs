@@ -8,7 +8,7 @@ use crate::ui::sidebar::Row;
 use crate::ui::symbols::Symbol;
 use crate::ui::view::{Hit, LIST_WIDTH, MailView, Pane, SIDEBAR_WIDTH, TOOLBAR_HEIGHT};
 use bande_toolkit::Color;
-use bande_toolkit::ui::{Key, Scroll, Size};
+use bande_toolkit::ui::{BUTTON_HEIGHT, Key, Scroll, Size};
 use bande_toolkit::{
     Item, Paragraph, Point, Radius, Rect, Scene, Shape, TextAlign, TextRole, TextStyle,
 };
@@ -35,6 +35,8 @@ const DOT: f32 = 8.0;
 const ROW_INSET: f32 = 6.0;
 const BADGE_GAP: f32 = 10.0;
 const SMALL_SYMBOL: f32 = 13.0;
+const OPEN_FILE_WIDTH: f32 = 240.0;
+const OPEN_FILE_BOTTOM: f32 = 64.0;
 
 impl MailView {
     fn scale(&mut self) -> f32 {
@@ -100,6 +102,20 @@ impl MailView {
                 (self.size.1 - TOOLBAR_HEIGHT).max(0.0),
             );
             guide.place(&mut self.ui, area);
+        }
+        if let Some(open) = self.open_file.filter(|_| self.welcoming()) {
+            let (width, height) = self.size;
+            if let Some(host) = self.host_mut() {
+                host.set_frame(
+                    open,
+                    Rect::new(
+                        ((width - OPEN_FILE_WIDTH) / 2.0).round(),
+                        height - OPEN_FILE_BOTTOM,
+                        OPEN_FILE_WIDTH,
+                        BUTTON_HEIGHT,
+                    ),
+                );
+            }
         }
         self.ui.layout(Size::new(self.size.0, self.size.1));
         let (controls, sheet) = self.ui.paint_layers(width, height);

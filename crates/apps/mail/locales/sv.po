@@ -886,6 +886,12 @@ msgstr "Brevlådan kunde inte ändras"
 msgid "{count} new messages"
 msgstr "{count} nya meddelanden"
 
+msgid "Open Message File…"
+msgstr "Öppna meddelandefil…"
+
+msgid "Open Message File"
+msgstr "Öppna meddelandefil"
+
 msgid "The new message was not started"
 msgstr "Det nya meddelandet påbörjades inte"
 

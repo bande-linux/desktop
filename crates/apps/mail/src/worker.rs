@@ -74,6 +74,7 @@ pub enum Event {
     Opened(MessageId, Box<crate::message::Content>),
     LookedUp(MessageId, std::result::Result<(), String>),
     KeysChanged(std::result::Result<String, String>),
+    Chosen(PathBuf),
 }
 
 #[derive(Clone)]

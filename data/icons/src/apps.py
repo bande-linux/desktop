@@ -290,7 +290,22 @@ ICONS = {
 }
 
 HICOLOR = {
+    'org.bande.Archives': 'crates/apps/archive/data/org.bande.Archives.svg',
+    'org.bande.Calculator': 'crates/apps/calculator/data/org.bande.Calculator.svg',
+    'org.bande.Calendar': 'crates/apps/calendar/data/org.bande.Calendar.svg',
+    'org.bande.Clock': 'crates/apps/clock/data/org.bande.Clock.svg',
+    'org.bande.Disks': 'crates/apps/disks/data/org.bande.Disks.svg',
     'org.bande.Files': 'crates/apps/files/data/org.bande.Files.svg',
-    'org.bande.Settings': 'crates/apps/settings/data/org.bande.Settings.svg',
+    'org.bande.Installer': 'crates/apps/installer/data/org.bande.Installer.svg',
     'org.bande.Mail': 'crates/apps/mail/data/org.bande.Mail.svg',
+    'org.bande.Notes': 'crates/apps/notes/data/org.bande.Notes.svg',
+    'org.bande.Player': 'crates/apps/player/data/org.bande.Player.svg',
+    'org.bande.ScreenSharing': 'crates/apps/screen-viewer/data/org.bande.ScreenSharing.svg',
+    'org.bande.Settings': 'crates/apps/settings/data/org.bande.Settings.svg',
+    'org.bande.Software': 'crates/apps/software/data/org.bande.Software.svg',
+    'org.bande.SystemMonitor': 'crates/apps/monitor/data/org.bande.SystemMonitor.svg',
+    'org.bande.Terminal': 'crates/apps/terminal/data/org.bande.Terminal.svg',
+    'org.bande.TextEditor': 'crates/apps/text-editor/data/org.bande.TextEditor.svg',
+    'org.bande.Velox': 'crates/apps/velox/data/org.bande.Velox.svg',
+    'org.bande.Viewer': 'crates/apps/viewer/data/org.bande.Viewer.svg',
 }

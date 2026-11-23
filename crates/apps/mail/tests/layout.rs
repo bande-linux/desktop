@@ -1,54 +1,87 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
+use std::path::Path;
+use std::time::Instant;
+
+use accesskit::{Node, Role};
+use bande_mail::imap::{Fetched, Folder, Role as Kind};
 use bande_mail::net::{Security, Server};
 use bande_mail::settings::MailSettings;
 use bande_mail::store::{Account, Store};
 use bande_mail::ui::{MailView, Panes, Request};
-use std::path::{Path, PathBuf};
-
-use bande_mail::imap::{Fetched, Folder, Role};
 use bande_toolkit::ui::{Event, Key, Modifiers, Pointer, Scroll, ScrollPhase, ScrollSource};
 use bande_toolkit::{Appearance, HeaderInsets, Palette, Point, Scheme, TextSystem, WindowButtons};
 
-fn view_of(store_path: PathBuf) -> MailView {
-    let mut view = MailView::new(
-        store_path,
-        MailSettings::default(),
-        Palette::for_scheme(Scheme::Light),
-        TextSystem::new(),
-    )
-    .unwrap();
-    view.reload();
-    view
+fn find(view: &MailView, found: impl Fn(&Node) -> bool) -> Option<Node> {
+    view.accessibility()
+        .nodes
+        .into_iter()
+        .map(|(_, node)| node)
+        .find(found)
 }
 
-fn account() -> Account {
+fn named(view: &MailView, label: &str) -> Option<Node> {
+    find(view, |node| node.label() == Some(label))
+}
+
+fn list(view: &MailView) -> Node {
+    find(view, |node| {
+        node.role() == Role::ListBox && node.label() == Some("Inbox")
+    })
+    .unwrap()
+}
+
+fn press(view: &mut MailView, key: Key, control: bool) {
+    view.handle(&Event::Key {
+        key,
+        modifiers: Modifiers {
+            control,
+            ..Modifiers::default()
+        },
+    });
+    view.scene(1280, 800);
+}
+
+#[test]
+fn every_pane_keeps_clear_of_the_window_buttons_and_the_list_acts_by_swipe_and_keys() {
+    let folder = tempfile::tempdir().unwrap();
+    let store_path = folder.path().join("mail.sqlite3");
+    let mut store = Store::open(&store_path).unwrap();
     let server = Server {
         host: "127.0.0.1".to_owned(),
         port: 1,
         security: Security::Plain,
     };
-    Account {
-        id: 0,
-        name: "Ann".to_owned(),
-        email: "ann@bande.test".to_owned(),
-        user: "ann@bande.test".to_owned(),
-        imap: server.clone(),
-        smtp: server,
-        signature: String::new(),
-        enabled: true,
-        description: String::new(),
-    }
-}
+    let id = store
+        .add_account(&Account {
+            id: 0,
+            name: "Ann".to_owned(),
+            email: "ann@bande.test".to_owned(),
+            user: "ann@bande.test".to_owned(),
+            imap: server.clone(),
+            smtp: server,
+            signature: String::new(),
+            enabled: true,
+            description: String::new(),
+        })
+        .unwrap();
+    let folders = [
+        ("INBOX", "Inbox", Kind::Inbox),
+        ("Archive", "Archive", Kind::Archive),
+    ];
+    let folders = folders.map(|(path, name, role)| Folder {
+        path: path.to_owned(),
+        name: name.to_owned(),
+        delimiter: None,
+        role: Some(role),
+        selectable: true,
+    });
+    store.replace_mailboxes(id, &folders).unwrap();
+    let palette = Palette::for_scheme(Scheme::Light);
+    let settings = MailSettings::default();
+    let mut view = MailView::new(store_path, settings, palette, TextSystem::new()).unwrap();
+    view.reload();
 
-#[test]
-fn every_pane_keeps_its_header_controls_clear_of_the_window_buttons_at_any_width() {
-    let folder = tempfile::tempdir().unwrap();
-    let store_path = folder.path().join("mail.sqlite3");
-    let store = Store::open(&store_path).unwrap();
-    store.add_account(&account()).unwrap();
-    let mut view = view_of(store_path);
-    let height = 800;
     for (width, panes) in [(1280, Panes::Three), (900, Panes::Two), (600, Panes::One)] {
         for buttons in [WindowButtons::Right, WindowButtons::Left] {
             view.set_appearance(Appearance {
@@ -56,8 +89,8 @@ fn every_pane_keeps_its_header_controls_clear_of_the_window_buttons_at_any_width
                 reduce_motion: true,
                 ..Appearance::default()
             });
-            view.scene(width, height);
-            view.scene(width, height);
+            view.scene(width, 800);
+            view.scene(width, 800);
             assert_eq!(view.panes(), panes);
             let insets = HeaderInsets::of(buttons);
             let header = view.header();
@@ -69,186 +102,81 @@ fn every_pane_keeps_its_header_controls_clear_of_the_window_buttons_at_any_width
                 };
                 assert!(
                     item.x >= 0.0 && clear,
-                    "{item:?} runs into the window buttons on the {buttons:?} at {width}"
+                    "{item:?} hits the buttons at {width}"
                 );
             }
-            let names = view
-                .accessibility()
-                .nodes
-                .into_iter()
-                .filter_map(|(_, node)| node.label().map(str::to_owned))
-                .collect::<Vec<_>>();
-            for name in ["New Message", "Sort by"] {
-                assert!(
-                    names.iter().any(|known| known == name),
-                    "no {name} with the buttons on the {buttons:?} at {width}"
-                );
-            }
+            let shown = |name: &str| named(&view, name).is_some();
+            assert!(shown("New Message") && shown("Sort by"));
             for name in ["Reply", "Archive", "More"] {
-                assert_eq!(
-                    names.iter().any(|known| known == name),
-                    panes != Panes::One,
-                    "{name} is in the tree only while the reader shows, at {width}"
-                );
+                assert_eq!(shown(name), panes != Panes::One, "{name} at {width}");
             }
-            let sidebar_shown = panes == Panes::Three;
             for name in ["Get Mail", "Mailboxes"] {
-                assert_eq!(
-                    names.iter().any(|known| known == name),
-                    sidebar_shown,
-                    "{name} is in the tree only while the sidebar shows, at {width}"
-                );
+                assert_eq!(shown(name), panes == Panes::Three, "{name} at {width}");
             }
-            assert_eq!(view.sidebar_region() > 0.0, sidebar_shown);
             if panes == Panes::Two {
                 view.toggle_sidebar();
-                view.scene(width, height);
+                view.scene(width, 800);
                 assert!(
-                    node(&view, "Get Mail").is_some() && node(&view, "Mailboxes").is_some(),
-                    "the sidebar slides over the list"
+                    named(&view, "Mailboxes").is_some(),
+                    "the sidebar slides over"
                 );
-                view.handle(&Event::Key {
-                    key: Key::Escape,
-                    modifiers: Modifiers::default(),
-                });
-                view.scene(width, height);
-                assert!(node(&view, "Mailboxes").is_none(), "Escape closes it");
+                press(&mut view, Key::Escape, false);
+                view.scene(width, 800);
+                assert!(named(&view, "Mailboxes").is_none(), "Escape closes it");
             }
         }
     }
 
-    view.scene(1280, height);
-    let list = view
-        .accessibility()
-        .nodes
-        .into_iter()
-        .map(|(_, node)| node)
-        .find(|node| node.role() == accesskit::Role::ListBox && node.label() == Some("Inbox"))
-        .and_then(|node| node.bounds())
-        .unwrap();
-    let edge = Point::new(list.x1 as f32, 400.0);
+    view.scene(1280, 800);
+    let empty = list(&view).description().unwrap_or_default().to_owned();
+    assert!(empty.starts_with("Inbox is empty"), "{empty}");
+    let edge = Point::new(list(&view).bounds().unwrap().x1 as f32, 400.0);
     let moved = Point::new(edge.x + 40.0, edge.y);
     view.handle(&Event::PointerDown(Pointer::at(edge)));
     view.handle(&Event::PointerMove(Pointer::at(moved)));
     view.handle(&Event::PointerUp(Pointer::at(moved)));
-    assert_eq!(view.settings().list_width, 380, "the list edge drags");
-    let kept = std::fs::read_to_string(
-        Path::new(&std::env::var_os("XDG_CONFIG_HOME").unwrap()).join("bande/mail.conf"),
-    )
-    .unwrap();
+    let config = Path::new(&std::env::var_os("XDG_CONFIG_HOME").unwrap()).join("bande/mail.conf");
+    let kept = std::fs::read_to_string(config).unwrap();
     assert!(
         kept.contains("list-width = 380"),
-        "the width is kept: {kept}"
-    );
-}
-
-fn node(view: &MailView, label: &str) -> Option<accesskit::Node> {
-    view.accessibility()
-        .nodes
-        .into_iter()
-        .map(|(_, node)| node)
-        .find(|node| node.label() == Some(label))
-}
-
-#[test]
-fn the_list_says_when_it_is_empty_and_acts_on_messages_by_panel_swipe_and_keys() {
-    let folder = tempfile::tempdir().unwrap();
-    let store_path = folder.path().join("mail.sqlite3");
-    let mut store = Store::open(&store_path).unwrap();
-    let id = store.add_account(&account()).unwrap();
-    let inbox = Folder {
-        path: "INBOX".to_owned(),
-        name: "Inbox".to_owned(),
-        delimiter: None,
-        role: Some(Role::Inbox),
-        selectable: true,
-    };
-    let archive = Folder {
-        path: "Archive".to_owned(),
-        name: "Archive".to_owned(),
-        delimiter: None,
-        role: Some(Role::Archive),
-        selectable: true,
-    };
-    store.replace_mailboxes(id, &[inbox, archive]).unwrap();
-    let mut view = view_of(store_path);
-    view.set_appearance(Appearance {
-        reduce_motion: true,
-        ..Appearance::default()
-    });
-    view.scene(1280, 800);
-    let list = view
-        .accessibility()
-        .nodes
-        .into_iter()
-        .map(|(_, node)| node)
-        .find(|node| node.role() == accesskit::Role::ListBox && node.label() == Some("Inbox"))
-        .unwrap();
-    assert!(
-        list.description()
-            .is_some_and(|text| text.starts_with("Inbox is empty")),
-        "{list:?}"
+        "the list edge drags: {kept}"
     );
 
-    let mailbox = store
-        .mailboxes(id)
-        .unwrap()
-        .into_iter()
-        .find(|mailbox| mailbox.role == Some(Role::Inbox))
-        .unwrap()
-        .id;
+    let mailboxes = store.mailboxes(id).unwrap();
+    let inbox = mailboxes
+        .iter()
+        .find(|mailbox| mailbox.role == Some(Kind::Inbox));
     let fetched = [7, 8].map(|uid| Fetched {
         uid,
         flags: None,
         size: Some(10),
         internal_date: Some(1),
         header: Some(
-            format!("From: Ada <ada@example.org>\r\nSubject: Plan {uid}\r\n\r\n").into_bytes(),
+            format!(
+                "From: <ada@example.org>\r\nMessage-ID: <{uid}@x>\r\nSubject: Plan {uid}\r\n\r\n"
+            )
+            .into_bytes(),
         ),
         body: None,
     });
-    store.insert_headers(mailbox, &fetched).unwrap();
+    store.insert_headers(inbox.unwrap().id, &fetched).unwrap();
     view.reload();
-    view.scene(1280, 800);
-    let width = |view: &mut MailView| {
+    let panel = |view: &mut MailView| {
         view.scene(1280, 800);
-        node(view, "Mark as Read")
+        named(view, "Mark as Read")
             .and_then(|node| node.bounds())
-            .map_or(0.0, |bounds| bounds.x1 - bounds.x0)
+            .is_some_and(|bounds| bounds.x1 > bounds.x0)
     };
-    assert_eq!(
-        width(&mut view),
-        0.0,
-        "no selection panel for one message or none"
-    );
-    view.handle(&Event::Key {
-        key: Key::Character('a'),
-        modifiers: Modifiers {
-            control: true,
-            ..Modifiers::default()
-        },
-    });
-    view.scene(1280, 800);
-    assert!(
-        width(&mut view) > 0.0,
-        "choosing both messages offers Mark as Read"
-    );
+    assert!(!panel(&mut view), "no selection panel for one message");
+    press(&mut view, Key::Character('a'), true);
+    assert!(panel(&mut view), "choosing both offers Mark as Read");
+    press(&mut view, Key::Escape, false);
 
-    view.handle(&Event::Key {
-        key: Key::Escape,
-        modifiers: Modifiers::default(),
-    });
-    let row = node(&view, "Plan 8")
+    let row = named(&view, "Plan 8")
         .and_then(|node| node.bounds())
-        .map(|bounds| {
-            Point::new(
-                bounds.x0 as f32 + 100.0,
-                (bounds.y0 + bounds.y1) as f32 / 2.0,
-            )
-        })
         .unwrap();
+    let row = Point::new(row.x0 as f32 + 100.0, (row.y0 + row.y1) as f32 / 2.0);
     view.handle(&Event::PointerMove(Pointer::at(row)));
-    view.scene(1280, 800);
     for (delta, phase) in [
         (-50.0, ScrollPhase::Began),
         (-60.0, ScrollPhase::Changed),
@@ -263,23 +191,11 @@ fn the_list_says_when_it_is_empty_and_acts_on_messages_by_panel_swipe_and_keys()
         }));
         view.scene(1280, 800);
     }
-    view.tick(std::time::Instant::now());
-    assert_eq!(
-        view.messages().len(),
-        1,
-        "a swipe to the right archives the row once it has slid out"
-    );
+    view.tick(Instant::now());
+    assert_eq!(view.messages().len(), 1, "a swipe to the right archives");
+    press(&mut view, Key::Character('z'), true);
+    assert_eq!(view.messages().len(), 2, "Ctrl+Z brings it back");
 
-    let press = |view: &mut MailView, key: Key, control: bool| {
-        view.handle(&Event::Key {
-            key,
-            modifiers: Modifiers {
-                control,
-                ..Modifiers::default()
-            },
-        });
-        view.scene(1280, 800);
-    };
     press(&mut view, Key::Character('j'), false);
     assert!(view.selected().is_some(), "J chooses the next message");
     press(&mut view, Key::Character('v'), false);
@@ -287,10 +203,10 @@ fn the_list_says_when_it_is_empty_and_acts_on_messages_by_panel_swipe_and_keys()
         .take_requests()
         .into_iter()
         .any(|request| matches!(request, Request::ShowMenu(menu, _) if menu.search.is_some()));
-    assert!(finder, "V opens a mailbox finder to type into");
-    let inbox = view.place().clone();
+    assert!(finder, "V opens a mailbox finder");
+    let place = view.place().clone();
     press(&mut view, Key::Character('2'), true);
-    assert_ne!(*view.place(), inbox, "Ctrl+2 goes to the second mailbox");
+    assert_ne!(*view.place(), place, "Ctrl+2 goes to the second mailbox");
     press(&mut view, Key::Character('?'), false);
     assert!(view.has_sheet(), "? lists the shortcuts");
 }

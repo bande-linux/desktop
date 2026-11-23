@@ -199,16 +199,12 @@ their usual English names.
 ## Tests
 
 `tests/mail.rs` starts Debian's `dovecot` as the current user on a free loopback port
-(`bande_mail_core::testing`, shared with Notes), with a
-small SMTP listener beside it, and checks that a message sent after the IMAP session went stale
-goes out once, without injected headers or its Bcc, and is kept in Sent. It skips itself when
-`/usr/sbin/dovecot` is not installed. It also checks that a `mailto:` link cannot add Bcc
-recipients or attachments. `tests/layout.rs` checks the panes, header and sidebar overlay across
-widths and window-button sides through the accessibility tree, and `tests/settings.rs` the
-Settings pages. `tests/crypto.rs` opens real signed and encrypted messages made by
-GnuPG, gpgsm and OpenSSL (`tests/crypto/make-fixtures.py` makes them) with a real `gpg-agent` in a
-temporary GnuPG home, and sends signed and encrypted messages to itself in both standards; it
-skips itself when `gpgsm` is not installed. The whole test list is in `docs/quality/tests.md`.
+(`bande_mail_core::testing`, shared with Notes), with small SMTP listeners and a nameserver beside
+it, and walks the setup guide end to end; it skips itself when `/usr/sbin/dovecot` is not
+installed. It also checks that a `mailto:` link cannot add Bcc recipients or attachments.
+`tests/layout.rs` checks the panes, header and sidebar overlay across widths and window-button
+sides, and the list's swipes, undo and single-key shortcuts, through the accessibility tree.
+The whole test list is in `docs/quality/tests.md`.
 
 ## Dependencies
 

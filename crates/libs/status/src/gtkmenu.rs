@@ -4,7 +4,7 @@ use zbus::blocking::Connection;
 use zbus::message::{Flags, Message};
 use zbus::zvariant::{OwnedValue, Signature, Value};
 
-use crate::dbusmenu::{Node, Toggle, with_app_row, without_mnemonics};
+use crate::dbusmenu::{Node, Toggle, without_mnemonics};
 
 pub const MENUS_INTERFACE: &str = "org.gtk.Menus";
 pub const ACTIONS_INTERFACE: &str = "org.gtk.Actions";
@@ -312,12 +312,12 @@ impl Importer {
         let children = builder.menu((0, 0), 0, true);
         self.activations = builder.activations;
         self.key = key.to_owned();
-        Ok(with_app_row(Node {
+        Ok(Node {
             enabled: true,
             visible: true,
             children,
             ..Node::default()
-        }))
+        })
     }
 
     pub fn activate(&self, connection: &Connection, key: &str, id: i32) -> zbus::Result<()> {

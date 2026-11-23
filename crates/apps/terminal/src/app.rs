@@ -25,8 +25,8 @@ use bande_toolkit::ui::{
     TabsShown,
 };
 use bande_toolkit::{
-    Appearance, DragAction, DragEvent, FrameRegions, HEADER_LEADING, HEADER_TRAILING, Header, Item,
-    MenuPlacement, Point, Radius, Rect, SHEET_INSET, Scene, Shape, Transfer, Window, WindowEvent,
+    Appearance, DragAction, DragEvent, FrameRegions, Header, HeaderInsets, Item, MenuPlacement,
+    Point, Radius, Rect, SHEET_INSET, Scene, Shape, Transfer, Window, WindowEvent,
 };
 
 use crate::APP_ID;
@@ -146,6 +146,7 @@ pub struct TerminalWindow {
     title: String,
     size: (u32, u32),
     header: f32,
+    insets: HeaderInsets,
     banner: Option<Banner>,
     banner_focused: bool,
     composing: String,
@@ -214,6 +215,7 @@ impl TerminalWindow {
             title: String::new(),
             size: (0, 0),
             header: 0.0,
+            insets: HeaderInsets::default(),
             banner: None,
             banner_focused: false,
             composing: String::new(),
@@ -249,6 +251,7 @@ impl TerminalWindow {
 
     pub fn attach(&mut self, window: &mut Window) {
         self.header = window.header_height() as f32;
+        self.insets = HeaderInsets::of(window.appearance().window_buttons);
         self.painter
             .set_metrics(self.painter.font_size(), window.scale());
         self.frame_window(window);
@@ -296,11 +299,12 @@ impl TerminalWindow {
 
     fn tab_layout(&self) -> TabStripLayout {
         let width = self.size.0 as f32;
-        let strip_width = match self.header > 0.0 {
-            true => width - HEADER_TRAILING + HEADER_LEADING,
-            false => width,
+        let edge = HeaderInsets::WITHOUT_CONTROLS.leading;
+        let (strip_width, leading) = match self.header > 0.0 {
+            true => (width - self.insets.trailing + edge, self.insets.leading),
+            false => (width, edge),
         };
-        TabStripLayout::new(self.tabs.len(), strip_width, HEADER_LEADING, STRIP_HEIGHT)
+        TabStripLayout::new(self.tabs.len(), strip_width, leading, STRIP_HEIGHT)
     }
 
     fn sync_strip(&mut self) -> TabStripLayout {
@@ -344,7 +348,7 @@ impl TerminalWindow {
         let title_x = if self.tabs.len() > 1 {
             self.size.0 as f32
         } else {
-            HEADER_LEADING
+            self.insets.leading
         };
         let (items, tabs) = if self.header > 0.0 {
             (vec![layout.new_tab], layout.tabs)
@@ -1956,6 +1960,12 @@ impl View for TerminalWindow {
         if header != self.header {
             self.header = header;
             self.frame_window(window);
+        }
+        let insets = HeaderInsets::of(window.appearance().window_buttons);
+        if insets != self.insets {
+            self.insets = insets;
+            self.frame_window(window);
+            self.layout();
         }
         let size = window.size();
         let rescaled = self

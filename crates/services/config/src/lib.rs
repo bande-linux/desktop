@@ -57,7 +57,7 @@ pub enum Appearance {
     Automatic,
 }
 
-pub use bande_design::Style;
+pub use bande_design::{Style, WindowButtons};
 
 pub const ACCENTS: [(&str, Accent); 8] = [
     ("ultramarine", Accent::Ultramarine),
@@ -981,6 +981,7 @@ impl Search {
 pub struct Config {
     pub appearance: Appearance,
     pub style: Style,
+    pub window_buttons: WindowButtons,
     pub accent: Accent,
     pub tinted_frame: bool,
     pub reopen_apps: bool,
@@ -1022,6 +1023,7 @@ impl Default for Config {
         Self {
             appearance: Appearance::Dark,
             style: Style::default(),
+            window_buttons: WindowButtons::default(),
             accent: Accent::default(),
             tinted_frame: false,
             reopen_apps: true,
@@ -1177,6 +1179,12 @@ impl Parser<'_> {
                 "style" => self
                     .keyword(node, &Style::ALL.map(|style| (style.keyword(), style)))
                     .map(|style| config.style = style),
+                "window-buttons" => self
+                    .keyword(
+                        node,
+                        &WindowButtons::ALL.map(|buttons| (buttons.keyword(), buttons)),
+                    )
+                    .map(|buttons| config.window_buttons = buttons),
                 "accent" => self
                     .keyword(node, &ACCENTS)
                     .map(|accent| config.accent = accent),

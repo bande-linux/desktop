@@ -60,8 +60,9 @@ when they reach the screen is Bande's own.
   (libadwaita, `gtk_window_set_titlebar`) ask for client-side and keep their own, and a later
   switch is honoured. A mode requested before the surface becomes a toplevel is kept and
   applied when it does. The bar is `bande_graphics::TitleBar`, which `bande-toolkit-platform`
-  draws its own with: 40 pt high, a pill on the right with minimize, maximize and close, the menu
-  button (⋮) to its left when the window said where its menus are (`org_kde_kwin_appmenu`, or a
+  draws its own with: 40 pt high, a pill on the side `window-buttons` names (the right by
+  default, mirrored on the left) with minimize, maximize and close, the menu button (⋮) inside it
+  when the window said where its menus are (`org_kde_kwin_appmenu`, or a
   GTK 3 or GTK 4 `GtkApplicationWindow` menu bar through `gtk_shell1`), a
   flush-left Manrope title, colours of the light or dark palette (followed from the portal's
   `color-scheme`) and active, inactive and hover states.

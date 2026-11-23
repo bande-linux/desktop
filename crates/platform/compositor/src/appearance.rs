@@ -1,7 +1,7 @@
 use std::thread;
 
 use bande_bus::portal_settings::{self, APPEARANCE, BANDE_APPEARANCE, PREFER_LIGHT};
-use bande_graphics::{Style, TextSize};
+use bande_graphics::{Style, TextSize, WindowButtons};
 use zbus::blocking::Connection;
 use zbus::zvariant::OwnedValue;
 
@@ -12,6 +12,7 @@ pub struct SystemAppearance {
     pub text_size: TextSize,
     pub style: Style,
     pub increased_contrast: bool,
+    pub window_buttons: WindowButtons,
 }
 
 impl Default for SystemAppearance {
@@ -22,6 +23,7 @@ impl Default for SystemAppearance {
             text_size: TextSize::default(),
             style: Style::default(),
             increased_contrast: false,
+            window_buttons: WindowButtons::default(),
         }
     }
 }
@@ -32,6 +34,13 @@ impl SystemAppearance {
             self.style = String::try_from(value)
                 .ok()
                 .and_then(|keyword| Style::from_keyword(&keyword))
+                .unwrap_or_default();
+            return;
+        }
+        if (namespace, key) == (BANDE_APPEARANCE, "window-buttons") {
+            self.window_buttons = String::try_from(value)
+                .ok()
+                .and_then(|keyword| WindowButtons::from_keyword(&keyword))
                 .unwrap_or_default();
             return;
         }

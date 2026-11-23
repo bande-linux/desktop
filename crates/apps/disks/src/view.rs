@@ -18,7 +18,9 @@ use bande_toolkit::ui::{
     PopUpButton, ProgressBar, Row, ScrollView, SecureField, Stack, Table, TextField, Ui, Widget,
     WidgetId,
 };
-use bande_toolkit::{Appearance, Color, Header, Image, Palette, SHEET_INSET, TextSystem};
+use bande_toolkit::{
+    Appearance, Color, Header, HeaderInsets, Image, Palette, SHEET_INSET, TextSystem,
+};
 use bande_volumes::udisks::Health;
 use zeroize::Zeroizing;
 
@@ -268,6 +270,9 @@ impl DisksView {
 
     pub fn set_appearance(&mut self, appearance: Appearance) {
         self.palette = appearance.palette();
+        if let Some(root) = self.ui.widget_as::<Root>(self.root) {
+            root.set_header_insets(HeaderInsets::of(appearance.window_buttons));
+        }
         self.ui.set_appearance(appearance);
         self.refresh();
     }

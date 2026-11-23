@@ -18,8 +18,8 @@ use crate::{
     FocusSchedule, InputSource, LidOnPower, Loaded, NIGHT_LIGHT_WARMTH_RANGE, NightLight,
     NightSchedule, Placement, PrimaryButton, ReloadError, Rotation, ScrollMethod, SearchCategory,
     SecondaryClick, Setting, SoftwareUpdates, Style, Suspend, TEXT_SIZE_RANGE, WallpaperFit,
-    WallpaperVariant, ZOOM_RANGE, accent_keyword, is_wallpaper_path, read_system_input_sources,
-    read_system_xkb_options,
+    WallpaperVariant, WindowButtons, ZOOM_RANGE, accent_keyword, is_wallpaper_path,
+    read_system_input_sources, read_system_xkb_options,
 };
 
 pub type ArrangedDisplay = (String, i32, i32, bool, String);
@@ -179,6 +179,9 @@ fn publish_changes(
         }
         if before.style != after.style {
             announce(guard.style_changed(emitter).await);
+        }
+        if before.window_buttons != after.window_buttons {
+            announce(guard.window_buttons_changed(emitter).await);
         }
         if before.accent != after.accent {
             announce(guard.accent_changed(emitter).await);
@@ -707,6 +710,17 @@ impl ConfigInterface {
     fn set_style(&self, value: String) -> zbus::fdo::Result<()> {
         let style = keyword(&Style::ALL, |style| style.keyword(), &value)?;
         self.write(&Setting::Style(style))
+    }
+
+    #[zbus(property)]
+    fn window_buttons(&self) -> String {
+        self.store.current().window_buttons.keyword().to_owned()
+    }
+
+    #[zbus(property)]
+    fn set_window_buttons(&self, value: String) -> zbus::fdo::Result<()> {
+        let buttons = keyword(&WindowButtons::ALL, |buttons| buttons.keyword(), &value)?;
+        self.write(&Setting::WindowButtons(buttons))
     }
 
     #[zbus(property)]

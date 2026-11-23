@@ -1,8 +1,8 @@
 use accesskit::{Action, Affine, Node, NodeId, Role, TreeUpdate};
 use bande_graphics::{
     Color, ControlHover, Cut, Item, Palette, Paragraph, Point, Radius, Rect, ResizeEdge, Scene,
-    Shape, TextAlign, TextStyle, TextSystem, TitleBar, WindowControls, menu_button_area,
-    past_drag_slop, resize_zone, shortened, title_style, window_controls_width,
+    Shape, TextAlign, TextStyle, TextSystem, TitleBar, WindowButtons, WindowControls,
+    menu_button_area, past_drag_slop, resize_zone, shortened, title_style, window_controls_width,
 };
 use bande_l10n::tr;
 
@@ -13,8 +13,8 @@ use bande_widgets::{Animated, Spring};
 pub(crate) use bande_graphics::RESIZE_MARGIN;
 pub use bande_graphics::WINDOW_HEADER_HEIGHT;
 pub const SHEET_INSET: u32 = 6;
-pub(crate) use bande_graphics::WindowControl as Control;
 const TITLE_TRAILING_GAP: f32 = 12.0;
+pub(crate) use bande_graphics::WindowControl as Control;
 
 const WINDOW_NODE: NodeId = NodeId(u64::MAX);
 const TITLE_BAR_NODE: NodeId = NodeId(u64::MAX - 1);
@@ -29,7 +29,7 @@ fn control_node(control: Control) -> NodeId {
 }
 
 pub(crate) fn control_for_node(node: NodeId) -> Option<Control> {
-    Control::shown(true).find(|control| control_node(*control) == node)
+    Control::shown(true, WindowButtons::Right).find(|control| control_node(*control) == node)
 }
 
 fn control_label(control: Control) -> String {
@@ -85,14 +85,18 @@ pub struct Header {
 }
 
 impl Header {
-    fn title_area(&self, width: f32, menu: bool) -> Rect {
+    fn title_area(&self, width: f32, menu: bool, buttons: WindowButtons) -> Rect {
+        let controls = match buttons {
+            WindowButtons::Right => width - window_controls_width(menu),
+            WindowButtons::Left => width,
+        };
         let end = self
             .items
             .iter()
             .chain(&self.tabs)
             .map(|item| item.x)
             .filter(|x| *x > self.title_x)
-            .fold(width - window_controls_width(menu), f32::min);
+            .fold(controls, f32::min);
         Rect::new(
             self.title_x,
             0.0,
@@ -111,6 +115,7 @@ pub(crate) struct Frame {
     pub(crate) regions: Option<FrameRegions>,
     pub(crate) header: bool,
     pub(crate) menu: bool,
+    pub(crate) buttons: WindowButtons,
     pub(crate) width: f32,
     pub(crate) height: f32,
 }
@@ -190,7 +195,7 @@ impl Frame {
         if window.contains(point) {
             let local = Point::new(point.x - window.x, point.y - window.y);
             if local.y < self.title {
-                return Control::at(local, self.width, self.title, self.menu)
+                return Control::at(local, self.width, self.title, self.menu, self.buttons)
                     .map_or(Zone::TitleBar, Zone::Control);
             }
             return if self.content().contains(local) {
@@ -207,7 +212,8 @@ impl Frame {
     }
 
     pub(crate) fn menu_button(&self) -> Option<Rect> {
-        (self.menu && self.title > 0.0).then(|| menu_button_area(self.width, self.title))
+        (self.menu && self.title > 0.0)
+            .then(|| menu_button_area(self.width, self.title, self.buttons))
     }
 }
 
@@ -333,13 +339,21 @@ impl Chrome {
         bar.set_label(self.title.clone());
         bar.set_bounds(bounds(Rect::new(0.0, 0.0, frame.width, frame.title)));
         let menu = frame.menu_button().is_some();
-        bar.set_children(Control::shown(menu).map(control_node).collect::<Vec<_>>());
+        bar.set_children(
+            Control::shown(menu, frame.buttons)
+                .map(control_node)
+                .collect::<Vec<_>>(),
+        );
         tree.nodes.push((WINDOW_NODE, window));
         tree.nodes.push((TITLE_BAR_NODE, bar));
-        for control in Control::shown(menu) {
+        for control in Control::shown(menu, frame.buttons) {
             let mut button = Node::new(Role::Button);
             button.set_label(control_label(control));
-            button.set_bounds(bounds(control.area(frame.width, frame.title)));
+            button.set_bounds(bounds(control.area(
+                frame.width,
+                frame.title,
+                frame.buttons,
+            )));
             if control == Control::Maximize && self.fixed {
                 button.set_disabled();
             } else {
@@ -476,7 +490,8 @@ impl Chrome {
             Some(header) => {
                 let text = self.text.get_or_insert_with(TextSystem::new);
                 let empty = text.paragraph("", style, None, TextAlign::Start);
-                let area = header.title_area(frame.width, frame.menu_button().is_some());
+                let area =
+                    header.title_area(frame.width, frame.menu_button().is_some(), frame.buttons);
                 let title = match title.width() > area.width {
                     true => {
                         let shown = shortened(&self.title, Cut::End, |candidate| {
@@ -516,6 +531,7 @@ impl Chrome {
                     maximizable: !self.fixed,
                     alternate: self.alternate && look.active,
                     menu_open: frame.menu_button().map(|_| self.menu_open),
+                    buttons: frame.buttons,
                 },
             }
             .items(),

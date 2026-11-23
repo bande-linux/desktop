@@ -178,9 +178,9 @@ The lock-screen clock is Manrope 300 at 96 pt with `tnum`.
 
 ## 6. Window chrome
 
-**Header (48 pt, `chassis`)**: from the left, 12 pt in: back/forward (when relevant), the **title flush left** in Manrope 15/700, toolbar items, search (`well`, radius 8), a 16 gap, then the menu button and the window controls on the right. No separator line: the sheet's top edge is the division.
+**Header (48 pt, `chassis`)**: from the left, 12 pt in: back/forward (when relevant), the **title flush left** in Manrope 15/700, toolbar items, search (`well`, radius 8), a 16 gap, then the menu button and the window controls on the right. With the window buttons on the left (Settings ▸ Appearance ▸ Window buttons) the controls lead, mirrored, and everything else starts 16 pt after them and ends 12 pt from the right edge. No separator line: the sheet's top edge is the division.
 
-**Window controls (right, ours)**: one **well**, a 66×24 pill with radius 12 (`well` fill) 12 pt from the right edge, holding three neutral glyphs on a 21 pt pitch, from the left minimize, maximize, close, so close is at the far right as in GTK, Qt and Firefox. The menu button (⋮), a 24×24 well, sits 6 pt left of it.
+**Window controls (right, ours)**: one **well**, a 66×24 pill with radius 12 (`well` fill) 12 pt from the right edge, holding three neutral glyphs on a 21 pt pitch, from the left minimize, maximize, close, so close is at the far right as in GTK, Qt and Firefox. The menu button (⋮), a 24×24 well, sits 6 pt left of it. On the left the layout mirrors: close at the far left, then maximize, minimize and the menu button.
 - **Minimize**: an 8 pt bar.
 - **Maximize**: two opposing corner brackets (expand). It changes to inward brackets while maximized or full screen, so the glyph tells the state.
 - **Close**: an × with 7 pt arms and a 1.5 stroke, round caps.

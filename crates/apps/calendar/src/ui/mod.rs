@@ -26,8 +26,8 @@ use bande_inbox::Outbox;
 use bande_l10n::{tr, trn};
 use bande_toolkit::ui::{Alert, ClipboardRequest, Context, Cursor, FreeLayout, Menu, Ui, WidgetId};
 use bande_toolkit::{
-    Appearance, Header, Item, Palette, Point, Radius, Rect, SHEET_INSET, Scene, Shape, TextAlign,
-    TextStyle, TextSystem,
+    Appearance, Header, HeaderInsets, Item, Palette, Point, Radius, Rect, SHEET_INSET, Scene,
+    Shape, TextAlign, TextStyle, TextSystem,
 };
 use jiff::civil::{Date, DateTime, Weekday};
 use jiff::tz::TimeZone;
@@ -535,6 +535,7 @@ impl CalendarView {
 
     pub fn set_appearance(&mut self, appearance: Appearance) {
         self.palette = appearance.palette();
+        self.toolbar.insets = HeaderInsets::of(appearance.window_buttons);
         self.ui.set_appearance(appearance);
     }
 

@@ -443,7 +443,8 @@ impl State {
             0 => WINDOW_HEADER_HEIGHT as f32,
             bar => bar as f32,
         };
-        let control = WindowControl::Maximize.area(geometry.size.w as f32, bar);
+        let control =
+            WindowControl::Maximize.area(geometry.size.w as f32, bar, self.decorations.buttons);
         Some(Rectangle {
             loc: (
                 f64::from(geometry.loc.x) + f64::from(control.x),

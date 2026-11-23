@@ -7,7 +7,7 @@ use std::rc::Rc;
 use std::time::Instant;
 
 use accesskit::TreeUpdate;
-use bande_app_menu::{AppMenu, KEY_ACTION, Standard, shortcut_action};
+use bande_app_menu::{AppMenu, KEY_ACTION, Standard, WINDOW_ACTION, shortcut_action};
 use bande_l10n::tr;
 use bande_toolkit::ui::{Alert, Context, Event, Key, Size, Ui, parse_shortcut, shortcut_pressed};
 use bande_toolkit::{
@@ -115,7 +115,7 @@ pub(crate) fn run<P: Program>(
                 info,
                 program.menus(&cx),
                 !cx.windows.is_empty(),
-                cx.sizing(),
+                cx.window_commands(),
             ),
         )
         .inspect_err(|error| tracing::warn!("{error}"))
@@ -451,7 +451,7 @@ impl<P: Program> Runner<P> {
             self.cx.info,
             self.program.menus(&self.cx),
             windowed,
-            self.cx.sizing(),
+            self.cx.window_commands(),
         );
         if let Err(error) = menu.update(entries) {
             tracing::warn!("cannot update the menus: {error}");
@@ -497,6 +497,16 @@ impl<P: Program> Runner<P> {
             }
             return;
         }
+        if let Some(command) = action.strip_prefix(WINDOW_ACTION) {
+            let shown = window.and_then(|window| self.cx.index(window));
+            if let Some(index) = shown
+                && let Err(error) = self.cx.windows[index].window_command(command)
+            {
+                tracing::warn!("cannot {command}: {error}");
+            }
+            self.cx.menus_changed = true;
+            return;
+        }
         let Some(standard) = Standard::parse(action) else {
             self.program.command(&mut self.cx, window, action);
             self.cx.menus_changed = true;
@@ -507,8 +517,7 @@ impl<P: Program> Runner<P> {
             .and_then(|window| self.cx.index(window))
             .map(|index| &mut self.cx.windows[index]);
         let result = match (standard, shown) {
-            (Standard::Hide | Standard::Minimize, Some(window)) => window.minimize(),
-            (Standard::Maximize, Some(window)) => window.toggle_maximize(),
+            (Standard::Hide, Some(window)) => window.minimize(),
             (Standard::FullScreen, Some(window)) => match full_screen {
                 Some(_) => window.toggle_full_screen(),
                 None => Ok(()),
@@ -587,7 +596,7 @@ impl<P: Program> Runner<P> {
             self.cx.info,
             self.program.menus(&self.cx),
             windowed,
-            self.cx.sizing(),
+            self.cx.window_commands(),
         );
         if let Some(action) = shortcut_action(&menus, &|shortcut| shortcut_pressed(input, shortcut))
         {
@@ -657,6 +666,10 @@ impl<P: Program> Surfaces for Runner<P> {
             WindowEvent::CloseRequested => self.close(window),
             WindowEvent::QuitRequested => self.quit(),
             WindowEvent::Focus(focused) => self.focus(index, window, focused),
+            WindowEvent::ToplevelChanged(_) => {
+                self.cx.menus_changed = true;
+                self.deliver(index, window, event);
+            }
             WindowEvent::AppearanceChanged(appearance) => {
                 self.cx.views[index].1.view().set_appearance(appearance);
                 self.cx.windows[index].request_redraw();

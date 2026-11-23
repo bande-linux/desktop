@@ -17,8 +17,8 @@ use bande_toolkit::ui::{
     WidgetId,
 };
 use bande_toolkit::{
-    Appearance, FrameRegions, HEADER_LEADING, HEADER_TRAILING, Header, Item, Rect, Scene, Shape,
-    TextRole, TextSystem, WINDOW_HEADER_HEIGHT, Window, WindowEvent,
+    Appearance, FrameRegions, Header, HeaderInsets, Item, Rect, Scene, Shape, TextRole, TextSystem,
+    WINDOW_HEADER_HEIGHT, Window, WindowEvent,
 };
 use serde::Deserialize;
 
@@ -531,9 +531,9 @@ impl LogsView {
         !intents.is_empty()
     }
 
-    fn header(&self) -> Header {
+    fn header(&self, title_x: f32) -> Header {
         Header {
-            title_x: HEADER_LEADING,
+            title_x,
             items: self
                 .ui
                 .widget_ref::<LogsRoot>(self.root)
@@ -574,14 +574,15 @@ impl View for LogsView {
                 false => 0.0,
             },
         });
+        let insets = match full_screen {
+            true => HeaderInsets::WITHOUT_CONTROLS,
+            false => HeaderInsets::of(window.appearance().window_buttons),
+        };
         if let Some(root) = self.ui.widget_as::<LogsRoot>(self.root) {
-            root.trailing = match full_screen {
-                true => HEADER_LEADING,
-                false => HEADER_TRAILING,
-            };
+            root.trailing = insets.trailing;
         }
         let scene = View::scene(&mut self.ui, window);
-        window.set_header(self.header());
+        window.set_header(self.header(insets.leading));
         scene
     }
 
@@ -659,7 +660,7 @@ impl LogsRoot {
             children,
             sizes: Vec::new(),
             frame: Rect::default(),
-            trailing: HEADER_TRAILING,
+            trailing: HeaderInsets::default().trailing,
         }
     }
 

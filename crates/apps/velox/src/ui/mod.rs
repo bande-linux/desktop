@@ -12,7 +12,7 @@ use bande_l10n::{text, tr};
 use bande_toolkit::ui::{
     Button, Cell, Column, Context, Heading, Label, Row, Table, Ui, Widget, WidgetId,
 };
-use bande_toolkit::{Appearance, Header, Image, Palette, SHEET_INSET, TextSystem};
+use bande_toolkit::{Appearance, Header, HeaderInsets, Image, Palette, SHEET_INSET, TextSystem};
 
 pub use self::places::{Place, Places};
 pub use self::widgets::SIDEBAR_WIDTH;
@@ -309,6 +309,7 @@ impl VeloxView {
         self.machines.set_palette(self.palette);
         self.machines.hide();
         if let Some(root) = self.ui.widget_as::<Root>(self.root) {
+            root.set_header_insets(HeaderInsets::of(appearance.window_buttons));
             root.set_tools(Vec::new());
         }
         self.refresh();

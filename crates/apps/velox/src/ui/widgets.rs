@@ -1,8 +1,8 @@
 use accesskit::{Node, Role};
 use bande_toolkit::ui::{BUTTON_HEIGHT, Context, Size, TEXT_FIELD_HEIGHT, Widget, WidgetId};
 use bande_toolkit::{
-    Color, HEADER_LEADING, HEADER_TRAILING, Image, Item, Paragraph, Point, Radius, Rect,
-    SHEET_INSET, Shape, Spacing, TextAlign, TextRole, TextStyle, WINDOW_HEADER_HEIGHT,
+    Color, HeaderInsets, Image, Item, Paragraph, Point, Radius, Rect, SHEET_INSET, Shape, Spacing,
+    TextAlign, TextRole, TextStyle, WINDOW_HEADER_HEIGHT,
 };
 
 pub const SIDEBAR_WIDTH: f32 = 220.0;
@@ -43,6 +43,7 @@ pub struct Root {
     id: WidgetId,
     children: Vec<Box<dyn Widget>>,
     inset: f32,
+    header: HeaderInsets,
     frame: Rect,
 }
 
@@ -56,12 +57,17 @@ impl Root {
             id: WidgetId::next(),
             children: vec![sidebar, pill, content],
             inset: SHEET_INSET as f32,
+            header: HeaderInsets::default(),
             frame: Rect::default(),
         }
     }
 
     pub fn set_inset(&mut self, inset: f32) {
         self.inset = inset;
+    }
+
+    pub fn set_header_insets(&mut self, header: HeaderInsets) {
+        self.header = header;
     }
 
     pub fn set_pill(&mut self, pill: Box<dyn Widget>) {
@@ -88,8 +94,8 @@ impl Root {
 
     fn trailing(&self) -> f32 {
         match self.inset > 0.0 {
-            true => HEADER_TRAILING,
-            false => HEADER_LEADING,
+            true => self.header.trailing,
+            false => HeaderInsets::WITHOUT_CONTROLS.trailing,
         }
     }
 

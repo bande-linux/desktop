@@ -15,8 +15,8 @@ use bande_toolkit::ui::{
     SegmentedControl, Stack, Stepper, Table, TextField, Toggle, Ui, Widget, WidgetId,
 };
 use bande_toolkit::{
-    Appearance, HEADER_LEADING, HEADER_TRAILING, Header, Image, Rect, Scene, TextSystem,
-    WINDOW_HEADER_HEIGHT, Window, WindowEvent,
+    Appearance, Header, HeaderInsets, Image, Rect, Scene, TextSystem, WINDOW_HEADER_HEIGHT, Window,
+    WindowEvent,
 };
 use jiff::civil::{Date, Weekday, date};
 use jiff::tz::TimeZone;
@@ -1040,8 +1040,8 @@ impl ClockView {
         }
     }
 
-    fn header(&self, width: f32) -> (Rect, Rect) {
-        let end = width - HEADER_TRAILING;
+    fn header(&self, width: f32, insets: HeaderInsets) -> (Rect, Rect) {
+        let end = width - insets.trailing;
         let (add, end) = match self.can_add() {
             true => {
                 let add = Rect::new(
@@ -1058,7 +1058,7 @@ impl ClockView {
         let x = ((width - tabs_width) / 2.0)
             .round()
             .min(end - tabs_width)
-            .max(HEADER_LEADING);
+            .max(insets.leading);
         let tabs = Rect::new(
             x,
             ((HEADER - SEGMENTED_HEIGHT) / 2.0).round(),
@@ -1086,7 +1086,8 @@ fn city_rows(cities: &[City], text: &str) -> Vec<Row> {
 impl View for ClockView {
     fn scene(&mut self, window: &mut Window) -> Scene {
         let (width, height) = window.size();
-        let (tabs, add) = self.header(width as f32);
+        let insets = HeaderInsets::of(window.appearance().window_buttons);
+        let (tabs, add) = self.header(width as f32, insets);
         let body = Rect::new(0.0, HEADER, width as f32, (height as f32 - HEADER).max(0.0));
         let (tabs_id, add_id, body_id) = (self.tabs, self.add, self.body);
         if let Some(layout) = self.ui.widget_as::<FreeLayout>(self.root) {
@@ -1095,7 +1096,7 @@ impl View for ClockView {
             layout.set_frame(body_id, body);
         }
         window.set_header(Header {
-            title_x: HEADER_LEADING,
+            title_x: insets.leading,
             items: [tabs, add]
                 .into_iter()
                 .filter(|rect| rect.width > 0.0)

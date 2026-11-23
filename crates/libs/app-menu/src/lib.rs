@@ -4,7 +4,6 @@ use std::os::fd::BorrowedFd;
 use std::sync::{Arc, Mutex, PoisonError};
 
 use bande_inbox::{Inbox, Outbox};
-use bande_keyboard::{Action, keys_of};
 use bande_l10n::tr;
 use zbus::blocking::Connection;
 use zbus::zvariant::{OwnedValue, Structure, Value};
@@ -13,6 +12,7 @@ pub const MENU_PATH: &str = "/org/bande/MenuBar";
 pub const SHELL_ACTION_PROPERTY: &str = "x-bande-shell-action";
 pub const VERSION_PROPERTY: &str = "x-bande-version";
 pub const KEY_ACTION: &str = "key:";
+pub const WINDOW_ACTION: &str = "window-command:";
 const INTERFACE: &str = "com.canonical.dbusmenu";
 pub const REDO: &str = "Shift+Ctrl+Z";
 pub const REDO_ALIAS: &str = "Ctrl+Y";
@@ -27,18 +27,14 @@ pub use status_item::{STATUS_ACTIVATE, StatusItem};
 pub enum Standard {
     Hide,
     Quit,
-    Minimize,
-    Maximize,
     FullScreen,
     CloseWindow,
     Settings,
 }
 
-const STANDARD: [(Standard, &str); 7] = [
+const STANDARD: [(Standard, &str); 5] = [
     (Standard::Hide, "app-menu:hide"),
     (Standard::Quit, "app-menu:quit"),
-    (Standard::Minimize, "app-menu:minimize"),
-    (Standard::Maximize, "app-menu:maximize"),
     (Standard::FullScreen, "app-menu:full-screen"),
     (Standard::CloseWindow, "app-menu:close-window"),
     (Standard::Settings, "app-menu:settings"),
@@ -60,10 +56,7 @@ impl Standard {
     }
 
     pub fn needs_window(self) -> bool {
-        matches!(
-            self,
-            Self::Minimize | Self::Maximize | Self::FullScreen | Self::CloseWindow
-        )
+        matches!(self, Self::FullScreen | Self::CloseWindow)
     }
 }
 
@@ -98,46 +91,65 @@ impl ShellAction {
     }
 }
 
-pub fn app_submenu(app: &str, version: &str, items: Vec<Entry>, quit: &str) -> Entry {
-    let about = Entry {
+pub fn about_item(app: &str, version: &str) -> Entry {
+    Entry {
         version: Some(version.to_owned()),
         ..Entry::item(&tr!("About {app}", app = app), "").shell_action(ShellAction::About)
-    };
-    let mut entries = vec![about, Entry::separator()];
-    if !items.is_empty() {
-        entries.extend(items);
-        entries.push(Entry::separator());
     }
-    entries.extend([
+}
+
+pub fn hide_items(app: &str) -> [Entry; 3] {
+    [
         Entry::item(&tr!("Hide {app}", app = app), Standard::Hide.action())
             .shell_action(ShellAction::Hide),
         Entry::item(&tr!("Hide Other Apps"), "").shell_action(ShellAction::HideOthers),
         Entry::item(&tr!("Show All Apps"), "").shell_action(ShellAction::ShowAll),
-        Entry::separator(),
-        Entry::item(&tr!("Quit {app}", app = app), Standard::Quit.action()).shortcut(quit),
-    ]);
-    Entry::submenu(app, entries)
+    ]
 }
 
-pub fn window_submenu(items: Vec<Entry>, maximizable: bool, full_screen: Option<bool>) -> Entry {
-    let full_screen_label = match full_screen {
-        Some(true) => tr!("Exit Full Screen"),
-        _ => tr!("Enter Full Screen"),
-    };
-    let mut entries = vec![
-        Entry::item(&tr!("Minimize"), Standard::Minimize.action())
-            .shortcut(&keys_of(Action::MinimizeWindow).unwrap_or_default()),
-        Entry::item(&tr!("Maximize"), Standard::Maximize.action())
-            .enabled(maximizable && full_screen != Some(true)),
-        Entry::item(&full_screen_label, Standard::FullScreen.action())
-            .shortcut(FULL_SCREEN)
-            .enabled(full_screen.is_some()),
-    ];
-    if !items.is_empty() {
-        entries.push(Entry::separator());
-        entries.extend(items);
+pub fn quit_item(app: &str, shortcut: &str) -> Entry {
+    Entry::item(&tr!("Quit {app}", app = app), Standard::Quit.action()).shortcut(shortcut)
+}
+
+pub fn window_submenu(items: Vec<Entry>) -> Entry {
+    Entry::submenu(&tr!("Window"), tidy(items))
+}
+
+pub fn take_primary(menus: Vec<Entry>, limit: usize) -> (Vec<Entry>, Vec<Entry>) {
+    let mut primary = Vec::new();
+    let rest = without_primary(menus, &mut primary, limit);
+    (primary, rest)
+}
+
+fn without_primary(entries: Vec<Entry>, primary: &mut Vec<Entry>, limit: usize) -> Vec<Entry> {
+    let mut kept = Vec::with_capacity(entries.len());
+    for entry in entries {
+        if entry.primary && primary.len() < limit {
+            primary.push(entry);
+        } else if entry.children.is_empty() {
+            kept.push(entry);
+        } else {
+            let children = without_primary(entry.children, primary, limit);
+            if !children.is_empty() {
+                kept.push(Entry { children, ..entry });
+            }
+        }
     }
-    Entry::submenu(&tr!("Window"), entries)
+    tidy(kept)
+}
+
+pub fn tidy(entries: Vec<Entry>) -> Vec<Entry> {
+    let mut kept: Vec<Entry> = Vec::with_capacity(entries.len());
+    for entry in entries {
+        if entry.separator && kept.last().is_none_or(|last| last.separator) {
+            continue;
+        }
+        kept.push(entry);
+    }
+    if kept.last().is_some_and(|last| last.separator) {
+        kept.pop();
+    }
+    kept
 }
 
 pub fn key_item(label: &str, shortcut: &str) -> Entry {
@@ -233,6 +245,7 @@ pub struct Entry {
     enabled: bool,
     separator: bool,
     toggle: Option<Toggle>,
+    primary: bool,
     children: Vec<Entry>,
 }
 
@@ -247,6 +260,7 @@ impl Entry {
             enabled: true,
             separator: false,
             toggle: None,
+            primary: false,
             children: Vec::new(),
         }
     }
@@ -279,12 +293,20 @@ impl Entry {
         }
     }
 
+    pub fn primary(self) -> Self {
+        Self {
+            primary: true,
+            ..self
+        }
+    }
+
     pub fn enabled(self, enabled: bool) -> Self {
         Self { enabled, ..self }
     }
 
     pub fn without_window(self) -> Self {
         let needs_window = self.action.starts_with(KEY_ACTION)
+            || self.action.starts_with(WINDOW_ACTION)
             || Standard::parse(&self.action).is_some_and(Standard::needs_window);
         Self {
             enabled: self.enabled && !needs_window,

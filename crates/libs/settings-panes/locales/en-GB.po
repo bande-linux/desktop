@@ -16,6 +16,9 @@ msgstr "Refresh rate, variable refresh rate and colour profile of each display"
 msgid "Warmer colors after dark"
 msgstr "Warmer colours after dark"
 
+msgid "close, minimize, maximize, title bar, controls, left, right"
+msgstr "close, minimise, maximise, title bar, controls, left, right"
+
 msgid "Accent color"
 msgstr "Accent colour"
 

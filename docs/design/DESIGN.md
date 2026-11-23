@@ -78,7 +78,8 @@ silent, these principles decide; where they do not, take the simpler answer.
   or any edge the user picks, holds the launcher mark, the apps, status and the clock; there is
   no separate top menu bar, and each window's menu button holds its app's menus.
 - Window controls sit on the right as one neutral pill, close at the far right, where GTK, Qt
-  and Firefox put theirs, so every window agrees.
+  and Firefox put theirs, or mirrored on the left when the person chooses; every window agrees,
+  since the portal tells GTK and Qt the same side.
 - Ctrl runs app shortcuts and Super the system, following the Linux desktop convention.
 - Pure Wayland; no X11 compatibility layer.
 - Configuration is a human-readable file (`config.kdl`); every Settings control writes to it.

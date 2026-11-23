@@ -112,7 +112,11 @@ pub fn windowless_menus() -> Menus {
     Menus {
         menus: vec![submenu(
             text!("File"),
-            vec![Entry::item(&tr!("New Window"), NEW_WINDOW).shortcut("Ctrl+N")],
+            vec![
+                Entry::item(&tr!("New Window"), NEW_WINDOW)
+                    .shortcut("Ctrl+N")
+                    .primary(),
+            ],
         )],
         window: Vec::new(),
     }
@@ -120,9 +124,9 @@ pub fn windowless_menus() -> Menus {
 
 pub fn app_menus(view: &FilesView, recent_folders: &[PathBuf]) -> Menus {
     let mut file = vec![
-        shortcut(text!("New Window"), "Ctrl+N"),
-        shortcut(text!("New Tab"), "Ctrl+T"),
-        shortcut(text!("New Folder"), "Shift+Ctrl+N"),
+        shortcut(text!("New Window"), "Ctrl+N").primary(),
+        shortcut(text!("New Tab"), "Ctrl+T").primary(),
+        shortcut(text!("New Folder"), "Shift+Ctrl+N").primary(),
         shortcut(text!("Open"), "Ctrl+O"),
         Entry::separator(),
         shortcut(text!("Properties"), "Ctrl+I"),
@@ -143,7 +147,7 @@ pub fn app_menus(view: &FilesView, recent_folders: &[PathBuf]) -> Menus {
         shortcut(text!("Delete Immediately…"), "Shift+Delete"),
         Entry::separator(),
         plain(text!("Eject"), "eject-current"),
-        shortcut(text!("Find"), "Ctrl+F"),
+        shortcut(text!("Find"), "Ctrl+F").primary(),
         Entry::separator(),
         bande_app_menu::print_item(view.can_print()),
     ]);
@@ -208,7 +212,7 @@ pub fn app_menus(view: &FilesView, recent_folders: &[PathBuf]) -> Menus {
                 Entry::separator(),
                 submenu(text!("Recent Folders"), recent_entries(recent_folders)),
                 shortcut(text!("Go to Location…"), "Ctrl+L"),
-                shortcut(text!("Connect to Server…"), "Ctrl+K"),
+                shortcut(text!("Connect to Server…"), "Ctrl+K").primary(),
             ],
         ),
     ];

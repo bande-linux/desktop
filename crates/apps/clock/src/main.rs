@@ -405,7 +405,7 @@ impl Program for ClockApp {
         let view_menu = pages
             .chain([
                 Entry::separator(),
-                entry(toggle, "stopwatch-toggle"),
+                entry(toggle, "stopwatch-toggle").primary(),
                 entry(lap, "stopwatch-lap").enabled(running || !stopwatch.banked.is_zero()),
             ])
             .collect();
@@ -420,8 +420,8 @@ impl Program for ClockApp {
                     ]
                     .into_iter()
                     .map(|(message, command, creates)| match creates == page {
-                        true => entry(message, command).shortcut("Ctrl+N"),
-                        false => entry(message, command),
+                        true => entry(message, command).shortcut("Ctrl+N").primary(),
+                        false => entry(message, command).primary(),
                     })
                     .collect(),
                 ),

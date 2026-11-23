@@ -254,22 +254,28 @@ fn app_menus(view: &CalendarView, time_zones: bool) -> Vec<Entry> {
     }
     view_menu.extend([
         Entry::separator(),
-        entry(text!("Go to Today"), "today").shortcut("Ctrl+T"),
+        entry(text!("Go to Today"), "today")
+            .shortcut("Ctrl+T")
+            .primary(),
         entry(text!("Previous"), "previous"),
         entry(text!("Next"), "next"),
         Entry::separator(),
-        entry(text!("Find"), "find").shortcut("Ctrl+F"),
+        entry(text!("Find"), "find").shortcut("Ctrl+F").primary(),
     ]);
     vec![
         Entry::submenu(
             &tr!("File"),
             vec![
-                entry(text!("New Event"), NEW_EVENT).shortcut("Ctrl+N"),
+                entry(text!("New Event"), NEW_EVENT)
+                    .shortcut("Ctrl+N")
+                    .primary(),
                 Entry::separator(),
                 entry(text!("New Calendar…"), "new-calendar"),
                 entry(text!("Add Account…"), "add-account"),
                 entry(text!("Open Colleague’s Calendar…"), "open-shared"),
-                entry(text!("Refresh Calendars"), REFRESH).shortcut("Ctrl+R"),
+                entry(text!("Refresh Calendars"), REFRESH)
+                    .shortcut("Ctrl+R")
+                    .primary(),
                 Entry::separator(),
                 entry(text!("Import…"), IMPORT),
                 entry(text!("Export…"), EXPORT),

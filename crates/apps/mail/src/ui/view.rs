@@ -38,8 +38,8 @@ use bande_toolkit::ui::{
     past_drag_slop, shortcut_pressed,
 };
 use bande_toolkit::{
-    Appearance, Header, Palette, Point, Rect, SHEET_INSET, TextSystem, WINDOW_HEADER_HEIGHT,
-    Window, WindowEvent,
+    Appearance, Header, HeaderInsets, Palette, Point, Rect, SHEET_INSET, TextSystem,
+    WINDOW_HEADER_HEIGHT, Window, WindowEvent,
 };
 use jiff::Timestamp;
 use jiff::tz::TimeZone;
@@ -225,6 +225,7 @@ pub struct MailView {
     pub(crate) toolbar: Toolbar,
     pub(crate) signals: Signals,
     pub(crate) palette: Palette,
+    pub(crate) header_insets: HeaderInsets,
     pub(crate) symbols: Symbols,
     pub(crate) size: (f32, f32),
     pub(crate) sheet_inset: f32,
@@ -290,6 +291,7 @@ impl MailView {
             toolbar: Toolbar::default(),
             signals,
             palette,
+            header_insets: HeaderInsets::default(),
             symbols: Symbols::default(),
             size: (0.0, 0.0),
             sheet_inset: SHEET_INSET as f32,
@@ -504,6 +506,7 @@ impl MailView {
 
     pub fn set_appearance(&mut self, appearance: Appearance) {
         self.palette = appearance.palette();
+        self.header_insets = HeaderInsets::of(appearance.window_buttons);
         self.ui.set_appearance(appearance);
         self.reader.layout = None;
     }

@@ -1,6 +1,7 @@
 use std::cell::OnceCell;
 use std::path::PathBuf;
 
+use bande_toolkit::ui::MenuItem;
 use bande_toolkit::{AppConnection, Appearance, Role, Window, WindowError};
 use bande_xdg::InstallWatch;
 use zbus::blocking::Connection;
@@ -215,13 +216,11 @@ impl<P: Program> Cx<P> {
             .or_else(|| self.shown().last().map(|(id, _)| *id))
     }
 
-    pub(crate) fn sizing(&self) -> (bool, Option<bool>) {
-        self.focused().map_or((false, None), |window| {
-            let maximizable = self
-                .index(window)
-                .is_some_and(|index| self.windows[index].is_resizable());
-            (maximizable, self.full_screen(window))
-        })
+    pub(crate) fn window_commands(&self) -> Vec<MenuItem> {
+        self.focused()
+            .filter(|window| !self.panels.contains(window))
+            .and_then(|window| self.index(window))
+            .map_or_else(Vec::new, |index| self.windows[index].window_commands())
     }
 
     pub(crate) fn full_screen(&self, window: WindowId) -> Option<bool> {

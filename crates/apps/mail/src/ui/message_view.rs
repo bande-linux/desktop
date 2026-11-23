@@ -14,8 +14,8 @@ use bande_toolkit::ui::{
     Size, Ui, WidgetId, access_rect, opens_menu,
 };
 use bande_toolkit::{
-    Appearance, Header, Item, Palette, Point, Rect, Scene, TextAlign, TextRole, TextStyle,
-    TextSystem,
+    Appearance, Header, HeaderInsets, Item, Palette, Point, Rect, Scene, TextAlign, TextRole,
+    TextStyle, TextSystem,
 };
 use jiff::Timestamp;
 use jiff::tz::TimeZone;
@@ -74,6 +74,7 @@ pub struct MessageView {
     reader: ReaderPane,
     ui: Ui,
     palette: Palette,
+    header_insets: HeaderInsets,
     symbols: Symbols,
     zone: TimeZone,
     formats: DateFormats,
@@ -164,6 +165,7 @@ impl MessageView {
             reader: ReaderPane::default(),
             ui: Ui::new(Box::new(host), Context::new(text, palette)),
             palette,
+            header_insets: HeaderInsets::default(),
             symbols: Symbols::default(),
             zone: TimeZone::system(),
             formats: DateFormats::from_env(),
@@ -197,7 +199,7 @@ impl MessageView {
 
     pub fn header(&self) -> Header {
         Header {
-            title_x: TITLE_INSET,
+            title_x: self.header_insets.leading.max(TITLE_INSET),
             items: Vec::new(),
             tabs: Vec::new(),
         }
@@ -217,6 +219,7 @@ impl MessageView {
 
     pub fn set_appearance(&mut self, appearance: Appearance) {
         self.palette = appearance.palette();
+        self.header_insets = HeaderInsets::of(appearance.window_buttons);
         self.ui.set_appearance(appearance);
         self.reader.layout = None;
     }

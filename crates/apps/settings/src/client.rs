@@ -76,6 +76,10 @@ pub trait Config {
     #[zbus(property)]
     fn set_style(&self, value: &str) -> zbus::Result<()>;
     #[zbus(property)]
+    fn window_buttons(&self) -> zbus::Result<String>;
+    #[zbus(property)]
+    fn set_window_buttons(&self, value: &str) -> zbus::Result<()>;
+    #[zbus(property)]
     fn lid_on_power(&self) -> zbus::Result<String>;
     #[zbus(property)]
     fn set_lid_on_power(&self, value: &str) -> zbus::Result<()>;
@@ -376,9 +380,10 @@ fn display_settings(settings: &HashMap<String, OwnedValue>) -> DisplaySettings {
     }
 }
 
-pub const CONFIG_SETTINGS: [SettingId; 84] = [
+pub const CONFIG_SETTINGS: [SettingId; 85] = [
     SettingId::Appearance,
     SettingId::Style,
+    SettingId::WindowButtons,
     SettingId::ClockFormat,
     SettingId::LowPowerOnBattery,
     SettingId::LidOnPower,
@@ -608,6 +613,7 @@ impl SettingsClient {
             SettingId::DoNotDisturb => Value::Flag(self.notifications.do_not_disturb()?),
             SettingId::Appearance => Value::Keyword(self.config.appearance()?),
             SettingId::Style => Value::Keyword(self.config.style()?),
+            SettingId::WindowButtons => Value::Keyword(self.config.window_buttons()?),
             SettingId::ScreenReader => Value::Flag(self.config.screen_reader()?),
             SettingId::Zoom => Value::Flag(self.config.zoom()? > 1.0),
             SettingId::IncreaseContrast => Value::Flag(self.config.increase_contrast()?),
@@ -722,6 +728,9 @@ impl SettingsClient {
             }
             (SettingId::Appearance, Value::Keyword(keyword)) => self.config.set_appearance(keyword),
             (SettingId::Style, Value::Keyword(keyword)) => self.config.set_style(keyword),
+            (SettingId::WindowButtons, Value::Keyword(keyword)) => {
+                self.config.set_window_buttons(keyword)
+            }
             (SettingId::Accent, Value::Keyword(keyword)) => self.config.set_accent(keyword),
             (SettingId::TintedFrame, Value::Flag(tinted)) => self.config.set_tinted_frame(*tinted),
             (SettingId::ReopenApps, Value::Flag(on)) => self.config.set_reopen_apps(*on),

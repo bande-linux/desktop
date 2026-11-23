@@ -8,8 +8,8 @@ use std::time::{Duration, Instant};
 
 use bande_compositor::background;
 use bande_compositor::{
-    Compositor, KEYBOARD_MONITOR_NAME, SCREEN_READER_NAME, SessionReport, UNRESPONSIVE_AFTER,
-    serve_keyboard_monitor,
+    Compositor, KEYBOARD_MONITOR_NAME, OutputConfig, SCREEN_READER_NAME, SessionReport,
+    UNRESPONSIVE_AFTER, serve_keyboard_monitor,
 };
 use bande_render::VulkanRenderer;
 use bande_test_bus::SessionBus;
@@ -782,4 +782,27 @@ fn the_overview_opens_on_the_gpu_over_windows_updated_in_pieces() {
         idle(&mut frames, &mut server, Duration::from_millis(800));
     }
     assert_eq!(bande_render::vulkan_errors(), 0, "Vulkan reported errors");
+}
+
+#[test]
+fn moving_the_pointer_redraws_only_the_display_it_is_on() {
+    let mut server = headless(640, 480);
+    server.add_output(OutputConfig::virtual_display(
+        "HEADLESS-2",
+        (640, 480).into(),
+    ));
+    let outputs = server.outputs();
+    assert_eq!(outputs.len(), 2, "the second display is not arranged");
+    let mut frames = Frames::start();
+    idle(&mut frames, &mut server, Duration::from_millis(200));
+    for output in &outputs {
+        server.take_redraw_on(output);
+    }
+    server.move_pointer_to((100.0, 100.0).into(), 0);
+    server.move_pointer_to((120.0, 110.0).into(), 1);
+    let redrawn: Vec<bool> = outputs
+        .iter()
+        .map(|output| server.take_redraw_on(output))
+        .collect();
+    assert_eq!(redrawn, [true, false], "a pointer move redrew {outputs:?}");
 }

@@ -212,7 +212,9 @@ when they reach the screen is Bande's own.
   only there, except while it is dragged across an edge; it is told the display through
   `wl_surface.enter`/`leave` and its scale through `wp_fractional_scale_v1`, so it redraws
   sharp when it moves to a display of another scale. The pointer moves across the displays at
-  their own scales and never leaves them (it stops at an edge without a neighbour); a new
+  their own scales and never leaves them (it stops at an edge without a neighbour); a move
+  redraws only the displays it leaves and enters (and their mirrors), where the damage is the
+  cursor's, on the cursor plane when `DrmCompositor` can put it there; a new
   window opens on the display with the pointer, cascading only from its app's windows shown on
   that display, maximizing, full screen, tiling and snapping
   use the window's display, and dragging a window until the pointer crosses onto another

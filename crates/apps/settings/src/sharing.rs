@@ -1,6 +1,7 @@
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::rc::Rc;
 use std::sync::mpsc::{self, Sender};
 
 use bande_app::choose_folder;
@@ -10,11 +11,14 @@ use bande_packages::Client;
 use bande_screen_sharing::setup::{
     self as screen_sharing, KEYRING_APPLICATION, PASSWORD_KEY, SHORTEST_PASSWORD,
 };
-use bande_toolkit::ui::{Button, SecureField, Toggle, Widget};
+use bande_toolkit::Spacing;
+use bande_toolkit::ui::{
+    Alert, Axis, Button, CheckState, Checkbox, SecureField, Stack, Toggle, Widget,
+};
 use zbus::blocking::Connection;
 
 use crate::client::ConfigProxyBlocking;
-use crate::follow::{Update, Updates, spawn};
+use crate::follow::{Command as Order, Update, Updates, spawn};
 use crate::pages::{FIELD_SIZE, Widgets, boxed, submit};
 use crate::view::{Anchor, Intent, SettingsView, intent};
 use crate::widgets::{Row, Text, Tone};
@@ -29,6 +33,8 @@ const AVAHI_DAEMON: &str = "/usr/sbin/avahi-daemon";
 const SMBD: &str = "/usr/sbin/smbd";
 const SSHD: &str = "/usr/sbin/sshd";
 const TESTPARM: &str = "/usr/bin/testparm";
+const TURN_ON: &str = "turn-on";
+const CANCEL: &str = "cancel";
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Share {
@@ -52,6 +58,8 @@ pub enum Problem {
     Failed,
     ShortPassword,
     NoPassword,
+    Keyring,
+    NotStarted,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -65,6 +73,7 @@ pub struct SharingState {
     pub shares: Vec<Share>,
     pub screen: Option<ScreenSharing>,
     pub problem: Option<Problem>,
+    pub screen_problem: Option<Problem>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -79,6 +88,7 @@ pub enum SharingCommand {
     Password(String),
     InstallScreenSharing,
     ScreenSharing(bool),
+    TurnOnWithPassword(String),
     ScreenPassword(String),
     AskBeforeViewing(bool),
     OlderViewers(bool),
@@ -216,6 +226,7 @@ fn read_state(session: Option<&Connection>) -> SharingState {
         },
         screen: read_screen_sharing(session),
         problem: None,
+        screen_problem: None,
     }
 }
 
@@ -277,17 +288,26 @@ fn share_name_for(path: &Path, taken: &[Share]) -> String {
 }
 
 fn turn_screen_sharing(on: bool) -> Result<(), Problem> {
-    if on && screen_password().is_none() {
+    if !on {
+        return worked(systemctl(&[
+            "--user",
+            "disable",
+            "--now",
+            screen_sharing::UNIT,
+        ]));
+    }
+    if screen_password().is_none() {
         return Err(Problem::NoPassword);
     }
-    let change = match on {
-        true => "enable",
-        false => "disable",
-    };
-    match systemctl(&["--user", change, "--now", screen_sharing::UNIT]) {
-        true => Ok(()),
-        false => Err(Problem::Failed),
+    let started = systemctl(&["--user", "enable", "--now", screen_sharing::UNIT])
+        && systemctl(&["--user", "is-active", "--quiet", screen_sharing::UNIT]);
+    if started {
+        return Ok(());
     }
+    if !systemctl(&["--user", "disable", "--now", screen_sharing::UNIT]) {
+        tracing::warn!("cannot turn Screen Sharing off again after it failed to start");
+    }
+    Err(Problem::NotStarted)
 }
 
 fn save_screen_password(password: &str) -> Result<(), Problem> {
@@ -298,7 +318,7 @@ fn save_screen_password(password: &str) -> Result<(), Problem> {
         .and_then(|keyring| keyring.save(&PASSWORD_KEY, &tr!("Screen Sharing password"), password))
         .map_err(|error| {
             tracing::warn!("cannot keep the Screen Sharing password: {error}");
-            Problem::Failed
+            Problem::Keyring
         })?;
     worked(systemctl(&["--user", "try-restart", screen_sharing::UNIT]))
 }
@@ -333,6 +353,10 @@ fn run(
     match command {
         SharingCommand::InstallScreenSharing => worked(install(system, SCREEN_SHARING)),
         SharingCommand::ScreenSharing(on) => turn_screen_sharing(on),
+        SharingCommand::TurnOnWithPassword(password) => {
+            save_screen_password(&password)?;
+            turn_screen_sharing(true)
+        }
         SharingCommand::ScreenPassword(password) => save_screen_password(&password),
         SharingCommand::AskBeforeViewing(ask) => {
             configure(session, |config| config.set_screen_sharing_ask(ask))
@@ -353,6 +377,7 @@ fn run_file_sharing(
         SharingCommand::Read
         | SharingCommand::InstallScreenSharing
         | SharingCommand::ScreenSharing(_)
+        | SharingCommand::TurnOnWithPassword(_)
         | SharingCommand::ScreenPassword(_)
         | SharingCommand::AskBeforeViewing(_)
         | SharingCommand::OlderViewers(_) => true,
@@ -414,10 +439,25 @@ pub fn follow_sharing(
 ) -> Sender<SharingCommand> {
     let (sender, receiver) = mpsc::channel();
     spawn("sharing", move || {
+        let mut screen_problem = None;
         for command in receiver {
-            let problem = run(command, system.as_ref(), session.as_ref()).err();
+            let turning = matches!(
+                command,
+                SharingCommand::ScreenSharing(_)
+                    | SharingCommand::TurnOnWithPassword(_)
+                    | SharingCommand::ScreenPassword(_)
+            );
+            let outcome = run(command, system.as_ref(), session.as_ref());
+            let problem = match turning {
+                true => {
+                    screen_problem = outcome.err();
+                    None
+                }
+                false => outcome.err(),
+            };
             let state = SharingState {
                 problem,
+                screen_problem,
                 ..read_state(session.as_ref())
             };
             if !updates.send(Update::Sharing(state)) {
@@ -428,6 +468,23 @@ pub fn follow_sharing(
     sender
 }
 
+fn problem_text(problem: Problem) -> String {
+    match problem {
+        Problem::Failed => tr!("That change didn’t go through."),
+        Problem::ShortPassword => tr!(
+            "Use at least {count} characters.",
+            count = SHORTEST_PASSWORD
+        ),
+        Problem::NoPassword => tr!("Choose a password first."),
+        Problem::Keyring => {
+            tr!("The keyring is locked or unavailable, so the password can’t be kept.")
+        }
+        Problem::NotStarted => {
+            tr!("Screen Sharing didn’t start. Details: journalctl --user -u bande-screen-sharing")
+        }
+    }
+}
+
 impl SettingsView {
     pub(crate) fn sharing_rows(&mut self) -> Widgets {
         let Some(state) = self.sharing.clone() else {
@@ -435,14 +492,7 @@ impl SettingsView {
         };
         let mut rows = Vec::new();
         if let Some(problem) = state.problem {
-            rows.push(crate::pages::muted_row(&match problem {
-                Problem::Failed => tr!("That change didn’t go through."),
-                Problem::ShortPassword => tr!(
-                    "Use at least {count} characters for the Screen Sharing password.",
-                    count = SHORTEST_PASSWORD
-                ),
-                Problem::NoPassword => tr!("Set a Screen Sharing password first."),
-            }));
+            rows.push(crate::pages::muted_row(&problem_text(problem)));
         }
         if state.ssh_installed {
             let mut change = intent(&self.intents, Intent::Sharing);
@@ -573,23 +623,35 @@ impl SettingsView {
         };
         let mut rows = Vec::new();
         let mut change = intent(&self.intents, Intent::Sharing);
-        let toggle = Toggle::new(&tr!("Screen Sharing"), screen.on, move |on| {
+        let on = screen.on || self.turning_on_screen;
+        let toggle = Toggle::new(&tr!("Screen Sharing"), on, move |on| {
             change(SharingCommand::ScreenSharing(on));
         });
-        let detail = match (screen.on, screen.addresses.first()) {
-            (true, Some(address)) => tr!(
-                "VNC viewers on the local network connect to vnc://{address}",
-                address = address.clone()
+        let detail = match (self.turning_on_screen, screen.on, screen.addresses.first()) {
+            (true, _, _) => Text::new(&tr!("Turning on…"), Tone::Muted),
+            (false, _, _) if state.screen_problem.is_some() => Text::new(
+                &state.screen_problem.map(problem_text).unwrap_or_default(),
+                Tone::Danger,
             ),
-            _ => {
-                tr!("Others on the local network can see and control this screen with a VNC viewer")
-            }
+            (false, true, Some(address)) => Text::new(
+                &tr!(
+                    "VNC viewers on the local network connect to vnc://{address}",
+                    address = address.clone()
+                ),
+                Tone::Muted,
+            ),
+            _ => Text::new(
+                &tr!(
+                    "Others on the local network can see and control this screen with a VNC viewer"
+                ),
+                Tone::Muted,
+            ),
         };
         let row = Row::new(
             Text::new(&tr!("Screen Sharing"), Tone::Primary),
             Some(boxed(toggle)),
         )
-        .detail(Text::new(&detail, Tone::Muted).caption());
+        .detail(detail.caption());
         rows.push(self.item_row("screen-sharing".to_owned(), row));
         if screen.on && !screen.running {
             rows.push(crate::pages::muted_row(&tr!(
@@ -686,6 +748,89 @@ impl SettingsView {
             rows.push(self.unadvertised_row());
         }
         rows
+    }
+
+    pub(crate) fn needs_screen_password(&self) -> bool {
+        self.sharing
+            .as_ref()
+            .and_then(|state| state.screen.as_ref())
+            .is_some_and(|screen| !screen.password_set)
+    }
+
+    pub(crate) fn ask_screen_password(&mut self, problem: Option<String>) {
+        self.screen_password.borrow_mut().clear();
+        let typed = Rc::clone(&self.screen_password);
+        let mut submitted = intent(&self.intents, Intent::ScreenPasswordAnswer);
+        let field = SecureField::new(&tr!("Password"), FIELD_SIZE, move |_| {
+            submitted(TURN_ON.to_owned());
+        })
+        .on_edit(move |text| {
+            let mut typed = typed.borrow_mut();
+            typed.clear();
+            typed.push_str(text);
+        });
+        self.screen_password_field = Some(field.id());
+        let mut reveal = intent(&self.intents, Intent::RevealScreenPassword);
+        let show = Checkbox::new(&tr!("Show password"), CheckState::Off, move |shown| {
+            reveal(shown);
+        });
+        let message = problem.unwrap_or_else(|| {
+            tr!(
+                "Viewers type it to connect. At least {count} characters.",
+                count = SHORTEST_PASSWORD
+            )
+        });
+        let mut answer = intent(&self.intents, Intent::ScreenPasswordAnswer);
+        let alert = Alert::new(
+            &tr!("Choose a password for Screen Sharing"),
+            &message,
+            move |choice| answer(choice.to_owned()),
+        )
+        .accessory(Stack::new(
+            Axis::Vertical,
+            Spacing::S as f32,
+            0.0,
+            vec![boxed(field), boxed(show)],
+        ))
+        .primary(&tr!("Turn On"), TURN_ON)
+        .cancel(&tr!("Cancel"), CANCEL);
+        self.ui.present_sheet(alert);
+        if let Some(field) = self.screen_password_field {
+            self.ui.set_focus(field);
+        }
+        self.invalidate();
+    }
+
+    pub(crate) fn reveal_screen_password(&mut self, shown: bool) {
+        if let Some(field) = self
+            .screen_password_field
+            .and_then(|field| self.ui.widget_as::<SecureField>(field))
+        {
+            field.set_revealed(shown);
+        }
+    }
+
+    pub(crate) fn screen_password_answered(&mut self, choice: &str) {
+        self.ui.close_sheet();
+        self.screen_password_field = None;
+        let password = std::mem::take(&mut *self.screen_password.borrow_mut());
+        if choice != TURN_ON {
+            self.invalidate();
+            return;
+        }
+        if password.chars().count() < SHORTEST_PASSWORD {
+            self.ask_screen_password(Some(tr!(
+                "Use at least {count} characters.",
+                count = SHORTEST_PASSWORD
+            )));
+            return;
+        }
+        self.turning_on_screen = true;
+        self.commands
+            .push(Order::Sharing(SharingCommand::TurnOnWithPassword(
+                password.to_string(),
+            )));
+        self.invalidate();
     }
 
     fn unadvertised_row(&mut self) -> Box<dyn Widget> {

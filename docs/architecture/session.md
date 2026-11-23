@@ -831,7 +831,11 @@ fingerprint as soon as sharing is on. The protocol code, both sides, is `bande-r
   Teredo or 6to4 address (`network.rs`). Viewers already connected stay when the computer moves to another network.
   Nothing changes the firewall and nothing asks the router to forward the port. A password of
   at least 8 characters, kept in the keyring and read when the service starts (Settings restarts
-  it after a change), is required before Settings turns sharing on. Viewers are offered VeNCrypt
+  it after a change), is required: switching sharing on without one opens a sheet that asks for
+  it (Show password, Cancel or Turn On), which saves it and starts the unit. Settings checks that
+  the unit is enabled and active, and otherwise turns it off again; any failure (a short
+  password, a locked or missing keyring, a unit that did not start, with the `journalctl`
+  command to read why) stays next to the switch until the next change. Viewers are offered VeNCrypt
   only, X509Plain over TLS 1.2 or 1.3 with the whole password, with a self-signed certificate
   made for this computer on first start (`$XDG_DATA_HOME/bande/screen-sharing`, its fingerprint
   shown in Settings). X509Vnc and plain VNC authentication (RFB 3.3 and viewers without

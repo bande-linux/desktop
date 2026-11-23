@@ -76,6 +76,7 @@ pub use scan::Leaving;
 pub use services::{
     AudioCommand, BluetoothCommand, NetworkCommand, follow_bluetooth, follow_network,
 };
+pub use sharing::{Problem, ScreenSharing, SharingCommand, SharingState};
 pub use software::{
     Ending, Need, Notice, Package, Reboot, Refresh, SoftwareCommand, SoftwareState, UPDATE_NOTICE,
     announce_updates, check, follow_software, open_updates, update,

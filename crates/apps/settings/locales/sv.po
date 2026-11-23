@@ -1994,11 +1994,17 @@ msgstr "Lösenord för skärmdelning"
 msgid "Choose a folder to share"
 msgstr "Välj en mapp att dela"
 
-msgid "Use at least {count} characters for the Screen Sharing password."
-msgstr "Använd minst {count} tecken i lösenordet för skärmdelning."
+msgid "Use at least {count} characters."
+msgstr "Använd minst {count} tecken."
 
-msgid "Set a Screen Sharing password first."
-msgstr "Välj först ett lösenord för skärmdelning."
+msgid "Choose a password first."
+msgstr "Välj ett lösenord först."
+
+msgid "The keyring is locked or unavailable, so the password can’t be kept."
+msgstr "Nyckelringen är låst eller otillgänglig, så lösenordet kan inte sparas."
+
+msgid "Screen Sharing didn’t start. Details: journalctl --user -u bande-screen-sharing"
+msgstr "Skärmdelningen startade inte. Detaljer: journalctl --user -u bande-screen-sharing"
 
 msgid "Others with an account on this computer can sign in with SSH"
 msgstr "Andra med ett konto på den här datorn kan logga in med SSH"
@@ -2029,6 +2035,9 @@ msgstr "Låter andra på det lokala nätverket se och styra den här skärmen"
 
 msgid "Screen Sharing"
 msgstr "Skärmdelning"
+
+msgid "Turning on…"
+msgstr "Slår på…"
 
 msgid "VNC viewers on the local network connect to vnc://{address}"
 msgstr "VNC-visare på det lokala nätverket ansluter till vnc://{address}"
@@ -2062,6 +2071,18 @@ msgstr "Certifikatets fingeravtryck"
 
 msgid "A viewer shows it the first time it connects: {fingerprint}"
 msgstr "En visare visar det första gången den ansluter: {fingerprint}"
+
+msgid "Show password"
+msgstr "Visa lösenord"
+
+msgid "Viewers type it to connect. At least {count} characters."
+msgstr "Visare anger det för att ansluta. Minst {count} tecken."
+
+msgid "Choose a password for Screen Sharing"
+msgstr "Välj ett lösenord för skärmdelning"
+
+msgid "Turn On"
+msgstr "Slå på"
 
 msgid "Other computers won’t see this one nearby and must connect by its address. Installing Avahi lets it announce itself."
 msgstr "Andra datorer ser inte den här i närheten och måste ansluta med dess adress. Installera Avahi så annonserar den sig."
@@ -2626,9 +2647,6 @@ msgstr "Surfzonens lösenord"
 
 msgid "Type 8 to 63 characters and press Return to share this computer’s wired connection"
 msgstr "Skriv 8 till 63 tecken och tryck på Retur för att dela datorns trådbundna anslutning"
-
-msgid "Turn On"
-msgstr "Slå på"
 
 msgid "Use the saved password"
 msgstr "Använd det sparade lösenordet"

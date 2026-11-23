@@ -544,6 +544,10 @@ impl Store {
         accounts::add(&self.connection, account)
     }
 
+    pub fn notes(&self) -> Result<Vec<AccountId>> {
+        accounts::notes(&self.connection)
+    }
+
     pub fn set_notes(&self, account: AccountId, used: bool) -> Result<()> {
         accounts::set_notes(&self.connection, account, used)
     }

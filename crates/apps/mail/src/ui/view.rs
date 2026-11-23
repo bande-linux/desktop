@@ -14,7 +14,7 @@ use crate::error::Result;
 use crate::imap::{Flag, Role};
 use crate::message::{Address, Content, Envelope, parse_addresses};
 use crate::net::Network;
-use crate::settings::{MailSettings, SortBy};
+use crate::settings::{MailSettings, MarkRead, SortBy};
 use crate::store::{Account, AccountId, Mailbox, MailboxId, MessageId, RuleAction, Store, Summary};
 use crate::ui::Mode;
 use crate::ui::compose_view::attachable;
@@ -67,6 +67,7 @@ const UNDO_TRIES: u8 = 3;
 const MOVED_IN_KEPT: Duration = Duration::from_secs(10 * 60);
 const UNDO_LEVELS: usize = 20;
 const OPENED_UNREAD: usize = 10;
+const READ_AFTER: Duration = Duration::from_secs(2);
 const FLAG_COLORS: [Text; 7] = [
     text!("Red"),
     text!("Orange"),
@@ -235,6 +236,7 @@ pub struct MailView {
     requests: Vec<Request>,
     pub(crate) setup: Option<Guide>,
     pub(crate) open_file: Option<WidgetId>,
+    read_later: Option<(Instant, Vec<MessageId>)>,
     waiting: Vec<Draft>,
     pub(crate) settings: MailSettings,
     held: Vec<(AccountId, Command)>,
@@ -301,6 +303,7 @@ impl MailView {
             requests: Vec::new(),
             setup: None,
             open_file: None,
+            read_later: None,
             waiting: Vec::new(),
             settings,
             held: Vec::new(),
@@ -474,7 +477,10 @@ impl MailView {
         self.reader.printable(&self.zone, &self.formats)
     }
 
-    pub fn unread_inbox(&self) -> usize {
+    pub fn taskbar_count(&self) -> usize {
+        if !self.settings.badge {
+            return 0;
+        }
         self.sidebar
             .iter()
             .find_map(|row| match row {
@@ -551,7 +557,38 @@ impl MailView {
     }
 
     pub fn deadline(&self) -> Option<Instant> {
-        self.ui.deadline()
+        let read_at = self.read_later.as_ref().map(|(at, _)| *at);
+        self.ui.deadline().into_iter().chain(read_at).min()
+    }
+
+    fn opened_unseen(&mut self, unseen: Vec<MessageId>) {
+        if unseen.is_empty() {
+            return;
+        }
+        match self.settings.mark_read {
+            MarkRead::OnOpen => self.set_flag_on(&unseen, Flag::Seen, true),
+            MarkRead::Later => self.read_later = Some((Instant::now() + READ_AFTER, unseen)),
+            MarkRead::Manually => {}
+        }
+    }
+
+    pub fn tick(&mut self, now: Instant) {
+        let Some((_, ids)) = self.read_later.take_if(|(at, _)| *at <= now) else {
+            return;
+        };
+        let still_open = ids
+            .into_iter()
+            .filter(|id| {
+                self.reader
+                    .thread
+                    .as_ref()
+                    .and_then(|thread| thread.entry(*id))
+                    .is_some_and(|entry| entry.reading.is_some())
+            })
+            .collect::<Vec<_>>();
+        if !still_open.is_empty() {
+            self.set_flag_on(&still_open, Flag::Seen, true);
+        }
     }
 
     pub fn accessibility(&self) -> TreeUpdate {
@@ -808,9 +845,7 @@ impl MailView {
         self.focus = Pane::List;
         self.reader.scroll = ScrollState::default();
         let unseen = self.open_thread(&summary);
-        if !unseen.is_empty() {
-            self.set_flag_on(&unseen, Flag::Seen, true);
-        }
+        self.opened_unseen(unseen);
         self.reveal_selected();
     }
 
@@ -1014,7 +1049,7 @@ impl MailView {
             self.reader.focus_entry(id);
             self.read_entry(id);
             if unseen {
-                self.set_flag_on(&[id], Flag::Seen, true);
+                self.opened_unseen(vec![id]);
             }
             return;
         }

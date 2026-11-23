@@ -447,17 +447,20 @@ msgstr "Länken säger ”{claimed}” men leder till ”{real}”."
 msgid "General"
 msgstr "Allmänt"
 
-msgid "Accounts"
-msgstr "Konton"
-
-msgid "Viewing"
-msgstr "Visning"
+msgid "Reading"
+msgstr "Läsning"
 
 msgid "Composing"
 msgstr "Skrivande"
 
+msgid "Privacy"
+msgstr "Integritet"
+
 msgid "Rules"
 msgstr "Regler"
+
+msgid "Account"
+msgstr "Konto"
 
 msgid "Security"
 msgstr "Säkerhet"
@@ -522,6 +525,15 @@ msgstr "Skapa"
 msgid "Waiting for GnuPG…"
 msgstr "Väntar på GnuPG…"
 
+msgid "Accounts"
+msgstr "Konton"
+
+msgid "Addressing"
+msgstr "Adressering"
+
+msgid "Send new messages from"
+msgstr "Skicka nya meddelanden från"
+
 msgid "New Messages"
 msgstr "Nya meddelanden"
 
@@ -530,6 +542,9 @@ msgstr "Visa notiser"
 
 msgid "Play a sound"
 msgstr "Spela upp ett ljud"
+
+msgid "Show the unread count in the Taskbar"
+msgstr "Visa antalet olästa i Aktivitetsfältet"
 
 msgid "Default Email Reader"
 msgstr "Standardprogram för e-post"
@@ -544,6 +559,18 @@ msgstr[1] "{lines} rader"
 
 msgid "Preview"
 msgstr "Förhandsvisning"
+
+msgid "When the message opens"
+msgstr "När meddelandet öppnas"
+
+msgid "After two seconds"
+msgstr "Efter två sekunder"
+
+msgid "Only when you mark it"
+msgstr "Bara när du markerar det"
+
+msgid "Mark as read"
+msgstr "Markera som läst"
 
 msgid "Message List"
 msgstr "Meddelandelista"
@@ -560,14 +587,23 @@ msgstr "Visa oformaterad text när meddelandet har sådan"
 msgid "Use a fixed-width font for plain text"
 msgstr "Använd ett teckensnitt med fast breddsteg för oformaterad text"
 
-msgid "Privacy"
-msgstr "Integritet"
+msgid "Remote Content"
+msgstr "Fjärrinnehåll"
 
 msgid "Load remote content in messages"
 msgstr "Ladda externt innehåll i meddelanden"
 
 msgid "Remote pictures can tell the sender when and where you read a message. When this is off, a message shows Load Remote Content instead, and Mail remembers the senders you load it for."
 msgstr "Externa bilder kan visa för avsändaren när och var du läser ett meddelande. När det här är av visar meddelandet Ladda externt innehåll i stället, och E-post kommer ihåg de avsändare du laddar det för."
+
+msgid "Links"
+msgstr "Länkar"
+
+msgid "When a link shows one address and leads to another, Mail asks before opening it."
+msgstr "När en länk visar en adress men leder till en annan frågar E-post innan den öppnas."
+
+msgid "Mail connects only to your mail servers, and fetches pictures and keys only when you ask for them."
+msgstr "E-post ansluter bara till dina e-postservrar och hämtar bilder och nycklar bara när du ber om det."
 
 msgid "Find decrypted messages in search"
 msgstr "Hitta dekrypterade meddelanden vid sökning"
@@ -590,9 +626,6 @@ msgstr[1] "Du litar på {count} S/MIME-utfärdare"
 
 msgid "Flag the message"
 msgstr "Flagga meddelandet"
-
-msgid "Mark as read"
-msgstr "Markera som läst"
 
 msgid "Move to {mailbox} ({account})"
 msgstr "Flytta till {mailbox} ({account})"
@@ -669,29 +702,20 @@ msgstr "Regler tillämpas på nya olästa meddelanden i inkorgen medan E-post ä
 msgid "Account of the selected mailbox"
 msgstr "Kontot för den markerade brevlådan"
 
-msgid "Send new messages from"
-msgstr "Skicka nya meddelanden från"
-
-msgid "Addressing"
-msgstr "Adressering"
-
 msgid "Responding"
 msgstr "Svar"
 
 msgid "Quote the original message"
 msgstr "Citera originalmeddelandet"
 
-msgid "Each account’s signature is set in Accounts."
-msgstr "Varje kontos signatur anges under Konton."
+msgid "Show the Bcc field"
+msgstr "Visa fältet Hemlig kopia"
 
-msgid "No accounts are set up."
-msgstr "Inga konton är tillagda."
+msgid "Each account’s signature is set on its page."
+msgstr "Varje kontos signatur ställs in på kontots sida."
 
-msgid "Account"
-msgstr "Konto"
-
-msgid "Remove…"
-msgstr "Ta bort…"
+msgid "Remove Account…"
+msgstr "Ta bort konto…"
 
 msgid "Ann Lee"
 msgstr "Anna Lind"
@@ -702,17 +726,23 @@ msgstr "Ingen signatur"
 msgid "Save"
 msgstr "Spara"
 
+msgid "Use this account"
+msgstr "Använd det här kontot"
+
 msgid "Account Information"
 msgstr "Kontoinformation"
 
-msgid "Use this account"
-msgstr "Använd det här kontot"
+msgid "Description"
+msgstr "Beskrivning"
+
+msgid "Full name"
+msgstr "Fullständigt namn"
 
 msgid "Email address"
 msgstr "E-postadress"
 
-msgid "Full name"
-msgstr "Fullständigt namn"
+msgid "Also use this account for Notes"
+msgstr "Använd även kontot för Anteckningar"
 
 msgid "Signature"
 msgstr "Signatur"

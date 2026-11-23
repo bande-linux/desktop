@@ -183,8 +183,10 @@ impl View for Pane {
     }
 
     fn tick(&mut self, _window: &mut Window, now: Instant) -> bool {
-        if let Self::Compose(view) = self {
-            view.autosave(now);
+        match self {
+            Self::Compose(view) => view.autosave(now),
+            Self::Main(view) => view.tick(now),
+            Self::Message(_) => {}
         }
         true
     }
@@ -604,7 +606,7 @@ impl Mail {
 
     fn show_unread(&mut self, cx: &mut Cx<Self>) {
         let unread =
-            main_view(cx, self.main, &mut self.parked).map_or(0, |view| view.unread_inbox());
+            main_view(cx, self.main, &mut self.parked).map_or(0, |view| view.taskbar_count());
         self.notices
             .set_badge(u32::try_from(unread).unwrap_or(u32::MAX));
     }

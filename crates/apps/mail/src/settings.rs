@@ -37,6 +37,26 @@ impl SortBy {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum MarkRead {
+    #[default]
+    OnOpen,
+    Later,
+    Manually,
+}
+
+impl MarkRead {
+    pub const ALL: [Self; 3] = [Self::OnOpen, Self::Later, Self::Manually];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::OnOpen => "open",
+            Self::Later => "later",
+            Self::Manually => "manually",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MailSettings {
     pub notify: bool,
@@ -52,6 +72,8 @@ pub struct MailSettings {
     pub ascending: bool,
     pub bcc_field: bool,
     pub index_decrypted: bool,
+    pub badge: bool,
+    pub mark_read: MarkRead,
 }
 
 impl Default for MailSettings {
@@ -70,6 +92,8 @@ impl Default for MailSettings {
             ascending: false,
             bcc_field: false,
             index_decrypted: false,
+            badge: true,
+            mark_read: MarkRead::OnOpen,
         }
     }
 }
@@ -111,6 +135,13 @@ impl Stored for MailSettings {
                 "index-decrypted" => {
                     settings.index_decrypted = flag(value).unwrap_or(settings.index_decrypted);
                 }
+                "badge" => settings.badge = flag(value).unwrap_or(settings.badge),
+                "mark-read" => {
+                    settings.mark_read = MarkRead::ALL
+                        .into_iter()
+                        .find(|mark| mark.name() == value)
+                        .unwrap_or_default();
+                }
                 _ => {}
             }
         }
@@ -119,7 +150,7 @@ impl Stored for MailSettings {
 
     fn to_text(&self) -> String {
         format!(
-            "notify = {}\nsound = {}\nload-remote = {}\npreview-lines = {}\nconversations = {}\nplain-text = {}\nfixed-width = {}\nquote = {}\nsend-from = {}\nsort = {}\nascending = {}\nbcc-field = {}\nindex-decrypted = {}\n",
+            "notify = {}\nsound = {}\nload-remote = {}\npreview-lines = {}\nconversations = {}\nplain-text = {}\nfixed-width = {}\nquote = {}\nsend-from = {}\nsort = {}\nascending = {}\nbcc-field = {}\nindex-decrypted = {}\nbadge = {}\nmark-read = {}\n",
             self.notify,
             self.sound,
             self.load_remote,
@@ -133,6 +164,8 @@ impl Stored for MailSettings {
             self.ascending,
             self.bcc_field,
             self.index_decrypted,
+            self.badge,
+            self.mark_read.name(),
         )
     }
 }

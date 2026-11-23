@@ -24,19 +24,24 @@ apt install bande-mail
   description (the account's name in the sidebar) and, when Notes is installed, Also use this
   account for Notes (on by default). When a saved password stops working, the password sheet
   also leads to Server Settings…. Several accounts work side by side.
-- **Settings** (Ctrl+,) has five tabs. General: notifications for new mail and their sound.
-  Accounts: whether each account is used, its full name, signature, OpenPGP key, S/MIME
-  certificate and whether new messages are signed, and server settings (user
-  name, hosts, ports, TLS or STARTTLS), Add Account… and Remove…; changed servers are checked
-  with the saved password before they are kept. Viewing: list preview lines, conversations,
-  plain text over HTML, a fixed-width font for plain text, whether remote content loads by
-  itself (off by default), and Forget for the senders Mail loads it for because you chose Load
-  Remote Content in one of their messages, whether decrypted messages can be found in search
-  (off by default), and Forget for the S/MIME issuers you chose to trust. Composing: the account new messages are sent from and whether replies
-  quote the original. Rules (each can be edited or removed): if any or all of several conditions hold (From, To or Cc, or
-  Subject contains a text), move new unread Inbox mail to a mailbox, flag it or mark it read,
-  while Mail is open; Message ▸ Apply Rules runs them on the chosen messages. They are kept in
-  `~/.config/bande/mail.conf`; signatures, servers and rules in the offline store.
+- **Settings** (Ctrl+,) lists its pages in a sidebar. General: the account new messages are sent
+  from, notifications for new mail and their sound, and whether the Taskbar shows the unread
+  count. Reading: list preview lines, conversations, when a message is marked as read (when it
+  opens, after two seconds, or only when you mark it), plain text over HTML and a fixed-width
+  font for plain text. Composing: whether replies quote the original and whether the Bcc field
+  shows. Privacy: whether remote content loads by itself (off by default) and Forget for the
+  senders Mail loads it for because you chose Load Remote Content in one of their messages, how
+  links are checked, whether decrypted messages can be found in search (off by default), and
+  Forget for the S/MIME issuers you chose to trust. Rules (each can be edited or removed): if any
+  or all of several conditions hold (From, To or Cc, or Subject contains a text), move new unread
+  Inbox mail to a mailbox, flag it or mark it read, while Mail is open; Message ▸ Apply Rules runs
+  them on the chosen messages. Under Accounts each account has its page: whether it is used, its
+  description (its name in the sidebar), full name, Also use this account for Notes when Notes is
+  installed, signature, server settings (user name, hosts, ports, TLS or STARTTLS; changed servers
+  are checked with the saved password before they are kept), OpenPGP key, S/MIME certificate and
+  whether new messages are signed, and Remove Account…; Add Account… ends the list. Settings are
+  kept in `~/.config/bande/mail.conf`; descriptions, signatures, servers and rules in the offline
+  store.
 - **Finding servers** asks only the address's own domain, in this order: DNS SRV records (RFC
   6186: `_imaps`, `_imap`, `_submissions`, `_submission`), the domain's published autoconfig
   (`autoconfig.<domain>`, then `<domain>/.well-known/autoconfig`, over HTTPS, password sign-in
@@ -57,7 +62,7 @@ apt install bande-mail
   `Message-ID`; a reply that has neither joins the latest message of the account with the same
   subject in the 30 days before it) share one row with a count; clicking the count, or Right and Left, shows and
   hides the earlier ones, and acting on a closed conversation acts on all of it (Settings ▸
-  Viewing turns this off). The reader shows the whole conversation, oldest first, with your
+  Reading turns this off). The reader shows the whole conversation, oldest first, with your
   replies from Sent and the account's other mailboxes (not Trash or Junk): the chosen message and
   unread ones open, the others as a line that opens on a click. Each open message shows its
   headers, the plain text or sanitised HTML, quoted text folded behind Show Quoted Text, and the
@@ -104,14 +109,14 @@ apt install bande-mail
   Keys are never fetched by themselves. A verified S/MIME sender's certificate is kept for
   encrypting to them. Checking and decrypting run off the window's thread, so a passphrase prompt
   never freezes Mail. The text of an encrypted message is not kept in the search index unless
-  Settings ▸ Viewing allows it; turning that off removes it again. Autocrypt is not used: its
+  Settings ▸ Privacy allows it; turning that off removes it again. Autocrypt is not used: its
   keys arrive unverified in every message's headers, and a key found that way would be one more
   "unverified" signature, not proof; WKD on request gives the same keys from the domain itself.
 - **HTML** is never rendered as a web page: it is turned into paragraphs, headings, lists,
   quotes, links and pictures. Scripts, styles, forms and frames are dropped, and only `http`,
   `https` and `mailto` links survive. Pictures sent inside the message (`cid:`) show at once;
   remote pictures are not fetched until **Load Remote Content** is clicked in the reader's
-  banner, which Mail then remembers for that sender (or by themselves when Settings ▸ Viewing
+  banner, which Mail then remembers for that sender (or by themselves when Settings ▸ Privacy
   allows it), and then only over HTTPS, at
   most 20 per message, 10 MB each, decoded with limits on their size.
 - **Toolbar and keys.** Get Mail (F5), New Message (Ctrl+N), Archive (Shift+Ctrl+A),

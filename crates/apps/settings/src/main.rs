@@ -2,6 +2,7 @@ use std::ffi::OsString;
 use std::os::fd::BorrowedFd;
 use std::path::Path;
 use std::process::ExitCode;
+use std::thread;
 use std::time::Instant;
 
 use bande_app::{Cx, Info, Keys, Kind, Menus, Program, Saved, View, WindowId};
@@ -406,8 +407,6 @@ impl Program for Settings {
 }
 
 const CHECK_UPDATES: &str = "--check-updates";
-const ANNOUNCE_UPDATES: &str = "--announce-updates";
-const ANNOUNCE_TRANSLATIONS: &str = "--announce-translations";
 const DELETED: &str = " (deleted)";
 
 fn installed_program() -> Result<String, std::io::Error> {
@@ -417,26 +416,17 @@ fn installed_program() -> Result<String, std::io::Error> {
         .map_or_else(|| program.clone(), str::to_owned))
 }
 
-fn check_updates() -> Result<(), Box<dyn std::error::Error>> {
-    start_announcer(ANNOUNCE_UPDATES)?;
-    start_announcer(ANNOUNCE_TRANSLATIONS)
-}
-
-fn start_announcer(flag: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let program = installed_program()?;
-    let announcer = [
-        "systemd-run",
-        "--user",
-        "--scope",
-        "--quiet",
-        "--collect",
-        "--",
-        &program,
-        flag,
-    ]
-    .map(str::to_owned);
-    spawn_detached("", &announcer, None, None)?;
-    Ok(())
+fn check_updates() -> ExitCode {
+    let translations = thread::spawn(|| reported(announce_translations_and_install_on_click()));
+    let updates = reported(announce_updates_and_open_on_click());
+    match translations.join() {
+        Ok(translations) if translations && updates => ExitCode::SUCCESS,
+        Ok(_) => ExitCode::FAILURE,
+        Err(_) => {
+            tracing::error!("the check for translations stopped unexpectedly");
+            ExitCode::FAILURE
+        }
+    }
 }
 
 fn announce_updates_and_open_on_click() -> Result<(), Box<dyn std::error::Error>> {
@@ -466,14 +456,10 @@ fn announce_and_open_on_click(
     Ok(())
 }
 
-fn finish(outcome: Result<(), Box<dyn std::error::Error>>) -> ExitCode {
-    match outcome {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(error) => {
-            tracing::error!("{error}");
-            ExitCode::FAILURE
-        }
-    }
+fn reported(outcome: Result<(), Box<dyn std::error::Error>>) -> bool {
+    outcome
+        .inspect_err(|error| tracing::error!("{error}"))
+        .is_ok()
 }
 
 fn main() -> ExitCode {
@@ -481,15 +467,7 @@ fn main() -> ExitCode {
     match arguments.as_slice() {
         [flag] if flag == CHECK_UPDATES => {
             bande_log::init(INFO.package);
-            finish(check_updates())
-        }
-        [flag] if flag == ANNOUNCE_UPDATES => {
-            bande_log::init(INFO.package);
-            finish(announce_updates_and_open_on_click())
-        }
-        [flag] if flag == ANNOUNCE_TRANSLATIONS => {
-            bande_log::init(INFO.package);
-            finish(announce_translations_and_install_on_click())
+            check_updates()
         }
         _ => bande_app::run::<Settings>(&INFO),
     }

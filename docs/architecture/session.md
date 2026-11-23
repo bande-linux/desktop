@@ -958,6 +958,13 @@ the interval (When available, Every day, 7 or 31 days); security updates follow 
 leaves its outcome in `$XDG_STATE_HOME/bande/software-badge`, so Settings starts PackageKit only
 when the pane opens or a check is due.
 
+The daily check is `bande-update-check.timer`: 5 minutes after login plus up to 15 random, so it
+never competes with the session starting, then at midnight (with the same random delay) while
+the session runs. It does not catch up a missed day at login. Its service hands one
+`bande-settings --check-updates` to a transient unit in `background.slice` at nice 10 with idle
+I/O, which checks for updates and translations on two threads and stays only while its
+notification waits for an answer, so a check is never skipped because an old one is still open.
+
 **Classes.** Software Update (`bande-packages`, through PackageKit) classifies each update:
 
 - **Offline** (installed at the next restart): `libc6`, `systemd`, `libsystemd0`, `udev`,

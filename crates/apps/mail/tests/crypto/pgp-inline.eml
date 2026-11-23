@@ -1,0 +1,19 @@
+From: Carol <carol@bande.test>
+To: Alice <alice@bande.test>
+Subject: Inline
+Date: Sun, 22 Nov 2026 09:00:00 +0100
+Message-ID: <inline@bande.test>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA512
+
+Carol signed this inline.
+-----BEGIN PGP SIGNATURE-----
+
+iIcEARYKAC8WIQQVpP9moVN2h9POaAQLsteZA0duHQUCawKZSREcY2Fyb2xAYmFu
+ZGUudGVzdAAKCRALsteZA0duHUfwAQDTn3EyeP+FS3SUxXRv5LC/OCbzrDYDbYbq
+ytr/T9WM0wEA8y8tac45Go+Q31Yxel9mnnVK/zo147Umbcxo9ksEbgE=
+=X1ia
+-----END PGP SIGNATURE-----

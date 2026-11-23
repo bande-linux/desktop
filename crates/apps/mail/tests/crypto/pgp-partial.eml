@@ -1,0 +1,34 @@
+From: Carol <carol@bande.test>
+To: Alice <alice@bande.test>
+Subject: Partly signed
+Date: Sun, 22 Nov 2026 09:00:00 +0100
+Message-ID: <partly-signed@bande.test>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="mix"
+
+--mix
+Content-Type: text/plain
+
+This text is not signed.
+--mix
+Content-Type: multipart/signed; boundary="sig"; micalg=pgp-sha256; protocol="application/pgp-signature"
+
+--sig
+Content-Type: text/plain; charset=utf-8
+
+Only this part is signed.
+
+--sig
+Content-Type: application/pgp-signature; name=signature.asc
+
+-----BEGIN PGP SIGNATURE-----
+
+iIcEABYKAC8WIQQVpP9moVN2h9POaAQLsteZA0duHQUCawKZSREcY2Fyb2xAYmFu
+ZGUudGVzdAAKCRALsteZA0duHX6oAP0RIeETMXcl55kH+Gi3Zz+4kmMXM0iOiMHu
+svEveFAfFAD9Fc37aYguy2nPQdXc13kKGgQdgkLL+GE159HSZa3hLwM=
+=F0LV
+-----END PGP SIGNATURE-----
+
+--sig--
+
+--mix--

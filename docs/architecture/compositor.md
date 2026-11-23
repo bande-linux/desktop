@@ -256,7 +256,9 @@ when they reach the screen is Bande's own.
 - **Colour.** Frames are shown as sent unless a display's settings in `config.kdl` name a
   `colour-profile` (Settings offers none yet): `"display"` builds a profile from the EDID's
   primaries, white point and gamma, unless the EDID says the default colour space is sRGB or its
-  primaries are within 0.02 of sRGB's; `"srgb"` and `"none"` leave frames alone; `"display-p3"`;
+  primaries are within 0.02 of sRGB's, and none when the primaries are implausible (red not the
+  furthest right, green not the highest, blue not the lowest above zero, a white point at y = 0 or
+  outside the primaries); `"srgb"` and `"none"` leave frames alone; `"display-p3"`;
   or the path of an ICC matrix-and-curve display profile. A profile that differs from sRGB
   converts frames: a shader decodes sRGB, applies the matrix to the display's primaries
   (relative, white kept, Bradford-adapted through D50) and encodes with the profile's own tone

@@ -322,7 +322,7 @@ impl Program for Player {
         };
         let queue = pane.is_some_and(Pane::has_queue);
         let file = vec![
-            item(text!("Open…"), OPEN, Some("Ctrl+O"), true).primary(),
+            item(text!("Open…"), OPEN, Some("Ctrl+O"), true),
             item(
                 text!("Add Subtitle File…"),
                 ADD_SUBTITLES,
@@ -331,7 +331,7 @@ impl Program for Player {
             ),
         ];
         let mut playback = vec![
-            item(toggle_key, TOGGLE, Some("Space"), loaded).primary(),
+            item(toggle_key, TOGGLE, Some("Space"), loaded),
             item(text!("Next"), NEXT, Some("Ctrl+Right"), queue),
             item(text!("Previous"), PREVIOUS, Some("Ctrl+Left"), queue),
             Entry::separator(),
@@ -353,8 +353,8 @@ impl Program for Player {
         };
         let editable = pane.is_some_and(Pane::can_edit_queue);
         let view = vec![
-            item(queue_key, QUEUE, Some("F9"), pane.is_some()).primary(),
-            item(text!("Full Screen"), FULL_SCREEN, Some("F11"), true).primary(),
+            item(queue_key, QUEUE, Some("F9"), pane.is_some()),
+            item(text!("Full Screen"), FULL_SCREEN, Some("F11"), true),
         ];
         playback.extend([
             Entry::separator(),

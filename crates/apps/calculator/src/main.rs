@@ -298,7 +298,6 @@ impl Calculator {
             Entry::item(&message.tr(), &format!("{MODE_ACTION}{}", mode_name(mode)))
                 .shortcut(shortcut)
                 .radio(engine.mode == mode)
-                .primary()
         };
         let scientific = engine.mode == Mode::Scientific;
         let programmer = engine.mode == Mode::Programmer;

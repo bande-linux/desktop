@@ -51,12 +51,7 @@ pub struct MenuPanel {
     scrolled: f32,
     pub(super) submenus_open_left: bool,
     pub(super) highlighted: Option<usize>,
-    search: Option<SearchLook>,
-}
-
-pub(super) enum SearchLook {
-    Hint(Paragraph),
-    Query(Paragraph),
+    search: Option<Paragraph>,
 }
 
 impl MenuPanel {
@@ -93,25 +88,20 @@ impl MenuPanel {
         let mut widest_label: f32 = 0.0;
         let mut widest_shortcut: f32 = 0.0;
         let has_submenu = menu.items.iter().any(|item| item.submenu.is_some());
-        let search = menu.search.as_ref().map(|search| {
-            if search.query.is_empty() {
-                let style = TextStyle::new(FONT_SIZE, palette.ink3);
-                SearchLook::Hint(text.paragraph(&search.hint, style, None, TextAlign::Start))
-            } else {
-                SearchLook::Query(text.paragraph(
+        let search = menu
+            .search
+            .as_ref()
+            .filter(|search| !search.query.is_empty())
+            .map(|search| {
+                text.paragraph(
                     &search.query,
                     TextStyle::new(FONT_SIZE, palette.ink),
                     None,
                     TextAlign::Start,
-                ))
-            }
-        });
+                )
+            });
         let (header, minimum_width) = match &search {
-            Some(SearchLook::Hint(hint)) => (
-                row_height + SEPARATOR_HEIGHT,
-                (TEXT_START + hint.width() + TRAILING_PADDING).max(widen(SEARCH_WIDTH)),
-            ),
-            Some(SearchLook::Query(_)) => (row_height + SEPARATOR_HEIGHT, widen(SEARCH_WIDTH)),
+            Some(_) => (row_height + SEPARATOR_HEIGHT, widen(SEARCH_WIDTH)),
             None => (0.0, widen(MINIMUM_WIDTH)),
         };
         let rows = [&menu, &alternate, &shifted].map(|menu| {
@@ -356,10 +346,8 @@ impl MenuPanel {
             },
             Item::lit_edge(outline, palette),
         ];
-        match &self.search {
-            Some(SearchLook::Query(query)) => self.paint_query(query, palette, &mut items),
-            Some(SearchLook::Hint(hint)) => self.paint_hint(hint, palette, &mut items),
-            None => {}
+        if let Some(query) = &self.search {
+            self.paint_query(query, palette, &mut items);
         }
         let rows = self.paint_rows(palette, show_highlight);
         if !self.is_scrollable() {
@@ -514,16 +502,6 @@ impl MenuPanel {
             to: Point::new(caret, y + query.height() - 1.0),
             width: 1.5,
             paint: palette.accent_text.into(),
-        });
-        self.paint_search_rule(palette, items);
-    }
-
-    fn paint_hint(&self, hint: &Paragraph, palette: &Palette, items: &mut Vec<Item>) {
-        let centre = self.search_centre();
-        magnifier(Point::new(MAGNIFIER_CENTRE, centre), palette.ink3, items);
-        items.push(Item::Text {
-            origin: Point::new(TEXT_START, (centre - hint.height() / 2.0).round()),
-            paragraph: hint.clone(),
         });
         self.paint_search_rule(palette, items);
     }

@@ -105,7 +105,7 @@ impl VulkanFrame<'_, '_> {
             Some(_) => Program::BlurTone,
             None => Program::Texture,
         })?;
-        self.push_texture(levels[0].1);
+        self.sample(levels[0].1, levels[0].1)?;
         self.draw(
             &Quad {
                 color: blur.tone.unwrap_or_default(),
@@ -240,7 +240,7 @@ impl VulkanFrame<'_, '_> {
         self.begin_rendering(to.1, bounds, vk::AttachmentLoadOp::CLEAR);
         self.bound = None;
         self.bind(program)?;
-        self.push_texture(from.1);
+        self.sample(from.1, from.1)?;
         let target = self.bounds;
         self.bounds = bounds;
         self.draw_quad(

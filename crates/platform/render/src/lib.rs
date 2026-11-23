@@ -3,6 +3,7 @@ mod frame;
 mod import;
 mod rect;
 
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::ffi::CStr;
 use std::fmt;
@@ -34,9 +35,9 @@ const SPIRV: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/compose.spv"));
 const BYTES_PER_PIXEL: usize = 4;
 const MIN_STAGING_BYTES: usize = 4 << 20;
 const GPU_HANG_NANOS: u64 = 5_000_000_000;
+const SETS_PER_POOL: u32 = 64;
 const MIN_RENDERER_LIFETIME: Duration = Duration::from_secs(10);
-const REQUIRED_EXTENSIONS: [&CStr; 3] = [
-    ash::khr::push_descriptor::NAME,
+const REQUIRED_EXTENSIONS: [&CStr; 2] = [
     ash::khr::external_memory_fd::NAME,
     ash::ext::external_memory_dma_buf::NAME,
 ];
@@ -330,6 +331,12 @@ struct Target {
     unconverted: Option<Image>,
 }
 
+#[derive(Default)]
+struct Descriptors {
+    pools: Vec<vk::DescriptorPool>,
+    sets: HashMap<(vk::ImageView, vk::ImageView), (vk::DescriptorSet, vk::DescriptorPool)>,
+}
+
 struct Staging {
     buffer: vk::Buffer,
     memory: vk::DeviceMemory,
@@ -375,7 +382,6 @@ impl fmt::Display for MemoryUse {
 pub struct VulkanRenderer {
     instance: ash::Instance,
     device: ash::Device,
-    push_descriptor: ash::khr::push_descriptor::Device,
     external_memory_fd: ash::khr::external_memory_fd::Device,
     queue: vk::Queue,
     queue_family: u32,
@@ -396,6 +402,7 @@ pub struct VulkanRenderer {
     fence: vk::Fence,
     sampler: vk::Sampler,
     set_layout: vk::DescriptorSetLayout,
+    descriptors: RefCell<Descriptors>,
     pipeline_layout: vk::PipelineLayout,
     pipelines: HashMap<(vk::Format, Program), vk::Pipeline>,
     id: u64,
@@ -769,7 +776,6 @@ impl VulkanRenderer {
             .map(|name| name.to_string_lossy().into_owned())
             .collect();
         let mut renderer = Self {
-            push_descriptor: ash::khr::push_descriptor::Device::new(&instance, &device),
             external_memory_fd: ash::khr::external_memory_fd::Device::new(&instance, &device),
             // SAFETY: the device was created with one queue in `chosen.family`, so queue 0 of that
             // family exists.
@@ -796,6 +802,7 @@ impl VulkanRenderer {
             fence: vk::Fence::null(),
             sampler: vk::Sampler::null(),
             set_layout: vk::DescriptorSetLayout::null(),
+            descriptors: RefCell::default(),
             pipeline_layout: vk::PipelineLayout::null(),
             pipelines: HashMap::new(),
             id: NEXT_RENDERER.fetch_add(1, Ordering::Relaxed),
@@ -899,13 +906,10 @@ impl VulkanRenderer {
                 .descriptor_count(1)
                 .stage_flags(vk::ShaderStageFlags::FRAGMENT),
         ];
-        // SAFETY: `bindings` and `samplers` outlive the call, and `VK_KHR_push_descriptor`, which
-        // `PUSH_DESCRIPTOR_KHR` needs, is a required extension of every chosen device.
+        // SAFETY: `bindings` and `samplers` outlive the call.
         self.set_layout = unsafe {
             device.create_descriptor_set_layout(
-                &vk::DescriptorSetLayoutCreateInfo::default()
-                    .flags(vk::DescriptorSetLayoutCreateFlags::PUSH_DESCRIPTOR_KHR)
-                    .bindings(&bindings),
+                &vk::DescriptorSetLayoutCreateInfo::default().bindings(&bindings),
                 None,
             )
         }?;
@@ -1769,6 +1773,7 @@ impl VulkanRenderer {
     }
 
     fn destroy_image(&self, image: &Image) {
+        self.forget_sets_of(image.view);
         // SAFETY: callers pass an image they no longer reach from the renderer's tables, after the
         // synchronous `submit_and_wait` of every submission that used it; Vulkan ignores the null
         // handles of a partly built image.
@@ -2217,6 +2222,108 @@ impl VulkanRenderer {
         }
     }
 
+    pub(crate) fn descriptor_set(
+        &mut self,
+        view: vk::ImageView,
+        second: vk::ImageView,
+    ) -> Result<vk::DescriptorSet, RenderError> {
+        if let Some(&(set, _)) = self.descriptors.get_mut().sets.get(&(view, second)) {
+            return Ok(set);
+        }
+        let set = match self.allocate_set() {
+            Ok(allocated) => allocated,
+            Err(vk::Result::ERROR_OUT_OF_POOL_MEMORY | vk::Result::ERROR_FRAGMENTED_POOL) => {
+                self.add_descriptor_pool()?;
+                self.allocate_set()?
+            }
+            Err(error) => return Err(error.into()),
+        };
+        let infos = [view, second].map(|view| {
+            vk::DescriptorImageInfo::default()
+                .image_view(view)
+                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+        });
+        let writes = [(0, &infos[0]), (2, &infos[1])].map(|(binding, info)| {
+            vk::WriteDescriptorSet::default()
+                .dst_set(set.0)
+                .dst_binding(binding)
+                .descriptor_type(vk::DescriptorType::SAMPLED_IMAGE)
+                .image_info(slice::from_ref(info))
+        });
+        // SAFETY: `set` was just allocated and no command buffer uses it yet; both views are live
+        // views of this device, and the set is freed with whichever of them is destroyed first.
+        unsafe { self.device.update_descriptor_sets(&writes, &[]) };
+        self.descriptors.get_mut().sets.insert((view, second), set);
+        Ok(set.0)
+    }
+
+    fn allocate_set(&mut self) -> Result<(vk::DescriptorSet, vk::DescriptorPool), vk::Result> {
+        let Some(&pool) = self.descriptors.get_mut().pools.last() else {
+            return Err(vk::Result::ERROR_OUT_OF_POOL_MEMORY);
+        };
+        // SAFETY: `pool` and `set_layout` belong to this device, and the pool is used only from
+        // the renderer's thread.
+        let sets = unsafe {
+            self.device.allocate_descriptor_sets(
+                &vk::DescriptorSetAllocateInfo::default()
+                    .descriptor_pool(pool)
+                    .set_layouts(slice::from_ref(&self.set_layout)),
+            )
+        }?;
+        let set = sets
+            .into_iter()
+            .next()
+            .ok_or(vk::Result::ERROR_OUT_OF_POOL_MEMORY)?;
+        Ok((set, pool))
+    }
+
+    fn add_descriptor_pool(&mut self) -> Result<(), RenderError> {
+        let sizes = [
+            vk::DescriptorPoolSize::default()
+                .ty(vk::DescriptorType::SAMPLED_IMAGE)
+                .descriptor_count(2 * SETS_PER_POOL),
+            vk::DescriptorPoolSize::default()
+                .ty(vk::DescriptorType::SAMPLER)
+                .descriptor_count(SETS_PER_POOL),
+        ];
+        // SAFETY: the create info outlives the call; the pool is destroyed in `Drop`, after the
+        // device is idle.
+        let pool = unsafe {
+            self.device.create_descriptor_pool(
+                &vk::DescriptorPoolCreateInfo::default()
+                    .flags(vk::DescriptorPoolCreateFlags::FREE_DESCRIPTOR_SET)
+                    .max_sets(SETS_PER_POOL)
+                    .pool_sizes(&sizes),
+                None,
+            )
+        }?;
+        self.descriptors.get_mut().pools.push(pool);
+        Ok(())
+    }
+
+    fn forget_sets_of(&self, view: vk::ImageView) {
+        let mut descriptors = self.descriptors.borrow_mut();
+        let gone: Vec<_> = descriptors
+            .sets
+            .keys()
+            .filter(|(first, second)| *first == view || *second == view)
+            .copied()
+            .collect();
+        for key in gone {
+            if let Some((set, pool)) = descriptors.sets.remove(&key) {
+                // SAFETY: the set's image is being destroyed after every submission that read it
+                // finished, so no pending command buffer uses the set; it came from `pool`, which
+                // was created with `FREE_DESCRIPTOR_SET`.
+                if let Err(error) = unsafe {
+                    self.device
+                        .free_descriptor_sets(pool, slice::from_ref(&set))
+                } {
+                    tracing::warn!("cannot free a descriptor set: {error}");
+                }
+            }
+        }
+    }
+
     fn submit_and_wait(&self) -> Result<(), RenderError> {
         let submit =
             vk::SubmitInfo::default().command_buffers(slice::from_ref(&self.command_buffer));
@@ -2644,6 +2751,9 @@ impl Drop for VulkanRenderer {
             }
             self.device
                 .destroy_pipeline_layout(self.pipeline_layout, None);
+            for pool in std::mem::take(&mut self.descriptors.get_mut().pools) {
+                self.device.destroy_descriptor_pool(pool, None);
+            }
             self.device
                 .destroy_descriptor_set_layout(self.set_layout, None);
             self.device.destroy_sampler(self.sampler, None);

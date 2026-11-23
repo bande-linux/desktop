@@ -20,10 +20,12 @@ when they reach the screen is Bande's own.
 
 ## Implemented
 
-- **Renderer.** `crates/platform/render` is one Vulkan 1.2 or later device with push descriptors,
-  dynamic rendering and synchronization2 (from `VK_KHR_dynamic_rendering` and
-  `VK_KHR_synchronization2` below 1.3, so hasvk's Haswell and Broadwell GPUs qualify); every device
-  left out is logged with the reason. It implements Smithay's `Renderer`, `Frame`, `ImportMemWl`,
+- **Renderer.** `crates/platform/render` is one Vulkan 1.2 or later device with dynamic rendering
+  and synchronization2 (from `VK_KHR_dynamic_rendering` and `VK_KHR_synchronization2` below 1.3, so
+  hasvk's Haswell and Broadwell GPUs qualify); every device left out is logged with the reason. Each
+  sampled image view (with its chroma plane or colour table) gets one descriptor set, made at its
+  first draw and freed with the image; push descriptors updated between the draws of one rendering
+  hung Intel Gen9 GPUs (anv) while the overview opened. It implements Smithay's `Renderer`, `Frame`, `ImportMemWl`,
   `ImportDmaWl`, `Offscreen` and `Bind<Dmabuf>`. Both outputs compose the same Wayland surface
   elements through Smithay: the headless output with `OutputDamageTracker` into a persistent
   offscreen image (read back only for tests), the DRM output with `DrmCompositor`. Each surface

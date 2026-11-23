@@ -735,3 +735,45 @@ fn a_closing_window_keeps_the_buffer_it_still_shows_until_it_is_gone() {
         "the closed window never let go of its buffer"
     );
 }
+
+#[test]
+fn the_overview_opens_on_the_gpu_over_windows_updated_in_pieces() {
+    if hardware().is_none() {
+        println!("skipped: no hardware Vulkan device with a DRM render node");
+        return;
+    }
+    let mut server = headless(2928, 1818);
+    server.set_output_scale(1.5);
+    server.set_reduce_motion(false);
+    let mut frames = Frames::start();
+    let mut windows = Vec::new();
+    for (index, (width, height)) in [(1002, 741), (1602, 963)].into_iter().enumerate() {
+        let bytes = BLUE.repeat((width * height) as usize);
+        let image = ShmImage {
+            width,
+            height,
+            stride: width * 4,
+            format: Format::Argb8888,
+            bytes: &bytes,
+        };
+        let mut client = TestClient::connect(&mut server);
+        client.use_seat(&mut server);
+        client.show_window(&mut server, &image);
+        client.set_app_id(&mut server, 0, &format!("org.bande.Piece{index}"));
+        roundtrip(&mut server, &mut [&mut client]);
+        idle(&mut frames, &mut server, Duration::from_millis(100));
+        for (x, y, w, h) in [(870, 27, 105, 42), (825, 27, 42, 42), (27, 18, 113, 60)] {
+            client.commit_buffer(0, &image, (x, y, w, h));
+            idle(&mut frames, &mut server, Duration::from_millis(30));
+        }
+        windows.push(client);
+    }
+    idle(&mut frames, &mut server, Duration::from_millis(500));
+    for _ in 0..2 {
+        chord(&mut server, &[KEY_LEFTMETA, KEY_W]);
+        idle(&mut frames, &mut server, Duration::from_millis(800));
+        chord(&mut server, &[KEY_LEFTMETA, KEY_W]);
+        idle(&mut frames, &mut server, Duration::from_millis(800));
+    }
+    assert_eq!(bande_render::vulkan_errors(), 0, "Vulkan reported errors");
+}

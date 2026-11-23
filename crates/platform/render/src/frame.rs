@@ -413,50 +413,23 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
         }
     }
 
-    fn push_chroma(&mut self, view: vk::ImageView) {
-        let image_info = vk::DescriptorImageInfo::default()
-            .image_view(view)
-            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL);
-        let write = vk::WriteDescriptorSet::default()
-            .dst_binding(2)
-            .descriptor_type(vk::DescriptorType::SAMPLED_IMAGE)
-            .image_info(slice::from_ref(&image_info));
+    fn sample(&mut self, view: vk::ImageView, second: vk::ImageView) -> Result<(), RenderError> {
+        let set = self.renderer.descriptor_set(view, second)?;
         // SAFETY: the frame holds the renderer mutably from `begin_commands` until `finish_frame`
         // ends the buffer, so `command_buffer` is recording and only this frame records into it;
-        // `view` belongs to a texture or target that `collect_garbage` cannot destroy while the
-        // frame holds the renderer, and `submit_and_wait` finishes before the frame returns it.
+        // `set` was written with `view` and `second`, whose images `collect_garbage` cannot
+        // destroy while the frame holds the renderer, and a set is freed only with its images.
         unsafe {
-            self.renderer.push_descriptor.cmd_push_descriptor_set(
+            self.renderer.device.cmd_bind_descriptor_sets(
                 self.renderer.command_buffer,
                 vk::PipelineBindPoint::GRAPHICS,
                 self.renderer.pipeline_layout,
                 0,
-                slice::from_ref(&write),
+                slice::from_ref(&set),
+                &[],
             );
         }
-    }
-
-    fn push_texture(&mut self, view: vk::ImageView) {
-        let image_info = vk::DescriptorImageInfo::default()
-            .image_view(view)
-            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL);
-        let write = vk::WriteDescriptorSet::default()
-            .dst_binding(0)
-            .descriptor_type(vk::DescriptorType::SAMPLED_IMAGE)
-            .image_info(slice::from_ref(&image_info));
-        // SAFETY: the frame holds the renderer mutably from `begin_commands` until `finish_frame`
-        // ends the buffer, so `command_buffer` is recording and only this frame records into it;
-        // `view` belongs to a texture or target that `collect_garbage` cannot destroy while the
-        // frame holds the renderer, and `submit_and_wait` finishes before the frame returns it.
-        unsafe {
-            self.renderer.push_descriptor.cmd_push_descriptor_set(
-                self.renderer.command_buffer,
-                vk::PipelineBindPoint::GRAPHICS,
-                self.renderer.pipeline_layout,
-                0,
-                slice::from_ref(&write),
-            );
-        }
+        Ok(())
     }
 
     fn draw_quad(&mut self, quad: &Quad, rects: &[Rect]) {
@@ -730,7 +703,6 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
         drawn: &[Rect],
     ) -> Result<(), RenderError> {
         self.bind(Program::DisplayColour)?;
-        self.push_texture(self.target_view);
         let table = self
             .renderer
             .encode_table
@@ -738,7 +710,7 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
             .filter(|_| colour.encode.is_some())
             .and_then(|(_, texture)| self.renderer.textures.get(&texture.id))
             .map(|table| table.image.view);
-        self.push_chroma(table.unwrap_or(self.target_view));
+        self.sample(self.target_view, table.unwrap_or(self.target_view))?;
         let matrix = colour.matrix;
         let row = |values: [f32; 3]| RoundedRect {
             x: values[0],
@@ -1131,11 +1103,13 @@ impl Frame for VulkanFrame<'_, '_> {
             (true, None) => return Ok(()),
             (true, Some(chroma)) => {
                 self.bind(Program::Video)?;
-                self.push_chroma(chroma);
+                self.sample(view, chroma)?;
             }
-            (false, _) => self.bind(Program::Texture)?,
+            (false, _) => {
+                self.bind(Program::Texture)?;
+                self.sample(view, view)?;
+            }
         }
-        self.push_texture(view);
         self.draw(
             &Quad {
                 destination,

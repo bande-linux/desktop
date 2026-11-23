@@ -133,7 +133,7 @@ fn display_value(
             output
                 .colour_profile
                 .clone()
-                .unwrap_or_else(|| bande_colour::DISPLAY.to_owned()),
+                .unwrap_or_else(|| bande_colour::UNMANAGED.to_owned()),
         ),
         SettingId::DisplayResolution => {
             let (width, height) = output.resolution.or_else(|| {
@@ -556,10 +556,10 @@ impl SettingsView {
             }
             Kind::ColourProfiles => {
                 let mut choices: Vec<(String, String)> = [
+                    (tr!("None"), bande_colour::UNMANAGED),
                     (tr!("This display"), bande_colour::DISPLAY),
                     (tr!("sRGB"), bande_colour::SRGB),
                     (tr!("Display P3"), bande_colour::DISPLAY_P3),
-                    (tr!("None (show colors as sent)"), bande_colour::UNMANAGED),
                 ]
                 .into_iter()
                 .map(|(label, value)| (label, value.to_owned()))

@@ -254,10 +254,9 @@ when they reach the screen is Bande's own.
   display can't show. When a trial can't start, Settings closes the dialog, reverts and says why.
 
 - **Colour.** Each display has a colour profile (`colour-profile` in its settings, Settings ▸
-  Displays ▸ Colour profile): "This display" (the default) builds a profile from
-  the EDID's primaries, white point and gamma, unless the EDID says the default colour space is
-  sRGB or its primaries are within 0.02 of sRGB's; "sRGB" and "None (show colours as sent)" leave
-  frames alone; "Display P3"; and any ICC matrix-and-curve display profile in
+  Displays ▸ Colour profile): "None" (the default) and "sRGB" leave frames alone; "This display"
+  builds a profile from the EDID's primaries, white point and gamma, unless the EDID says the
+  default colour space is sRGB or its primaries are within 0.02 of sRGB's; "Display P3"; and any ICC matrix-and-curve display profile in
   `$XDG_DATA_HOME/icc` or `color/icc` under the data directories ("Add Profile…" copies one there
   after checking it; LUT-based or non-display profiles are refused with the reason). A profile
   that differs from sRGB converts frames: a shader decodes sRGB, applies the matrix to the

@@ -2677,7 +2677,7 @@ impl SettingsView {
                     self.commands.push(Command::AddColourProfile(identity));
                     return;
                 }
-                display.colour_profile = (profile != bande_colour::DISPLAY).then_some(profile);
+                display.colour_profile = (profile != bande_colour::UNMANAGED).then_some(profile);
                 trial = self.keep.is_some();
             }
             _ => return,

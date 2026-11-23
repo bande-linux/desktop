@@ -1188,9 +1188,6 @@ msgstr "sRGB"
 msgid "Display P3"
 msgstr "Display P3"
 
-msgid "None (show colors as sent)"
-msgstr "Ingen (visa färger som de skickas)"
-
 msgid "Add Profile…"
 msgstr "Lägg till profil…"
 

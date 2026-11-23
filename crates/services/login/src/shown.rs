@@ -2,12 +2,9 @@ use std::io;
 use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
 use std::path::Path;
 
+use bande_xdg::DESKTOP_SHOWN;
 use rustix::fs::inotify::{self, CreateFlags, WatchFlags};
 use rustix::fs::{AtFlags, Mode, OFlags};
-
-/// The file a session's compositor creates in its runtime directory once its first frame is on
-/// screen.
-pub const DESKTOP_SHOWN: &str = "bande-desktop-shown";
 
 /// Waits for a session's compositor to show its first frame.
 pub struct ShownWatch {

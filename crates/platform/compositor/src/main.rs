@@ -7,12 +7,12 @@ use bande_compositor::{
     Awaited, CLIPBOARD_DAEMON, Compositor, CursorTheme, DisplaysHandle, DrmBackend, DrmNotifiers,
     FirstMode, FrameClock, FrameOutput, FrameRecovery, FrameScheduler, GREETER, InputSettings,
     REFRESH, REVIEW, RecoveryStep, Renderer, SCREENSHOT, SESSION_CLIENT_RESTART_THROTTLE, SHELL,
-    SessionRequest, SessionRole, SessionUpkeep, Sleep, export_session_environment, follow_alerts,
-    follow_appearance, follow_input_settings, follow_lid, follow_login_settings, follow_session,
-    follow_shutdown, follow_sleep, handle_power_key, notify_service_manager, raise_priority,
-    render_material, serve_app_states, serve_displays, serve_global_shortcuts,
-    serve_keyboard_monitor, take_display_from_boot_screen, user_config,
-    watchdog_keepalive_interval,
+    SessionRequest, SessionRole, SessionUpkeep, Sleep, boot_screen_shown,
+    export_session_environment, follow_alerts, follow_appearance, follow_input_settings,
+    follow_lid, follow_login_settings, follow_session, follow_shutdown, follow_sleep,
+    handle_power_key, notify_service_manager, raise_priority, render_material, serve_app_states,
+    serve_displays, serve_global_shortcuts, serve_keyboard_monitor, take_display_from_boot_screen,
+    user_config, watchdog_keepalive_interval,
 };
 use bande_config::{BUS_NAME, CARRIED_ACCESSIBILITY, OBJECT_PATH, login_accessibility_file};
 use bande_datetime::ClockChanges;
@@ -48,7 +48,6 @@ const GREETER_HANG_LIMIT_SECONDS: u32 = 20;
 const GREETER_HANG_CHECK: Duration = Duration::from_secs(10);
 const LOGIN_DISPLAY_OFF: Duration = Duration::from_secs(10 * 60);
 const LOGIN_WINDOW_SHOWN: &str = "/run/bande-greeter/shown";
-const DESKTOP_SHOWN: &str = "bande-desktop-shown";
 const MINIMUM_UPTIME_TO_RESTART: Duration = Duration::from_secs(300);
 
 enum Backend {
@@ -954,7 +953,7 @@ where
             let shown = app.output.frames_on_screen();
             app.compositor.fade_in_over(shown);
             app.first_frame_marker =
-                bande_xdg::runtime_dir().map(|runtime| runtime.join(DESKTOP_SHOWN));
+                bande_xdg::runtime_dir().map(|runtime| runtime.join(bande_xdg::DESKTOP_SHOWN));
             (None, start_user_session(event_loop, &mut app)?)
         }
         Session::Greeter => {
@@ -989,7 +988,10 @@ where
                 app.started,
                 now() + SHELL_READY_TIMEOUT,
             );
-            let shown = app.output.frames_on_screen();
+            let shown = match boot_screen_shown() {
+                true => app.output.frames_on_screen(),
+                false => Vec::new(),
+            };
             app.compositor.fade_in_over(shown);
             app.first_frame_marker = Some(PathBuf::from(LOGIN_WINDOW_SHOWN));
             (Some(Greeter::start(&mut app.compositor)), None)

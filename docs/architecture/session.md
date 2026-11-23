@@ -583,16 +583,26 @@ part of login small and the UI unprivileged:
    session it starts a worker, itself again (`/proc/self/exe --worker`) with a socket for its
    standard input, so each session's PAM transaction lives in a process of its own that
    `pam_systemd` makes the session's leader. A worker authenticates, checks the account (changing
-   an expired password with `pam_chauthtok`), establishes credentials, opens the session, runs
-   the session's processes as the person (`setsid`, the virtual terminal as controlling
-   terminal, their groups, `PR_SET_PDEATHSIG`), and closes the session when they end. People
+   an expired password with `pam_chauthtok`), refuses uid 0 and a login shell `/etc/shells` does
+   not list (`nologin`, `false`), takes the person's groups (`getgrouplist`) before
+   `pam_setcred` adds `pam_group`'s, establishes credentials, opens the session, reinitialises
+   the credentials, runs the session's processes as the person (`setsid`, the virtual terminal
+   as controlling terminal, `PR_SET_PDEATHSIG`, every descriptor past standard error closed at
+   `exec`), and closes the session and deletes the credentials when they end, also when signing
+   in is called off after the password was accepted. People
    sign in through `/etc/pam.d/bande-greeter`, which follows Debian's `gdm-password`:
-   `pam_nologin`, no root login, `common-auth`, `common-account`, `pam_loginuid`, `pam_keyinit`,
+   `pam_nologin`, no uid 0, `pam_shells`, `common-auth`, `common-account`, `pam_loginuid`, `pam_keyinit`,
    `pam_limits`, `pam_env` (with `/etc/default/locale`), `common-session` (`pam_systemd`, and the
    keyring module through `pam-auth-update`) and `common-password`. The worker sets
    `XDG_SEAT=seat0`, `XDG_VTNR`, `XDG_SESSION_CLASS=user`, `XDG_SESSION_TYPE=wayland`,
    `XDG_SESSION_DESKTOP=bande` and `XDG_CURRENT_DESKTOP=X-Bande` before `pam_open_session`, and
-   runs `/usr/bin/bande-session` through `/bin/sh` after `/etc/profile` and `~/.profile`.
+   runs `/usr/bin/bande-session` through the person's login shell (`-bash -c 'exec …'`, so it
+   reads `/etc/profile` and `~/.profile` or its own files). The session's output goes to the
+   journal as the person's (`bande-session`, `_UID` theirs, in their session's scope), from a
+   stream the child opens after taking their uid. `bande-greeter.service` stops with
+   `KillMode=mixed`: `SIGTERM` reaches only the daemon, which lets go of every worker, and each
+   worker (which handles `SIGTERM` and `SIGHUP` itself) ends its session within 10 s, closes it
+   in PAM, deletes its credentials and gives its virtual terminal back to the console.
 2. **The greeter**: `bande-greeter` runs as `_bande-greeter` (a system account from
    `debian/bande-greeter.sysusers`, home `/var/lib/bande-greeter/home`) in a session of class
    `greeter` (`/etc/pam.d/bande-greeter-session`, which admits only that account), inside
@@ -604,8 +614,9 @@ part of login small and the UI unprivileged:
    wakes, so a dock that changes them is followed.
 3. **The protocol**: length-prefixed JSON, one response for each request:
    `create_session`, `post_auth_message_response`, `start_session` and `cancel_session`
-   (`bande_login::protocol`). Messages either way are refused above 64 KiB, a message the login
-   window starts must arrive within a second, answers are zeroized, and `start_session` passes on
+   (`bande_login::protocol`). Messages either way are refused above 64 KiB, each message to or
+   from the login window must pass whole within a second (`Deadline`, on a non-blocking socket,
+   so a login window that trickles bytes cannot hold the daemon), answers are zeroized, and `start_session` passes on
    only `BANDE_LOGIN_…` variables, so the login window cannot choose the session's class, seat or
    program. Which worker the login window talks to, and what happens when either goes away, is
    decided by `bande_login::manager`, which does no I/O.
@@ -687,20 +698,26 @@ desktop has drawn its first frame, then the desktop fades in over it:
    with inotify), `bande-login` answers `start_session` and ends the login window's session.
 
 When the session ends before its first frame (`bande-session` failing, the compositor
-crashing), the worker brings VT 1 back and `bande-login` answers `start_session` with an error;
+crashing), or has not shown it within 20 s (`~/.profile` blocking, a hung compositor; the
+worker then ends it), the worker brings VT 1 back and `bande-login`
+answers `start_session` with an error and accepts a new `create_session`;
 the login window, still running, comes back with its content and the reason `bande-session` left
 for it (above). Logging out ends the session: logind gives the terminal back to the console,
 which shows only `deep`, and `bande-login` starts the login window again on VT 1, set to
-graphics mode before it comes to the front, which fades in over that colour. A compositor
+graphics mode before it comes to the front, which fades in from that colour. A compositor
 leaving the screen closes its framebuffers with `DRM_IOCTL_MODE_CLOSEFB`, which leaves them on
-their planes until something else is shown. Unlocking is one compositor: the last lock frame
+their planes until something else is shown, so the login window imports what is on screen only
+while Plymouth runs and otherwise starts from `deep`: it never reads a person's last frame. One
+person is signed in at a time: the login window comes back only once the session has ended. Unlocking is one compositor: the last lock frame
 fades out over the desktop, so input reaches the desktop at once. A session takes the first free
 virtual terminal, usually VT 2, and `bande-login` keeps VT 1 open, so logind starts no `getty`
 there (which would conflict with `bande-greeter.service`); `Ctrl+Alt+F3` and above reach a text
 console at any time. When the login window ends three times within 10 s of starting while no
 session runs, `bande-login` exits with a failure; after five failed starts in 30 s
-`bande-console-fallback.service` resets VT 1's console, quits Plymouth, starts `getty@tty1` and
-brings the console forward. Stopping `bande-greeter.service` ends every session it started.
+`bande-console-fallback.service` quits Plymouth, gives VT 1 back to the console
+(`bande-login --console`: text mode and automatic switching, whoever left it in graphics mode,
+then a reset), starts `getty@tty1` and brings the console forward. Stopping
+`bande-greeter.service` ends every session it started.
 
 The boot screen (`bande-plymouth-theme`, which `bande-desktop` recommends) shows when GRUB starts
 the kernel with `splash` and `loglevel=3`, which the package's
@@ -762,8 +779,7 @@ every display manager's maintainer scripts keep the two in step with the debconf
   non-interactive install keeps it.
 - `dpkg-reconfigure bande-greeter` (or any display manager's package) switches.
 - Removing `bande-greeter` while it is chosen asks at critical priority for another installed
-  display manager, preselecting one other than greetd (greetd's own greeter only if nothing
-  else is installed), and links it; with none left, the link goes and the computer starts to
+  display manager and links it; with none left, the link goes and the computer starts to
   the text console. Only these scripts touch the link: `deb-systemd-helper`, whose purge
   removes an alias whatever it points to, never manages `bande-greeter.service`.
 

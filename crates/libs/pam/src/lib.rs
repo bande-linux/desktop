@@ -16,6 +16,7 @@ const ITEM_TTY: c_int = 3;
 
 pub const ESTABLISH_CRED: c_int = 0x0002;
 pub const DELETE_CRED: c_int = 0x0004;
+pub const REINITIALIZE_CRED: c_int = 0x0008;
 pub const REFRESH_CRED: c_int = 0x0010;
 const CHANGE_EXPIRED_AUTHTOK: c_int = 0x0020;
 

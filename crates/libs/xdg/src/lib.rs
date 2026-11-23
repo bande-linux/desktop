@@ -38,8 +38,8 @@ pub use launch::{
 };
 pub use mime::{DIRECTORY, MimeDatabase, OCTET_STREAM, TEXT_PLAIN, escape_xml, unescape_xml};
 pub use mimeapps::{
-    MimeApps, cache_home, config_dirs, config_home, data_home, mimeapps_paths, runtime_dir,
-    set_default_app, state_home,
+    DESKTOP_SHOWN, MimeApps, cache_home, config_dirs, config_home, data_home, mimeapps_paths,
+    runtime_dir, set_default_app, state_home,
 };
 pub use reopen::{
     crashed_apps_file, forget_saved_windows, global_shortcuts_file, listed_apps,

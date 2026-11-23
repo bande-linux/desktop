@@ -1,15 +1,18 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
+use std::io::Write;
 use std::os::unix::net::UnixStream;
-use std::time::Duration;
+use std::path::Path;
+use std::time::{Duration, Instant};
 
 use bande_login::manager::{Action, GREETER_USER, Manager};
 use bande_login::protocol::{
-    AuthMessageType, Class, ErrorType, FromWorker, Request, Response, ToWorker, read_message,
-    write_message,
+    AuthMessageType, Class, Deadline, ErrorType, FromWorker, Request, Response, ToWorker,
+    read_message, write_message,
 };
-use bande_login::{DESKTOP_SHOWN, Relay, ShownWatch};
+use bande_login::{Relay, ShownWatch, login_shell, refusal};
 use bande_pam::Conversation;
+use bande_xdg::DESKTOP_SHOWN;
 use zeroize::Zeroizing;
 
 const GREETER: u64 = 1;
@@ -148,6 +151,127 @@ fn the_login_window_stays_until_the_desktop_is_shown_and_returns_after_logging_o
         manager.worker_ended(4, at(3)),
         vec![Action::Exit { success: false }],
         "a login window that keeps failing hands over to the console fallback"
+    );
+}
+
+#[test]
+fn letting_go_of_a_signed_in_person_deletes_their_credentials() {
+    let mut manager = Manager::default();
+    signed_in(&mut manager);
+    assert_eq!(
+        manager.request(Request::CancelSession),
+        vec![Action::Stop(ADA), Action::Reply(Response::Success)],
+        "a session that is starting is ended in order"
+    );
+
+    let mut manager = Manager::default();
+    manager.start(at(0));
+    manager.request(Request::CreateSession {
+        username: "ada".to_owned(),
+    });
+    manager.worker_said(ADA, FromWorker::Authenticated);
+    assert_eq!(
+        manager.request(Request::CancelSession),
+        vec![Action::Stop(ADA), Action::Reply(Response::Success)],
+        "a worker that has established credentials is let go, so it deletes them, not killed"
+    );
+
+    let mut manager = Manager::default();
+    manager.start(at(0));
+    manager.request(Request::CreateSession {
+        username: "ada".to_owned(),
+    });
+    manager.worker_said(ADA, FromWorker::Authenticated);
+    assert_eq!(
+        manager.disconnected(),
+        vec![Action::Stop(ADA)],
+        "a login window that goes away after signing in lets the worker clean up too"
+    );
+    assert_eq!(
+        manager.terminate(),
+        vec![Action::Stop(GREETER)],
+        "stopping the login manager ends the login window in order"
+    );
+}
+
+#[test]
+fn a_desktop_that_never_appears_gives_the_screen_back_and_allows_signing_in_again() {
+    let mut manager = Manager::default();
+    signed_in(&mut manager);
+    let gave_up = FromWorker::Failed {
+        error_type: ErrorType::Error,
+        description: "the desktop did not appear within 20 s".to_owned(),
+    };
+    assert_eq!(
+        manager.worker_said(ADA, gave_up),
+        vec![
+            Action::Reply(Response::error(
+                ErrorType::Error,
+                "the desktop did not appear within 20 s"
+            )),
+            Action::ShowGreeter,
+        ]
+    );
+    assert_eq!(
+        manager.request(Request::CreateSession {
+            username: "ada".to_owned(),
+        }),
+        vec![Action::Spawn {
+            worker: 3,
+            class: Class::User,
+            username: "ada".to_owned()
+        }],
+        "the login window accepts a new attempt while the old session is still ending"
+    );
+}
+
+#[test]
+fn root_and_accounts_without_a_login_shell_get_no_desktop() {
+    let shells = "# /etc/shells: valid login shells\n/bin/sh\n/usr/bin/bash\n/usr/bin/fish\n";
+    let bash = Path::new("/usr/bin/bash");
+    assert_eq!(refusal(1000, bash, Some(shells)), None);
+    assert!(
+        refusal(0, bash, Some(shells)).is_some(),
+        "uid 0 under any name"
+    );
+    for shell in ["/usr/sbin/nologin", "/bin/false", "/usr/bin/bash-evil"] {
+        assert!(
+            refusal(1000, Path::new(shell), Some(shells)).is_some(),
+            "{shell}"
+        );
+    }
+    assert_eq!(login_shell(Path::new("")), Path::new("/bin/sh"));
+    assert_eq!(refusal(1000, Path::new(""), Some(shells)), None);
+    assert_eq!(refusal(1000, Path::new("/bin/sh"), None), None);
+    assert!(refusal(1000, bash, None).is_some());
+}
+
+#[test]
+fn a_login_window_that_sends_slowly_cannot_hold_bande_login() {
+    let (daemon, greeter) = UnixStream::pair().unwrap();
+    daemon.set_nonblocking(true).unwrap();
+    let trickle = std::thread::spawn(move || {
+        let mut greeter = greeter;
+        for byte in 0u32.to_ne_bytes() {
+            greeter.write_all(&[byte]).unwrap();
+            std::thread::sleep(Duration::from_millis(150));
+        }
+    });
+    let started = Instant::now();
+    let read = read_message::<Request>(&mut Deadline::within(&daemon, Duration::from_millis(300)));
+    assert_eq!(read.unwrap_err().kind(), std::io::ErrorKind::TimedOut);
+    assert!(
+        started.elapsed() < Duration::from_secs(2),
+        "the deadline covers the whole message, not each read"
+    );
+    trickle.join().unwrap();
+    let (daemon, greeter) = UnixStream::pair().unwrap();
+    daemon.set_nonblocking(true).unwrap();
+    write_message(&mut &greeter, &Request::CancelSession).unwrap();
+    assert_eq!(
+        read_message::<Request>(&mut Deadline::within(&daemon, Duration::from_secs(5))).unwrap(),
+        Request::CancelSession,
+        "a message that arrives in time is read whole"
     );
 }
 

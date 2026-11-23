@@ -15,9 +15,9 @@ if { [ "$1" = remove ] || [ "$1" = deconfigure ]; } && [ -e /usr/share/debconf/c
 	if db_metaget $question owners; then
 		owners=$RET
 		db_subst $question choices "$owners"
-		if [ "$(chosen_daemon)" = /usr/bin/bande-greeter ]; then
-			preferred=$(echo "$owners" | tr -d ' ' | tr ',' '\n' | grep -vx greetd | head -n 1)
-			db_set $question "${preferred:-greetd}"
+		preferred=$(echo "$owners" | tr -d ' ' | tr ',' '\n' | grep -v '^$' | head -n 1)
+		if [ "$(chosen_daemon)" = /usr/bin/bande-greeter ] && [ -n "$preferred" ]; then
+			db_set $question "$preferred"
 			db_fset $question seen false
 			db_input critical $question || true
 			db_go || true

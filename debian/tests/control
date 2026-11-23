@@ -22,6 +22,10 @@ Tests: display-manager
 Depends: bande-desktop, lightdm, bsdutils, debconf
 Restrictions: needs-root, breaks-testbed, allow-stderr
 
+Tests: greetd-upgrade
+Depends: bande-greeter, greetd, apt, debconf, passwd, systemd
+Restrictions: needs-root, breaks-testbed, allow-stderr
+
 Tests: coexistence
 Depends: gnome-core, gnome-keyring, libpam-gnome-keyring, libsecret-tools, dbus-daemon, dbus-bin,
  python3-dbusmock, apt

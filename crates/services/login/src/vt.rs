@@ -206,6 +206,25 @@ impl Terminal {
         switch_to(self.number)
     }
 
+    fn restore(&self) -> io::Result<()> {
+        self.ioctl(KDSETMODE, KD_TEXT)?;
+        self.set_mode(&VtMode {
+            mode: VT_AUTO,
+            waitv: 0,
+            relsig: 0,
+            acqsig: 0,
+            frsig: 0,
+        })
+    }
+
+    /// Gives the terminal back to the kernel's console whoever left it in graphics mode, resets
+    /// it and brings it to the front, so a login prompt there can be seen.
+    pub fn give_to_console(&self) -> io::Result<()> {
+        self.restore()?;
+        (&self.file).write_all(b"\x1bc")?;
+        switch_to(self.number)
+    }
+
     /// Hands the screen to `other` if this terminal still has it.
     pub fn leave_to(&self, other: u32) -> io::Result<()> {
         match active()? == self.number {
@@ -220,16 +239,7 @@ impl Drop for Terminal {
         if !self.held {
             return;
         }
-        let restored = self.ioctl(KDSETMODE, KD_TEXT).and_then(|()| {
-            self.set_mode(&VtMode {
-                mode: VT_AUTO,
-                waitv: 0,
-                relsig: 0,
-                acqsig: 0,
-                frsig: 0,
-            })
-        });
-        if let Err(error) = restored {
+        if let Err(error) = self.restore() {
             tracing::warn!(
                 "cannot give tty{} back to the console: {error}",
                 self.number

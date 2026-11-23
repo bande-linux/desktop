@@ -34,6 +34,10 @@ pub fn state_home() -> Option<PathBuf> {
     base_dir("XDG_STATE_HOME", ".local/state")
 }
 
+/// The file a session's compositor creates in its runtime directory once its first frame is on
+/// screen.
+pub const DESKTOP_SHOWN: &str = "bande-desktop-shown";
+
 pub fn runtime_dir() -> Option<PathBuf> {
     env::var_os("XDG_RUNTIME_DIR")
         .map(PathBuf::from)

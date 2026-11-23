@@ -23,9 +23,10 @@ pub enum Action {
         username: String,
     },
     Tell(WorkerId, ToWorker),
-    /// Lets go of a worker, which ends the session it opened.
+    /// Lets go of a worker, which deletes the credentials it established and ends the session it
+    /// opened.
     Stop(WorkerId),
-    /// Ends a worker that has opened no session, in the middle of its conversation.
+    /// Ends a worker that has established nothing yet, in the middle of its conversation.
     Kill(WorkerId),
     /// Answers the login window's last request.
     Reply(Response),
@@ -137,6 +138,14 @@ impl Manager {
         }
     }
 
+    fn abandon(&mut self, login: Login) -> Action {
+        self.abandoned.push(login.worker);
+        match login.phase {
+            Phase::Authenticating => Action::Kill(login.worker),
+            Phase::Authenticated | Phase::Starting => Action::Stop(login.worker),
+        }
+    }
+
     fn drop_conversation(&mut self) -> Vec<Action> {
         self.queued.clear();
         self.asked = false;
@@ -145,10 +154,7 @@ impl Manager {
                 self.login = Some(login);
                 Vec::new()
             }
-            Some(login) => {
-                self.abandoned.push(login.worker);
-                vec![Action::Kill(login.worker)]
-            }
+            Some(login) => vec![self.abandon(login)],
             None => Vec::new(),
         }
     }
@@ -227,17 +233,12 @@ impl Manager {
                 actions
             }
             Request::CancelSession => {
-                let mut actions = match self.login.take() {
-                    Some(login) if login.phase == Phase::Starting => {
-                        self.abandoned.push(login.worker);
-                        vec![Action::Stop(login.worker)]
-                    }
-                    Some(login) => {
-                        self.abandoned.push(login.worker);
-                        vec![Action::Kill(login.worker)]
-                    }
-                    None => Vec::new(),
-                };
+                let mut actions: Vec<Action> = self
+                    .login
+                    .take()
+                    .map(|login| self.abandon(login))
+                    .into_iter()
+                    .collect();
                 self.queued.clear();
                 self.asked = false;
                 actions.push(Action::Reply(Response::Success));

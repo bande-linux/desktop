@@ -12,6 +12,7 @@ bande-bus.workspace = true
 bande-design.workspace = true
 bande-log.workspace = true
 bande-pam.workspace = true
+bande-xdg.workspace = true
 libc.workspace = true
 rustix = { workspace = true, features = ["fs", "net"] }
 serde.workspace = true

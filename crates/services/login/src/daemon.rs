@@ -1,25 +1,25 @@
 use std::collections::{HashMap, VecDeque};
 use std::fs::Permissions;
 use std::io;
-use std::mem::MaybeUninit;
-use std::os::fd::{AsFd, BorrowedFd, FromRawFd, OwnedFd};
+use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::process::{Child, Command, ExitCode, Stdio};
 use std::time::{Duration, Instant};
 
 use bande_login::manager::{Action, GREETER_USER, Manager, WorkerId};
-use bande_login::protocol::{Class, FromWorker, Request, ToWorker, read_message, write_message};
+use bande_login::protocol::{
+    Class, Deadline, FromWorker, Request, ToWorker, read_message, write_message,
+};
 use rustix::event::{PollFd, PollFlags, poll};
 use rustix::process::{Pid, PidfdFlags, pidfd_open};
 
-use crate::GREETER_SOCKET;
 use crate::account::Account;
 use crate::vt::{self, GREETER_VT, Terminal};
+use crate::{GREETER_SOCKET, signals};
 
 const OWN_PROGRAM: &str = "/proc/self/exe";
 const GREETER_PATIENCE: Duration = Duration::from_secs(1);
-const STOPPING_SIGNALS: [libc::c_int; 3] = [libc::SIGTERM, libc::SIGINT, libc::SIGHUP];
 
 struct Worker {
     child: Child,
@@ -61,26 +61,6 @@ fn listen(account: &Account) -> io::Result<UnixListener> {
     Ok(listener)
 }
 
-fn stopping_signals() -> io::Result<OwnedFd> {
-    // SAFETY: the set is initialised by sigemptyset before use, and signalfd returns a new
-    // descriptor this function owns.
-    unsafe {
-        let mut set = MaybeUninit::<libc::sigset_t>::uninit();
-        libc::sigemptyset(set.as_mut_ptr());
-        for signal in STOPPING_SIGNALS {
-            libc::sigaddset(set.as_mut_ptr(), signal);
-        }
-        let set = set.assume_init();
-        if libc::sigprocmask(libc::SIG_BLOCK, &set, std::ptr::null_mut()) == -1 {
-            return Err(io::Error::last_os_error());
-        }
-        match libc::signalfd(-1, &set, libc::SFD_CLOEXEC | libc::SFD_NONBLOCK) {
-            -1 => Err(io::Error::last_os_error()),
-            fd => Ok(OwnedFd::from_raw_fd(fd)),
-        }
-    }
-}
-
 fn start_worker(class: Class, username: String) -> io::Result<Worker> {
     let (ours, theirs) = UnixStream::pair()?;
     let child = Command::new(OWN_PROGRAM)
@@ -104,8 +84,8 @@ pub fn run() -> ExitCode {
         .and_then(|account| {
             let listener = listen(&account)
                 .map_err(|error| format!("cannot listen on {GREETER_SOCKET}: {error}"))?;
-            let signals =
-                stopping_signals().map_err(|error| format!("cannot watch for signals: {error}"))?;
+            let signals = signals::stopping()
+                .map_err(|error| format!("cannot watch for signals: {error}"))?;
             let greeter_vt = Terminal::open(GREETER_VT)
                 .map_err(|error| format!("cannot open tty{GREETER_VT}: {error}"))?;
             Ok((account.uid, listener, signals, greeter_vt))
@@ -203,13 +183,12 @@ impl Daemon {
     }
 
     fn signalled(&mut self) -> Vec<Action> {
-        let mut info = [0u8; std::mem::size_of::<libc::signalfd_siginfo>()];
-        match rustix::io::read(&self.signals, &mut info) {
-            Ok(_) => {
+        match signals::arrived(&self.signals) {
+            Ok(true) => {
                 tracing::info!("stopping: ending every session");
                 self.manager.terminate()
             }
-            Err(rustix::io::Errno::AGAIN) => Vec::new(),
+            Ok(false) => Vec::new(),
             Err(error) => {
                 tracing::warn!("cannot read the signal: {error}");
                 Vec::new()
@@ -239,10 +218,7 @@ impl Daemon {
                 return Vec::new();
             }
         }
-        let patient = stream
-            .set_read_timeout(Some(GREETER_PATIENCE))
-            .and_then(|()| stream.set_write_timeout(Some(GREETER_PATIENCE)));
-        if let Err(error) = patient {
+        if let Err(error) = stream.set_nonblocking(true) {
             tracing::warn!("cannot bound the login window's messages: {error}");
             return Vec::new();
         }
@@ -258,10 +234,10 @@ impl Daemon {
     }
 
     fn hear_greeter(&mut self) -> Vec<Action> {
-        let Some(greeter) = self.greeter.as_mut() else {
+        let Some(greeter) = self.greeter.as_ref() else {
             return Vec::new();
         };
-        match read_message::<Request>(greeter) {
+        match read_message::<Request>(&mut Deadline::within(greeter, GREETER_PATIENCE)) {
             Ok(request) => self.manager.request(request),
             Err(error) => {
                 if error.kind() != io::ErrorKind::UnexpectedEof {
@@ -349,14 +325,17 @@ impl Daemon {
                 }
                 Vec::new()
             }
-            Action::Reply(response) => match self.greeter.as_mut() {
-                Some(greeter) => match write_message(greeter, &response) {
-                    Ok(()) => Vec::new(),
-                    Err(error) => {
-                        tracing::warn!("cannot answer the login window: {error}");
-                        self.forget_greeter()
+            Action::Reply(response) => match self.greeter.as_ref() {
+                Some(greeter) => {
+                    match write_message(&mut Deadline::within(greeter, GREETER_PATIENCE), &response)
+                    {
+                        Ok(()) => Vec::new(),
+                        Err(error) => {
+                            tracing::warn!("cannot answer the login window: {error}");
+                            self.forget_greeter()
+                        }
                     }
-                },
+                }
                 None => Vec::new(),
             },
             Action::ShowGreeter => {

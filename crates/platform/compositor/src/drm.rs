@@ -35,7 +35,7 @@ use smithay::utils::{Clock, DeviceFd, Monotonic, Size};
 use smithay::wayland::dmabuf::{DmabufFeedback, DmabufFeedbackBuilder};
 use bande_render::VulkanRenderer;
 
-use crate::boot_screen::PLYMOUTH_PID;
+use crate::boot_screen::boot_screen_shown;
 use crate::clock::{FrameOutput, Submission, Vblank};
 use crate::element::drawing_everything;
 use crate::render::{Snapshot, background};
@@ -1213,7 +1213,7 @@ impl FrameOutput for DrmBackend {
     type Error = DrmBackendError;
 
     fn frames_on_screen(&mut self) -> Vec<ShownFrame> {
-        let splash_shown = Path::new(PLYMOUTH_PID).exists();
+        let splash_shown = boot_screen_shown();
         let frames: Vec<(String, OnScreen)> = self
             .heads
             .iter()

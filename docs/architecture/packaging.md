@@ -95,6 +95,11 @@ debhelper compat 14, built with Debian's `rustc` and `cargo` through dh-cargo's 
   `/etc/nsswitch.conf` of a system booted with systemd as they were),
   `display-manager` (next to LightDM, the login window is offered and not imposed,
   `dpkg-reconfigure` switches both ways, and removing it gives the display back to LightDM),
+  `greetd-upgrade` (updating a login window that ran under greetd keeps it as the display
+  manager: the debconf choice and the `display-manager.service` link carry over and start
+  `bande-login`, greetd's configuration goes, the new account owns the runtime folder and reads
+  each person's folder, and `display-manager.service` starts again on a system booted with
+  systemd),
   `coexistence` (`bande-desktop` installs next to `gnome-core` without removing anything, and
   GNOME's keyring keeps its PAM profile, socket and activation, and Bande's keyring, started
   while logind (python-dbusmock's template) lists only a GNOME session of the user, exits

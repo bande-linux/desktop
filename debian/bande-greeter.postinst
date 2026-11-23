@@ -31,3 +31,25 @@ fi
 db_stop
 
 #DEBHELPER#
+
+signed_in_through_greetd() {
+	loginctl list-sessions --no-legend | while read -r session _; do
+		if [ "$(loginctl show-session --property Class --value "$session")" = user ] &&
+			[ "$(loginctl show-session --property Service --value "$session")" = bande-greeter ]; then
+			echo "$session"
+		fi
+	done
+}
+
+if [ "$1" = configure ] && [ -n "$2" ] && [ -z "$DPKG_ROOT" ] && [ -d /run/systemd/system ]; then
+	for folder in /var/lib/bande-greeter/users/*; do
+		if [ -d "$folder" ] && [ "$(stat -c %G "$folder")" != _bande-greeter ]; then
+			deb-systemd-invoke start "bande-greeter-share@$(basename "$folder").service" || true
+		fi
+	done
+	main=$(systemctl show --property MainPID --value bande-greeter.service)
+	if [ "${main:-0}" -gt 0 ] && [ "$(cat "/proc/$main/comm" 2> /dev/null)" = greetd ] &&
+		[ -z "$(signed_in_through_greetd)" ]; then
+		deb-systemd-invoke restart bande-greeter.service
+	fi
+fi

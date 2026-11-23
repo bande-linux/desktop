@@ -20,6 +20,8 @@ verified=$(systemd-analyze verify --man=no bande-greeter.service bande-greeter-h
 [ "$(getent passwd _bande-greeter | cut -d: -f6,7)" = /var/lib/bande-greeter/home:/usr/sbin/nologin ]
 [ "$(stat -c '%a %U %G' /var/lib/bande-greeter/home)" = "700 _bande-greeter _bande-greeter" ]
 grep -qx "ExecStart=/usr/libexec/bande-login" /usr/lib/systemd/system/bande-greeter.service
+grep -qx "KillMode=mixed" /usr/lib/systemd/system/bande-greeter.service
+grep -qx "ExecStart=/usr/libexec/bande-login --console" /usr/lib/systemd/system/bande-console-fallback.service
 test -x /usr/libexec/bande-login
 test -x /usr/libexec/bande-greeter-session
 display_manager() {
@@ -28,6 +30,7 @@ display_manager() {
 }
 display_manager /usr/bin/bande-greeter
 grep -q pam_loginuid /etc/pam.d/bande-greeter
+grep -q pam_shells /etc/pam.d/bande-greeter
 grep -q pam_systemd /etc/pam.d/bande-greeter-session
 share=/var/lib/bande-greeter/users
 [ "$(stat -c '%a %U %G' "$share")" = "755 root root" ]

@@ -1,0 +1,103 @@
+#!/bin/bash
+# A computer whose login window ran under greetd keeps it as its display manager after the
+# update to bande-login: the debconf choice and the display-manager.service link carry over and
+# now start bande-login, greetd's configuration goes, the login window's new account owns its
+# runtime folder and reads each person's folder, and display-manager.service starts again.
+set -euo pipefail
+export DEBIAN_FRONTEND=noninteractive
+work=$(mktemp -d)
+new=$(dpkg-query -W -f '${Version}' bande-greeter)
+(cd "$work" && apt-get download -q "bande-greeter=$new")
+cp /var/lib/dpkg/info/bande-greeter.config /var/lib/dpkg/info/bande-greeter.templates "$work"
+dpkg --purge --force-depends bande-greeter < /dev/null
+
+old=$work/old
+mkdir -p "$old/DEBIAN" "$old/usr/lib/systemd/system" "$old/usr/lib/tmpfiles.d" "$old/usr/share/bande-greeter"
+cat > "$old/DEBIAN/control" <<CONTROL
+Package: bande-greeter
+Version: 0.1-1
+Architecture: all
+Maintainer: Bande <bande@localhost>
+Depends: greetd
+Provides: x-display-manager
+Description: the greetd-based login window, as the update finds it
+CONTROL
+cp "$work/bande-greeter.config" "$old/DEBIAN/config"
+cp "$work/bande-greeter.templates" "$old/DEBIAN/templates"
+cat > "$old/DEBIAN/postinst" <<'SCRIPT'
+#!/bin/sh
+set -e
+. /usr/share/debconf/confmodule
+db_get shared/default-x-display-manager
+db_get "$RET/daemon_name"
+mkdir -p /etc/X11
+echo "$RET" > /etc/X11/default-display-manager
+ln -sf /usr/lib/systemd/system/bande-greeter.service /etc/systemd/system/display-manager.service
+systemd-tmpfiles --create bande-greeter.conf
+db_stop
+SCRIPT
+chmod 755 "$old/DEBIAN/config" "$old/DEBIAN/postinst"
+cat > "$old/usr/lib/systemd/system/bande-greeter.service" <<'UNIT'
+[Unit]
+Description=Bande login window
+Conflicts=getty@tty1.service greetd.service
+
+[Service]
+ExecStart=/usr/sbin/greetd --config /usr/share/bande-greeter/greetd-config.toml
+SendSIGHUP=yes
+Restart=always
+
+[Install]
+Alias=display-manager.service
+UNIT
+cat > "$old/usr/lib/systemd/system/bande-greeter-share@.service" <<'UNIT'
+[Service]
+Type=oneshot
+User=%i
+Group=_greetd
+StateDirectory=bande-greeter/users/%i
+StateDirectoryMode=2750
+ExecStart=/usr/bin/true
+UNIT
+cat > "$old/usr/lib/tmpfiles.d/bande-greeter.conf" <<'TMPFILES'
+d /var/lib/bande-greeter 0755 root root -
+d /var/lib/bande-greeter/users 0755 root root -
+d /run/bande-greeter 0755 _greetd _greetd -
+TMPFILES
+printf '[terminal]\nvt = 1\n[general]\nservice = "bande-greeter"\n[default_session]\ncommand = "/usr/libexec/bande-greeter-session"\nuser = "_greetd"\n' \
+    > "$old/usr/share/bande-greeter/greetd-config.toml"
+dpkg-deb --root-owner-group --build "$old" "$work/old.deb" > /dev/null
+dpkg -i "$work/old.deb" < /dev/null
+
+useradd --create-home ada
+folder=/var/lib/bande-greeter/users/$(id -u ada)
+install -d -o ada -g _greetd -m 2750 "$folder"
+runuser -u ada -- sh -c "umask 027; echo picture > $folder/picture"
+[ "$(stat -c %U /run/bande-greeter)" = _greetd ]
+
+dpkg -i "$work"/bande-greeter_*.deb < /dev/null
+
+grep -qx /usr/bin/bande-greeter /etc/X11/default-display-manager
+[ "$(readlink /etc/systemd/system/display-manager.service)" = /usr/lib/systemd/system/bande-greeter.service ]
+[ "$(echo get shared/default-x-display-manager | debconf-communicate)" = "0 bande-greeter" ]
+grep -qx ExecStart=/usr/libexec/bande-login "$(realpath /etc/systemd/system/display-manager.service)"
+verified=$(systemd-analyze verify --man=no bande-greeter.service 2>&1)
+[ -z "$verified" ] || { echo "$verified"; exit 1; }
+test ! -e /usr/share/bande-greeter/greetd-config.toml
+[ "$(stat -c '%U %G' /run/bande-greeter)" = "_bande-greeter _bande-greeter" ]
+postinst=/var/lib/dpkg/info/bande-greeter.postinst
+sysusers=$(grep -n systemd-sysusers "$postinst" | head -n 1 | cut -d: -f1)
+tmpfiles=$(grep -n systemd-tmpfiles "$postinst" | head -n 1 | cut -d: -f1)
+[ "$sysusers" -lt "$tmpfiles" ] || { echo "the account is made after its folders"; exit 1; }
+
+if [ -d /run/systemd/system ]; then
+    [ "$(stat -c '%U %G' "$folder" "$folder/picture" | sort -u)" = "ada _bande-greeter" ]
+    [ "$(runuser -u _bande-greeter -- cat "$folder/picture")" = picture ]
+    systemctl restart display-manager.service
+    for _ in $(seq 50); do
+        [ -S /run/bande-login/greeter.sock ] && break
+        sleep 0.2
+    done
+    test -S /run/bande-login/greeter.sock
+fi
+echo "the update from greetd keeps the Bande login window as the display manager"

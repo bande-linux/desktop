@@ -1,5 +1,8 @@
 use std::io::{self, Read, Write};
+use std::os::unix::net::UnixStream;
+use std::time::{Duration, Instant};
 
+use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 
@@ -162,4 +165,65 @@ pub fn read_message<T: for<'de> Deserialize<'de>>(stream: &mut impl Read) -> io:
     let mut body = Zeroizing::new(vec![0u8; length as usize]);
     stream.read_exact(&mut body)?;
     Ok(serde_json::from_slice(&body)?)
+}
+
+/// A non-blocking stream that gives up once `until` has passed, however slowly the other side
+/// sends or takes each byte, so one message cannot hold its reader for longer than that.
+pub struct Deadline<'a> {
+    stream: &'a UnixStream,
+    until: Instant,
+}
+
+impl<'a> Deadline<'a> {
+    pub fn within(stream: &'a UnixStream, patience: Duration) -> Self {
+        Self {
+            stream,
+            until: Instant::now() + patience,
+        }
+    }
+
+    fn retry<T>(
+        &self,
+        flags: PollFlags,
+        mut attempt: impl FnMut() -> io::Result<T>,
+    ) -> io::Result<T> {
+        loop {
+            match attempt() {
+                Err(error) if error.kind() == io::ErrorKind::WouldBlock => {}
+                Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+                done => return done,
+            }
+            let left = self.until.saturating_duration_since(Instant::now());
+            if left.is_zero() {
+                return Err(io::Error::new(
+                    io::ErrorKind::TimedOut,
+                    "the message did not arrive in time",
+                ));
+            }
+            let timeout = Timespec::try_from(left).map_err(io::Error::other)?;
+            let mut fds = [PollFd::new(self.stream, flags)];
+            match poll(&mut fds, Some(&timeout)) {
+                Ok(_) | Err(rustix::io::Errno::INTR) => {}
+                Err(error) => return Err(error.into()),
+            }
+        }
+    }
+}
+
+impl Read for Deadline<'_> {
+    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+        let stream = self.stream;
+        self.retry(PollFlags::IN, || (&*stream).read(buffer))
+    }
+}
+
+impl Write for Deadline<'_> {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        let stream = self.stream;
+        self.retry(PollFlags::OUT, || (&*stream).write(bytes))
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
 }

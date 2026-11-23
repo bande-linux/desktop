@@ -9,7 +9,7 @@ use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use rustix::fs::inotify::{self, CreateFlags, WatchFlags};
 use rustix::ioctl::{self, IntegerSetter, Opcode};
 
-pub(crate) const PLYMOUTH_PID: &str = "/run/plymouth/pid";
+const PLYMOUTH_PID: &str = "/run/plymouth/pid";
 const HANDOVER_FOLDER: &str = "/run/bande-greeter";
 const HANDOVER_WANTED: &str = "/run/bande-greeter/handover";
 const HANDED_OVER: &str = "/run/bande-greeter/handed-over";
@@ -62,8 +62,13 @@ fn ask_for_display() -> io::Result<bool> {
 /// Takes the display over from Plymouth while the boot screen still shows: keeps the kernel's
 /// console from drawing, then has the root `bande-greeter-handover.path` run `plymouth
 /// deactivate`, waiting at most a few seconds for it.
+/// Whether Plymouth's boot screen is up, so what the display shows is the start screen's.
+pub fn boot_screen_shown() -> bool {
+    Path::new(PLYMOUTH_PID).exists()
+}
+
 pub fn take_display_from_boot_screen() {
-    if !Path::new(PLYMOUTH_PID).exists() || Path::new(HANDED_OVER).exists() {
+    if !boot_screen_shown() || Path::new(HANDED_OVER).exists() {
         return;
     }
     if let Err(error) = hide_console_text() {

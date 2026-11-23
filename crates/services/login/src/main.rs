@@ -1,5 +1,7 @@
 mod account;
 mod daemon;
+mod journal;
+mod signals;
 mod vt;
 mod worker;
 
@@ -19,8 +21,19 @@ fn main() -> ExitCode {
     match (arguments.next(), arguments.next()) {
         (None, _) => daemon::run(),
         (Some(argument), None) if argument == "--worker" => worker::run(),
+        (Some(argument), None) if argument == "--console" => give_to_console(),
         _ => {
-            tracing::error!("usage: bande-login");
+            tracing::error!("usage: bande-login [--console]");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn give_to_console() -> ExitCode {
+    match vt::Terminal::open(vt::GREETER_VT).and_then(|terminal| terminal.give_to_console()) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            tracing::error!("cannot give tty{} to the console: {error}", vt::GREETER_VT);
             ExitCode::FAILURE
         }
     }

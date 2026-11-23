@@ -64,6 +64,17 @@ impl Frames {
         self.renderer.frames()
     }
 
+    pub fn now(&self) -> Duration {
+        self.start.elapsed()
+    }
+
+    pub fn draw_at(&mut self, server: &mut Compositor, time: Duration) {
+        server.dispatch().expect("server dispatch");
+        self.scheduler
+            .poll(|| time, server, &mut self.renderer)
+            .expect("compositor frame");
+    }
+
     pub fn run_until(&mut self, server: &mut Compositor, mut done: impl FnMut() -> bool) {
         let deadline = Instant::now() + PATIENCE;
         let start = self.start;

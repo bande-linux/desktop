@@ -9,7 +9,7 @@ use bande_l10n::{Text, text, tr, trn};
 use crate::crypto::{GnuPg, OwnCertificate, OwnKey};
 use crate::discover::Settings as Servers;
 use crate::net::{Network, Security, Server};
-use crate::settings::{Change, MAX_PREVIEW_LINES, MailSettings, MarkRead, announce};
+use crate::settings::{Change, Density, MailSettings, MarkRead, announce};
 use crate::setup::{Outcome, Problem, check};
 use crate::store::{Account, AccountId, Identity, Rule, RuleAction, RuleField, Store};
 use crate::ui::view::TOOLBAR_HEIGHT;
@@ -715,23 +715,17 @@ impl SettingsView {
 
     fn reading(&self) -> Form {
         let settings = self.state.borrow().settings.clone();
-        let lines = (0..=MAX_PREVIEW_LINES)
-            .map(|lines| match lines {
-                0 => tr!("None"),
-                lines => trn!("1 line", "{lines} lines", lines = lines),
-            })
-            .collect::<Vec<_>>();
+        let densities = [tr!("Comfortable"), tr!("Compact")];
         let state = Rc::clone(&self.state);
-        let preview = PopUpButton::new(
-            &tr!("Preview"),
-            &lines,
-            usize::from(settings.preview_lines),
-            move |index| {
-                let mut state = state.borrow_mut();
-                state.settings.preview_lines = u8::try_from(index).unwrap_or(MAX_PREVIEW_LINES);
-                state.signals.push(Signal::Settings);
-            },
-        );
+        let chosen = Density::ALL
+            .iter()
+            .position(|density| *density == settings.density)
+            .unwrap_or_default();
+        let density = PopUpButton::new(&tr!("Density"), &densities, chosen, move |index| {
+            let mut state = state.borrow_mut();
+            state.settings.density = Density::ALL.get(index).copied().unwrap_or_default();
+            state.signals.push(Signal::Settings);
+        });
         let marks = [
             tr!("When the message opens"),
             tr!("After two seconds"),
@@ -751,7 +745,7 @@ impl SettingsView {
             &Page::Reading.title(),
             vec![
                 heading(text!("Message List")),
-                row(text!("Preview"), preview),
+                row(text!("Density"), density),
                 row(
                     text!("Organize by conversation"),
                     toggle(

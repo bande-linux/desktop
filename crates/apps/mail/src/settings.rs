@@ -5,8 +5,6 @@ use bande_inbox::Outbox;
 
 use crate::store::AccountId;
 
-pub const MAX_PREVIEW_LINES: u8 = 5;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SortBy {
     #[default]
@@ -38,6 +36,24 @@ impl SortBy {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Density {
+    #[default]
+    Comfortable,
+    Compact,
+}
+
+impl Density {
+    pub const ALL: [Self; 2] = [Self::Comfortable, Self::Compact];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Comfortable => "comfortable",
+            Self::Compact => "compact",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum MarkRead {
     #[default]
     OnOpen,
@@ -62,7 +78,7 @@ pub struct MailSettings {
     pub notify: bool,
     pub sound: bool,
     pub load_remote: bool,
-    pub preview_lines: u8,
+    pub density: Density,
     pub conversations: bool,
     pub plain_text: bool,
     pub fixed_width: bool,
@@ -85,7 +101,7 @@ impl Default for MailSettings {
             notify: true,
             sound: true,
             load_remote: false,
-            preview_lines: 2,
+            density: Density::Comfortable,
             conversations: true,
             plain_text: false,
             fixed_width: false,
@@ -114,12 +130,11 @@ impl Stored for MailSettings {
                 "notify" => settings.notify = flag(value).unwrap_or(settings.notify),
                 "sound" => settings.sound = flag(value).unwrap_or(settings.sound),
                 "load-remote" => settings.load_remote = flag(value).unwrap_or(settings.load_remote),
-                "preview-lines" => {
-                    settings.preview_lines = value
-                        .parse()
-                        .ok()
-                        .filter(|lines| *lines <= MAX_PREVIEW_LINES)
-                        .unwrap_or(settings.preview_lines);
+                "density" => {
+                    settings.density = Density::ALL
+                        .into_iter()
+                        .find(|density| density.name() == value)
+                        .unwrap_or_default();
                 }
                 "conversations" => {
                     settings.conversations = flag(value).unwrap_or(settings.conversations);
@@ -163,11 +178,11 @@ impl Stored for MailSettings {
 
     fn to_text(&self) -> String {
         format!(
-            "notify = {}\nsound = {}\nload-remote = {}\npreview-lines = {}\nconversations = {}\nplain-text = {}\nfixed-width = {}\nquote = {}\nsend-from = {}\nsort = {}\nascending = {}\nbcc-field = {}\nindex-decrypted = {}\nbadge = {}\nmark-read = {}\nsidebar-width = {}\nlist-width = {}\nhide-sidebar = {}\n",
+            "notify = {}\nsound = {}\nload-remote = {}\ndensity = {}\nconversations = {}\nplain-text = {}\nfixed-width = {}\nquote = {}\nsend-from = {}\nsort = {}\nascending = {}\nbcc-field = {}\nindex-decrypted = {}\nbadge = {}\nmark-read = {}\nsidebar-width = {}\nlist-width = {}\nhide-sidebar = {}\n",
             self.notify,
             self.sound,
             self.load_remote,
-            self.preview_lines,
+            self.density.name(),
             self.conversations,
             self.plain_text,
             self.fixed_width,

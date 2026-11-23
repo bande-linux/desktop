@@ -22,6 +22,23 @@ pub fn list_date(seconds: i64, now: Timestamp, zone: &TimeZone, formats: &DateFo
     formats.date(&time, day.year() != today.year())
 }
 
+pub fn day_group(seconds: i64, now: Timestamp, zone: &TimeZone, formats: &DateFormats) -> String {
+    let Ok(time) = Timestamp::from_second(seconds) else {
+        return String::new();
+    };
+    let (day, today) = (
+        time.to_zoned(zone.clone()).date(),
+        now.to_zoned(zone.clone()).date(),
+    );
+    match (today - day).get_days() {
+        days if days <= 0 => tr!("Today"),
+        1 => tr!("Yesterday"),
+        2..=6 => tr!("This Week"),
+        _ if day.year() == today.year() => formats.month_name(day.month()),
+        _ => formats.month_title(day.first_of_month()),
+    }
+}
+
 pub fn full_date(seconds: i64, zone: &TimeZone, formats: &DateFormats) -> String {
     Timestamp::from_second(seconds)
         .map(|time| formats.date_time(&time.to_zoned(zone.clone()), true))

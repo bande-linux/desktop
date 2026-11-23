@@ -285,6 +285,12 @@ msgstr "Avbryt"
 msgid "Yesterday"
 msgstr "Igår"
 
+msgid "Today"
+msgstr "Idag"
+
+msgid "This Week"
+msgstr "Den här veckan"
+
 msgid "The message is larger than {limit}."
 msgstr "Meddelandet är större än {limit}."
 
@@ -296,14 +302,26 @@ msgid_plural "{count} unread"
 msgstr[0] "{count} oläst"
 msgstr[1] "{count} olästa"
 
-msgid "No messages"
-msgstr "Inga meddelanden"
+msgid "{mailbox} is empty"
+msgstr "{mailbox} är tom"
 
-msgid "No results"
-msgstr "Inga resultat"
+msgid "No unread messages"
+msgstr "Inga olästa meddelanden"
+
+msgid "No flagged messages"
+msgstr "Inga flaggade meddelanden"
+
+msgid "No messages match “{search}”"
+msgstr "Inga meddelanden matchar ”{search}”"
+
+msgid "Search looks in the sender, recipients, subject and text."
+msgstr "Sökningen letar i avsändare, mottagare, ämne och text."
 
 msgid "No message selected"
 msgstr "Inget meddelande markerat"
+
+msgid "Up and Down choose a message. Ctrl+N starts a new one."
+msgstr "Upp och Ned väljer ett meddelande. Ctrl+N påbörjar ett nytt."
 
 msgid "{count} messages selected"
 msgstr "{count} meddelanden markerade"
@@ -542,13 +560,14 @@ msgstr "Standardprogram för e-post"
 msgid "To open email links in Mail, choose it in Settings ▸ Apps."
 msgstr "Om du vill öppna e-postlänkar i E-post väljer du det i Inställningar ▸ Appar."
 
-msgid "1 line"
-msgid_plural "{lines} lines"
-msgstr[0] "1 rad"
-msgstr[1] "{lines} rader"
+msgid "Comfortable"
+msgstr "Luftig"
 
-msgid "Preview"
-msgstr "Förhandsvisning"
+msgid "Compact"
+msgstr "Kompakt"
+
+msgid "Density"
+msgstr "Täthet"
 
 msgid "When the message opens"
 msgstr "När meddelandet öppnas"
@@ -818,6 +837,12 @@ msgstr "All e-post"
 msgid "More"
 msgstr "Mer"
 
+msgid "Mark as Read"
+msgstr "Markera som läst"
+
+msgid "Move To…"
+msgstr "Flytta till…"
+
 msgid "Date"
 msgstr "Datum"
 
@@ -968,9 +993,6 @@ msgstr "Brevlådan och alla meddelanden i den raderas från servern."
 
 msgid "Mark as Unread"
 msgstr "Markera som oläst"
-
-msgid "Mark as Read"
-msgstr "Markera som läst"
 
 msgid "Getting mail…"
 msgstr "Hämtar e-post…"

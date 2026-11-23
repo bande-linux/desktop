@@ -281,6 +281,10 @@ impl MailView {
         node.set_label(self.title());
         node.set_multiselectable();
         node.set_size_of_set(self.messages.len());
+        if self.messages.is_empty() {
+            let (heading, detail) = self.empty_list_text();
+            node.set_description(format!("{heading}\n{detail}"));
+        }
         node.set_bounds(access_rect(self.list_frame()));
         node.add_action(Action::Focus);
         node.set_children(children);

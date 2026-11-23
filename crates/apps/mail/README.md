@@ -26,7 +26,7 @@ apt install bande-mail
   also leads to Server Settings…. Several accounts work side by side.
 - **Settings** (Ctrl+,) lists its pages in a sidebar. General: the account new messages are sent
   from, notifications for new mail and their sound, and whether the Taskbar shows the unread
-  count. Reading: list preview lines, conversations, when a message is marked as read (when it
+  count. Reading: density (Comfortable, or Compact with sender and subject on one line and one preview line), conversations, when a message is marked as read (when it
   opens, after two seconds, or only when you mark it), plain text over HTML and a fixed-width
   font for plain text. Composing: whether replies quote the original and whether the Bcc field
   shows. Privacy: whether remote content loads by itself (off by default) and Forget for the
@@ -57,8 +57,11 @@ apt install bande-mail
   under `application=org.bande.Mail`, never in a file.
 - **Window.** A window that was open at log out comes back in its place, showing the mailbox it showed. Each pane owns its part of the header: New Message over the sidebar (a symbol when the window buttons sit on that side), Search over the list, and over the reader Reply, Reply All, Forward, Archive, Junk, Delete, Flag and More (Move To, Mark as Read or Unread, a flag colour, Apply Rules); the window title is not painted, but stays the window's name. The list's own header shows the mailbox, its unread count, All, Unread and Flagged, and the sort order (date, sender, subject, size or unread first, either way). Width decides the layout: from 1040 points the sidebar, list and reader sit side by side; narrower, the sidebar slides over the list from the header's sidebar button; below 720 one pane shows at a time, the reader with Back (or Escape) to the list. View ▸ Hide Sidebar (Shift+Ctrl+S) hides it at any width. The sidebar and list edges can be dragged, and their widths are kept. The reader's cards stay at most 860 points wide, centred. The foot of the sidebar says whether Mail is getting mail, which accounts are offline or when it last updated, next to Get Mail. The sidebar lists Inbox, Flagged, Drafts, Sent, Archive, Junk and Trash across all
   accounts, then each account's folders with unread counts. The list shows sender, subject, a
-  preview (two lines unless Settings says otherwise), the date, an unread dot, a flag and a
-  paperclip. Messages of one conversation (the first `References` entry, else the
+  preview, the date, an unread dot, a flag and a paperclip, under day labels (Today, Yesterday,
+  This Week, then months) when sorted by date; in a mailbox of all accounts a coloured mark tells
+  the accounts apart. An empty mailbox, filter or search says so, with when Mail last updated or
+  where search looks. With nothing chosen the reader names the keys to start with; with several
+  messages chosen it offers Archive, Delete, Mark as Read, Move To… and Flag for all of them. Messages of one conversation (the first `References` entry, else the
   `Message-ID`; a reply that has neither joins the latest message of the account with the same
   subject in the 30 days before it) share one row with a count; clicking the count, or Right and Left, shows and
   hides the earlier ones, and acting on a closed conversation acts on all of it (Settings ▸

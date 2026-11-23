@@ -40,6 +40,8 @@ pub enum Signal {
     More,
     ToggleSidebar,
     Back,
+    MarkRead,
+    MoveMenu,
     Search(String),
     Filter(Filter),
     Sort(SortBy),
@@ -77,6 +79,7 @@ pub struct Toolbar {
     pub more: WidgetId,
     pub status: WidgetId,
     pub get_mail: WidgetId,
+    pub selection: [WidgetId; 5],
 }
 
 impl Default for Toolbar {
@@ -101,12 +104,14 @@ impl Default for Toolbar {
             more: WidgetId::next(),
             status: WidgetId::next(),
             get_mail: WidgetId::next(),
+            selection: [WidgetId::next(); 5],
         }
     }
 }
 
 impl Toolbar {
-    fn widgets(&self) -> [WidgetId; 17] {
+    fn widgets(&self) -> [WidgetId; 22] {
+        let [archive, delete, read, move_to, flag] = self.selection;
         [
             self.sidebar,
             self.back,
@@ -125,6 +130,11 @@ impl Toolbar {
             self.more,
             self.status,
             self.get_mail,
+            archive,
+            delete,
+            read,
+            move_to,
+            flag,
         ]
     }
 
@@ -157,6 +167,15 @@ const ACTIONS: [(Symbol, Text, Signal); 8] = [
     (Symbol::More, text!("More"), Signal::More),
 ];
 const GROUP_ENDS: [usize; 2] = [3, 6];
+const SELECTION: [(Text, Signal); 5] = [
+    (text!(context = "action", "Archive"), Signal::Archive),
+    (text!("Delete"), Signal::Delete),
+    (text!("Mark as Read"), Signal::MarkRead),
+    (text!("Move To…"), Signal::MoveMenu),
+    (text!("Flag"), Signal::Flag),
+];
+const SELECTION_WIDTH: f32 = 128.0;
+pub const SELECTION_TOP: f32 = 24.0;
 
 pub fn sort_title(sort: SortBy) -> String {
     match sort {
@@ -248,6 +267,10 @@ impl MailView {
         let sidebar =
             self.symbol_button(Symbol::Sidebar, &tr!("Show Sidebar"), Signal::ToggleSidebar);
         let back = self.symbol_button(Symbol::Back, &tr!("Back"), Signal::Back);
+        let selection = SELECTION.map(|(title, signal)| {
+            let send = sender(&self.signals);
+            Button::new(&title.tr(), move || send(signal.clone()))
+        });
         let Some(host) = self.host_mut() else {
             return;
         };
@@ -264,6 +287,7 @@ impl MailView {
             .collect::<Vec<_>>();
         let status = host.insert(status, Rect::default());
         let get_mail = host.insert(get_mail, Rect::default());
+        let selection = selection.map(|button| host.insert(button, Rect::default()));
         if let [reply, reply_all, forward, archive, junk, delete, flag, more] = ids[..] {
             self.toolbar = Toolbar {
                 sidebar,
@@ -285,6 +309,7 @@ impl MailView {
                 more,
                 status,
                 get_mail,
+                selection,
             };
         }
     }
@@ -421,6 +446,7 @@ impl MailView {
                 )),
             ),
         ]);
+        frames.extend(self.selection_frames());
         let foot = self.sidebar_foot_frame();
         if foot.width <= 0.0 {
             frames.extend([
@@ -447,6 +473,34 @@ impl MailView {
             ),
         ]);
         frames
+    }
+
+    fn selection_frames(&self) -> Vec<(WidgetId, Rect)> {
+        let reader = self.reader_frame();
+        let several = self.reader.thread.is_none() && !self.also.is_empty();
+        let per_row = ((reader.width - 2.0 * COLUMN_INSET + CONTROL_GAP)
+            / (SELECTION_WIDTH + CONTROL_GAP))
+            .floor()
+            .max(1.0) as usize;
+        let top = reader.y + (reader.height / 2.0).round() + SELECTION_TOP;
+        self.toolbar
+            .selection
+            .iter()
+            .enumerate()
+            .map(|(index, id)| {
+                if !several || reader.width <= 0.0 {
+                    return (*id, Rect::default());
+                }
+                let (row, column) = (index / per_row, index % per_row);
+                let in_row = (SELECTION.len() - row * per_row).min(per_row) as f32;
+                let row_width = in_row * SELECTION_WIDTH + (in_row - 1.0) * CONTROL_GAP;
+                let x = reader.x
+                    + ((reader.width - row_width) / 2.0).round()
+                    + column as f32 * (SELECTION_WIDTH + CONTROL_GAP);
+                let y = top + row as f32 * (BUTTON_HEIGHT + CONTROL_GAP);
+                (*id, Rect::new(x, y, SELECTION_WIDTH, BUTTON_HEIGHT))
+            })
+            .collect()
     }
 
     pub(crate) fn layout_toolbar(&mut self) {

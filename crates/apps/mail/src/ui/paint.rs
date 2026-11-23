@@ -1,9 +1,11 @@
 use bande_l10n::{tr, trn};
 
-use crate::store::Summary;
+use crate::settings::Density;
+use crate::store::{AccountId, Filter, Summary};
 use crate::ui::format::list_date;
 use crate::ui::reader::{Clock, Target};
 use crate::ui::reader_pane::{Look, paint_link_target};
+use crate::ui::sidebar::Place;
 use crate::ui::sidebar::Row;
 use crate::ui::symbols::Symbol;
 use crate::ui::toolbar::{LIST_HEADER_HEIGHT, LIST_TITLE_HEIGHT, SIDEBAR_FOOT_HEIGHT};
@@ -37,6 +39,11 @@ const ROW_INSET: f32 = 6.0;
 const BADGE_GAP: f32 = 10.0;
 const SMALL_SYMBOL: f32 = 13.0;
 const LIST_HEADER_INSET: f32 = 14.0;
+const ACCOUNT_MARK: f32 = 3.0;
+const ACCOUNT_MARK_INSET: f32 = 2.0;
+const ACCOUNT_COLORS: [usize; 5] = [4, 3, 5, 1, 0];
+const GROUP_HEIGHT: f32 = 26.0;
+const EMPTY_SYMBOL: f32 = 32.0;
 const OPEN_FILE_WIDTH: f32 = 240.0;
 const OPEN_FILE_BOTTOM: f32 = 64.0;
 
@@ -134,13 +141,30 @@ impl MailView {
         )
     }
 
-    pub(crate) fn row_height(&mut self) -> f32 {
-        let scale = self.scale();
-        (2.0 * LIST_PADDING + (18.0 + 18.0 + 16.0 * self.preview_lines()) * scale).round()
+    pub(crate) fn row_top(&self, index: usize, row_height: f32) -> f32 {
+        let groups = self.groups.partition_point(|(start, _)| *start <= index);
+        index as f32 * row_height + groups as f32 * GROUP_HEIGHT
     }
 
-    fn preview_lines(&self) -> f32 {
-        f32::from(self.settings.preview_lines)
+    fn first_row_after(&self, offset: f32, row_height: f32) -> usize {
+        let (mut low, mut high) = (0, self.messages.len());
+        while low < high {
+            let middle = low + (high - low) / 2;
+            match self.row_top(middle, row_height) + row_height <= offset {
+                true => low = middle + 1,
+                false => high = middle,
+            }
+        }
+        low
+    }
+
+    pub(crate) fn row_height(&mut self) -> f32 {
+        let scale = self.scale();
+        let lines = match self.settings.density {
+            Density::Comfortable => 18.0 + 18.0 + 16.0 * 2.0,
+            Density::Compact => 18.0 + 16.0,
+        };
+        (2.0 * LIST_PADDING + lines * scale).round()
     }
 
     fn sidebar_row_height(&mut self) -> f32 {
@@ -501,37 +525,81 @@ impl MailView {
         });
     }
 
+    pub(crate) fn empty_list_text(&self) -> (String, String) {
+        match (self.search.trim(), self.filter) {
+            ("", Filter::All) => (
+                tr!("{mailbox} is empty", mailbox = self.title()),
+                self.sync_line(),
+            ),
+            ("", Filter::Unread) => (tr!("No unread messages"), String::new()),
+            ("", Filter::Flagged) => (tr!("No flagged messages"), String::new()),
+            (search, _) => (
+                tr!("No messages match “{search}”", search = search.to_owned()),
+                tr!("Search looks in the sender, recipients, subject and text."),
+            ),
+        }
+    }
+
+    fn paint_empty_list(&mut self, items: &mut Vec<Item>, frame: Rect) {
+        let palette = self.palette;
+        let (heading, detail) = self.empty_list_text();
+        let symbol = match &self.place {
+            Place::All(role) => Symbol::for_role(Some(*role)),
+            Place::Flagged => Symbol::Flag,
+            Place::Mailbox(_) => Symbol::Folder,
+        };
+        let width = (frame.width - 2.0 * LIST_TEXT_X).max(0.0);
+        let heading = self.ui.context().text.paragraph(
+            &heading,
+            TextStyle::role(TextRole::BodyStrong, palette.ink2),
+            Some(width),
+            TextAlign::Center,
+        );
+        let detail = self.ui.context().text.paragraph(
+            &detail,
+            TextStyle::role(TextRole::Callout, palette.ink3),
+            Some(width),
+            TextAlign::Center,
+        );
+        let mut y = frame.y + (frame.height / 3.0).round();
+        self.put_symbol(
+            items,
+            symbol,
+            Rect::new(
+                frame.x + ((frame.width - EMPTY_SYMBOL) / 2.0).round(),
+                y,
+                EMPTY_SYMBOL,
+                EMPTY_SYMBOL,
+            ),
+            palette.ink3,
+        );
+        y += EMPTY_SYMBOL + 12.0;
+        let heading_height = heading.height();
+        items.push(Item::Text {
+            origin: Point::new(frame.x + LIST_TEXT_X, y),
+            paragraph: heading,
+        });
+        items.push(Item::Text {
+            origin: Point::new(frame.x + LIST_TEXT_X, y + heading_height + 4.0),
+            paragraph: detail,
+        });
+    }
+
     fn paint_list(&mut self, items: &mut Vec<Item>) {
         let palette = self.palette;
         let frame = self.list_frame();
         let row_height = self.row_height();
         let offset = {
-            let content = self.messages.len() as f32 * row_height;
+            let content = self.row_top(self.messages.len(), row_height);
             let scroll = &mut self.scrolls[1];
             scroll.set_extent(content, frame.height);
             scroll.offset(self.ui.context())
         };
         let mut drawn = Vec::new();
-        if self.messages.is_empty() {
-            let message = match self.search.is_empty() {
-                true => tr!("No messages"),
-                false => tr!("No results"),
-            };
-            let paragraph = self.ui.context().text.paragraph(
-                &message,
-                TextStyle::role(TextRole::Body, palette.ink3),
-                Some(frame.width),
-                TextAlign::Center,
-            );
-            drawn.push(Item::Text {
-                origin: Point::new(
-                    frame.x,
-                    frame.y + (frame.height / 2.0 - paragraph.height()).round(),
-                ),
-                paragraph,
-            });
+        if self.messages.is_empty() && frame.width > 0.0 {
+            self.paint_empty_list(&mut drawn, frame);
         }
-        let first = (offset / row_height).floor().max(0.0) as usize;
+        let first = self.first_row_after(offset, row_height);
         let visible = (frame.height / row_height).ceil() as usize + 1;
         let now = self.now.unwrap_or_else(Timestamp::now);
         let shown = self
@@ -542,8 +610,29 @@ impl MailView {
             .take(visible)
             .map(|(index, summary)| (index, summary.clone()))
             .collect::<Vec<_>>();
+        let groups = self
+            .groups
+            .iter()
+            .filter(|(start, _)| (first..first + visible).contains(start))
+            .cloned()
+            .collect::<Vec<_>>();
+        for (start, label) in groups {
+            let y = frame.y + self.row_top(start, row_height) - offset - GROUP_HEIGHT;
+            let paragraph = self.text_line(
+                &label,
+                TextStyle::role(TextRole::Label, palette.ink3),
+                frame.width - 2.0 * LIST_TEXT_X,
+            );
+            drawn.push(Item::Text {
+                origin: Point::new(
+                    frame.x + LIST_TEXT_X,
+                    y + (GROUP_HEIGHT - paragraph.height() - 4.0).round(),
+                ),
+                paragraph,
+            });
+        }
         for (index, summary) in shown {
-            let y = frame.y + index as f32 * row_height - offset;
+            let y = frame.y + self.row_top(index, row_height) - offset;
             let rect = Rect::new(frame.x, y, frame.width, row_height);
             self.hits.push((rect, Hit::Message(summary.id)));
             self.paint_row(&mut drawn, &summary, rect, now);
@@ -670,17 +759,27 @@ impl MailView {
             "" => tr!("No Sender"),
             shown => shown.to_owned(),
         };
+        let compact = self.settings.density == Density::Compact;
         let sender = self.text_line(
             &sender,
             TextStyle::role(TextRole::BodyStrong, ink),
-            date_x - text_x - 8.0,
+            match compact {
+                true => ((date_x - text_x) * 0.45).round(),
+                false => date_x - text_x - 8.0,
+            },
         );
+        let sender_end = text_x + sender.width();
         items.push(Item::Text {
             origin: Point::new(text_x, y),
             paragraph: sender,
         });
-        y += line;
-        let mut subject_right = right;
+        if !compact {
+            y += line;
+        }
+        let mut subject_right = match compact {
+            true => date_x - 8.0,
+            false => right,
+        };
         let symbols = [
             (
                 summary.flags.flagged,
@@ -712,20 +811,25 @@ impl MailView {
             "" => tr!("No Subject"),
             subject => subject.to_owned(),
         };
+        let subject_x = match compact {
+            true => sender_end + 8.0,
+            false => text_x,
+        };
         let subject = self.text_line(
             &subject,
-            TextStyle::role(TextRole::Body, ink),
-            subject_right - text_x,
+            TextStyle::role(TextRole::Body, if compact { ink2 } else { ink }),
+            (subject_right - subject_x).max(0.0),
         );
         items.push(Item::Text {
-            origin: Point::new(text_x, y),
+            origin: Point::new(subject_x, y),
             paragraph: subject,
         });
         y += line;
-        if self.settings.preview_lines == 0 {
-            return;
-        }
-        let preview_height = (16.0 * self.preview_lines() * scale).round();
+        let preview_lines = match compact {
+            true => 1.0,
+            false => 2.0,
+        };
+        let preview_height = (16.0 * preview_lines * scale).round();
         let preview = self.ui.context().text.paragraph(
             &summary.preview,
             TextStyle::role(TextRole::Callout, ink2),
@@ -739,6 +843,33 @@ impl MailView {
                 paragraph: preview,
             }],
         });
+        if let Some(color) = self.account_mark(summary.account) {
+            items.push(Item::Fill {
+                shape: Shape::rounded(
+                    Rect::new(
+                        rect.x + ACCOUNT_MARK_INSET,
+                        rect.y + LIST_PADDING,
+                        ACCOUNT_MARK,
+                        rect.height - 2.0 * LIST_PADDING,
+                    ),
+                    ACCOUNT_MARK / 2.0,
+                ),
+                paint: color.into(),
+            });
+        }
+    }
+
+    fn account_mark(&self, account: AccountId) -> Option<Color> {
+        if self.accounts.len() < 2 || matches!(self.place, Place::Mailbox(_)) {
+            return None;
+        }
+        let index = self
+            .accounts
+            .iter()
+            .position(|(known, _)| known.id == account)?;
+        FLAG_COLORS
+            .get(ACCOUNT_COLORS[index % ACCOUNT_COLORS.len()])
+            .map(|hex| Color::hex(*hex))
     }
 
     fn paint_reader(&mut self, items: &mut Vec<Item>) {
@@ -749,10 +880,16 @@ impl MailView {
         }
         if self.reader.thread.is_none() {
             let chosen = self.also.len() + usize::from(self.selected.is_some());
-            let message = match (self.messages.len(), chosen) {
-                (0, _) => String::new(),
-                (_, 0 | 1) => tr!("No message selected"),
-                (_, count) => tr!("{count} messages selected", count = count),
+            let (message, hint) = match (self.messages.len(), chosen) {
+                (0, _) => (String::new(), String::new()),
+                (_, 0 | 1) => (
+                    tr!("No message selected"),
+                    tr!("Up and Down choose a message. Ctrl+N starts a new one."),
+                ),
+                (_, count) => (
+                    tr!("{count} messages selected", count = count),
+                    String::new(),
+                ),
             };
             let paragraph = self.ui.context().text.paragraph(
                 &message,
@@ -760,11 +897,19 @@ impl MailView {
                 Some(frame.width),
                 TextAlign::Center,
             );
+            let top = frame.y + (frame.height / 2.0 - paragraph.height()).round();
+            let hint = self.ui.context().text.paragraph(
+                &hint,
+                TextStyle::role(TextRole::Callout, palette.ink3),
+                Some(frame.width),
+                TextAlign::Center,
+            );
             items.push(Item::Text {
-                origin: Point::new(
-                    frame.x,
-                    frame.y + (frame.height / 2.0 - paragraph.height()).round(),
-                ),
+                origin: Point::new(frame.x, top + paragraph.height() + 8.0),
+                paragraph: hint,
+            });
+            items.push(Item::Text {
+                origin: Point::new(frame.x, top),
                 paragraph,
             });
             return;
@@ -852,7 +997,7 @@ impl MailView {
             return;
         };
         let row_height = self.row_height();
-        let top = index as f32 * row_height;
+        let top = self.row_top(index, row_height);
         let state = &mut self.scrolls[1];
         let cx = self.ui.context();
         state.reveal(cx, top, top + row_height);

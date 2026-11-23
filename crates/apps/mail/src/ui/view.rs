@@ -14,13 +14,13 @@ use crate::error::Result;
 use crate::imap::{Flag, Role};
 use crate::message::{Address, Content, Envelope, parse_addresses};
 use crate::net::Network;
-use crate::settings::{MailSettings, MarkRead};
+use crate::settings::{MailSettings, MarkRead, SortBy};
 use crate::store::{
     Account, AccountId, Filter, Mailbox, MailboxId, MessageId, RuleAction, Store, Summary,
 };
 use crate::ui::Mode;
 use crate::ui::compose_view::attachable;
-use crate::ui::format::{full_date, list_date};
+use crate::ui::format::{day_group, full_date, list_date};
 use crate::ui::reader::{Entry, Reading, Respond, Target, Thread};
 use crate::ui::reader_pane::{
     ReaderPane, address_menu, attachment_menu, fetch_remote, link_alert, link_menu,
@@ -259,6 +259,7 @@ pub struct MailView {
     pub(crate) open_file: Option<WidgetId>,
     read_later: Option<(Instant, Vec<MessageId>)>,
     pub(crate) filter: Filter,
+    pub(crate) groups: Vec<(usize, String)>,
     pub(crate) overlay: bool,
     pub(crate) single_reader: bool,
     resizing: Option<(Edge, f32)>,
@@ -333,6 +334,7 @@ impl MailView {
             open_file: None,
             read_later: None,
             filter: Filter::All,
+            groups: Vec::new(),
             overlay: false,
             single_reader: false,
             resizing: None,
@@ -841,6 +843,20 @@ impl MailView {
                 };
                 all
             }
+        };
+        self.groups = match self.settings.sort {
+            SortBy::Date => {
+                let now = Timestamp::now();
+                let mut groups: Vec<(usize, String)> = Vec::new();
+                for (index, summary) in self.messages.iter().enumerate() {
+                    let label = day_group(summary.date, now, &self.zone, &self.formats);
+                    if groups.last().is_none_or(|(_, last)| *last != label) {
+                        groups.push((index, label));
+                    }
+                }
+                groups
+            }
+            _ => Vec::new(),
         };
         let messages = &self.messages;
         self.also
@@ -2475,6 +2491,15 @@ impl MailView {
                 }
                 Signal::More => self.show_more(),
                 Signal::ToggleSidebar => self.toggle_sidebar(),
+                Signal::MarkRead => {
+                    let ids = self
+                        .targets()
+                        .iter()
+                        .map(|summary| summary.id)
+                        .collect::<Vec<_>>();
+                    self.set_flag_on(&ids, Flag::Seen, true);
+                }
+                Signal::MoveMenu => self.show_move_menu(),
                 Signal::Back => self.back_to_list(),
                 signal @ (Signal::NewMailbox(..)
                 | Signal::RenameMailbox(..)
@@ -3339,6 +3364,24 @@ impl MailView {
             true => prefix,
             false => String::new(),
         }
+    }
+
+    fn show_move_menu(&mut self) {
+        let Some(at) = self
+            .toolbar_frames()
+            .into_iter()
+            .find(|(id, _)| *id == self.toolbar.selection[3])
+            .map(|(_, frame)| Point::new(frame.x, frame.y + frame.height))
+        else {
+            return;
+        };
+        let menu = Menu::new(
+            self.move_targets()
+                .into_iter()
+                .map(|(name, id)| MenuItem::new(&name, &format!("move-to:{id}")))
+                .collect(),
+        );
+        self.requests.push(Request::ShowMenu(menu, at));
     }
 
     fn show_more(&mut self) {

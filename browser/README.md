@@ -13,7 +13,7 @@ This directory holds no browser source. It holds what we change in Debian's:
 | `prefs/bande.js` | prefs only the rebuild needs, added after `settings.js` |
 | `l10n/` | `languages`, the language packs built besides English; Bande's own strings per language (`bande.ftl`) and lines added to Firefox's files at the same path under `browser/browser/` |
 | `search/` | search engines, with no partner codes |
-| `theme/` | chrome CSS using Bande's design tokens |
+| `theme/` | chrome CSS (`bande.css`) and `colors.css`, Datum's colour tokens, which `scripts/theme-colors.py` writes from `docs/design/datum/src/colors.py` (the lint gate runs it with `--check`) |
 | `scripts/` | the build, run the same way anywhere; `.github/workflows/browser-follow-debian.yml` checks every 6 hours, on dispatch and on changes to `browser/`, and builds only when Debian's version or the inputs (`scripts/inputs.sh`) changed |
 
 ## Two forms
@@ -44,6 +44,7 @@ This directory holds no browser source. It holds what we change in Debian's:
 - **Translation:** on-device, off by default, turned on in Settings. Until then no connection and no download; after that Remote Settings is allowed only for its models.
 - **Search:** no default engine, asked on first launch, no partner codes.
 - **Window frame:** tabs share a row with the control well the compositor draws. The compositor draws the well over the last 78 px of a client-side `org.bande.Browser` window and takes the clicks there; `theme/bande.css` copies the desktop's `title_bar.rs` numbers (`WINDOW_HEADER_HEIGHT` 48, `window_controls_width` 78, `MENU_GAP` 6, `HEADER_LEADING` 12). The well stays on the right in every locale, so the gap uses physical sides. Fullscreen has no well, so the restore button is the mouse way out.
+- **Colours:** `bande.css` sets Firefox's own chrome tokens (toolbox, toolbar, tabs, address bar, panels, menus) to Datum's. They follow the system's light or dark and Increase Contrast through `prefers-color-scheme` and `prefers-contrast`, and the accent through `AccentColor`, which the browser reads from the portal; dark fills use the accent's hue at the fill tones' lightness. A theme add-on can't do this: its colours are fixed when it loads, and the default theme can't carry any. `prepare.sh` runs `scripts/check-theme.py`, which fails when the source no longer reads a token `bande.css` sets.
 - **App menu:** the ⋮ button left of the well, as in Bande's own apps.
 - **Bookmarks Toolbar:** the favorites bar, shown in every window.
 - **Updates:** from apt only; the browser's own updater is off.
@@ -76,6 +77,7 @@ In the prepared tree, `export QUILT_PATCHES=debian/patches QUILT_PC=.pc`, then `
 - Windows that aren't the main browser window must carry their own `windowclass`, or they get the well too.
   `scripts/drive.py` drives the browser through Marionette under `scripts/session.sh` and asks for
   screenshots, to look at each window.
+- Rename what `scripts/check-theme.py` reports in `theme/bande.css` to the new ESR's tokens.
 - Re-run the network capture (`scripts/capture.sh`, with `--live` for a browsing run) and go through
   what the new ESR added; `scripts/scan-hosts.py` lists every Google host its code and prefs name.
 

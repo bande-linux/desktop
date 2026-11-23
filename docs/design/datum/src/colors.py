@@ -30,7 +30,9 @@ light=dict(chassis=(0.955,0.004),sheet=(0.995,0.001),overlay=(1.0,0),well=(0.905
 dark=dict(chassis=(0.285,0.008),sheet=(0.245,0.008),overlay=(0.33,0.008),well=(0.37,0.008),
  ink=(0.925,0.006),ink2=(0.80,0.012),ink3=(0.655,0.012),hairline=(0.40,0.008),
  edge=(0.47,0.012),deep=(0.215,0.015))
-for name,sch,hue in (('light',light,H),('dark',dark,HD)):
+contrast_light=dict(edge=(0.62,0.008))
+contrast_dark=dict(edge=(0.58,0.012),ink=(0.965,0.006),ink2=(0.86,0.012),ink3=(0.74,0.012))
+for name,sch,hue in (('light',light,H),('dark',dark,HD),('contrast.light',contrast_light,H),('contrast.dark',contrast_dark,HD)):
     for k,(L,C) in sch.items(): T[name+'.'+k]=oklch(L,C,hue)
 acc={'ultramarine':(0.53,0.20,272,0.70,0.15),'teal':(0.55,0.10,195,0.74,0.11),'moss':(0.55,0.12,140,0.75,0.13),
  'amber':(0.62,0.14,65,0.80,0.13),'ember':(0.58,0.19,38,0.72,0.16),'rose':(0.56,0.19,5,0.73,0.15),

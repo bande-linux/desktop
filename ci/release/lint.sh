@@ -32,5 +32,6 @@ if grep -rnE --include='*.rs' '\b(set_var|remove_var|setenv|putenv|unsetenv)\(' 
 fi
 ci/check-apps.sh
 python3 data/icons/src/generate.py --check
+python3 browser/scripts/theme-colors.py --check
 ci/release/check-protocols.py
 echo "lint passed"

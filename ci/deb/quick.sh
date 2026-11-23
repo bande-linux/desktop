@@ -1,14 +1,18 @@
 #!/bin/bash
-# quick.sh <out dir>: builds every binary package of this working tree, uncommitted changes
+# quick.sh [--install] <out dir>: builds every binary package of this working tree, uncommitted changes
 # included, into <out dir> for local testing, the way ci/deb/build.sh does (offline, with the
 # pkg.bande.vendor profile, the same debian/ and file layout) but much faster: with the release
 # profile (PROFILE picks another), without dh_auto_test, and in a tree and target directory kept
 # in ~/.cache/bande-quick, so a rebuild compiles only what changed. The vendored crates are made
 # again only when Cargo.lock changes. The version is ci/deb/version.sh's with +quickN after it,
 # N counting the quick builds, so it is never taken for a release and each one upgrades the last.
+# It prints the apt command that upgrades the installed packages to the new debs, never the
+# -dbgsym ones or packages not installed; --install runs it.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-out=$(realpath -m "${1:?usage: quick.sh <out dir>}")
+install=0
+[ "${1:-}" != --install ] || { install=1; shift; }
+out=$(realpath -m "${1:?usage: quick.sh [--install] <out dir>}")
 cache=${XDG_CACHE_HOME:-$HOME/.cache}/bande-quick
 tree=$cache/bande-desktop
 mkdir -p "$tree" "$out"
@@ -48,4 +52,16 @@ echo "$count" > "$cache/count"
 find "$cache" -maxdepth 1 -type f \( -name '*.deb' -o -name '*.changes' -o -name '*.buildinfo' \) -exec mv -t "$out" {} +
 echo "quick.sh: $version is in $out"
 echo "  check: ci/release/check-debs.sh $out $version && lintian --fail-on error,warning $out/*.changes"
-echo "  install: sudo apt install $out/*_${version}_*.deb"
+upgrades=()
+for deb in "$out"/*_"${version}"_*.deb; do
+    package=$(dpkg-deb --field "$deb" Package)
+    case $package in *-dbgsym) continue ;; esac
+    [ "$(dpkg-query -W -f='${db:Status-Status}' "$package" 2> /dev/null)" != installed ] || upgrades+=("$deb")
+done
+if [ ${#upgrades[@]} = 0 ]; then
+    echo "  install: no package of this build is installed"
+elif [ $install = 1 ]; then
+    sudo apt-get install --yes "${upgrades[@]}"
+else
+    echo "  install: sudo apt-get install ${upgrades[*]}"
+fi

@@ -64,8 +64,10 @@ covers the change:
   without `dh_auto_test` and in a tree and target directory kept in `~/.cache/bande-quick`, so a
   rebuild compiles only what changed. The version is `ci/deb/version.sh`'s with `+quickN`, which
   is never a release and upgrades the previous quick build; `check-debs.sh` and lintian check
-  it as they check a release build. A full build of the same commit sorts below it, so going
-  back to it means `apt install` with the version given.
+  it as they check a release build. It prints the `apt-get install` of the new debs of the
+  packages that are installed, never the `-dbgsym` ones; `quick.sh --install <out dir>` runs it.
+  A full build of the same commit sorts below it, so going back to it means `apt install` with
+  the version given.
 - **The full build** (`ci/deb/source.sh`, then `ci/deb/build.sh`, with the fat-LTO `dist`
   profile, about two hours): releases, CI and the gate only.
 

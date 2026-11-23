@@ -71,13 +71,6 @@ impl Blur {
         self.passes.clamp(1, MAX_PASSES)
     }
 
-    pub fn support(&self) -> i32 {
-        let level = |pass: u32| 1i32 << pass;
-        (0..self.passes())
-            .map(|pass| ((self.offset.max(0.0) * 1.5).ceil() as i32 + 3) * level(pass + 1))
-            .sum()
-    }
-
     pub fn reach(&self) -> i32 {
         (self.offset.max(0.0) * 2.0 * (1u32 << self.passes()) as f32).ceil() as i32
     }

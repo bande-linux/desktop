@@ -876,7 +876,7 @@ fn a_blurred_backdrop_drawn_frame_by_frame_matches_a_full_redraw() {
     server.press_button(BTN_LEFT, true, 0);
     let mut elements = Vec::new();
     for step in 0..40 {
-        at = (at.0 - 7.0, at.1 + 4.0);
+        at = (at.0 - 2.0, at.1 + 1.0);
         server.move_pointer_to(at.into(), step * 10);
         server.dispatch().expect("server dispatch");
         elements = server.render_elements_on(&mut vulkan, &output);

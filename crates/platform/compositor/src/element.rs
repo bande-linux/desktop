@@ -79,32 +79,32 @@ pub(crate) fn keep_backdrops_whole(
 ) {
     let scale = Scale::from(scale);
     for index in 0..elements.len() {
-        let support = match &elements[index].inner {
-            OutputElement::Blur(blur) => blur.support(),
+        let reach = match &elements[index].inner {
+            OutputElement::Blur(blur) => blur.reach(),
             _ => continue,
         };
-        let Some(reach) = elements[index].geometry(scale).intersection(output) else {
+        let Some(backdrop) = elements[index].geometry(scale).intersection(output) else {
             continue;
         };
         let mut covered = Vec::new();
         for above in &mut elements[..index] {
-            if !above.geometry(scale).overlaps(reach) {
+            if !above.geometry(scale).overlaps(backdrop) {
                 continue;
             }
-            above.opaque_inset = above.opaque_inset.max(support);
+            above.opaque_inset = above.opaque_inset.max(reach);
             let at = above.location(scale);
-            covered.extend(
-                eroded(above.inner.opaque_regions(scale), support).filter_map(|mut region| {
+            covered.extend(eroded(above.inner.opaque_regions(scale), reach).filter_map(
+                |mut region| {
                     region.loc += at;
-                    region.intersection(reach)
-                }),
-            );
+                    region.intersection(backdrop)
+                },
+            ));
         }
         let mut hasher = DefaultHasher::new();
         for rect in &covered {
             (rect.loc.x, rect.loc.y, rect.size.w, rect.size.h).hash(&mut hasher);
         }
-        let uncovered = Rectangle::subtract_rects_many([reach], covered)
+        let uncovered = Rectangle::subtract_rects_many([backdrop], covered)
             .iter()
             .map(|rect| {
                 u64::from(rect.size.w.unsigned_abs()) * u64::from(rect.size.h.unsigned_abs())

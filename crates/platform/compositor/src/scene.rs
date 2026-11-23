@@ -537,8 +537,8 @@ impl BlurElement {
         self.cover(0, u64::MAX);
     }
 
-    pub(crate) fn support(&self) -> i32 {
-        self.blur.support()
+    pub(crate) fn reach(&self) -> i32 {
+        self.blur.reach()
     }
 
     pub(crate) fn cover(&mut self, occluders: u64, uncovered: u64) {

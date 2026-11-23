@@ -1,6 +1,7 @@
 mod decorations;
 mod dispatch;
 mod error;
+mod feedback;
 mod gpu;
 mod layer;
 mod menus;
@@ -39,6 +40,7 @@ use wayland_protocols::ext::background_effect::v1::client::ext_background_effect
 use wayland_protocols::ext::background_effect::v1::client::ext_background_effect_surface_v1::ExtBackgroundEffectSurfaceV1;
 use wayland_protocols::wp::cursor_shape::v1::client::wp_cursor_shape_manager_v1::WpCursorShapeManagerV1;
 use wayland_protocols::wp::idle_inhibit::zv1::client::zwp_idle_inhibit_manager_v1::ZwpIdleInhibitManagerV1;
+use wayland_protocols::wp::linux_dmabuf::zv1::client::zwp_linux_dmabuf_feedback_v1::ZwpLinuxDmabufFeedbackV1;
 use wayland_protocols::xdg::activation::v1::client::xdg_activation_v1::XdgActivationV1;
 use wayland_protocols::xdg::dialog::v1::client::xdg_wm_dialog_v1::XdgWmDialogV1;
 use wayland_protocols::xdg::foreign::zv2::client::zxdg_exporter_v2::ZxdgExporterV2;
@@ -51,6 +53,7 @@ use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_shell_v1::ZwlrLay
 use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::ZwlrLayerSurfaceV1;
 
 pub use self::error::{WindowError, report};
+use self::feedback::{Feedback, FeedbackData};
 pub use self::gpu::RENDERER_VARIABLE;
 use self::gpu::{Gpu, GpuTarget, start_gpu};
 pub use self::layer::{Edges, KeyboardFocus, LayerKind, LayerOptions};
@@ -320,6 +323,9 @@ pub(crate) struct State {
     layer_shell: Option<ZwlrLayerShellV1>,
     pub(crate) activation: Option<XdgActivationV1>,
     pub(crate) dmabuf_formats: Vec<(u32, u64)>,
+    pub(crate) default_feedback: Option<Feedback>,
+    pub(crate) surface_feedback: Option<Feedback>,
+    pub(crate) feedback_changed: bool,
     pub(crate) idle_inhibit_manager: Option<ZwpIdleInhibitManagerV1>,
     toplevel_tag: Option<XdgToplevelTagManagerV1>,
     toplevel_session: Option<XdgToplevelSessionV1>,
@@ -428,6 +434,7 @@ fn for_role(role: &ShellSurface, appearance: Appearance) -> Appearance {
 
 pub struct Window {
     gpu: Gpu,
+    dmabuf_feedback: Option<ZwpLinuxDmabufFeedbackV1>,
     pub(crate) cpu: CpuRenderer,
     shm_target: ShmTarget,
     role: ShellSurface,
@@ -541,6 +548,11 @@ impl Window {
         state.join_primary_selection(&handle);
 
         let surface = compositor.create_surface(&handle, ());
+        let dmabuf_feedback = state
+            .dmabuf
+            .as_ref()
+            .filter(|dmabuf| dmabuf.version() >= 4)
+            .map(|dmabuf| dmabuf.get_surface_feedback(&surface, &handle, FeedbackData::new(true)));
         state.own_surface = Some(surface.clone());
         state.join_text_input(&surface, &handle);
         let surface_scale = state.scaling.follow(&surface, &handle);
@@ -707,6 +719,7 @@ impl Window {
         state.events.push(WindowEvent::AppearanceChanged(current));
         Ok(Self {
             gpu,
+            dmabuf_feedback,
             cpu: CpuRenderer::new(),
             shm_target: ShmTarget::default(),
             role,
@@ -1591,6 +1604,7 @@ impl Window {
         self.wait_for_frame()?;
         self.queue.dispatch_pending(&mut self.state)?;
         self.poll_gpu();
+        self.follow_dmabuf_feedback();
         let frame_time = match self.planned.take() {
             Some(planned) => planned,
             None => self.frame_time(),
@@ -1703,6 +1717,18 @@ impl Window {
         self.state.frame_pending = true;
     }
 
+    fn follow_dmabuf_feedback(&mut self) {
+        let Gpu::Ready(gpu) = &mut self.gpu else {
+            return;
+        };
+        if !std::mem::take(&mut self.state.feedback_changed) || gpu.follow(&self.state) {
+            return;
+        }
+        let size = self.geometry();
+        let scale = self.scale();
+        self.gpu = start_gpu(&self.state, (pixels(size.0, scale), pixels(size.1, scale)));
+    }
+
     fn poll_gpu(&mut self) {
         if let Gpu::Starting(receiver) = &self.gpu {
             match receiver.try_recv() {
@@ -1750,6 +1776,9 @@ impl Drop for Window {
         self.wait_for_gpu();
         self.gpu = Gpu::Unavailable;
         self.shm_target.destroy();
+        if let Some(feedback) = self.dmabuf_feedback.take() {
+            feedback.destroy();
+        }
         self.surface.destroy();
         self.state.release();
         let _ = self.connection.flush();

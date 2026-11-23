@@ -309,7 +309,12 @@ impl TextSystem {
     /// Starts reading the installed fonts on another thread, so the first `TextSystem` finds
     /// them ready.
     pub fn preload() {
-        thread::spawn(installed_fonts);
+        if let Err(error) = thread::Builder::new()
+            .name("fonts".to_owned())
+            .spawn(installed_fonts)
+        {
+            tracing::warn!("reading the installed fonts when the first window needs them: {error}");
+        }
     }
 
     pub fn new() -> Self {

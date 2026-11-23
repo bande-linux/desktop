@@ -11,12 +11,13 @@ use wayland_client::protocol::wl_registry::{self, WlRegistry};
 use wayland_client::protocol::wl_shm::WlShm;
 use wayland_client::protocol::wl_shm_pool::WlShmPool;
 use wayland_client::protocol::wl_surface::WlSurface;
-use wayland_client::{Connection, Dispatch, QueueHandle, delegate_noop};
+use wayland_client::{Connection, Dispatch, Proxy, QueueHandle, delegate_noop};
 use wayland_protocols::ext::background_effect::v1::client::ext_background_effect_manager_v1::ExtBackgroundEffectManagerV1;
 use wayland_protocols::ext::background_effect::v1::client::ext_background_effect_surface_v1::ExtBackgroundEffectSurfaceV1;
 use wayland_protocols::ext::foreign_toplevel_list::v1::client::ext_foreign_toplevel_list_v1::ExtForeignToplevelListV1;
 use wayland_protocols::wp::idle_inhibit::zv1::client::zwp_idle_inhibit_manager_v1::ZwpIdleInhibitManagerV1;
 use wayland_protocols::wp::idle_inhibit::zv1::client::zwp_idle_inhibitor_v1::ZwpIdleInhibitorV1;
+use wayland_protocols::wp::linux_dmabuf::zv1::client::zwp_linux_dmabuf_v1::ZwpLinuxDmabufV1;
 use wayland_protocols::xdg::activation::v1::client::xdg_activation_v1::XdgActivationV1;
 use wayland_protocols::xdg::dialog::v1::client::xdg_dialog_v1::XdgDialogV1;
 use wayland_protocols::xdg::dialog::v1::client::xdg_wm_dialog_v1::XdgWmDialogV1;
@@ -33,6 +34,7 @@ use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::{
     self, ZwlrLayerSurfaceV1,
 };
 
+use super::feedback::FeedbackData;
 use super::{State, ToplevelState, WindowEvent};
 use crate::shell::{APP_VERSION, SHELL_VERSION};
 
@@ -64,7 +66,11 @@ impl Dispatch<WlRegistry, ()> for State {
                     state.subcompositor = Some(registry.bind(name, 1, handle, ()));
                 }
                 "zwp_linux_dmabuf_v1" if version >= 3 => {
-                    state.dmabuf = Some(registry.bind(name, 3, handle, ()));
+                    let dmabuf: ZwpLinuxDmabufV1 = registry.bind(name, version.min(4), handle, ());
+                    if dmabuf.version() >= 4 {
+                        dmabuf.get_default_feedback(handle, FeedbackData::new(false));
+                    }
+                    state.dmabuf = Some(dmabuf);
                 }
                 "ext_background_effect_manager_v1" => {
                     state.background_effects = Some(registry.bind(name, 1, handle, ()));

@@ -1,5 +1,8 @@
 use std::io;
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Mutex, PoisonError};
+use std::time::Duration;
 
 use ash::{ext, khr, vk};
 use wgpu::hal;
@@ -15,6 +18,7 @@ const DMA_BUF: vk::ExternalMemoryHandleTypeFlags = vk::ExternalMemoryHandleTypeF
 const SYNC_FD: vk::ExternalSemaphoreHandleTypeFlags = vk::ExternalSemaphoreHandleTypeFlags::SYNC_FD;
 const DMA_BUF_IOCTL_IMPORT_SYNC_FILE: libc::c_ulong = 0x4008_6203;
 const DMA_BUF_SYNC_WRITE: u32 = 2;
+const READERS_PATIENCE: Duration = Duration::from_secs(1);
 
 #[repr(C)]
 struct ImportSyncFile {
@@ -24,6 +28,8 @@ struct ImportSyncFile {
 
 pub struct SharedImage {
     pub(crate) texture: wgpu::Texture,
+    image: vk::Image,
+    handed_over: AtomicBool,
     pub fd: OwnedFd,
     pub modifier: u64,
     pub offset: u32,
@@ -36,7 +42,8 @@ pub(crate) struct Sharing {
     device: ash::Device,
     memory_fd: khr::external_memory_fd::Device,
     modifier_properties: ext::image_drm_format_modifier::Device,
-    fence: Option<Fence>,
+    family: u32,
+    fence: Mutex<Option<Fence>>,
     renderable: Vec<u64>,
 }
 
@@ -58,6 +65,7 @@ impl Sharing {
             khr::external_memory_fd::NAME,
             ext::external_memory_dma_buf::NAME,
             ext::image_drm_format_modifier::NAME,
+            ext::queue_family_foreign::NAME,
         ];
         if !needed.iter().all(|name| enabled.contains(name)) {
             return None;
@@ -78,30 +86,38 @@ impl Sharing {
             modifier_properties: ext::image_drm_format_modifier::Device::new(&instance, &raw),
             instance,
             physical,
+            family: hal_device.queue_family_index(),
             device: raw,
-            fence,
+            fence: Mutex::new(fence),
             renderable,
         })
     }
 
-    pub(crate) fn accepts_any(&self, offered: &[u64]) -> bool {
-        self.renderable
+    pub(crate) fn accepts_any(&self, tranches: &[Vec<u64>]) -> bool {
+        !self.preferred(tranches).is_empty()
+    }
+
+    fn preferred(&self, tranches: &[Vec<u64>]) -> Vec<u64> {
+        tranches
             .iter()
-            .any(|modifier| offered.contains(modifier))
+            .map(|offered| {
+                self.renderable
+                    .iter()
+                    .copied()
+                    .filter(|modifier| offered.contains(modifier))
+                    .collect::<Vec<u64>>()
+            })
+            .find(|modifiers| !modifiers.is_empty())
+            .unwrap_or_default()
     }
 
     pub(crate) fn image(
         &self,
         device: &wgpu::Device,
         (width, height): (u32, u32),
-        offered: &[u64],
+        tranches: &[Vec<u64>],
     ) -> Result<SharedImage, DrawError> {
-        let modifiers: Vec<u64> = self
-            .renderable
-            .iter()
-            .copied()
-            .filter(|modifier| offered.contains(modifier))
-            .collect();
+        let modifiers = self.preferred(tranches);
         if modifiers.is_empty() {
             return Err(DrawError::Gpu(
                 "the compositor takes none of the GPU's image layouts".to_owned(),
@@ -264,6 +280,8 @@ impl Sharing {
         };
         Ok(SharedImage {
             texture,
+            image,
+            handed_over: AtomicBool::new(false),
             fd,
             modifier: properties.drm_format_modifier,
             offset,
@@ -275,39 +293,148 @@ impl Sharing {
         &self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        commands: wgpu::CommandBuffer,
+        draw: wgpu::CommandBuffer,
         image: &SharedImage,
     ) -> Result<(), DrawError> {
-        let Some(fence) = &self.fence else {
-            return wait(device, queue.submit([commands]));
+        let mut commands = Vec::with_capacity(3);
+        if image.handed_over.load(Ordering::Acquire) {
+            wait_for_readers(&image.fd);
+            commands.push(self.hand_over(device, image.image, false)?);
+        }
+        commands.push(draw);
+        commands.push(self.hand_over(device, image.image, true)?);
+        image.handed_over.store(true, Ordering::Release);
+        let fence = self.fence.lock().unwrap_or_else(PoisonError::into_inner);
+        let Some(active) = fence.as_ref() else {
+            return wait(device, queue.submit(commands));
         };
-        // SAFETY: the hal queue is only used to queue the semaphore signal and is released before
-        // the submission.
-        let hal_queue = unsafe { queue.as_hal::<Vulkan>() };
-        let Some(hal_queue) = hal_queue else {
-            return wait(device, queue.submit([commands]));
-        };
-        hal_queue.add_signal_semaphore(fence.semaphore, None);
-        drop(hal_queue);
-        let submission = queue.submit([commands]);
+        // SAFETY: the hal queue only queues the semaphore signal and is released before the
+        // submission.
+        match unsafe { queue.as_hal::<Vulkan>() } {
+            Some(hal_queue) => hal_queue.add_signal_semaphore(active.semaphore, None),
+            None => return wait(device, queue.submit(commands)),
+        }
+        let submission = queue.submit(commands);
         // SAFETY: as above.
         let unsignalled = unsafe { queue.as_hal::<Vulkan>() }
-            .is_none_or(|hal_queue| hal_queue.remove_signal_semaphore(fence.semaphore));
+            .is_none_or(|hal_queue| hal_queue.remove_signal_semaphore(active.semaphore));
         if unsignalled {
             return wait(device, submission);
         }
-        let finished = fence.export()?;
-        if let Err(error) = attach_fence(&image.fd, &finished) {
-            tracing::debug!("waiting for the GPU, the frame cannot carry its fence: {error}");
-            return wait(device, submission);
+        let attached = match active.export() {
+            Ok(None) => return Ok(()),
+            Ok(Some(finished)) => {
+                attach_fence(&image.fd, &finished).map_err(|error| error.to_string())
+            }
+            Err(error) => Err(error.to_string()),
+        };
+        let Err(error) = attached else {
+            return Ok(());
+        };
+        drop(fence);
+        let waited = wait(device, submission);
+        self.give_up_fences(&error);
+        waited
+    }
+
+    pub(crate) fn give_up_fences(&self, why: &str) {
+        let taken = self
+            .fence
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take();
+        let Some(fence) = taken else {
+            return;
+        };
+        tracing::warn!("frames wait for the GPU from now on, they cannot carry a fence: {why}");
+        // SAFETY: the device is idle once the wait returns, so no submission still refers to the
+        // semaphore, whatever state the failed export left it in.
+        unsafe {
+            if let Err(error) = self.device.device_wait_idle() {
+                tracing::warn!("cannot wait for the GPU before freeing a fence: {error}");
+            }
+            self.device.destroy_semaphore(fence.semaphore, None);
         }
-        Ok(())
+    }
+
+    fn hand_over(
+        &self,
+        device: &wgpu::Device,
+        image: vk::Image,
+        acquire: bool,
+    ) -> Result<wgpu::CommandBuffer, DrawError> {
+        let attachment = (
+            vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+            vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
+            vk::AccessFlags::COLOR_ATTACHMENT_READ | vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
+        );
+        let barrier = vk::ImageMemoryBarrier::default()
+            .image(image)
+            .subresource_range(vk::ImageSubresourceRange {
+                aspect_mask: vk::ImageAspectFlags::COLOR,
+                base_mip_level: 0,
+                level_count: 1,
+                base_array_layer: 0,
+                layer_count: 1,
+            });
+        let (barrier, from, to) = match acquire {
+            true => (
+                barrier
+                    .src_queue_family_index(vk::QUEUE_FAMILY_FOREIGN_EXT)
+                    .dst_queue_family_index(self.family)
+                    .old_layout(vk::ImageLayout::GENERAL)
+                    .new_layout(attachment.0)
+                    .dst_access_mask(attachment.2),
+                vk::PipelineStageFlags::TOP_OF_PIPE,
+                attachment.1,
+            ),
+            false => (
+                barrier
+                    .src_queue_family_index(self.family)
+                    .dst_queue_family_index(vk::QUEUE_FAMILY_FOREIGN_EXT)
+                    .old_layout(attachment.0)
+                    .new_layout(vk::ImageLayout::GENERAL)
+                    .src_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE),
+                attachment.1,
+                vk::PipelineStageFlags::BOTTOM_OF_PIPE,
+            ),
+        };
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some(match acquire {
+                true => "toolkit frame from the compositor",
+                false => "toolkit frame to the compositor",
+            }),
+        });
+        // SAFETY: the encoder records only this barrier, in its own command buffer submitted next
+        // to the frame's, on the queue of `family`; `image` is a live shared image created with
+        // that family, and the barrier leaves it in the layout wgpu last saw (colour attachment)
+        // on our side and in GENERAL, owned by the foreign queue, between frames, as the
+        // compositor acquires and releases it.
+        let recorded = unsafe {
+            encoder.as_hal_mut::<Vulkan, _, _>(|hal| {
+                hal.map(|hal| {
+                    self.device.cmd_pipeline_barrier(
+                        hal.raw_handle(),
+                        from,
+                        to,
+                        vk::DependencyFlags::empty(),
+                        &[],
+                        &[],
+                        &[barrier],
+                    );
+                })
+            })
+        };
+        recorded
+            .map(|()| encoder.finish())
+            .ok_or_else(|| DrawError::Gpu("cannot record a queue family transfer".to_owned()))
     }
 }
 
 impl Drop for Sharing {
     fn drop(&mut self) {
-        if let Some(fence) = &self.fence {
+        let fence = self.fence.get_mut().unwrap_or_else(PoisonError::into_inner);
+        if let Some(fence) = fence {
             // SAFETY: the device is idle once the wait returns, so no submission still refers
             // to the semaphore.
             unsafe {
@@ -354,7 +481,7 @@ impl Fence {
         })
     }
 
-    fn export(&self) -> Result<OwnedFd, DrawError> {
+    fn export(&self) -> Result<Option<OwnedFd>, DrawError> {
         let info = vk::SemaphoreGetFdInfoKHR::default()
             .semaphore(self.semaphore)
             .handle_type(SYNC_FD);
@@ -362,8 +489,9 @@ impl Fence {
         // exporting it as a sync file unsignals it for the next frame.
         let fd = unsafe { self.export.get_semaphore_fd(&info) }
             .map_err(failed("cannot export the frame's fence"))?;
-        // SAFETY: vkGetSemaphoreFdKHR hands over a new file descriptor that nothing else owns.
-        Ok(unsafe { OwnedFd::from_raw_fd(fd) })
+        // SAFETY: a non-negative fd from vkGetSemaphoreFdKHR is new and owned by nobody else; -1
+        // means the frame is already finished and there is nothing to own.
+        Ok((fd >= 0).then(|| unsafe { OwnedFd::from_raw_fd(fd) }))
     }
 }
 
@@ -375,6 +503,24 @@ fn wait(device: &wgpu::Device, submission: wgpu::SubmissionIndex) -> Result<(), 
         })
         .map(|_| ())
         .map_err(|error| DrawError::Gpu(error.to_string()))
+}
+
+fn wait_for_readers(dmabuf: &OwnedFd) {
+    let mut readable = libc::pollfd {
+        fd: dmabuf.as_raw_fd(),
+        events: libc::POLLOUT,
+        revents: 0,
+    };
+    let patience = libc::c_int::try_from(READERS_PATIENCE.as_millis()).unwrap_or(libc::c_int::MAX);
+    // SAFETY: readable is one valid pollfd for an open descriptor and lives across the call.
+    match unsafe { libc::poll(&mut readable, 1, patience) } {
+        1.. => {}
+        0 => tracing::warn!("the compositor is still reading a frame after {READERS_PATIENCE:?}"),
+        _ => tracing::warn!(
+            "cannot wait for the compositor to finish reading a frame: {}",
+            io::Error::last_os_error()
+        ),
+    }
 }
 
 fn attach_fence(dmabuf: &OwnedFd, fence: &OwnedFd) -> io::Result<()> {

@@ -1,7 +1,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError, Weak, mpsc};
 
-use ash::khr;
+use ash::{ext, khr, vk};
 use vello_cpu::Glyph;
 
 use vello_gpu::kurbo::{self, Affine, BezPath};
@@ -27,6 +27,7 @@ const ATLAS_BUDGET_PIXELS: u64 = 8 * 4096 * 4096;
 
 pub struct GpuDevice {
     sharing: Option<Sharing>,
+    nodes: Vec<u64>,
     adapter: wgpu::Adapter,
     device: wgpu::Device,
     queue: wgpu::Queue,
@@ -56,15 +57,38 @@ impl GpuDevice {
         SOFTWARE_ONLY.load(Ordering::Relaxed)
     }
 
-    pub fn shared(allow_software: bool) -> Result<Arc<Self>, DrawError> {
+    /// The process's device on the GPU whose DRM node is `node` (the compositor's main device), or
+    /// on the only GPU there is when the compositor does not say which one it uses.
+    pub fn shared(allow_software: bool, node: Option<u64>) -> Result<Arc<Self>, DrawError> {
         let mut shared = SHARED.lock().unwrap_or_else(PoisonError::into_inner);
-        if let Some(gpu) = shared.upgrade() {
+        if let Some(gpu) = shared.upgrade()
+            && node.is_none_or(|node| gpu.is_node(node))
+        {
             return Ok(gpu);
         }
-        let adapter = futures_lite::future::block_on(
-            instance().request_adapter(&wgpu::RequestAdapterOptions::default()),
-        )
-        .map_err(DrawError::Adapter)?;
+        let adapters =
+            futures_lite::future::block_on(instance().enumerate_adapters(wgpu::Backends::VULKAN));
+        let adapter = match node {
+            Some(node) => adapters
+                .into_iter()
+                .find(|adapter| drm_nodes(adapter).contains(&node))
+                .ok_or_else(|| {
+                    DrawError::Gpu("no Vulkan device draws on the compositor's GPU".to_owned())
+                })?,
+            None => {
+                let mut adapters = adapters.into_iter();
+                match (adapters.next(), adapters.next()) {
+                    (Some(adapter), None) => adapter,
+                    (None, _) => return Err(DrawError::Gpu("no Vulkan device".to_owned())),
+                    (Some(_), Some(_)) => {
+                        return Err(DrawError::Gpu(
+                            "several GPUs, and the compositor does not say which one it uses"
+                                .to_owned(),
+                        ));
+                    }
+                }
+            }
+        };
         let info = adapter.get_info();
         if !allow_software && is_software(&info) {
             SOFTWARE_ONLY.store(true, Ordering::Relaxed);
@@ -73,6 +97,10 @@ impl GpuDevice {
         let gpu = Arc::new(Self::open(adapter)?);
         *shared = Arc::downgrade(&gpu);
         Ok(gpu)
+    }
+
+    pub fn is_node(&self, node: u64) -> bool {
+        self.nodes.contains(&node)
     }
 
     fn open(adapter: wgpu::Adapter) -> Result<Self, DrawError> {
@@ -84,9 +112,17 @@ impl GpuDevice {
         // wraps it.
         let hal_adapter = unsafe { adapter.as_hal::<hal::api::Vulkan>() }
             .ok_or_else(|| DrawError::Gpu("the adapter is not a Vulkan adapter".to_owned()))?;
-        let fences = hal_adapter
-            .physical_device_capabilities()
-            .supports_extension(khr::external_semaphore_fd::NAME);
+        let wanted: Vec<&'static std::ffi::CStr> = [
+            khr::external_semaphore_fd::NAME,
+            ext::queue_family_foreign::NAME,
+        ]
+        .into_iter()
+        .filter(|name| {
+            hal_adapter
+                .physical_device_capabilities()
+                .supports_extension(name)
+        })
+        .collect();
         // SAFETY: the features and limits are wgpu's defaults, which every adapter supports, and
         // the callback only adds an extension the adapter supports.
         let opened = unsafe {
@@ -95,8 +131,10 @@ impl GpuDevice {
                 &descriptor.required_limits,
                 &descriptor.memory_hints,
                 Some(Box::new(move |arguments| {
-                    if fences {
-                        arguments.extensions.push(khr::external_semaphore_fd::NAME);
+                    for name in wanted {
+                        if !arguments.extensions.contains(&name) {
+                            arguments.extensions.push(name);
+                        }
                     }
                 })),
             )
@@ -109,6 +147,7 @@ impl GpuDevice {
         device.on_uncaptured_error(Arc::new(|error| tracing::error!(%error, "GPU error")));
         Ok(Self {
             sharing: Sharing::new(&device),
+            nodes: drm_nodes(&adapter),
             adapter,
             device,
             queue,
@@ -116,7 +155,7 @@ impl GpuDevice {
         })
     }
 
-    pub fn shares_images(&self, offered: &[u64]) -> bool {
+    pub fn shares_images(&self, offered: &[Vec<u64>]) -> bool {
         self.sharing
             .as_ref()
             .is_some_and(|sharing| sharing.accepts_any(offered))
@@ -125,7 +164,7 @@ impl GpuDevice {
     pub fn shared_image(
         &self,
         size: (u32, u32),
-        offered: &[u64],
+        offered: &[Vec<u64>],
     ) -> Result<SharedImage, DrawError> {
         self.sharing
             .as_ref()
@@ -150,6 +189,41 @@ pub struct GpuRenderer {
     scene: vello_gpu::Scene,
     depth: Option<(RenderSize, wgpu::TextureView)>,
     uploaded: bool,
+}
+
+fn drm_nodes(adapter: &wgpu::Adapter) -> Vec<u64> {
+    // SAFETY: the hal adapter is only read here.
+    let Some(hal_adapter) = (unsafe { adapter.as_hal::<hal::api::Vulkan>() }) else {
+        return Vec::new();
+    };
+    if !hal_adapter
+        .physical_device_capabilities()
+        .supports_extension(ext::physical_device_drm::NAME)
+    {
+        return Vec::new();
+    }
+    let mut drm = vk::PhysicalDeviceDrmPropertiesEXT::default();
+    let mut properties = vk::PhysicalDeviceProperties2::default().push_next(&mut drm);
+    // SAFETY: the physical device belongs to this instance and properties, with the structure it
+    // chains, lives across the call.
+    unsafe {
+        hal_adapter
+            .shared_instance()
+            .raw_instance()
+            .get_physical_device_properties2(hal_adapter.raw_physical_device(), &mut properties);
+    }
+    let node = |major: i64, minor: i64| {
+        let (major, minor) = (u32::try_from(major).ok()?, u32::try_from(minor).ok()?);
+        Some(libc::makedev(major, minor))
+    };
+    [
+        (drm.has_primary == vk::TRUE).then(|| node(drm.primary_major, drm.primary_minor)),
+        (drm.has_render == vk::TRUE).then(|| node(drm.render_major, drm.render_minor)),
+    ]
+    .into_iter()
+    .flatten()
+    .flatten()
+    .collect()
 }
 
 fn instance() -> wgpu::Instance {
@@ -585,5 +659,138 @@ impl Canvas for GpuCanvas<'_> {
         {
             tracing::warn!("cannot draw glyphs: {error}");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::os::fd::AsRawFd;
+
+    use super::*;
+    use crate::scene::{Item, Paint, Rect, Shape};
+    use bande_design::Color;
+
+    const LINEAR: u64 = 0;
+    const SIDE: u32 = 64;
+    const DMA_BUF_IOCTL_SYNC: libc::c_ulong = 0x4008_6200;
+    const SYNC_READ_START: u64 = 1;
+    const SYNC_READ_END: u64 = 1 | 4;
+
+    fn scene(square: Color) -> Scene {
+        Scene {
+            width: SIDE,
+            height: SIDE,
+            background: Color::hex(0xff0000),
+            items: vec![Item::Fill {
+                shape: Shape::rect(Rect::new(32.0, 32.0, 16.0, 16.0)),
+                paint: Paint::Solid(square),
+            }],
+        }
+    }
+
+    fn bgra(color: Color) -> [u8; 4] {
+        [color.b, color.g, color.r, color.a]
+    }
+
+    fn pixels(image: &SharedImage, at: &[(u32, u32)]) -> Vec<[u8; 4]> {
+        let mut ready = libc::pollfd {
+            fd: image.fd.as_raw_fd(),
+            events: libc::POLLIN,
+            revents: 0,
+        };
+        let length = image.offset as usize + image.stride as usize * SIDE as usize;
+        // SAFETY: ready is a valid pollfd; the mapping covers the image's one plane, is only read
+        // between the dma-buf's read sync calls and is unmapped before returning.
+        unsafe {
+            assert_eq!(
+                libc::poll(&mut ready, 1, 5000),
+                1,
+                "the frame's fence never signalled"
+            );
+            libc::ioctl(image.fd.as_raw_fd(), DMA_BUF_IOCTL_SYNC, &SYNC_READ_START);
+            let mapped = libc::mmap(
+                std::ptr::null_mut(),
+                length,
+                libc::PROT_READ,
+                libc::MAP_SHARED,
+                image.fd.as_raw_fd(),
+                0,
+            );
+            assert_ne!(mapped, libc::MAP_FAILED, "cannot map the shared image");
+            let bytes = std::slice::from_raw_parts(mapped.cast::<u8>(), length);
+            let read = at
+                .iter()
+                .map(|&(x, y)| {
+                    let start =
+                        image.offset as usize + y as usize * image.stride as usize + x as usize * 4;
+                    [
+                        bytes[start],
+                        bytes[start + 1],
+                        bytes[start + 2],
+                        bytes[start + 3],
+                    ]
+                })
+                .collect();
+            libc::munmap(mapped, length);
+            libc::ioctl(image.fd.as_raw_fd(), DMA_BUF_IOCTL_SYNC, &SYNC_READ_END);
+            read
+        }
+    }
+
+    #[test]
+    fn frames_reach_a_reused_shared_image_with_their_fence_and_after_waiting_without_one() {
+        let gpu = match GpuDevice::shared(false, None) {
+            Ok(gpu) => gpu,
+            Err(error) => {
+                eprintln!("skipped, no GPU to share images from: {error}");
+                return;
+            }
+        };
+        let linear = [vec![LINEAR]];
+        let Some(sharing) = gpu
+            .sharing
+            .as_ref()
+            .filter(|sharing| sharing.accepts_any(&linear))
+        else {
+            eprintln!("skipped, the GPU cannot share linear images");
+            return;
+        };
+        let mut renderer = GpuRenderer::with_device(Arc::clone(&gpu), (SIDE, SIDE));
+        let image = gpu
+            .shared_image((SIDE, SIDE), &linear)
+            .expect("a shared image");
+        let (blue, green) = (Color::hex(0x0000ff), Color::hex(0x00ff00));
+        let square = [Region {
+            x: 32,
+            y: 32,
+            width: 16,
+            height: 16,
+        }];
+        let (inside, outside) = ((40, 40), (8, 8));
+
+        renderer
+            .present(&scene(blue), 1.0, &image, None)
+            .expect("the first frame");
+        assert_eq!(
+            pixels(&image, &[inside, outside]),
+            [bgra(blue), bgra(Color::hex(0xff0000))]
+        );
+
+        renderer
+            .present(&scene(green), 1.0, &image, Some(&square))
+            .expect("a partial frame into the image the compositor had");
+        assert_eq!(
+            pixels(&image, &[inside, outside]),
+            [bgra(green), bgra(Color::hex(0xff0000))]
+        );
+
+        sharing.give_up_fences("the test turns fences off");
+        renderer
+            .present(&scene(blue), 1.0, &image, Some(&square))
+            .expect("a partial frame without a fence");
+        assert_eq!(
+            pixels(&image, &[inside, outside]),
+            [bgra(blue), bgra(Color::hex(0xff0000))]
+        );
     }
 }

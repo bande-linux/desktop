@@ -11,6 +11,7 @@ use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_protocols::wp::linux_dmabuf::zv1::client::zwp_linux_dmabuf_v1::ZwpLinuxDmabufV1;
 
 use super::State;
+use super::feedback::{Feedback, Tranche};
 use super::pool::BufferPool;
 use crate::external::{Dmabuf, DmabufPlane, dmabuf_buffer};
 
@@ -19,7 +20,7 @@ pub const RENDERER_VARIABLE: &str = "BANDE_RENDERER";
 pub(super) struct GpuSurface {
     gpu: Arc<GpuDevice>,
     renderer: GpuRenderer,
-    modifiers: Vec<u64>,
+    modifiers: Vec<Vec<u64>>,
     buffers: BufferPool<SharedImage>,
 }
 
@@ -38,6 +39,25 @@ pub(super) struct GpuTarget<'a> {
 }
 
 impl GpuSurface {
+    pub(super) fn follow(&mut self, state: &State) -> bool {
+        let offer = offer(state);
+        if offer
+            .main_device
+            .is_some_and(|device| !self.gpu.is_node(device))
+        {
+            return false;
+        }
+        let modifiers = modifiers(&self.gpu, &offer);
+        if !self.gpu.shares_images(&modifiers) {
+            return false;
+        }
+        if modifiers != self.modifiers {
+            self.buffers.clear();
+            self.modifiers = modifiers;
+        }
+        true
+    }
+
     pub(super) fn release_uploads(&mut self) {
         self.renderer.release_uploads();
     }
@@ -91,41 +111,68 @@ fn renderer_choice() -> RendererChoice {
     }
 }
 
+fn offer(state: &State) -> Feedback {
+    state
+        .surface_feedback
+        .clone()
+        .or_else(|| state.default_feedback.clone())
+        .unwrap_or_else(|| Feedback {
+            main_device: None,
+            tranches: vec![Tranche {
+                device: 0,
+                formats: state.dmabuf_formats.clone(),
+                scanout: false,
+            }],
+        })
+}
+
+fn modifiers(gpu: &GpuDevice, offer: &Feedback) -> Vec<Vec<u64>> {
+    offer.modifiers(SHARED_FOURCC, |device| {
+        offer.main_device.is_none() || gpu.is_node(device)
+    })
+}
+
 pub(super) fn start_gpu(state: &State, atlas: (u32, u32)) -> Gpu {
     let choice = renderer_choice();
-    let modifiers: Vec<u64> = state
-        .dmabuf_formats
-        .iter()
-        .filter(|(fourcc, _)| *fourcc == SHARED_FOURCC)
-        .map(|(_, modifier)| *modifier)
-        .collect();
+    let offer = offer(state);
     if choice == RendererChoice::Cpu
         || choice == RendererChoice::Automatic && GpuDevice::known_software_only()
         || state.dmabuf.is_none()
-        || modifiers.is_empty()
+        || offer.modifiers(SHARED_FOURCC, |_| true).is_empty()
     {
         return Gpu::Unavailable;
     }
     let allow_software = choice == RendererChoice::Gpu;
     let (sender, receiver) = mpsc::channel();
-    thread::spawn(move || {
-        let opened = open_gpu(modifiers, atlas, allow_software);
-        match &opened {
-            Ok(_) => {}
-            Err(error @ DrawError::Software(_)) => tracing::info!("drawing on the CPU: {error}"),
-            Err(error) => tracing::warn!("drawing on the CPU, the GPU did not open: {error}"),
+    let spawned = thread::Builder::new()
+        .name("gpu-start".to_owned())
+        .spawn(move || {
+            let opened = open_gpu(&offer, atlas, allow_software);
+            match &opened {
+                Ok(_) => {}
+                Err(error @ DrawError::Software(_)) => {
+                    tracing::info!("drawing on the CPU: {error}");
+                }
+                Err(error) => tracing::warn!("drawing on the CPU, the GPU did not open: {error}"),
+            }
+            let _ = sender.send(opened);
+        });
+    match spawned {
+        Ok(_) => Gpu::Starting(receiver),
+        Err(error) => {
+            tracing::warn!("drawing on the CPU, cannot start opening the GPU: {error}");
+            Gpu::Unavailable
         }
-        let _ = sender.send(opened);
-    });
-    Gpu::Starting(receiver)
+    }
 }
 
 fn open_gpu(
-    modifiers: Vec<u64>,
+    offer: &Feedback,
     atlas: (u32, u32),
     allow_software: bool,
 ) -> Result<GpuSurface, DrawError> {
-    let gpu = GpuDevice::shared(allow_software)?;
+    let gpu = GpuDevice::shared(allow_software, offer.main_device)?;
+    let modifiers = modifiers(&gpu, offer);
     if !gpu.shares_images(&modifiers) {
         return Err(DrawError::Gpu(
             "the compositor takes none of the GPU's image layouts".to_owned(),

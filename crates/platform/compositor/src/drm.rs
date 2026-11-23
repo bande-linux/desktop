@@ -159,6 +159,8 @@ pub struct HeadChanges {
 }
 
 const LINK_STATUS: &[u8] = b"link-status";
+const MAX_BPC: &[u8] = b"max bpc";
+const BITS_PER_CHANNEL: u64 = 8;
 const LINK_GOOD: u64 = 0;
 const LINK_BAD: u64 = 1;
 const DISPLAY_GRACE: Duration = Duration::from_secs(3);
@@ -179,12 +181,41 @@ fn rescanned(present: bool, another_display: bool, lost_for: Duration) -> Rescan
     }
 }
 
-fn link_status(device: &DrmDevice, handle: connector::Handle) -> Option<(property::Handle, u64)> {
+fn connector_property(
+    device: &DrmDevice,
+    handle: connector::Handle,
+    name: &[u8],
+) -> Option<(property::Handle, u64, property::Info)> {
     let properties = device.get_properties(handle).ok()?;
     properties.iter().find_map(|(property, value)| {
         let info = device.get_property(*property).ok()?;
-        (info.name().to_bytes() == LINK_STATUS).then_some((*property, *value))
+        (info.name().to_bytes() == name).then_some((*property, *value, info))
     })
+}
+
+fn link_status(device: &DrmDevice, handle: connector::Handle) -> Option<(property::Handle, u64)> {
+    connector_property(device, handle, LINK_STATUS).map(|(property, value, _)| (property, value))
+}
+
+fn limit_bits_per_channel(device: &DrmDevice, handle: connector::Handle, name: &str) {
+    let Some((property, value, info)) = connector_property(device, handle, MAX_BPC) else {
+        return;
+    };
+    let property::ValueType::UnsignedRange(min, max) = info.value_type() else {
+        return;
+    };
+    let wanted = BITS_PER_CHANNEL.clamp(min, max);
+    if value == wanted {
+        return;
+    }
+    let mut request = AtomicModeReq::new();
+    request.add_property(handle, property, property::Value::UnsignedRange(wanted));
+    match device.atomic_commit(AtomicCommitFlags::ALLOW_MODESET, request) {
+        Ok(()) => tracing::info!("{name} sends {wanted} bits per channel, as its frames hold"),
+        Err(error) => {
+            tracing::warn!("{name} keeps sending up to {value} bits per channel: {error}")
+        }
+    }
 }
 
 fn relink(device: &DrmDevice, head: &mut Head) {
@@ -667,6 +698,7 @@ impl DrmBackend {
         ) else {
             return Ok(None);
         };
+        limit_bits_per_channel(&self.device, info.handle(), &connector_name(info));
         let (compositor, buffers) = self.buffered_compositor(
             (crtc, mode, info.handle()),
             self.first_buffers(),

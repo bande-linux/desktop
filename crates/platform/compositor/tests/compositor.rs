@@ -404,10 +404,26 @@ fn an_idle_window_is_not_drawn_again_and_still_gets_a_frame_when_it_asks() {
 
 #[test]
 fn a_window_dragged_over_scanout_buffers_leaves_the_frame_a_full_redraw_draws() {
+    drag_over_scanout_buffers(None);
+}
+
+#[test]
+fn a_window_dragged_on_a_wide_gamut_display_leaves_the_frame_a_full_redraw_draws() {
+    let converted = bande_colour::Profile::display_p3()
+        .and_then(|profile| bande_colour::conversion(&profile, [1.0; 3]))
+        .expect("a Display P3 conversion");
+    drag_over_scanout_buffers(Some(bande_render::OutputColour {
+        matrix: converted.matrix,
+        encode: Some(Arc::from(converted.encode)),
+    }));
+}
+
+fn drag_over_scanout_buffers(colour: Option<bande_render::OutputColour>) {
     let Some((mut vulkan, gbm)) = hardware() else {
         println!("skipped: no hardware Vulkan device with a DRM render node");
         return;
     };
+    vulkan.set_output_colour(colour);
     let mut formats: Vec<_> = vulkan.render_formats().iter().copied().collect();
     formats.sort_by_key(|format| std::cmp::Reverse(u64::from(format.modifier)));
     let Some(format) = formats

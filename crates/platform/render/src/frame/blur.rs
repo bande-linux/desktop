@@ -5,8 +5,8 @@ use smithay::utils::{Physical, Rectangle};
 
 use super::{Quad, RoundedRect, Sampling, VulkanFrame, scissor};
 use crate::{
-    ATTACHMENT, COLOR_LAYERS, Image, Program, Rect, RenderError, SAMPLED, TRANSFER_SOURCE, Usage,
-    barrier,
+    ATTACHMENT, COLOR_LAYERS, DRAWING, Image, Program, Rect, RenderError, SAMPLED, TRANSFER_SOURCE,
+    Usage, barrier,
 };
 
 const MAX_PASSES: u32 = 6;
@@ -23,6 +23,7 @@ pub struct Blur {
 pub(crate) struct BlurChain {
     pub(crate) levels: Vec<Image>,
     pub(crate) used: bool,
+    drawn: bool,
 }
 
 const COPY_DESTINATION: Usage = (
@@ -86,19 +87,24 @@ impl VulkanFrame<'_, '_> {
             return Ok(());
         }
         let passes = blur.passes();
-        let levels = self.blur_levels(source, passes)?;
+        let (levels, prior) = self.blur_levels(source, passes)?;
         self.pause();
-        self.copy_into(source, levels[0]);
+        self.copy_into(source, levels[0], prior);
         for pass in 0..passes as usize {
             self.filter(
                 Program::BlurDown,
                 levels[pass],
-                levels[pass + 1],
+                (levels[pass + 1], prior),
                 blur.offset,
             )?;
         }
         for pass in (0..passes as usize).rev() {
-            self.filter(Program::BlurUp, levels[pass + 1], levels[pass], blur.offset)?;
+            self.filter(
+                Program::BlurUp,
+                levels[pass + 1],
+                (levels[pass], SAMPLED),
+                blur.offset,
+            )?;
         }
         self.resume();
         self.bind(match blur.tone {
@@ -126,7 +132,7 @@ impl VulkanFrame<'_, '_> {
         &mut self,
         source: Rect,
         passes: u32,
-    ) -> Result<Vec<(vk::Image, vk::ImageView, i32, i32)>, RenderError> {
+    ) -> Result<(Vec<(vk::Image, vk::ImageView, i32, i32)>, Usage), RenderError> {
         let key = (source.width, source.height, self.format, passes);
         if !self.renderer.blur_chains.contains_key(&key) {
             let mut levels = Vec::new();
@@ -155,6 +161,7 @@ impl VulkanFrame<'_, '_> {
                 BlurChain {
                     levels,
                     used: false,
+                    drawn: false,
                 },
             );
         }
@@ -164,11 +171,16 @@ impl VulkanFrame<'_, '_> {
             .get_mut(&key)
             .ok_or(RenderError::ForeignResource)?;
         chain.used = true;
-        Ok(chain
+        let prior = match std::mem::replace(&mut chain.drawn, true) {
+            true => SAMPLED,
+            false => DISCARDED,
+        };
+        let levels = chain
             .levels
             .iter()
             .map(|image| (image.image, image.view, image.width, image.height))
-            .collect())
+            .collect();
+        Ok((levels, prior))
     }
 
     pub(super) fn pause(&mut self) {
@@ -186,11 +198,16 @@ impl VulkanFrame<'_, '_> {
         self.bound = None;
     }
 
-    fn copy_into(&mut self, source: Rect, level: (vk::Image, vk::ImageView, i32, i32)) {
+    fn copy_into(
+        &mut self,
+        source: Rect,
+        level: (vk::Image, vk::ImageView, i32, i32),
+        prior: Usage,
+    ) {
         let device = &self.renderer.device;
         let commands = self.renderer.command_buffer;
         barrier(device, commands, self.image, ATTACHMENT, TRANSFER_SOURCE);
-        barrier(device, commands, level.0, DISCARDED, COPY_DESTINATION);
+        barrier(device, commands, level.0, prior, COPY_DESTINATION);
         let region = vk::ImageCopy::default()
             .src_subresource(COLOR_LAYERS)
             .src_offset(vk::Offset3D {
@@ -217,7 +234,7 @@ impl VulkanFrame<'_, '_> {
                 slice::from_ref(&region),
             );
         }
-        barrier(device, commands, self.image, TRANSFER_SOURCE, ATTACHMENT);
+        barrier(device, commands, self.image, TRANSFER_SOURCE, DRAWING);
         barrier(device, commands, level.0, COPY_DESTINATION, SAMPLED);
         self.renderer.counters.shaded_pixels += source.area();
     }
@@ -226,7 +243,7 @@ impl VulkanFrame<'_, '_> {
         &mut self,
         program: Program,
         from: (vk::Image, vk::ImageView, i32, i32),
-        to: (vk::Image, vk::ImageView, i32, i32),
+        (to, prior): ((vk::Image, vk::ImageView, i32, i32), Usage),
         offset: f32,
     ) -> Result<(), RenderError> {
         let bounds = Rect::new(0, 0, to.2, to.3);
@@ -234,7 +251,7 @@ impl VulkanFrame<'_, '_> {
             &self.renderer.device,
             self.renderer.command_buffer,
             to.0,
-            DISCARDED,
+            prior,
             DRAWN,
         );
         self.begin_rendering(to.1, bounds, vk::AttachmentLoadOp::CLEAR);

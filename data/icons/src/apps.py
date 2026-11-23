@@ -189,7 +189,7 @@ def screen_sharing():
     body = rect(8, 11, 24, 17, 2.5, PAPER, 'opacity="0.55"')
     body += rect(16, 18, 24, 17, 2.5, PAPER, 'opacity="0.96"')
     body += rect(18.2, 20.2, 19.6, 12.6, 1.2, INK, 'opacity="0.16"')
-    body += stroke('M23 26.5h9.2M28.6 22.9l3.6 3.6-3.6 3.6', EMBER, 2, 'stroke-linecap="round" stroke-linejoin="round" fill="none"')
+    body += stroke('M23 26.5h9.2M28.6 22.9l3.6 3.6-3.6 3.6', EMBER, 2)
     body += rect(25, 36.5, 6, 1.6, 0.8, PAPER, 'opacity="0.85"')
     return tile(*hue_field(215, 0.46, 0.1), body)
 

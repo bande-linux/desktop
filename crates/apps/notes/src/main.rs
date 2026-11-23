@@ -187,8 +187,7 @@ impl Notes {
                 });
             }
             Event::AccountsChanged => self.reconcile(cx, None),
-            Event::Found(found) => Self::with_view(cx, |view| view.servers_found(*found)),
-            Event::Checked(outcome) => Self::with_view(cx, |view| view.setup_checked(*outcome)),
+            Event::Guide(report) => Self::with_view(cx, |view| view.guide_reported(*report)),
         }
     }
 
@@ -313,7 +312,7 @@ impl Program for Notes {
             "delete" => Self::with_view(cx, NotesView::delete_note),
             "undo-delete" => Self::with_view(cx, NotesView::undo_delete),
             "find" => Self::with_view(cx, NotesView::focus_search),
-            "add-account" => Self::with_view(cx, |view| view.present_setup(Mode::Kind)),
+            "add-account" => Self::with_view(cx, |view| view.present_setup(Mode::Address)),
             command => {
                 if let Some(style) = command.strip_prefix("style:") {
                     Self::with_view(cx, |view| view.style(style));

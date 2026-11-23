@@ -163,16 +163,11 @@ impl MailView {
         let mut children = Vec::new();
         for (index, row) in self.sidebar.iter().enumerate() {
             let (node, bounds) = match row {
-                Row::Heading(title) => {
+                Row::Heading(title, account) => {
                     let mut node = Node::new(Role::Heading);
                     node.set_label(title.as_str());
                     node.set_level(2);
-                    let offline = self
-                        .accounts
-                        .iter()
-                        .find(|(account, _)| account.email == *title)
-                        .map(|(account, _)| account.id)
-                        .filter(|account| self.offline(*account));
+                    let offline = account.filter(|account| self.offline(*account));
                     if let Some(account) = offline {
                         let mut button = clickable(Role::Button, &tr!("Offline"));
                         button.set_description(self.failure(account));
@@ -349,15 +344,10 @@ impl MailView {
                 }
             }
             Part::Offline(index) => {
-                let Some(Row::Heading(title)) = self.sidebar.get(index) else {
+                let Some(Row::Heading(_, Some(account))) = self.sidebar.get(index) else {
                     return Some(false);
                 };
-                let account = self
-                    .accounts
-                    .iter()
-                    .find(|(account, _)| account.email == *title)?
-                    .0
-                    .id;
+                let account = *account;
                 self.focus = Pane::Sidebar;
                 if request.action == Action::Click {
                     self.show_failure(account);

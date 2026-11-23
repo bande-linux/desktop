@@ -38,8 +38,7 @@ pub enum Event {
     LoginFailed(AccountId, String),
     NoFolder(AccountId),
     AccountsChanged,
-    Found(Box<bande_mail_core::setup::Found>),
-    Checked(Box<bande_mail_core::setup::Outcome>),
+    Guide(Box<bande_mail_core::guide::Report>),
 }
 
 pub struct Worker {

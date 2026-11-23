@@ -1193,35 +1193,38 @@ impl SettingsView {
                     })
                     .map_err(crate::error::Error::from)
                 {
-                    Ok((Some(password), keyring)) => match check(&servers, &password, &network) {
-                        Outcome::Ready(checked) => {
-                            let kept = Store::open(&store_path)
-                                .and_then(|store| store.update_servers(id, &servers))
-                                .and_then(|()| match servers.imap.host == old_host {
-                                    true => Ok(()),
-                                    false => keyring
-                                        .save(
-                                            &crate::keyring_key(&email, &servers.imap.host),
-                                            &crate::keyring_label(&email),
-                                            &password,
-                                        )
-                                        .and_then(|()| {
-                                            keyring.forget(&crate::keyring_key(&email, &old_host))
-                                        })
-                                        .map_err(Into::into),
-                                });
-                            match kept {
-                                Ok(()) => {
-                                    announce(Change::Accounts);
-                                    Outcome::Ready(checked)
-                                }
-                                Err(error) => {
-                                    Outcome::Failed(servers, Problem::Saving(error.to_string()))
+                    Ok((Some(password), keyring)) => {
+                        match check(&servers, &password, &network, |_| {}) {
+                            Outcome::Ready(checked) => {
+                                let kept = Store::open(&store_path)
+                                    .and_then(|store| store.update_servers(id, &servers))
+                                    .and_then(|()| match servers.imap.host == old_host {
+                                        true => Ok(()),
+                                        false => keyring
+                                            .save(
+                                                &crate::keyring_key(&email, &servers.imap.host),
+                                                &crate::keyring_label(&email),
+                                                &password,
+                                            )
+                                            .and_then(|()| {
+                                                keyring
+                                                    .forget(&crate::keyring_key(&email, &old_host))
+                                            })
+                                            .map_err(Into::into),
+                                    });
+                                match kept {
+                                    Ok(()) => {
+                                        announce(Change::Accounts);
+                                        Outcome::Ready(checked)
+                                    }
+                                    Err(error) => {
+                                        Outcome::Failed(servers, Problem::Saving(error.to_string()))
+                                    }
                                 }
                             }
+                            outcome => outcome,
                         }
-                        outcome => outcome,
-                    },
+                    }
                     Ok((None, _)) => Outcome::Failed(servers, Problem::NoPassword),
                     Err(error) => Outcome::Failed(servers, Problem::Saving(error.to_string())),
                 };

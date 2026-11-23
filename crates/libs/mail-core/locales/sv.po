@@ -28,6 +28,9 @@ msgstr "Servern vägrade: {text}"
 msgid "The server refused the login: {text}"
 msgstr "Servern vägrade inloggningen: {text}"
 
+msgid "The server does not accept a password from mail apps."
+msgstr "Servern godtar inte lösenord från e-postprogram."
+
 msgid "The offline store failed: {error}"
 msgstr "Det lokala arkivet fungerar inte: {error}"
 
@@ -39,6 +42,45 @@ msgstr "Servern stängde anslutningen."
 
 msgid "There is no folder for the mail accounts, because neither XDG_DATA_HOME nor HOME is set."
 msgstr "Det finns ingen mapp för e-postkontona, eftersom varken XDG_DATA_HOME eller HOME är angiven."
+
+msgid "Looking up the servers of {domain}"
+msgstr "Slår upp servrarna för {domain}"
+
+msgid "Guessed the servers of {domain}"
+msgstr "Gissade servrarna för {domain}"
+
+msgid "Found the servers {domain} publishes"
+msgstr "Hittade servrarna som {domain} publicerar"
+
+msgid "Signing in to {server}"
+msgstr "Loggar in på {server}"
+
+msgid "Checking sending via {server}"
+msgstr "Kontrollerar sändning via {server}"
+
+msgid "Incoming: {server}"
+msgstr "Inkommande: {server}"
+
+msgid "Outgoing: {server}"
+msgstr "Utgående: {server}"
+
+msgid "Enter your name."
+msgstr "Ange ditt namn."
+
+msgid "Enter your email address."
+msgstr "Ange din e-postadress."
+
+msgid "This account is already set up."
+msgstr "Det här kontot är redan tillagt."
+
+msgid "Enter your password."
+msgstr "Ange ditt lösenord."
+
+msgid "Enter the server name."
+msgstr "Ange servernamnet."
+
+msgid "Mail for {domain} is handled by servers outside that domain. Sign in there only if they belong to your mail provider."
+msgstr "E-post för {domain} hanteras av servrar utanför den domänen. Logga bara in där om de tillhör din e-postleverantör."
 
 msgid "the mailbox name “{path}” is not allowed"
 msgstr "brevlådenamnet ”{path}” är inte tillåtet"
@@ -82,6 +124,9 @@ msgstr "{server} erbjuder ingen krypterad anslutning. Välj TLS eller STARTTLS, 
 msgid "{server} did not accept the user name or password. Check both; some providers need a separate app password for mail apps."
 msgstr "{server} godtog inte användarnamnet eller lösenordet. Kontrollera båda. Vissa leverantörer kräver ett separat applösenord för e-postappar."
 
+msgid "{server} does not accept a password from mail apps. Your provider’s help may describe how to enable IMAP access."
+msgstr "{server} godtar inte lösenord från e-postprogram. Din leverantörs hjälp kan beskriva hur du slår på IMAP-åtkomst."
+
 msgid "{server} answered with an error: {detail}. Check the server settings, or try again later."
 msgstr "{server} svarade med ett fel: {detail}. Kontrollera serverinställningarna eller försök igen senare."
 
@@ -90,9 +135,6 @@ msgstr "E-post har inget sparat lösenord för kontot. Ange det igen."
 
 msgid "Mail could not save the account: {error}"
 msgstr "E-post kunde inte spara kontot: {error}"
-
-msgid "Account type:"
-msgstr "Kontotyp:"
 
 msgid "Name:"
 msgstr "Namn:"
@@ -118,6 +160,9 @@ msgstr "Port:"
 msgid "Security:"
 msgstr "Säkerhet:"
 
+msgid "Description:"
+msgstr "Beskrivning:"
+
 msgid "Ann Lee"
 msgstr "Anna Lind"
 
@@ -139,8 +184,14 @@ msgstr "smtp.example.org"
 msgid "Default"
 msgstr "Standard"
 
-msgid "Enter Server Settings Manually"
-msgstr "Ange serverinställningar manuellt"
+msgid "Work, Home…"
+msgstr "Arbete, Hem…"
+
+msgid "Set Up Manually…"
+msgstr "Ställ in manuellt…"
+
+msgid "Change Settings…"
+msgstr "Ändra inställningar…"
 
 msgid "Back"
 msgstr "Tillbaka"
@@ -154,38 +205,32 @@ msgstr "Fortsätt"
 msgid "Sign In"
 msgstr "Logga in"
 
-msgid "Security"
-msgstr "Säkerhet"
-
-msgid "Also use this account for Notes"
-msgstr "Använd även kontot för Anteckningar"
-
-msgid "Account Type"
-msgstr "Kontotyp"
-
-msgid "IMAP and SMTP"
-msgstr "IMAP och SMTP"
-
-msgid "Cancel"
-msgstr "Avbryt"
-
-msgid "Checking the account…"
-msgstr "Kontrollerar kontot…"
+msgid "Done"
+msgstr "Klar"
 
 msgid "Add a Mail Account"
 msgstr "Lägg till ett e-postkonto"
 
-msgid "Choose the type of account. Mail reads and sends mail with IMAP and SMTP, the open standards mail providers offer."
-msgstr "Välj typ av konto. E-post läser och skickar e-post med IMAP och SMTP, de öppna standarder som e-postleverantörer erbjuder."
+msgid "Enter your name, email address and password."
+msgstr "Ange ditt namn, din e-postadress och ditt lösenord."
 
-msgid "Enter your name, email address and password. Mail looks up the servers of your address’s domain and shows them to you before it signs in."
-msgstr "Ange ditt namn, din e-postadress och ditt lösenord. E-post slår upp servrarna för adressens domän och visar dem för dig innan den loggar in."
+msgid "Mail is checking the account. This can take a moment."
+msgstr "E-post kontrollerar kontot. Det kan ta en stund."
+
+msgid "Sign In to These Servers?"
+msgstr "Logga in på de här servrarna?"
 
 msgid "Mail Server Settings"
 msgstr "Inställningar för e-postservrar"
 
-msgid "Check the settings your mail provider gives for IMAP and SMTP, then sign in."
-msgstr "Kontrollera de inställningar för IMAP och SMTP som din e-postleverantör anger och logga sedan in."
+msgid "Enter the settings your mail provider gives for IMAP and SMTP, then sign in."
+msgstr "Ange de inställningar för IMAP och SMTP som din e-postleverantör anger och logga sedan in."
+
+msgid "Account Added"
+msgstr "Kontot har lagts till"
+
+msgid "{email} is ready. Mail is downloading your mail; you can start reading now."
+msgstr "{email} är klart. E-post hämtar din e-post; du kan börja läsa redan nu."
 
 msgid "Enter Your Password"
 msgstr "Ange ditt lösenord"
@@ -193,11 +238,23 @@ msgstr "Ange ditt lösenord"
 msgid "The server did not accept the password for {email}."
 msgstr "Servern godtog inte lösenordet för {email}."
 
+msgid "Mail works with any provider that offers IMAP and SMTP."
+msgstr "E-post fungerar med alla leverantörer som erbjuder IMAP och SMTP."
+
+msgid "Security"
+msgstr "Säkerhet"
+
+msgid "Also use this account for Notes"
+msgstr "Använd även kontot för Anteckningar"
+
+msgid "Checking the account…"
+msgstr "Kontrollerar kontot…"
+
+msgid "Cancel"
+msgstr "Avbryt"
+
 msgid "“{address}” is not a mail address"
 msgstr "”{address}” är ingen e-postadress"
-
-msgid "the server offers no sign-in method Mail knows: {methods}"
-msgstr "servern erbjuder inget inloggningssätt som E-post kan: {methods}"
 
 msgid "the message has no recipients"
 msgstr "meddelandet har inga mottagare"

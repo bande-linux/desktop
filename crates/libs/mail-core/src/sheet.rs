@@ -7,11 +7,12 @@ use crate::discover::Settings;
 use crate::net::{Security, Server};
 use accesskit::{Node, Role};
 use bande_toolkit::ui::{
-    Button, CheckState, Checkbox, Context, PopUpButton, RadioGroup, SPINNER_SIZE, SecureField,
-    Size, Spinner, TextField, Widget, WidgetId,
+    Button, CheckState, Checkbox, Context, PopUpButton, SPINNER_SIZE, SecureField, Size, Spinner,
+    TextField, Widget, WidgetId,
 };
 use bande_toolkit::{
-    ControlSize, Image, Item, Paragraph, Point, Rect, Shape, TextAlign, TextRole, TextStyle,
+    Color, ControlSize, Image, Item, Paragraph, Path, Point, Rect, Shape, TextAlign, TextRole,
+    TextStyle,
 };
 use zeroize::Zeroizing;
 
@@ -23,17 +24,18 @@ const TITLE_GAP: f32 = 6.0;
 const LABEL_WIDTH: f32 = 128.0;
 const LABEL_GAP: f32 = 10.0;
 const ROW_GAP: f32 = 10.0;
+const ERROR_GAP: f32 = 4.0;
+const LINE_GAP: f32 = 8.0;
 const PORT_WIDTH: f32 = 64.0;
 const SECURITY_WIDTH: f32 = 168.0;
 const SECTION_GAP: f32 = 18.0;
 const BUTTON_SPACING: f32 = 8.0;
 const BUTTON_MIN_WIDTH: f32 = 96.0;
-const STATUS_GAP: f32 = 8.0;
+const MARK_GAP: f32 = 8.0;
 const FIELD_FONT: f32 = 13.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Field {
-    Kind,
     Name,
     Email,
     User,
@@ -44,13 +46,13 @@ pub enum Field {
     Outgoing,
     OutgoingPort,
     OutgoingSecurity,
+    Description,
     Notes,
 }
 
 impl Field {
     fn label(self) -> String {
         match self {
-            Self::Kind => tr!("Account type:"),
             Self::Name => tr!("Name:"),
             Self::Email => tr!("Email address:"),
             Self::User => tr!("User name:"),
@@ -59,6 +61,7 @@ impl Field {
             Self::Outgoing => tr!("Outgoing (SMTP):"),
             Self::IncomingPort | Self::OutgoingPort => tr!("Port:"),
             Self::IncomingSecurity | Self::OutgoingSecurity => tr!("Security:"),
+            Self::Description => tr!("Description:"),
             Self::Notes => String::new(),
         }
     }
@@ -72,30 +75,39 @@ impl Field {
             Self::Incoming => tr!("imap.example.org"),
             Self::Outgoing => tr!("smtp.example.org"),
             Self::IncomingPort | Self::OutgoingPort => tr!("Default"),
-            Self::Kind | Self::IncomingSecurity | Self::OutgoingSecurity | Self::Notes => {
-                String::new()
-            }
+            Self::Description => tr!("Work, Home…"),
+            Self::IncomingSecurity | Self::OutgoingSecurity | Self::Notes => String::new(),
         }
     }
 
     fn starts_server_row(self) -> bool {
         matches!(self, Self::Incoming | Self::Outgoing)
     }
+
+    fn row_start(self) -> Self {
+        match self {
+            Self::IncomingPort | Self::IncomingSecurity => Self::Incoming,
+            Self::OutgoingPort | Self::OutgoingSecurity => Self::Outgoing,
+            other => other,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Mode {
-    Kind,
     Address,
+    Checking,
+    Confirm(String),
     Servers,
+    Added(String),
     Password(String),
 }
 
 impl Mode {
-    fn fields(&self) -> Vec<Field> {
+    fn fields(&self, offer_notes: bool) -> Vec<Field> {
         match self {
-            Self::Kind => vec![Field::Kind],
             Self::Address => vec![Field::Name, Field::Email, Field::Password],
+            Self::Checking | Self::Confirm(_) => Vec::new(),
             Self::Servers => vec![
                 Field::Name,
                 Field::Email,
@@ -108,23 +120,77 @@ impl Mode {
                 Field::OutgoingPort,
                 Field::OutgoingSecurity,
             ],
+            Self::Added(_) if offer_notes => vec![Field::Description, Field::Notes],
+            Self::Added(_) => vec![Field::Description],
             Self::Password(_) => vec![Field::Password],
         }
     }
 
     fn other(&self) -> Option<String> {
         match self {
-            Self::Kind => None,
-            Self::Address => Some(tr!("Enter Server Settings Manually")),
+            Self::Address => Some(tr!("Set Up Manually…")),
+            Self::Confirm(_) => Some(tr!("Change Settings…")),
             Self::Servers => Some(tr!("Back")),
             Self::Password(_) => Some(tr!("Server Settings…")),
+            Self::Checking | Self::Added(_) => None,
         }
     }
 
-    fn primary(&self) -> String {
+    fn primary(&self) -> Option<String> {
         match self {
-            Self::Kind | Self::Address => tr!("Continue"),
-            Self::Servers | Self::Password(_) => tr!("Sign In"),
+            Self::Address => Some(tr!("Continue")),
+            Self::Confirm(_) | Self::Servers | Self::Password(_) => Some(tr!("Sign In")),
+            Self::Added(_) => Some(tr!("Done")),
+            Self::Checking => None,
+        }
+    }
+
+    fn cancels(&self, inline: bool) -> bool {
+        match self {
+            Self::Added(_) => false,
+            Self::Address => !inline,
+            _ => true,
+        }
+    }
+
+    fn texts(&self) -> (String, String) {
+        match self {
+            Self::Address => (
+                tr!("Add a Mail Account"),
+                tr!("Enter your name, email address and password."),
+            ),
+            Self::Checking => (
+                tr!("Add a Mail Account"),
+                tr!("Mail is checking the account. This can take a moment."),
+            ),
+            Self::Confirm(message) => (tr!("Sign In to These Servers?"), message.clone()),
+            Self::Servers => (
+                tr!("Mail Server Settings"),
+                tr!("Enter the settings your mail provider gives for IMAP and SMTP, then sign in."),
+            ),
+            Self::Added(email) => (
+                tr!("Account Added"),
+                tr!(
+                    "{email} is ready. Mail is downloading your mail; you can start reading now.",
+                    email = email.clone()
+                ),
+            ),
+            Self::Password(email) => (
+                tr!("Enter Your Password"),
+                tr!(
+                    "The server did not accept the password for {email}.",
+                    email = email.clone()
+                ),
+            ),
+        }
+    }
+
+    fn footnote(&self) -> Option<String> {
+        match self {
+            Self::Address => Some(tr!(
+                "Mail works with any provider that offers IMAP and SMTP."
+            )),
+            _ => None,
         }
     }
 }
@@ -136,13 +202,22 @@ pub enum Action {
     Cancel,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Progress {
+    Waiting,
+    Running,
+    Done,
+    Failed,
+}
+
 #[derive(Default)]
 pub struct SheetState {
     pub action: Option<Action>,
     pub password: Zeroizing<String>,
     pub values: Vec<(Field, String)>,
+    pub lines: Vec<(String, Option<Progress>)>,
+    pub problem: Option<(Field, String)>,
     pub status: Option<(String, bool)>,
-    pub busy: bool,
     pub closed: bool,
 }
 
@@ -237,20 +312,31 @@ impl SheetState {
 
 pub type Shared = Rc<RefCell<SheetState>>;
 
+struct Slot {
+    child: usize,
+    rect: Rect,
+}
+
+#[derive(Default)]
+struct Laid {
+    texts: Vec<(Point, Paragraph)>,
+    marks: Vec<(Point, Progress)>,
+    slots: Vec<Slot>,
+}
+
 pub struct AccountSheet {
     id: WidgetId,
     state: Shared,
     fields: Vec<Field>,
     children: Vec<Box<dyn Widget>>,
-    password_field: WidgetId,
+    spinner: usize,
+    buttons: Vec<usize>,
     mode: Mode,
+    inline: bool,
     icon: Option<Image>,
-    title: Option<Paragraph>,
-    message: Option<Paragraph>,
-    labels: Vec<Paragraph>,
-    status: Option<Paragraph>,
-    row_heights: Vec<f32>,
-    button_sizes: Vec<Size>,
+    laid: Laid,
+    spinning: bool,
+    size: Size,
     frame: Rect,
 }
 
@@ -298,76 +384,118 @@ fn action_button(state: &Shared, title: &str, action: Action) -> Button {
     Button::new(title, move || state.borrow_mut().action = Some(action))
 }
 
-impl AccountSheet {
-    pub fn new(state: Shared, mode: Mode, icon: &[u8], offer_notes: bool) -> Self {
-        let mut fields = mode.fields();
-        if offer_notes && matches!(mode, Mode::Address | Mode::Servers) {
-            fields.push(Field::Notes);
+fn paint_mark(cx: &Context, at: Point, progress: Progress, items: &mut Vec<Item>) {
+    let size = SPINNER_SIZE;
+    let point = |x: f32, y: f32| Point::new(at.x + x * size, at.y + y * size);
+    match progress {
+        Progress::Waiting => items.push(Item::Stroke {
+            shape: Shape::rounded(
+                Rect::new(at.x + 2.0, at.y + 2.0, size - 4.0, size - 4.0),
+                size / 2.0 - 2.0,
+            ),
+            width: 1.5,
+            paint: cx.palette.ink3.into(),
+        }),
+        Progress::Done => items.push(Item::StrokePath {
+            path: Path::through(&[point(0.18, 0.52), point(0.42, 0.76), point(0.84, 0.26)]),
+            width: 2.0,
+            paint: cx.palette.success.into(),
+        }),
+        Progress::Failed => {
+            for (from, to) in [
+                (point(0.22, 0.22), point(0.78, 0.78)),
+                (point(0.78, 0.22), point(0.22, 0.78)),
+            ] {
+                items.push(Item::Line {
+                    from,
+                    to,
+                    width: 2.0,
+                    paint: cx.palette.danger_text.into(),
+                });
+            }
         }
+        Progress::Running => {}
+    }
+}
+
+fn body(cx: &mut Context, text: &str, role: TextRole, color: Color, width: f32) -> Paragraph {
+    cx.text.paragraph(
+        text,
+        TextStyle::role(role, color),
+        Some(width),
+        TextAlign::Start,
+    )
+}
+
+impl AccountSheet {
+    pub fn new(state: Shared, mode: Mode, icon: &[u8], offer_notes: bool, inline: bool) -> Self {
+        let fields = mode.fields(offer_notes);
         let mut children: Vec<Box<dyn Widget>> = Vec::new();
-        let mut password_field = WidgetId::next();
         for field in &fields {
-            match field {
-                Field::Kind => children.push(Box::new(RadioGroup::new(
-                    &tr!("Account Type"),
-                    &[tr!("IMAP and SMTP")],
-                    Some(0),
-                    |_| {},
-                ))),
+            let child: Box<dyn Widget> = match field {
                 Field::Password => {
                     let shared = Rc::clone(&state);
-                    let secure =
-                        SecureField::new(&field.placeholder(), FIELD_FONT, move |secret| {
+                    Box::new(SecureField::new(
+                        &field.placeholder(),
+                        FIELD_FONT,
+                        move |secret| {
                             let mut state = shared.borrow_mut();
                             if !secret.is_empty() {
                                 state.password = Zeroizing::new(secret.to_owned());
                             }
                             state.action = Some(Action::Primary);
-                        });
-                    password_field = secure.id();
-                    children.push(Box::new(secure));
+                        },
+                    ))
                 }
                 Field::IncomingSecurity | Field::OutgoingSecurity => {
-                    children.push(Box::new(security_choice(&state, *field)));
+                    Box::new(security_choice(&state, *field))
                 }
-                Field::Notes => children.push(Box::new(notes_choice(&state))),
-                _ => children.push(Box::new(text_field(&state, *field))),
-            }
+                Field::Notes => Box::new(notes_choice(&state)),
+                _ => Box::new(text_field(&state, *field)),
+            };
+            children.push(child);
         }
-        children.push(Box::new(
-            action_button(&state, &tr!("Cancel"), Action::Cancel).cancel(),
-        ));
-        children.push(Box::new(
-            action_button(&state, &mode.primary(), Action::Primary).primary(),
-        ));
+        let spinner = children.len();
         children.push(Box::new(Spinner::new(&tr!("Checking the account…"))));
+        let mut buttons = Vec::new();
         if let Some(other) = mode.other() {
+            buttons.push(children.len());
             children.push(Box::new(action_button(&state, &other, Action::Other)));
+        }
+        if mode.cancels(inline) {
+            buttons.push(children.len());
+            children.push(Box::new(
+                action_button(&state, &tr!("Cancel"), Action::Cancel).cancel(),
+            ));
+        }
+        if let Some(primary) = mode.primary() {
+            buttons.push(children.len());
+            children.push(Box::new(
+                action_button(&state, &primary, Action::Primary).primary(),
+            ));
         }
         Self {
             id: WidgetId::next(),
             state,
             fields,
             children,
-            password_field,
+            spinner,
+            buttons,
             mode,
+            inline,
             icon: Image::from_svg(icon, 96, 96),
-            title: None,
-            message: None,
-            labels: Vec::new(),
-            status: None,
-            row_heights: Vec::new(),
-            button_sizes: Vec::new(),
+            laid: Laid::default(),
+            spinning: false,
+            size: Size::default(),
             frame: Rect::default(),
         }
     }
 
-    pub fn password_field(&self) -> WidgetId {
-        self.password_field
-    }
-
-    fn text_x(&self) -> f32 {
-        self.frame.x + PADDING + ICON_SIZE + ICON_GAP
+    pub fn field(&self, field: Field) -> Option<WidgetId> {
+        self.fields
+            .iter()
+            .position(|known| *known == field)
+            .map(|index| self.children[index].id())
     }
 
     fn rows(&self) -> Vec<Vec<usize>> {
@@ -383,48 +511,6 @@ impl AccountSheet {
         }
         rows
     }
-
-    fn header_height(&self) -> f32 {
-        let text = self.title.as_ref().map_or(0.0, Paragraph::height)
-            + self
-                .message
-                .as_ref()
-                .map_or(0.0, |message| TITLE_GAP + message.height());
-        text.max(ICON_SIZE)
-    }
-
-    fn fields_height(&self) -> f32 {
-        let rows = self.row_heights.len() as f32;
-        self.row_heights.iter().sum::<f32>() + (rows - 1.0).max(0.0) * ROW_GAP
-    }
-
-    fn texts(&self) -> (String, String) {
-        match &self.mode {
-            Mode::Kind => (
-                tr!("Add a Mail Account"),
-                tr!(
-                    "Choose the type of account. Mail reads and sends mail with IMAP and SMTP, the open standards mail providers offer."
-                ),
-            ),
-            Mode::Address => (
-                tr!("Add a Mail Account"),
-                tr!(
-                    "Enter your name, email address and password. Mail looks up the servers of your address’s domain and shows them to you before it signs in."
-                ),
-            ),
-            Mode::Servers => (
-                tr!("Mail Server Settings"),
-                tr!("Check the settings your mail provider gives for IMAP and SMTP, then sign in."),
-            ),
-            Mode::Password(email) => (
-                tr!("Enter Your Password"),
-                tr!(
-                    "The server did not accept the password for {email}.",
-                    email = email.clone()
-                ),
-            ),
-        }
-    }
 }
 
 impl Widget for AccountSheet {
@@ -434,135 +520,188 @@ impl Widget for AccountSheet {
 
     fn measure(&mut self, cx: &mut Context, available: Size) -> Size {
         let width = WIDTH.min(available.width);
-        let text_width = width - (PADDING + ICON_SIZE + ICON_GAP) - PADDING;
-        let (title, message) = self.texts();
-        self.title = Some(cx.text.paragraph(
-            &title,
-            TextStyle::role(TextRole::Heading, cx.palette.ink),
-            Some(text_width),
-            TextAlign::Start,
-        ));
-        self.message = Some(cx.text.paragraph(
-            &message,
-            TextStyle::role(TextRole::Body, cx.palette.ink2),
-            Some(text_width),
-            TextAlign::Start,
-        ));
-        self.labels = self
-            .fields
-            .iter()
-            .map(|field| {
-                cx.text.paragraph(
-                    &field.label(),
-                    TextStyle::role(TextRole::Body, cx.palette.ink2),
-                    Some(LABEL_WIDTH),
-                    TextAlign::End,
-                )
-            })
-            .collect();
-        let (status, error) = self
-            .state
-            .borrow()
-            .status
-            .clone()
-            .map_or((None, false), |(text, error)| (Some(text), error));
-        let color = match error {
-            true => cx.palette.danger_text,
-            false => cx.palette.ink2,
-        };
-        self.status = status.map(|status| {
-            cx.text.paragraph(
-                &status,
-                TextStyle::role(TextRole::Callout, color),
-                Some(width - 2.0 * PADDING - SPINNER_SIZE - STATUS_GAP),
-                TextAlign::Start,
-            )
-        });
+        let text_x = PADDING + ICON_SIZE + ICON_GAP;
+        let text_width = width - text_x - PADDING;
+        let field_x = PADDING + LABEL_WIDTH + LABEL_GAP;
+        let field_width = width - PADDING - field_x;
         let control = cx.control_height(ControlSize::Regular);
-        let fields = self.fields.len();
+        let state = Rc::clone(&self.state);
+        let state = state.borrow();
+        let mut laid = Laid::default();
+
+        let (title, message) = self.mode.texts();
+        let title = body(cx, &title, TextRole::Heading, cx.palette.ink, text_width);
+        let message = body(cx, &message, TextRole::Body, cx.palette.ink2, text_width);
+        let header = (title.height() + TITLE_GAP + message.height()).max(ICON_SIZE);
+        let message_y = PADDING + title.height() + TITLE_GAP;
+        laid.texts.push((Point::new(text_x, PADDING), title));
+        laid.texts.push((Point::new(text_x, message_y), message));
+        let mut y = PADDING + header + SECTION_GAP;
+
         let sizes = self
             .children
             .iter_mut()
-            .map(|child| child.measure(cx, Size::new(width, control)))
+            .map(|child| child.measure(cx, Size::new(field_width, control)))
             .collect::<Vec<_>>();
-        self.row_heights = self
-            .rows()
-            .iter()
-            .map(|row| {
-                row.iter()
-                    .map(|index| sizes[*index].height)
-                    .fold(control, f32::max)
-            })
-            .collect();
-        self.button_sizes = sizes[fields..]
-            .iter()
-            .map(|size| Size::new(size.width.max(BUTTON_MIN_WIDTH), control))
-            .collect();
-        let status = self
-            .status
-            .as_ref()
-            .map_or(SPINNER_SIZE, |status| status.height().max(SPINNER_SIZE));
-        let height = PADDING
-            + self.header_height()
-            + SECTION_GAP
-            + self.fields_height()
-            + SECTION_GAP
-            + status
-            + SECTION_GAP
-            + control
-            + PADDING;
-        Size::new(width, height.ceil())
-    }
-
-    fn place(&mut self, cx: &mut Context, frame: Rect) {
-        self.frame = frame;
-        let field_x = frame.x + PADDING + LABEL_WIDTH + LABEL_GAP;
-        let field_width = frame.x + frame.width - PADDING - field_x;
-        let mut y = frame.y + PADDING + self.header_height() + SECTION_GAP;
-        for (row, height) in self.rows().into_iter().zip(self.row_heights.clone()) {
+        let rows = self.rows();
+        for row in &rows {
+            let height = row
+                .iter()
+                .map(|index| sizes[*index].height)
+                .fold(control, f32::max);
+            let first = self.fields[row[0]];
+            let label = cx.text.paragraph(
+                &first.label(),
+                TextStyle::role(TextRole::Body, cx.palette.ink2),
+                Some(LABEL_WIDTH),
+                TextAlign::End,
+            );
+            let label_y = y + ((control.min(height) - label.height()) / 2.0).round();
+            laid.texts.push((Point::new(PADDING, label_y), label));
             match row.as_slice() {
                 [host, port, security] => {
                     let host_width = field_width - PORT_WIDTH - SECURITY_WIDTH - 2.0 * LABEL_GAP;
-                    self.children[*host].place(cx, Rect::new(field_x, y, host_width, height));
                     let port_x = field_x + host_width + LABEL_GAP;
-                    self.children[*port].place(cx, Rect::new(port_x, y, PORT_WIDTH, height));
-                    let security_x = port_x + PORT_WIDTH + LABEL_GAP;
-                    self.children[*security]
-                        .place(cx, Rect::new(security_x, y, SECURITY_WIDTH, height));
+                    for (child, x, width) in [
+                        (*host, field_x, host_width),
+                        (*port, port_x, PORT_WIDTH),
+                        (*security, port_x + PORT_WIDTH + LABEL_GAP, SECURITY_WIDTH),
+                    ] {
+                        laid.slots.push(Slot {
+                            child,
+                            rect: Rect::new(x, y, width, height),
+                        });
+                    }
                 }
-                [single] => {
-                    self.children[*single].place(cx, Rect::new(field_x, y, field_width, height));
-                }
-                _ => {}
+                _ => laid.slots.extend(row.iter().map(|child| Slot {
+                    child: *child,
+                    rect: Rect::new(field_x, y, field_width, height),
+                })),
             }
-            y += height + ROW_GAP;
+            y += height;
+            if let Some((_, problem)) = state
+                .problem
+                .as_ref()
+                .filter(|(field, _)| field.row_start() == first)
+            {
+                let error = body(
+                    cx,
+                    problem,
+                    TextRole::Callout,
+                    cx.palette.danger_text,
+                    field_width,
+                );
+                let below = ERROR_GAP + error.height();
+                laid.texts.push((Point::new(field_x, y + ERROR_GAP), error));
+                y += below;
+            }
+            y += ROW_GAP;
         }
-        let fields = self.fields.len();
-        let control = cx.control_height(ControlSize::Regular);
-        let buttons_y = frame.y + frame.height - PADDING - control;
-        let right = frame.x + frame.width - PADDING;
-        let [cancel, primary] = [self.button_sizes[0], self.button_sizes[1]];
-        let primary_x = right - primary.width;
-        let cancel_x = primary_x - BUTTON_SPACING - cancel.width;
-        self.children[fields + 1].place(
-            cx,
-            Rect::new(primary_x, buttons_y, primary.width, primary.height),
-        );
-        self.children[fields].place(
-            cx,
-            Rect::new(cancel_x, buttons_y, cancel.width, cancel.height),
-        );
-        if let Some(other) = self.button_sizes.get(3).copied() {
-            self.children[fields + 3].place(
-                cx,
-                Rect::new(frame.x + PADDING, buttons_y, other.width, other.height),
+        if !rows.is_empty() {
+            y += SECTION_GAP - ROW_GAP;
+        }
+
+        let (lines_x, lines_width) = match rows.is_empty() {
+            true => (text_x, text_width),
+            false => (field_x, field_width),
+        };
+        self.spinning = false;
+        for (text, progress) in &state.lines {
+            let indent = match progress {
+                Some(_) => SPINNER_SIZE + MARK_GAP,
+                None => 0.0,
+            };
+            let color = match progress {
+                Some(Progress::Waiting) => cx.palette.ink3,
+                Some(Progress::Failed) => cx.palette.danger_text,
+                _ => cx.palette.ink,
+            };
+            let line = body(cx, text, TextRole::Body, color, lines_width - indent);
+            let height = line.height();
+            let mark_y = y + ((height - SPINNER_SIZE) / 2.0).max(0.0).round();
+            match progress {
+                Some(Progress::Running) => {
+                    self.spinning = true;
+                    laid.slots.push(Slot {
+                        child: self.spinner,
+                        rect: Rect::new(lines_x, mark_y, SPINNER_SIZE, SPINNER_SIZE),
+                    });
+                }
+                Some(progress) => laid.marks.push((Point::new(lines_x, mark_y), *progress)),
+                None => {}
+            }
+            laid.texts.push((Point::new(lines_x + indent, y), line));
+            y += height + LINE_GAP;
+        }
+        if !state.lines.is_empty() {
+            y += SECTION_GAP - LINE_GAP;
+        }
+
+        let notes = self
+            .mode
+            .footnote()
+            .map(|text| (text, false))
+            .into_iter()
+            .chain(state.status.clone());
+        for (text, error) in notes {
+            let color = match error {
+                true => cx.palette.danger_text,
+                false => cx.palette.ink2,
+            };
+            let note = body(cx, &text, TextRole::Callout, color, lines_width);
+            let height = note.height();
+            laid.texts.push((Point::new(lines_x, y), note));
+            y += height + LINE_GAP;
+        }
+        y += SECTION_GAP - LINE_GAP;
+
+        let mut right = width - PADDING;
+        let has_other = self.mode.other().is_some();
+        for (order, index) in self.buttons.iter().enumerate().rev() {
+            let size = Size::new(sizes[*index].width.max(BUTTON_MIN_WIDTH), control);
+            let x = match order == 0 && has_other {
+                true => PADDING,
+                false => {
+                    right -= size.width;
+                    let x = right;
+                    right -= BUTTON_SPACING;
+                    x
+                }
+            };
+            laid.slots.push(Slot {
+                child: *index,
+                rect: Rect::new(x, y, size.width, size.height),
+            });
+        }
+        y += control + PADDING;
+        self.laid = laid;
+        self.size = Size::new(width, y.ceil());
+        match self.inline {
+            true => available,
+            false => self.size,
+        }
+    }
+
+    fn place(&mut self, cx: &mut Context, frame: Rect) {
+        self.frame = match self.inline {
+            true => Rect::new(
+                (frame.x + (frame.width - self.size.width) / 2.0).round(),
+                (frame.y + ((frame.height - self.size.height) / 3.0).max(0.0)).round(),
+                self.size.width,
+                self.size.height,
+            ),
+            false => frame,
+        };
+        let (x, y) = (self.frame.x, self.frame.y);
+        for slot in &self.laid.slots {
+            let rect = Rect::new(
+                x + slot.rect.x,
+                y + slot.rect.y,
+                slot.rect.width,
+                slot.rect.height,
             );
+            self.children[slot.child].place(cx, rect);
         }
-        let status_y = buttons_y - SECTION_GAP - SPINNER_SIZE;
-        self.children[fields + 2].place(
-            cx,
-            Rect::new(frame.x + PADDING, status_y, SPINNER_SIZE, SPINNER_SIZE),
-        );
     }
 
     fn frame(&self) -> Rect {
@@ -570,84 +709,47 @@ impl Widget for AccountSheet {
     }
 
     fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
+        let (x, y) = (self.frame.x, self.frame.y);
         if let Some(icon) = &self.icon {
             items.push(Item::Image {
-                rect: Rect::new(
-                    self.frame.x + PADDING,
-                    self.frame.y + PADDING,
-                    ICON_SIZE,
-                    ICON_SIZE,
-                ),
+                rect: Rect::new(x + PADDING, y + PADDING, ICON_SIZE, ICON_SIZE),
                 image: icon.clone(),
             });
         }
-        let x = self.text_x();
-        let mut y = self.frame.y + PADDING;
-        if let Some(title) = &self.title {
+        for (at, paragraph) in &self.laid.texts {
             items.push(Item::Text {
-                origin: Point::new(x, y),
-                paragraph: title.clone(),
-            });
-            y += title.height() + TITLE_GAP;
-        }
-        if let Some(message) = &self.message {
-            items.push(Item::Text {
-                origin: Point::new(x, y),
-                paragraph: message.clone(),
+                origin: Point::new(x + at.x, y + at.y),
+                paragraph: paragraph.clone(),
             });
         }
-        let control = cx.control_height(ControlSize::Regular);
-        let mut y = self.frame.y + PADDING + self.header_height() + SECTION_GAP;
-        for (row, height) in self.rows().iter().zip(&self.row_heights) {
-            if let Some(label) = row.first().and_then(|index| self.labels.get(*index)) {
-                items.push(Item::Text {
-                    origin: Point::new(
-                        self.frame.x + PADDING,
-                        y + ((control.min(*height) - label.height()) / 2.0).round(),
-                    ),
-                    paragraph: label.clone(),
-                });
-            }
-            y += height + ROW_GAP;
+        for (at, progress) in &self.laid.marks {
+            paint_mark(cx, Point::new(x + at.x, y + at.y), *progress, items);
         }
-        let fields = self.fields.len();
-        let busy = self.state.borrow().busy;
         for (index, child) in self.children.iter().enumerate() {
-            if index == fields + 2 && !busy {
-                continue;
+            if index != self.spinner || self.spinning {
+                child.paint(cx, items);
             }
-            child.paint(cx, items);
-        }
-        if let Some(status) = &self.status {
-            let spinner = self.children[fields + 2].frame();
-            let x = match busy {
-                true => spinner.x + SPINNER_SIZE + STATUS_GAP,
-                false => spinner.x,
-            };
-            items.push(Item::Clip {
-                shape: Shape::rect(Rect::new(
-                    x,
-                    spinner.y - status.height(),
-                    self.frame.width,
-                    status.height() * 3.0,
-                )),
-                items: vec![Item::Text {
-                    origin: Point::new(
-                        x,
-                        spinner.y + ((SPINNER_SIZE - status.height()) / 2.0).round(),
-                    ),
-                    paragraph: status.clone(),
-                }],
-            });
         }
     }
 
     fn access(&self, _cx: &Context) -> Node {
-        let mut node = Node::new(Role::Dialog);
-        let (title, message) = self.texts();
+        let (title, message) = self.mode.texts();
+        let mut node = match self.inline {
+            true => Node::new(Role::Group),
+            false => {
+                let mut node = Node::new(Role::Dialog);
+                node.set_modal();
+                node
+            }
+        };
         node.set_label(title);
-        node.set_description(message);
-        node.set_modal();
+        let state = self.state.borrow();
+        let details = std::iter::once(message)
+            .chain(state.lines.iter().map(|(line, _)| line.clone()))
+            .chain(state.problem.iter().map(|(_, problem)| problem.clone()))
+            .chain(state.status.iter().map(|(status, _)| status.clone()))
+            .collect::<Vec<_>>();
+        node.set_description(details.join("\n"));
         node
     }
 

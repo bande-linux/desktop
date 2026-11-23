@@ -24,6 +24,10 @@ CREATE TABLE IF NOT EXISTS accounts (
     signature TEXT NOT NULL DEFAULT '',
     enabled INTEGER NOT NULL DEFAULT 1
 );
+CREATE TABLE IF NOT EXISTS account_descriptions (
+    account INTEGER PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
+    description TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS notes_accounts (
     account INTEGER PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE
 );
@@ -39,6 +43,16 @@ pub struct Account {
     pub smtp: Server,
     pub signature: String,
     pub enabled: bool,
+    pub description: String,
+}
+
+impl Account {
+    pub fn label(&self) -> &str {
+        match self.description.trim() {
+            "" => &self.email,
+            description => description,
+        }
+    }
 }
 
 pub fn store_path() -> Result<PathBuf> {
@@ -93,13 +107,16 @@ fn account_from(row: &Row<'_>) -> rusqlite::Result<Account> {
         },
         signature: row.get(10)?,
         enabled: row.get(11)?,
+        description: row.get(12)?,
     })
 }
 
 pub fn list(connection: &Connection) -> Result<Vec<Account>> {
     let mut statement = connection.prepare(
         "SELECT id, name, email, user, imap_host, imap_port, imap_security, \
-         smtp_host, smtp_port, smtp_security, signature, enabled FROM accounts ORDER BY id",
+         smtp_host, smtp_port, smtp_security, signature, enabled, \
+         COALESCE((SELECT description FROM account_descriptions WHERE account = accounts.id), '') \
+         FROM accounts ORDER BY id",
     )?;
     let accounts = statement
         .query_map([], account_from)?
@@ -125,7 +142,28 @@ pub fn add(connection: &Connection, account: &Account) -> Result<AccountId> {
             account.signature,
         ],
     )?;
-    Ok(connection.last_insert_rowid())
+    let id = connection.last_insert_rowid();
+    set_description(connection, id, &account.description)?;
+    Ok(id)
+}
+
+pub fn set_description(
+    connection: &Connection,
+    account: AccountId,
+    description: &str,
+) -> Result<()> {
+    match description.trim() {
+        "" => connection.execute(
+            "DELETE FROM account_descriptions WHERE account = ?1",
+            [account],
+        )?,
+        description => connection.execute(
+            "INSERT INTO account_descriptions (account, description) VALUES (?1, ?2) \
+             ON CONFLICT (account) DO UPDATE SET description = excluded.description",
+            params![account, description],
+        )?,
+    };
+    Ok(())
 }
 
 pub fn notes(connection: &Connection) -> Result<Vec<AccountId>> {

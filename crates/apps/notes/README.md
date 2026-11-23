@@ -14,7 +14,7 @@ apt install bande-notes
 - **Where notes live.** "On This Computer" always exists. A mail account is used for notes when
   its Notes switch is on: in Settings… (Ctrl+,) for each of Mail's accounts, in Mail's own
   account setup ("Also use this account for Notes", on by default), or by adding the account
-  from Notes with File ▸ Add Account…, which is Mail's setup sheet (account type, the servers
+  from Notes with File ▸ Add Account…, which is Mail's setup guide (the servers
   found for the address, or entered by hand) and adds the account to Mail too. Passwords stay in
   the keyring under `application=org.bande.Mail`. A wrong password asks for it again. Nothing
   contacts a server unless an account is used for notes.

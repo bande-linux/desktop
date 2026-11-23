@@ -154,7 +154,30 @@ impl MailView {
         }
     }
 
+    pub(crate) fn remove_toolbar(&mut self) {
+        let toolbar = self.toolbar;
+        if let Some(host) = self.host_mut() {
+            for id in [
+                toolbar.get_mail,
+                toolbar.compose,
+                toolbar.archive,
+                toolbar.delete,
+                toolbar.junk,
+                toolbar.reply,
+                toolbar.reply_all,
+                toolbar.forward,
+                toolbar.flag,
+                toolbar.search,
+            ] {
+                host.remove(id);
+            }
+        }
+    }
+
     pub(crate) fn toolbar_frames(&self) -> Vec<(WidgetId, Rect)> {
+        if self.welcoming() {
+            return Vec::new();
+        }
         let toolbar = self.toolbar;
         let button_y = centred(BUTTON_HEIGHT);
         let list_end = SIDEBAR_WIDTH + LIST_WIDTH;

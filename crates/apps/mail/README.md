@@ -10,15 +10,19 @@ apt install bande-mail
 
 ## What it does
 
-- **Accounts.** The setup sheet first asks for the account type (IMAP and SMTP), then for a
-  name, an address and a password. Mail looks up the servers of the address's domain and shows
-  them, with user name, hosts, ports and security (TLS, STARTTLS), in the server settings step
-  to confirm or change; Enter Server Settings Manually goes there directly. Sign In checks that
-  both IMAP and SMTP accept the password before the account is added. When Notes is installed,
-  Also use this account for Notes (on by default) lets Notes keep its notes in the account too. A failure says what went
-  wrong (server unreachable, certificate not valid, no encryption offered, user name or password
-  refused, server error) and keeps every field editable. When a saved password stops working,
-  the password sheet also leads to Server Settings…. Several accounts work side by side.
+- **Accounts.** The setup guide asks for a name, an address and a password; with no account yet
+  it fills the window, Add Account… shows it as a sheet. Mail then looks up the servers of the
+  address's domain and checks them, in a checklist that shows each step (finding the servers,
+  signing in to IMAP, checking sending over SMTP); Cancel stops at any point. The password goes
+  only to servers in the address's own domain found in its DNS records or its published settings;
+  servers elsewhere, or guessed ones, are shown first with Sign In and Change Settings…. Set Up
+  Manually… goes straight to the server settings (user name, hosts, ports, TLS or STARTTLS). A
+  problem is shown at the field it concerns: a refused password, or a server that accepts no
+  password from mail apps, under Password; an unreachable server, a certificate that is not
+  valid or no encryption offered under that server. The last step, Account Added, takes a
+  description (the account's name in the sidebar) and, when Notes is installed, Also use this
+  account for Notes (on by default). When a saved password stops working, the password sheet
+  also leads to Server Settings…. Several accounts work side by side.
 - **Settings** (Ctrl+,) has five tabs. General: notifications for new mail and their sound.
   Accounts: whether each account is used, its full name, signature, OpenPGP key, S/MIME
   certificate and whether new messages are signed, and server settings (user
@@ -38,7 +42,8 @@ apt install bande-mail
   only), and finally `imap.`/`mail.`/`smtp.` guesses that answer on the usual ports. The DNS
   lookups use `bande-discovery`, shared with Calendar.
 - **Sign-in** uses SASL PLAIN, else LOGIN, as the server's capabilities offer, and only over TLS
-  or STARTTLS. After sending, Mail keeps a copy in Sent unless the server already filed one
+  or STARTTLS; a server that offers neither (only token sign-in) is told apart from a wrong
+  password. After sending, Mail keeps a copy in Sent unless the server already filed one
   with the same `Message-ID`.
 - **Security.** IMAP and SMTP use TLS or STARTTLS, verified against the system's certificate
   store. Plain text is refused for anything but this computer (`localhost`, `127.0.0.1`, `::1`),
@@ -212,7 +217,7 @@ noted:
 | `nettle` | AES-CBC and RSA encryption for S/MIME (already linked through Sequoia) |
 | `jiff`, `roxmltree`, `zbus`, `accesskit`, `tracing` | shared with the desktop |
 
-The accounts, the setup sheet and the IMAP and SMTP clients are `bande-mail-core`, shared with
+The accounts, the setup guide and the IMAP and SMTP clients are `bande-mail-core`, shared with
 Notes. No IMAP, SMTP, DNS or HTTP crate is used: the maintained IMAP crates are async-only or not in
 Debian, and the desktop has no async runtime. The IMAP and SMTP clients, the SRV/MX lookup and
 the HTTPS autoconfig fetch are small, synchronous and bounded by timeouts.

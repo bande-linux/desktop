@@ -356,7 +356,10 @@ impl Session {
             }
             self.finish(&tag)
         } else if self.has("LOGINDISABLED") {
-            return Err(Error::Insecure);
+            return Err(match self.link.is_encrypted() {
+                true => Error::NoPasswordSignIn,
+                false => Error::Insecure,
+            });
         } else {
             let (Some(user), Some(password)) = (quote(user), quote(password)) else {
                 return Err(Error::Login(tr!("the name or password has a line break")));

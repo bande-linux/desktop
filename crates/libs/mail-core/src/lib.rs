@@ -1,6 +1,7 @@
 pub mod accounts;
 pub mod discover;
 pub mod error;
+pub mod guide;
 pub mod http;
 pub mod imap;
 pub mod mime;

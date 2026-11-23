@@ -12,6 +12,7 @@ pub enum Error {
     Protocol(String),
     Refused(String),
     Login(String),
+    NoPasswordSignIn,
     Store(rusqlite::Error),
     Secret(String),
     Crypto(String),
@@ -45,6 +46,7 @@ impl fmt::Display for Error {
             }
             Self::Refused(text) => tr!("The server refused: {text}", text = text),
             Self::Login(text) => tr!("The server refused the login: {text}", text = text),
+            Self::NoPasswordSignIn => tr!("The server does not accept a password from mail apps."),
             Self::Store(error) => tr!(
                 "The offline store failed: {error}",
                 error = error.to_string()

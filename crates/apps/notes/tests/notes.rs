@@ -63,6 +63,7 @@ fn a_note_written_elsewhere_is_edited_here_and_a_conflicting_edit_keeps_both() {
         smtp: local(1),
         signature: String::new(),
         enabled: true,
+        description: String::new(),
     };
     account.id = accounts::add(&mail, &account).unwrap();
     let mut events = Inbox::new().unwrap();

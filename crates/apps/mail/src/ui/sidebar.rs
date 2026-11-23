@@ -1,7 +1,7 @@
 use bande_l10n::tr;
 
 use crate::imap::Role;
-use crate::store::{Account, Mailbox, MailboxId, Scope};
+use crate::store::{Account, AccountId, Mailbox, MailboxId, Scope};
 use crate::ui::symbols::Symbol;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -44,7 +44,7 @@ impl Place {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Row {
-    Heading(String),
+    Heading(String, Option<AccountId>),
     Place {
         place: Place,
         title: String,
@@ -77,7 +77,7 @@ pub fn role_title(role: Role) -> String {
 }
 
 pub fn rows(accounts: &[(Account, Vec<Mailbox>)], unread: impl Fn(&Scope) -> usize) -> Vec<Row> {
-    let mut rows = vec![Row::Heading(tr!("Mailboxes"))];
+    let mut rows = vec![Row::Heading(tr!("Mailboxes"), None)];
     for role in UNIFIED {
         let present = accounts
             .iter()
@@ -107,7 +107,7 @@ pub fn rows(accounts: &[(Account, Vec<Mailbox>)], unread: impl Fn(&Scope) -> usi
         }
     }
     for (account, mailboxes) in accounts {
-        rows.push(Row::Heading(account.email.clone()));
+        rows.push(Row::Heading(account.label().to_owned(), Some(account.id)));
         let mut ordered = mailboxes.iter().collect::<Vec<_>>();
         ordered.sort_by_key(|mailbox| {
             (

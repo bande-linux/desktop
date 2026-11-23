@@ -553,7 +553,7 @@ impl Store {
             "UPDATE accounts SET name = ?2, signature = ?3, enabled = ?4 WHERE id = ?1",
             params![account.id, account.name, account.signature, account.enabled],
         )?;
-        Ok(())
+        accounts::set_description(&self.connection, account.id, &account.description)
     }
 
     pub fn update_servers(&self, id: AccountId, servers: &crate::discover::Settings) -> Result<()> {

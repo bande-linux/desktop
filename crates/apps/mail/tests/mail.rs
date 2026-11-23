@@ -5,18 +5,22 @@ use std::net::TcpListener;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
+use accesskit::{Action, ActionRequest, TreeId};
 use bande_discovery::testing::{Record, nameserver};
 use bande_mail::compose::{Draft, Outgoing, from_mailto};
-use bande_mail::discover::Source;
 use bande_mail::imap::{Fetched, Folder, Session};
 use bande_mail::message::Address;
-use bande_mail::net::{Network, Security, Server};
+use bande_mail::net::{Network, Server};
 use bande_mail::offer::{DOMAIN, MESSAGE_ARGUMENT, offer_to_search};
-use bande_mail::setup::{Outcome, Problem, check, find};
+use bande_mail::setup::{Outcome, Problem, check};
 use bande_mail::store::{Account, Store};
 use bande_mail::worker::{Command as Order, Event, Mailroom, Status, Worker};
+use bande_mail_core::guide::{Done, Guide, Host, Options};
+use bande_mail_core::sheet::Mode;
 use bande_mail_core::testing::{Dovecot, PASSWORD, USER, local};
 use bande_search::Offer;
+use bande_toolkit::ui::{Context, Event as Input, FreeLayout, Key, Modifiers, Size, Ui, Widget};
+use bande_toolkit::{Palette, Scheme, TextSystem};
 use zbus::blocking::Connection;
 
 const WAIT: Duration = Duration::from_secs(20);
@@ -34,6 +38,7 @@ fn account(email: &str, imap: Server, smtp: Server) -> Account {
         smtp,
         signature: String::new(),
         enabled: true,
+        description: String::new(),
     }
 }
 
@@ -147,7 +152,7 @@ fn a_message_goes_out_once_without_injected_headers_after_the_imap_session_went_
 }
 
 #[test]
-fn an_account_found_in_its_domains_records_signs_in_after_a_wrong_password() {
+fn the_setup_guide_asks_before_signing_in_off_domain_and_shows_each_problem_at_its_field() {
     if !Dovecot::installed() {
         eprintln!("dovecot is not installed; skipping");
         return;
@@ -164,25 +169,161 @@ fn an_account_found_in_its_domains_records_signs_in_after_a_wrong_password() {
         resolver: nameserver(records).unwrap(),
         ..Network::default()
     };
-    let (mut found, source) = find(USER, &network).settings.unwrap();
-    assert_eq!(source, Source::Services);
-    assert_eq!(
-        (found.imap.host.as_str(), found.imap.port),
-        ("localhost", dovecot.port())
-    );
-    assert_eq!(
-        (found.smtp.security, found.user.as_str()),
-        (Security::StartTls, USER)
+    let (reports, received) = std::sync::mpsc::channel();
+    let layout = FreeLayout::new();
+    let host = Widget::id(&layout);
+    let palette = Palette::for_scheme(Scheme::Light);
+    let mut ui = Ui::new(Box::new(layout), Context::new(TextSystem::new(), palette));
+    let options = Options {
+        icon: b"<svg xmlns='http://www.w3.org/2000/svg'/>",
+        offer_notes: true,
+        taken: Vec::new(),
+        network: network.clone(),
+        reporter: Arc::new(move |report| {
+            let _ = reports.send(report);
+        }),
+    };
+    let mut guide = Guide::open(&mut ui, Host::Inline(host), Mode::Address, options);
+    let wait = |ui: &mut Ui, guide: &mut Guide, until: &dyn Fn(&Mode) -> bool| loop {
+        let report = received
+            .recv_timeout(WAIT)
+            .expect("the guide stopped reporting");
+        let done = guide.report(ui, report);
+        if done.is_some() || until(guide.mode()) {
+            return done;
+        }
+    };
+
+    assert!(!names(&mut ui).contains(&"Cancel".to_owned()));
+    for text in ["Ann", USER, "wrong"] {
+        key(&mut ui, Key::Tab);
+        ui.handle(&Input::Commit(text.to_owned()));
+    }
+    key(&mut ui, Key::Enter);
+    assert!(guide.act(&mut ui).is_none());
+    wait(&mut ui, &mut guide, &|mode| *mode != Mode::Checking);
+    assert!(
+        matches!(guide.mode(), Mode::Confirm(_)),
+        "servers outside bande.test are confirmed before the password goes there"
     );
 
-    found.imap.security = Security::Plain;
-    found.smtp.security = Security::Plain;
-    let refused = check(&found, "wrong", &network);
+    click(&mut ui, "Sign In");
+    assert!(guide.act(&mut ui).is_none());
+    wait(&mut ui, &mut guide, &|mode| *mode != Mode::Checking);
+    assert_eq!(*guide.mode(), Mode::Servers);
+    assert!(described(&mut ui).contains("offers no encrypted connection"));
+
+    for choice in [0, 1] {
+        click_nth(&mut ui, "Security", choice);
+        ui.take_menu_request().unwrap();
+        ui.menu_action("2");
+    }
+    click(&mut ui, "Sign In");
+    assert!(guide.act(&mut ui).is_none());
+    wait(&mut ui, &mut guide, &|mode| *mode != Mode::Checking);
+    assert_eq!(*guide.mode(), Mode::Servers);
+    assert!(described(&mut ui).contains("did not accept the user name or password"));
+
+    ui.handle(&Input::Commit(PASSWORD.to_owned()));
+    key(&mut ui, Key::Enter);
+    assert!(guide.act(&mut ui).is_none());
+    let Some(Done::Ready {
+        settings, password, ..
+    }) = wait(&mut ui, &mut guide, &|_| false)
+    else {
+        panic!("the right password did not sign in");
+    };
+    assert_eq!(
+        (settings.imap.port, settings.smtp.port, password.as_str()),
+        (dovecot.port(), smtp, PASSWORD)
+    );
+
+    guide.added(&mut ui, USER.to_owned());
+    key(&mut ui, Key::Tab);
+    ui.handle(&Input::Commit("Work".to_owned()));
+    click(&mut ui, "Done");
+    let Some(Done::Finished {
+        description, notes, ..
+    }) = guide.act(&mut ui)
+    else {
+        panic!("the account was not finished");
+    };
+    assert_eq!((description.as_str(), notes), ("Work", true));
+
+    let mut token_only = settings;
+    token_only.smtp = local(token_only_smtp());
+    let refused = check(&token_only, PASSWORD, &network, |_| {});
     assert!(
-        matches!(refused, Outcome::Failed(_, Problem::WrongCredentials(_))),
+        matches!(refused, Outcome::Failed(_, Problem::NoPasswordSignIn(_))),
         "{refused:?}"
     );
-    assert_eq!(check(&found, PASSWORD, &network), Outcome::Ready(found));
+}
+
+fn key(ui: &mut Ui, key: Key) {
+    ui.handle(&Input::Key {
+        key,
+        modifiers: Modifiers::default(),
+    });
+}
+
+fn nodes(ui: &mut Ui) -> Vec<(accesskit::NodeId, accesskit::Node)> {
+    ui.layout(Size::new(900.0, 700.0));
+    ui.accessibility().nodes
+}
+
+fn names(ui: &mut Ui) -> Vec<String> {
+    nodes(ui)
+        .iter()
+        .filter_map(|(_, node)| node.label().map(str::to_owned))
+        .collect()
+}
+
+fn described(ui: &mut Ui) -> String {
+    nodes(ui)
+        .iter()
+        .filter_map(|(_, node)| node.description().map(str::to_owned))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn click_nth(ui: &mut Ui, name: &str, nth: usize) {
+    let (target, _) = nodes(ui)
+        .into_iter()
+        .filter(|(_, node)| node.label() == Some(name))
+        .nth(nth)
+        .unwrap_or_else(|| panic!("no {name}"));
+    ui.perform(&ActionRequest {
+        action: Action::Click,
+        target_tree: TreeId::ROOT,
+        target_node: target,
+        data: None,
+    });
+}
+
+fn click(ui: &mut Ui, name: &str) {
+    click_nth(ui, name, 0);
+}
+
+fn token_only_smtp() -> u16 {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        for stream in listener.incoming().flatten() {
+            let mut writer = stream.try_clone().unwrap();
+            let lines = BufReader::new(stream).lines().map_while(Result::ok);
+            writer.write_all(b"220 ready\r\n").unwrap();
+            for line in lines {
+                let reply = match line.starts_with("EHLO") {
+                    true => "250-localhost\r\n250 AUTH XOAUTH2 OAUTHBEARER\r\n",
+                    false => "221 bye\r\n",
+                };
+                if writer.write_all(reply.as_bytes()).is_err() {
+                    break;
+                }
+            }
+        }
+    });
+    port
 }
 
 #[test]

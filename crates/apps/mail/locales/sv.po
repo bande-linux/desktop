@@ -892,18 +892,6 @@ msgstr "Det nya meddelandet påbörjades inte"
 msgid "Mail needs an account to send it from. Add one, then try again."
 msgstr "E-post behöver ett konto att skicka från. Lägg till ett och försök igen."
 
-msgid "Enter your password."
-msgstr "Ange ditt lösenord."
-
-msgid "Enter your name and email address."
-msgstr "Ange ditt namn och din e-postadress."
-
-msgid "This account is already set up."
-msgstr "Det här kontot är redan tillagt."
-
-msgid "Looking up the servers…"
-msgstr "Slår upp servrarna…"
-
 msgid "Rename Mailbox…"
 msgstr "Byt namn på brevlåda…"
 

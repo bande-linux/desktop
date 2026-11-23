@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use accesskit::TreeUpdate;
@@ -9,9 +10,9 @@ use bande_keyring::Keyring;
 use bande_l10n::tr;
 use bande_mail_core::accounts::{self, Account, AccountId};
 use bande_mail_core::discover::Settings;
+use bande_mail_core::guide::{Done, Guide, Host, Options, Report};
 use bande_mail_core::net::Network;
-use bande_mail_core::setup::{Outcome, check, find};
-use bande_mail_core::sheet::{AccountSheet, Action, Field, Mode, Shared, SheetState};
+use bande_mail_core::sheet::Mode;
 use bande_mail_core::{KEYRING, keyring_key, keyring_label};
 use bande_rich_text::heading;
 use bande_toolkit::ui::{
@@ -49,12 +50,6 @@ pub enum Request {
     Accounts(Option<(AccountId, String)>),
 }
 
-struct Setup {
-    state: Shared,
-    mode: Mode,
-    password_field: WidgetId,
-}
-
 pub fn now() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -85,7 +80,7 @@ pub struct NotesView {
     seen: u64,
     settle_at: Option<Instant>,
     undo: Vec<Deleted>,
-    setup: Option<Setup>,
+    setup: Option<Guide>,
     outbox: Outbox<WorkerEvent>,
     network: Network,
     requests: Vec<Request>,
@@ -257,7 +252,7 @@ impl NotesView {
                 .accounts
                 .iter()
                 .find(|known| known.id == account)
-                .map(|known| known.email.clone())
+                .map(|known| known.label().to_owned())
                 .unwrap_or_default(),
         }
     }
@@ -679,168 +674,84 @@ impl NotesView {
     }
 
     pub fn present_setup(&mut self, mode: Mode) {
-        let state: Shared = Rc::new(RefCell::new(SheetState::default()));
-        if let Some(previous) = self.setup.take() {
-            {
-                let previous = previous.state.borrow();
-                let mut fresh = state.borrow_mut();
-                fresh.values = previous.values.clone();
-                fresh.password = previous.password.clone();
-            }
-            previous.state.borrow_mut().closed = true;
-        }
-        let sheet = AccountSheet::new(Rc::clone(&state), mode.clone(), ICON, false);
-        let password_field = sheet.password_field();
-        self.ui.present_sheet(sheet);
-        self.setup = Some(Setup {
-            state,
-            mode,
-            password_field,
-        });
+        self.close_setup();
+        let outbox = self.outbox.clone();
+        let options = Options {
+            icon: ICON,
+            offer_notes: false,
+            taken: Vec::new(),
+            network: self.network.clone(),
+            reporter: Arc::new(move |report| {
+                outbox.send(WorkerEvent::Guide(Box::new(report)));
+            }),
+        };
+        self.setup = Some(Guide::open(&mut self.ui, Host::Sheet, mode, options));
     }
 
     fn close_setup(&mut self) {
-        if let Some(setup) = self.setup.take() {
-            setup.state.borrow_mut().closed = true;
+        if let Some(guide) = self.setup.take() {
+            guide.close(&mut self.ui);
         }
     }
 
-    fn submit_password(&mut self, field: WidgetId) {
-        let previous = self.ui.focus();
-        self.ui.set_focus(field);
-        self.ui.handle(&Event::Key {
-            key: Key::Enter,
-            modifiers: Modifiers::default(),
-        });
-        match previous {
-            Some(previous) => self.ui.set_focus(previous),
-            None => self.ui.clear_focus(),
-        }
-    }
-
-    fn sheet_action(&mut self) {
-        let Some(setup) = &self.setup else {
-            return;
-        };
-        let (state, mode, field) = (
-            Rc::clone(&setup.state),
-            setup.mode.clone(),
-            setup.password_field,
-        );
-        let Some(action) = state.borrow_mut().action.take() else {
-            return;
-        };
-        if state.borrow().busy && action != Action::Cancel {
-            return;
-        }
-        if action != Action::Cancel && mode != Mode::Kind {
-            self.submit_password(field);
-            state.borrow_mut().action = None;
-        }
-        match (action, mode) {
-            (Action::Cancel, _) => self.close_setup(),
-            (Action::Primary, Mode::Kind) => self.present_setup(Mode::Address),
-            (Action::Primary, Mode::Address) => self.find_servers(&state),
-            (Action::Primary, Mode::Servers) => self.sign_in(&state),
-            (Action::Primary, Mode::Password(email)) => self.renew_password(&state, &email),
-            (Action::Other, Mode::Address) => self.present_setup(Mode::Servers),
-            (Action::Other, Mode::Servers | Mode::Password(_)) => self.present_setup(Mode::Address),
-            (Action::Other, Mode::Kind) => {}
-        }
-    }
-
-    fn start_check(&self, state: &Shared, status: String) -> bool {
-        let problem = {
-            let state = state.borrow();
-            let email = state.value(Field::Email);
-            if state.value(Field::Name).is_empty() || bande_discovery::domain_of(&email).is_none() {
-                Some(tr!("Enter your name and email address."))
-            } else if state.password.is_empty() {
-                Some(tr!("Enter your password."))
-            } else {
-                None
-            }
-        };
-        let mut state = state.borrow_mut();
-        match problem {
-            Some(problem) => {
-                state.status = Some((problem, true));
-                false
-            }
-            None => {
-                state.busy = true;
-                state.status = Some((status, false));
-                true
-            }
-        }
-    }
-
-    fn find_servers(&mut self, state: &Shared) {
-        if !self.start_check(state, tr!("Looking up the servers…")) {
-            return;
-        }
-        let email = state.borrow().value(Field::Email);
-        let (network, outbox) = (self.network.clone(), self.outbox.clone());
-        std::thread::spawn(move || {
-            outbox.send(WorkerEvent::Found(Box::new(find(&email, &network))));
-        });
-    }
-
-    pub fn servers_found(&mut self, found: bande_mail_core::setup::Found) {
-        if self.setup.as_ref().map(|setup| &setup.mode) != Some(&Mode::Address) {
-            return;
-        }
-        if let Some((settings, _)) = &found.settings
-            && let Some(setup) = &self.setup
+    fn guide_acted(&mut self) {
+        if let Some(done) = self
+            .setup
+            .as_mut()
+            .and_then(|guide| guide.act(&mut self.ui))
         {
-            setup.state.borrow_mut().fill(settings);
-        }
-        self.present_setup(Mode::Servers);
-        if let Some(setup) = &self.setup {
-            setup.state.borrow_mut().status = Some((found.message(), false));
+            self.guide_done(done);
         }
     }
 
-    fn sign_in(&mut self, state: &Shared) {
-        let Some(servers) = state.borrow().servers() else {
-            state.borrow_mut().status = Some((tr!("Enter both server names."), true));
-            return;
-        };
-        if !self.start_check(state, tr!("Checking the account…")) {
-            return;
+    pub fn guide_reported(&mut self, report: Report) {
+        if let Some(done) = self
+            .setup
+            .as_mut()
+            .and_then(|guide| guide.report(&mut self.ui, report))
+        {
+            self.guide_done(done);
         }
-        let password = state.borrow().password.to_string();
-        let (network, outbox) = (self.network.clone(), self.outbox.clone());
-        std::thread::spawn(move || {
-            outbox.send(WorkerEvent::Checked(Box::new(check(
-                &servers, &password, &network,
-            ))));
-        });
     }
 
-    pub fn setup_checked(&mut self, outcome: Outcome) {
-        let Some(setup) = &self.setup else {
-            return;
-        };
-        let state = Rc::clone(&setup.state);
-        state.borrow_mut().busy = false;
-        match outcome {
-            Outcome::Ready(settings) => self.add_account(&state, settings),
-            Outcome::Failed(_, problem) => {
-                state.borrow_mut().status = Some((problem.message(), true));
+    fn guide_done(&mut self, done: Done) {
+        match done {
+            Done::Cancelled => self.close_setup(),
+            Done::Ready {
+                name,
+                email,
+                settings,
+                password,
+            } => self.add_account(name, email, settings, password),
+            Done::Finished {
+                email, description, ..
+            } => {
+                self.close_setup();
+                let described = accounts::open_store().and_then(|mail| {
+                    match accounts::list(&mail)?
+                        .into_iter()
+                        .find(|known| known.email.eq_ignore_ascii_case(&email))
+                    {
+                        Some(known) => accounts::set_description(&mail, known.id, &description),
+                        None => Ok(()),
+                    }
+                });
+                if let Err(error) = described {
+                    tracing::warn!("cannot describe {email}: {error}");
+                }
             }
+            Done::Renewed { email, password } => self.renew_password(&email, password),
+            Done::ServerSettings => self.present_setup(Mode::Address),
         }
     }
 
-    fn add_account(&mut self, state: &Shared, settings: Settings) {
-        let (name, email, password) = {
-            let state = state.borrow();
-            (
-                state.value(Field::Name),
-                state.value(Field::Email),
-                Zeroizing::new(state.password.to_string()),
-            )
-        };
+    fn add_account(
+        &mut self,
+        name: String,
+        email: String,
+        settings: Settings,
+        password: Zeroizing<String>,
+    ) {
         let account = Account {
             id: 0,
             name,
@@ -850,6 +761,7 @@ impl NotesView {
             smtp: settings.smtp,
             signature: String::new(),
             enabled: true,
+            description: String::new(),
         };
         let added = accounts::open_store().and_then(|mail| {
             let id = match accounts::list(&mail)?
@@ -878,18 +790,19 @@ impl NotesView {
                 });
                 self.requests
                     .push(Request::Accounts(Some((id, password.to_string()))));
-                self.close_setup();
+                if let Some(guide) = &mut self.setup {
+                    guide.added(&mut self.ui, account.email);
+                }
             }
-            Err(error) => state.borrow_mut().status = Some((error.to_string(), true)),
+            Err(error) => {
+                if let Some(guide) = &mut self.setup {
+                    guide.tell(&mut self.ui, error.to_string());
+                }
+            }
         }
     }
 
-    fn renew_password(&mut self, state: &Shared, email: &str) {
-        let password = Zeroizing::new(state.borrow().password.to_string());
-        if password.is_empty() {
-            state.borrow_mut().status = Some((tr!("Enter your password."), true));
-            return;
-        }
+    fn renew_password(&mut self, email: &str, password: Zeroizing<String>) {
         let Some(account) = self
             .accounts
             .iter()
@@ -1106,7 +1019,7 @@ impl NotesView {
     }
 
     fn after_event(&mut self) {
-        self.sheet_action();
+        self.guide_acted();
         if self.note.is_some()
             && !self.locked
             && self.revision() != self.seen

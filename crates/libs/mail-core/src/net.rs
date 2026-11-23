@@ -173,6 +173,10 @@ impl Link {
         }
     }
 
+    pub fn is_encrypted(&self) -> bool {
+        matches!(self.stream, Stream::Tls(_))
+    }
+
     pub fn start_tls(self) -> Result<Self> {
         let Stream::Plain(tcp) = self.stream else {
             return Ok(self);

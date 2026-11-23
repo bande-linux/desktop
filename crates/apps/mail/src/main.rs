@@ -726,7 +726,7 @@ impl Mail {
             Change::Settings => view.set_settings(load_settings()),
             Change::Accounts => view.accounts_changed(),
             Change::Remove(id) => view.remove_account(id),
-            Change::AddAccount => view.present_setup(Mode::Kind),
+            Change::AddAccount => view.present_setup(Mode::Address),
         }
         if let Some(main) = self.main {
             self.serve(cx, main);

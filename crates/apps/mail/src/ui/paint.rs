@@ -92,9 +92,28 @@ impl MailView {
         self.size = (width as f32, height as f32);
         self.hits.clear();
         self.layout_toolbar();
+        if let Some(guide) = self.setup.as_ref().filter(|_| self.welcoming()) {
+            let area = Rect::new(
+                0.0,
+                TOOLBAR_HEIGHT,
+                self.size.0,
+                (self.size.1 - TOOLBAR_HEIGHT).max(0.0),
+            );
+            guide.place(&mut self.ui, area);
+        }
         self.ui.layout(Size::new(self.size.0, self.size.1));
         let (controls, sheet) = self.ui.paint_layers(width, height);
         let mut items = Vec::new();
+        if self.welcoming() {
+            items.extend(controls);
+            items.extend(sheet);
+            return Scene {
+                width,
+                height,
+                background: self.palette.sheet,
+                items,
+            };
+        }
         self.paint_sidebar(&mut items);
         let sheet_frame = self.sheet_frame();
         let radius = match self.sheet_inset > 0.0 {
@@ -200,7 +219,7 @@ impl MailView {
             .sidebar
             .iter()
             .map(|row| match row {
-                Row::Heading(_) => heading_height,
+                Row::Heading(..) => heading_height,
                 Row::Place { .. } => row_height,
             })
             .sum::<f32>()
@@ -214,7 +233,7 @@ impl MailView {
         let mut y = frame.y + SIDEBAR_INSET / 2.0 - offset;
         for (index, row) in self.sidebar.clone().iter().enumerate() {
             match row {
-                Row::Heading(title) => {
+                Row::Heading(title, account) => {
                     let style = TextStyle::role(TextRole::Label, palette.ink3);
                     let paragraph =
                         self.text_line(title, style, SIDEBAR_WIDTH - 2.0 * SIDEBAR_TEXT_X);
@@ -223,12 +242,7 @@ impl MailView {
                         origin: Point::new(SIDEBAR_TEXT_X, text_y),
                         paragraph,
                     });
-                    let offline = self
-                        .accounts
-                        .iter()
-                        .find(|(account, _)| account.email == *title)
-                        .map(|(account, _)| account.id)
-                        .filter(|account| self.offline(*account));
+                    let offline = account.filter(|account| self.offline(*account));
                     if let Some(account) = offline {
                         let ink = match self.hover == Some(Hit::Offline(account)) {
                             true => palette.ink,
@@ -681,7 +695,7 @@ impl MailView {
         let row_height = self.sidebar_row_height();
         let heading_height = (SIDEBAR_HEADING * self.scale()).round();
         let height = |row: &Row| match row {
-            Row::Heading(_) => heading_height,
+            Row::Heading(..) => heading_height,
             Row::Place { .. } => row_height,
         };
         let top = SIDEBAR_INSET / 2.0 + self.sidebar.iter().take(index).map(height).sum::<f32>();

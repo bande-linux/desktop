@@ -149,10 +149,7 @@ fn open(
             smtp.command(&BASE64.encode(user.as_bytes()), &[334])?;
             smtp.command(&BASE64.encode(password.as_bytes()), &[235])?;
         } else {
-            return Err(Error::Login(tr!(
-                "the server offers no sign-in method Mail knows: {methods}",
-                methods = mechanisms.join(" ")
-            )));
+            return Err(Error::NoPasswordSignIn);
         }
     }
     Ok((smtp, extensions))

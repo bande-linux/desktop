@@ -13,6 +13,18 @@ pub struct Found {
 }
 
 impl Found {
+    pub fn trusted(&self) -> bool {
+        let within = |host: &str| {
+            host == self.domain
+                || host
+                    .strip_suffix(self.domain.as_str())
+                    .is_some_and(|start| start.ends_with('.'))
+        };
+        self.settings.as_ref().is_some_and(|(settings, source)| {
+            *source != Source::Guess && within(&settings.imap.host) && within(&settings.smtp.host)
+        })
+    }
+
     pub fn message(&self) -> String {
         let domain = self.domain.clone();
         match self.settings.as_ref().map(|(_, source)| *source) {
@@ -43,6 +55,7 @@ pub enum Problem {
     Secure(String),
     NoEncryption(String),
     WrongCredentials(String),
+    NoPasswordSignIn(String),
     Server(String, String),
     NoPassword,
     Saving(String),
@@ -59,6 +72,7 @@ impl Problem {
         let name = format!("{}:{}", server.host, server.port);
         match error {
             Error::Login(_) => Self::WrongCredentials(name),
+            Error::NoPasswordSignIn => Self::NoPasswordSignIn(server.host.clone()),
             Error::Insecure => Self::NoEncryption(name),
             Error::Tls(text) if text.to_ascii_lowercase().contains("certificate") => {
                 Self::Certificate(name)
@@ -91,6 +105,10 @@ impl Problem {
                 "{server} did not accept the user name or password. Check both; some providers need a separate app password for mail apps.",
                 server = server.clone()
             ),
+            Self::NoPasswordSignIn(server) => tr!(
+                "{server} does not accept a password from mail apps. Your provider’s help may describe how to enable IMAP access.",
+                server = server.clone()
+            ),
             Self::Server(server, detail) => tr!(
                 "{server} answered with an error: {detail}. Check the server settings, or try again later.",
                 server = server.clone(),
@@ -114,7 +132,19 @@ pub fn find(email: &str, network: &Network) -> Found {
     }
 }
 
-pub fn check(settings: &Settings, password: &str, network: &Network) -> Outcome {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Stage {
+    Incoming,
+    Outgoing,
+}
+
+pub fn check(
+    settings: &Settings,
+    password: &str,
+    network: &Network,
+    progress: impl Fn(Stage),
+) -> Outcome {
+    progress(Stage::Incoming);
     let imap = || -> Result<(), Error> {
         let mut session = Session::connect(&settings.imap, network)?;
         session.login(&settings.user, password)?;
@@ -124,9 +154,12 @@ pub fn check(settings: &Settings, password: &str, network: &Network) -> Outcome 
     };
     let problem = match imap() {
         Err(error) => Some(Problem::of(&settings.imap, error)),
-        Ok(()) => smtp::verify(&settings.smtp, network, &settings.user, password)
-            .err()
-            .map(|error| Problem::of(&settings.smtp, error)),
+        Ok(()) => {
+            progress(Stage::Outgoing);
+            smtp::verify(&settings.smtp, network, &settings.user, password)
+                .err()
+                .map(|error| Problem::of(&settings.smtp, error))
+        }
     };
     match problem {
         None => Outcome::Ready(settings.clone()),

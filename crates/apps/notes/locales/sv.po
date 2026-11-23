@@ -136,21 +136,6 @@ msgstr "Inga anteckningar matchar ”{search}”"
 msgid "No Note Selected"
 msgstr "Ingen anteckning är vald"
 
-msgid "Enter your name and email address."
-msgstr "Ange ditt namn och din e-postadress."
-
-msgid "Enter your password."
-msgstr "Ange ditt lösenord."
-
-msgid "Looking up the servers…"
-msgstr "Slår upp servrarna…"
-
-msgid "Enter both server names."
-msgstr "Ange båda servernamnen."
-
-msgid "Checking the account…"
-msgstr "Kontrollerar kontot…"
-
 msgid "OK"
 msgstr "OK"
 

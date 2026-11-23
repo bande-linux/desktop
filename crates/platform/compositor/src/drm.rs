@@ -1283,8 +1283,16 @@ impl FrameOutput for DrmBackend {
         Ok(true)
     }
 
-    fn gpu_time(&self) -> Duration {
-        self.renderer.gpu_frame_time().unwrap_or_default()
+    fn gpu_time(&self, output: &str) -> Duration {
+        self.heads
+            .iter()
+            .find(|head| head.config.name == output)
+            .map(|head| head.compositor.pending_mode().size())
+            .and_then(|(width, height)| {
+                self.renderer
+                    .gpu_frame_time((i32::from(width), i32::from(height)))
+            })
+            .unwrap_or_default()
     }
 
     fn refresh(&self, output: &str) -> Option<Duration> {
@@ -1501,6 +1509,9 @@ impl DrmBackend {
             Err(error) => return Err(error.into()),
         };
         self.renderer.finish_uploads()?;
+        if frame.needs_sync() {
+            self.renderer.wait_idle()?;
+        }
         head.scanned_out = matches!(frame.primary_element, PrimaryPlaneElement::Element(_));
         let empty = frame.is_empty;
         let submitted = self.renderer.submitted();

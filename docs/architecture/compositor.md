@@ -24,8 +24,10 @@ when they reach the screen is Bande's own.
   and synchronization2 (from `VK_KHR_dynamic_rendering` and `VK_KHR_synchronization2` below 1.3, so
   hasvk's Haswell and Broadwell GPUs qualify); every device left out is logged with the reason. Each
   sampled image view (with its chroma plane or colour table) gets one descriptor set, made at its
-  first draw and freed with the image; push descriptors updated between the draws of one rendering
-  hung Intel Gen9 GPUs (anv) while the overview opened. It implements Smithay's `Renderer`, `Frame`, `ImportMemWl`,
+  first draw and freed with the image; sets come from pools of 64, any pool with room, and a pool
+  is destroyed once its last set is freed. Push descriptors updated between the draws of one
+  rendering hung Intel Gen9 GPUs (anv) while the overview opened, also with every synchronisation
+  hazard fixed. It implements Smithay's `Renderer`, `Frame`, `ImportMemWl`,
   `ImportDmaWl`, `Offscreen` and `Bind<Dmabuf>`. Both outputs compose the same Wayland surface
   elements through Smithay: the headless output with `OutputDamageTracker` into a persistent
   offscreen image (read back only for tests), the DRM output with `DrmCompositor`. Each surface
@@ -44,11 +46,16 @@ when they reach the screen is Bande's own.
   back itself (snapshots, captures, copies on the CPU, uploads from client dma-bufs that no frame
   holds). An image, buffer or descriptor set dropped while a submission may use it is destroyed once
   that submission finishes. A frame hands the display a sync file of its submission
-  (`VK_KHR_external_semaphore_fd`, the plane's `IN_FENCE_FD` on DRM); without that extension every
-  frame is waited for. The render elements of a frame, and with them the client buffers they hold,
+  (`VK_KHR_external_semaphore_fd`, the plane's `IN_FENCE_FD` on DRM); when the extension is missing,
+  a sync file cannot be exported (the slot then gets a new semaphore), or no GPU time is known yet
+  for frames of that size, the frame is waited for, and on DRM the CPU waits before queueing
+  whenever the plane cannot take the fence (`needs_sync`: no `IN_FENCE_FD`, older NVIDIA drivers,
+  virtio-gpu without syncobj), so a buffer is never scanned out while it is drawn. Completion is
+  taken to follow submission order on the one queue, as every driver's ring does. The render elements of a frame, and with them the client buffers they hold,
   are kept until its submission finishes (`drawing.rs`, woken by the sync file), so no buffer goes
   back to a client while the GPU still reads it. The scheduler prices a frame at its CPU time plus
-  the longest GPU time of the last four frames. Client fences are waited for before a commit
+  the longest GPU time of the last four frames of that size (each display, not captures, which have
+  their own sizes), measured with timestamps masked to the queue's valid bits. Client fences are waited for before a commit
   applies (`sync.rs`: the dma-buf's implicit fences, or the `linux-drm-syncobj-v1` acquire point).
 - **Window shape and depth.** Every window that is not full screen is clipped to its
   `xdg_surface` window geometry with 16 pt rounded corners (antialiased in the fragment shader)
@@ -572,4 +579,4 @@ Status is what `crates/platform/compositor` serves on `main`.
 | `zwlr_output_power_management_v1` | Display power for idle and lock | implemented |
 | `bande_shell_v1` (own) | Launcher, screenshots, active app, volume keys, Quick Settings, taskbar icon rectangles, apps that stopped responding; for the taskbar: hide, quit and force quit an app, activate one window by its foreign-toplevel identifier, minimized windows, attention requests, rounded blur for shell surfaces, `show_app_menu` to open an app's menus below a window's menu button, `active_menus` (version 4) with the focused window's menu address, `open_terminal` (version 5) for `Ctrl+Alt+T`, `dismiss_on_press_outside` and `move_layer` (version 7, places remembered per display in `$XDG_STATE_HOME/bande/layer-places`) for the launcher; workspaces, the workspace of each window and `show_windows` for the overview and an app's windows | implemented, shell clients only |
 | `bande_app_v1` (own, in `bande-shell-v1.xml`) | App-level requests: `quit_requested` on the bar's or the taskbar's Quit instead of closing every window; `place_window` and `move_to_workspace` for the window menu; `offer_placements` (version 8) for the Tile menu on a toolkit window's maximize control; `keep_running` (version 2) so an app outlives its last window; `end_session` (version 3) opens the Bande menu's Log Out / Restart confirmation for Software Update; `set_menu_button`, `show_menus` and `menus_open` (version 4) for a window's menu button; `kept_on_top` (version 11) when the compositor's window menu changes Keep on Top | implemented, every client |
-| `ext-background-effect-v1` | The backdrop of window frames, the Taskbar and menus: the [style](../design/datum.md#styles) decides what fills it (`material.rs` for the wallpaper copy) | implemented: dual-filter Kawase blur (3 passes) clipped to the window's rounded shape, below the window's own shadow, redrawn when anything beneath it changes; each blur keeps its own levels across frames and displays (freed after 120 frames unused), and when the last blur saw its whole backdrop redrawn and nothing beneath has changed since (a hash of what lies beneath), a change of opacity or tone composites the kept result without blurring again; a flat scrim on a CPU renderer |
+| `ext-background-effect-v1` | The backdrop of window frames, the Taskbar and menus: the [style](../design/datum.md#styles) decides what fills it (`material.rs` for the wallpaper copy) | implemented: dual-filter Kawase blur (3 passes) clipped to the window's rounded shape, below the window's own shadow, redrawn when anything beneath it changes; each blur keeps one chain of levels, made again only when its size changes and freed after two seconds unused, and when the last blur at the same place saw its whole backdrop redrawn and nothing beneath has changed since (a hash of what lies beneath), a change of opacity or tone composites the kept result without blurring again; a flat scrim on a CPU renderer |

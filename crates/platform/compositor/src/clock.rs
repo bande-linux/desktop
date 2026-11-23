@@ -254,7 +254,7 @@ pub trait FrameOutput {
         None
     }
 
-    fn gpu_time(&self) -> Duration {
+    fn gpu_time(&self, _output: &str) -> Duration {
         Duration::ZERO
     }
 
@@ -517,7 +517,7 @@ impl FrameScheduler {
                         self.phase = Phase::Backoff(started + FAILED_FRAME_RETRY);
                     })?;
                     now = clock();
-                    let done = now + output.gpu_time();
+                    let done = now + output.gpu_time(&name);
                     let rendered = Rendered {
                         vblank,
                         started,

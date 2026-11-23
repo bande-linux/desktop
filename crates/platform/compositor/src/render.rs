@@ -200,8 +200,11 @@ impl FrameOutput for Renderer {
         Ok(Submission::AtVblank)
     }
 
-    fn gpu_time(&self) -> std::time::Duration {
-        self.vulkan.gpu_frame_time().unwrap_or_default()
+    fn gpu_time(&self, output: &str) -> std::time::Duration {
+        self.outputs
+            .get(output)
+            .and_then(|output| self.vulkan.gpu_frame_time((output.size.w, output.size.h)))
+            .unwrap_or_default()
     }
 
     fn renew_failed_renderer(&mut self) -> Result<bool, RenderError> {

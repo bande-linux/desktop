@@ -14,12 +14,12 @@ use crate::setup::{Outcome, Problem, check};
 use crate::store::{Account, AccountId, Identity, Rule, RuleAction, RuleField, Store};
 use crate::ui::view::TOOLBAR_HEIGHT;
 use crate::worker::{Event as MailEvent, Mailroom};
-use accesskit::TreeUpdate;
+use accesskit::{ActionRequest, TreeUpdate};
 use bande_app::View;
 use bande_app_settings::{Stored, settings_folder};
 use bande_keyring::Keyring;
 use bande_toolkit::ui::{
-    Alert, Axis, Button, Cell, Column, Context, Form, FormLine, FreeLayout,
+    Alert, Axis, Button, Cell, Column, Context, Event, Form, FormLine, FreeLayout,
     Heading as TableHeading, Label, PopUpButton, Row as TableRow, ScrollView, Stack, Table,
     TextField, TextView, Toggle, Ui, Widget, WidgetId,
 };
@@ -1636,6 +1636,25 @@ impl SettingsView {
     }
 }
 
+impl SettingsView {
+    pub fn render(&mut self, width: u32, height: u32) -> Scene {
+        self.layout(width as f32, height as f32);
+        let mut scene = self.ui.scene(width, height);
+        scene.background = self.ui.context().palette.sheet;
+        scene
+    }
+
+    pub fn handle(&mut self, event: &Event) -> bool {
+        let handled = self.ui.handle(event);
+        self.settle() || handled
+    }
+
+    pub fn perform(&mut self, request: &ActionRequest) -> bool {
+        let handled = self.ui.perform(request);
+        self.settle() || handled
+    }
+}
+
 impl View for SettingsView {
     fn scene(&mut self, window: &mut Window) -> Scene {
         window.set_frame_regions(FrameRegions {
@@ -1649,10 +1668,7 @@ impl View for SettingsView {
         }
         let (width, height) = window.size();
         window.set_move_areas(vec![Rect::new(0.0, 0.0, width as f32, TOOLBAR_HEIGHT)]);
-        self.layout(width as f32, height as f32);
-        let mut scene = self.ui.scene(width, height);
-        scene.background = self.ui.context().palette.sheet;
-        scene
+        self.render(width, height)
     }
 
     fn event(&mut self, window: &mut Window, event: WindowEvent) -> bool {

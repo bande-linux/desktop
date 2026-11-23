@@ -50,6 +50,14 @@ struct Start {
 }
 
 fn main() -> ExitCode {
+    // SAFETY: main is still single-threaded here.
+    let _session = match unsafe { bande_test_bus::PrivateSession::enter() } {
+        Ok(session) => session,
+        Err(error) => {
+            eprintln!("bande-toolkit-bench: cannot start a private session: {error}");
+            return ExitCode::FAILURE;
+        }
+    };
     bande_log::init("bande-toolkit-bench");
     match run() {
         Ok(true) => ExitCode::SUCCESS,
@@ -142,7 +150,7 @@ fn run() -> Result<bool, Box<dyn Error>> {
 fn options() -> Result<(PathBuf, PathBuf), Box<dyn Error>> {
     let mut sample = None;
     let mut json = None;
-    let mut args = std::env::args().skip(1);
+    let mut args = bande_test_bus::PrivateSession::arguments();
     while let Some(flag) = args.next() {
         let value = args.next().ok_or(format!("{flag} needs a value"))?;
         match flag.as_str() {

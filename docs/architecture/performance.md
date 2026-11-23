@@ -8,8 +8,11 @@ time targets are in [`../decisions/0001-rendering.md`](../decisions/0001-renderi
 Measure when a change is about memory, CPU or wake-ups: before and after, with release builds of
 both sides from the same worktree and its own target directory, on the same machine. Live
 numbers are read from `/proc` only; nothing restarts the running session. The tools are in
-`crates/testing/bench` and run on a headless compositor inside a private bus, so they never
-reach a running session.
+`crates/testing/bench` and run on a headless compositor in a private session
+(`PrivateSession`): their own session bus and a fresh temporary home with every XDG base
+directory and runtime directory, as `ci/hermetic.sh` gives tests, so neither they nor the apps
+they start reach the running session or the person's files, settings and saved windows. Only
+`--live` lets a tool use the real home and session bus.
 
 - **The whole session at idle:** `bande-idle --binaries <dir>` runs the compositor, the shell,
   the services and the apps found in `<dir>` with a private home folder and reports RSS and
@@ -24,7 +27,7 @@ reach a running session.
 
   ```sh
   cargo build --release -p bande-bench -p bande-shell
-  dbus-run-session -- target/release/bande-footprint --hover 2864,70,2600,900 target/release/bande-shell
+  target/release/bande-footprint --hover 2864,70,2600,900 target/release/bande-shell
   ```
 - **An app without windows:** `bande-background <binary>=<app id>[,background]…` starts each app
   on the same output with a private bus and home folder (first with `--background` when

@@ -162,7 +162,7 @@ The autopkgtests in `debian/tests`, which check the installed packages, are list
 
 ## Support
 
-- `crates/testing/test-bus`: private `dbus-daemon` buses (`SessionBus`) that never activate the
+- `crates/testing/test-bus`: private `dbus-daemon` buses (`SessionBus`), the private session the benchmarks run in (`PrivateSession`) that never activate the
   machine's services, and fake services on them: PackageKit, logind, systemd and UDisks2 (`drives`), and
   the AT-SPI registry with a screen reader's lookups (`atspi`).
 - `crates/testing/test-wayland`: a small Wayland client (`TestClient`, `TestClient::window`) for

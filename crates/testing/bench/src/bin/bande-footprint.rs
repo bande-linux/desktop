@@ -31,6 +31,14 @@ struct Footprint {
 }
 
 fn main() -> ExitCode {
+    // SAFETY: main is still single-threaded here.
+    let _session = match unsafe { bande_test_bus::PrivateSession::enter() } {
+        Ok(session) => session,
+        Err(error) => {
+            eprintln!("bande-footprint: cannot start a private session: {error}");
+            return ExitCode::FAILURE;
+        }
+    };
     bande_log::init("bande-footprint");
     match run() {
         Ok(()) => ExitCode::SUCCESS,
@@ -45,7 +53,7 @@ fn run() -> Result<(), Box<dyn Error>> {
     let mut hover = None;
     let mut settle = SETTLE;
     let mut clients = Vec::new();
-    let mut args = std::env::args().skip(1);
+    let mut args = bande_test_bus::PrivateSession::arguments();
     while let Some(arg) = args.next() {
         if arg == "--settle" {
             let seconds: u64 = args.next().ok_or("--settle needs seconds")?.parse()?;

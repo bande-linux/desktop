@@ -2,9 +2,12 @@ pub mod atspi;
 pub mod drives;
 pub mod fwupd;
 pub mod packagekit;
+mod private;
 
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, Command, Stdio};
+
+pub use private::PrivateSession;
 
 const CONFIG: &str = include_str!("../data/session.conf");
 

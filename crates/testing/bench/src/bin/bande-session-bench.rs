@@ -75,18 +75,14 @@ struct Row {
 }
 
 fn main() -> ExitCode {
-    let bus = match bande_test_bus::SessionBus::start() {
-        Ok(bus) => bus,
+    // SAFETY: main is still single-threaded here.
+    let _session = match unsafe { bande_test_bus::PrivateSession::enter() } {
+        Ok(session) => session,
         Err(error) => {
-            eprintln!("bande-session-bench: cannot start a private session bus: {error}");
+            eprintln!("bande-session-bench: cannot start a private session: {error}");
             return ExitCode::FAILURE;
         }
     };
-    // SAFETY: main is still single-threaded here: the bus is a child process and logging starts
-    // afterwards.
-    unsafe {
-        std::env::set_var("DBUS_SESSION_BUS_ADDRESS", bus.address());
-    }
     bande_log::init("bande-session-bench");
     match run() {
         Ok(()) => ExitCode::SUCCESS,
@@ -106,7 +102,7 @@ fn run() -> Result<(), Box<dyn Error>> {
     let mut snapshots = None;
     let mut full_effects = false;
     let mut list_frames = false;
-    let mut args = std::env::args().skip(1);
+    let mut args = bande_test_bus::PrivateSession::arguments();
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--full-effects" => full_effects = true,

@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::os::fd::{AsFd, FromRawFd, OwnedFd};
 use std::slice;
 use std::sync::Arc;
@@ -12,7 +12,7 @@ use smithay::reexports::rustix::event::{PollFd, PollFlags, Timespec, poll};
 use crate::{GPU_HANG_NANOS, RenderError, Staging, VulkanRenderer};
 
 const IN_FLIGHT: usize = 3;
-const SPARE_STAGING: usize = 2;
+const SPARE_STAGING: usize = IN_FLIGHT + 1;
 const TIMED_FRAMES: usize = 64;
 
 static LAST_SERIAL: AtomicU64 = AtomicU64::new(0);
@@ -23,7 +23,8 @@ pub(crate) struct Slot {
     signal: Option<vk::Semaphore>,
     timestamps: vk::QueryPool,
     serial: u64,
-    frame: bool,
+    frame: Option<(i32, i32)>,
+    stale_signal: bool,
     staging: Vec<Staging>,
     sync_file: Option<Arc<OwnedFd>>,
 }
@@ -46,7 +47,7 @@ pub(crate) struct Submissions {
     submitted: u64,
     completed: u64,
     spare: Vec<Staging>,
-    frame_times: VecDeque<Duration>,
+    frame_times: HashMap<(i32, i32), VecDeque<Duration>>,
     measured: Vec<Duration>,
 }
 
@@ -59,7 +60,7 @@ impl Submissions {
             submitted: last,
             completed: last,
             spare: Vec::new(),
-            frame_times: VecDeque::new(),
+            frame_times: HashMap::new(),
             measured: Vec::new(),
         }
     }
@@ -119,7 +120,8 @@ impl VulkanRenderer {
             signal: None,
             timestamps: vk::QueryPool::null(),
             serial: 0,
-            frame: false,
+            frame: None,
+            stale_signal: false,
             staging: Vec::new(),
             sync_file: None,
         };
@@ -139,18 +141,7 @@ impl VulkanRenderer {
             self.device
                 .create_fence(&vk::FenceCreateInfo::default(), None)
         }?;
-        if self.external_semaphore_fd.is_some() {
-            let mut export = vk::ExportSemaphoreCreateInfo::default()
-                .handle_types(vk::ExternalSemaphoreHandleTypeFlags::SYNC_FD);
-            // SAFETY: the device was created with `VK_KHR_external_semaphore_fd` and reported
-            // sync file export for binary semaphores; `export` outlives the call.
-            slot.signal = Some(unsafe {
-                self.device.create_semaphore(
-                    &vk::SemaphoreCreateInfo::default().push_next(&mut export),
-                    None,
-                )
-            }?);
-        }
+        slot.signal = self.create_signal()?;
         if self.timestamp_period.is_some() {
             // SAFETY: the queue family has valid timestamp bits; the pool is destroyed by
             // `destroy_slot`.
@@ -164,6 +155,41 @@ impl VulkanRenderer {
             }?;
         }
         Ok(())
+    }
+
+    fn create_signal(&self) -> Result<Option<vk::Semaphore>, RenderError> {
+        if self.external_semaphore_fd.is_none() {
+            return Ok(None);
+        }
+        let mut export = vk::ExportSemaphoreCreateInfo::default()
+            .handle_types(vk::ExternalSemaphoreHandleTypeFlags::SYNC_FD);
+        // SAFETY: the device was created with `VK_KHR_external_semaphore_fd` and reported sync
+        // file export for binary semaphores; `export` outlives the call, and the semaphore is
+        // destroyed with its slot.
+        let semaphore = unsafe {
+            self.device.create_semaphore(
+                &vk::SemaphoreCreateInfo::default().push_next(&mut export),
+                None,
+            )
+        }?;
+        Ok(Some(semaphore))
+    }
+
+    fn renew_signal(&mut self, index: usize) {
+        let fresh = match self.create_signal() {
+            Ok(fresh) => fresh,
+            Err(error) => {
+                tracing::warn!("frames wait for the GPU: cannot make a semaphore ({error})");
+                None
+            }
+        };
+        let slot = &mut self.submissions.slots[index];
+        if let Some(stale) = std::mem::replace(&mut slot.signal, fresh) {
+            // SAFETY: the slot's submission finished, so its signal operation is complete and no
+            // queue operation refers to the semaphore any more.
+            unsafe { self.device.destroy_semaphore(stale, None) };
+        }
+        slot.stale_signal = false;
     }
 
     fn destroy_slot(&self, slot: Slot) {
@@ -241,7 +267,7 @@ impl VulkanRenderer {
         Ok(())
     }
 
-    pub(crate) fn submit(&mut self, frame: bool) -> Result<u64, RenderError> {
+    pub(crate) fn submit(&mut self, frame: Option<(i32, i32)>) -> Result<u64, RenderError> {
         let index = self
             .submissions
             .recording
@@ -281,20 +307,27 @@ impl VulkanRenderer {
         }
         slot.serial = serial;
         slot.frame = frame;
-        slot.sync_file = match (slot.signal, &self.external_semaphore_fd) {
+        let exported = match (slot.signal, &self.external_semaphore_fd) {
             // SAFETY: the semaphore was created exportable as a sync file and the submission just
-            // queued signals it; exporting consumes that signal, and the fd is new and ours.
-            (Some(signal), Some(external)) => unsafe {
-                external
-                    .get_semaphore_fd(
-                        &vk::SemaphoreGetFdInfoKHR::default()
-                            .semaphore(signal)
-                            .handle_type(vk::ExternalSemaphoreHandleTypeFlags::SYNC_FD),
-                    )
-                    .ok()
-                    .filter(|&fd| fd >= 0)
-                    .map(|fd| Arc::new(OwnedFd::from_raw_fd(fd)))
-            },
+            // queued signals it; exporting consumes that signal.
+            (Some(signal), Some(external)) => Some(unsafe {
+                external.get_semaphore_fd(
+                    &vk::SemaphoreGetFdInfoKHR::default()
+                        .semaphore(signal)
+                        .handle_type(vk::ExternalSemaphoreHandleTypeFlags::SYNC_FD),
+                )
+            }),
+            _ => None,
+        };
+        slot.sync_file = match exported {
+            // SAFETY: a non-negative fd from `get_semaphore_fd` is new and ours; -1 means the
+            // work already finished.
+            Some(Ok(fd)) if fd >= 0 => Some(Arc::new(unsafe { OwnedFd::from_raw_fd(fd) })),
+            Some(Err(error)) => {
+                tracing::warn!("waiting for this frame on the CPU: no sync file ({error})");
+                slot.stale_signal = true;
+                None
+            }
             _ => None,
         };
         self.submissions.submitted = serial;
@@ -336,7 +369,7 @@ impl VulkanRenderer {
     }
 
     pub(crate) fn submit_and_wait(&mut self) -> Result<(), RenderError> {
-        let serial = self.submit(false)?;
+        let serial = self.submit(None)?;
         self.wait_for(serial)
     }
 
@@ -384,10 +417,14 @@ impl VulkanRenderer {
             }
             slot.serial = 0;
             slot.sync_file = None;
-            let frame = std::mem::take(&mut slot.frame);
+            let frame = slot.frame.take();
+            let stale_signal = slot.stale_signal;
             let staging = std::mem::take(&mut slot.staging);
-            if let (true, Some(time)) = (frame, timed) {
-                let times = &mut self.submissions.frame_times;
+            if stale_signal {
+                self.renew_signal(index);
+            }
+            if let (Some(size), Some(time)) = (frame, timed) {
+                let times = self.submissions.frame_times.entry(size).or_default();
                 times.push_back(time);
                 if times.len() > TIMED_FRAMES {
                     times.pop_front();
@@ -437,7 +474,11 @@ impl VulkanRenderer {
             )
         }
         .ok()?;
-        let nanos = ticks[1].saturating_sub(ticks[0]) as f64 * f64::from(period);
+        let mask = match self.timestamp_bits {
+            64.. => u64::MAX,
+            bits => (1u64 << bits) - 1,
+        };
+        let nanos = (ticks[1].wrapping_sub(ticks[0]) & mask) as f64 * f64::from(period);
         Some(Duration::from_nanos(nanos as u64))
     }
 
@@ -459,9 +500,10 @@ impl VulkanRenderer {
             .and_then(|fd| fd.as_fd().try_clone_to_owned().ok())
     }
 
-    pub fn gpu_frame_time(&self) -> Option<Duration> {
+    pub fn gpu_frame_time(&self, size: (i32, i32)) -> Option<Duration> {
         self.submissions
             .frame_times
+            .get(&size)?
             .iter()
             .rev()
             .take(4)
@@ -479,6 +521,10 @@ impl VulkanRenderer {
             .slots
             .iter()
             .find(|slot| slot.serial == serial)
+            .filter(|slot| {
+                slot.frame
+                    .is_some_and(|size| self.gpu_frame_time(size).is_some())
+            })
             .and_then(|slot| slot.sync_file.clone());
         match file {
             Some(file) => Ok(SyncPoint::from(GpuFence(file))),

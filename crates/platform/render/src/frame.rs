@@ -17,7 +17,7 @@ use crate::{
 mod blur;
 
 pub use blur::{Backdrop, Blur};
-pub(crate) use blur::{BlurChain, BlurKey, KEEP_UNUSED_FRAMES};
+pub(crate) use blur::{BlurChain, BlurKey, KEEP_UNUSED};
 
 pub(crate) const QUAD_BYTES: u32 = 112;
 
@@ -534,7 +534,9 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
         if verifying {
             self.mark_output(&readbacks)?;
         }
-        let serial = self.renderer.submit(true)?;
+        let serial = self
+            .renderer
+            .submit(Some((self.bounds.width, self.bounds.height)))?;
         self.renderer.retire_unused_blur_chains();
         if let Some(target) = self.renderer.targets.get_mut(&self.target) {
             target.rendered = true;
@@ -572,7 +574,7 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
             renderer.queue_family,
             (false, DRAWING),
         );
-        let serial = renderer.submit(true)?;
+        let serial = renderer.submit(Some((self.bounds.width, self.bounds.height)))?;
         renderer.retire_unused_blur_chains();
         renderer.hand_staging_to(serial);
         if let Some(target) = renderer.targets.get_mut(&self.target) {

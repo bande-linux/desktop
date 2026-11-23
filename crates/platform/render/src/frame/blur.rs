@@ -1,4 +1,5 @@
 use std::slice;
+use std::time::{Duration, Instant};
 
 use ash::vk;
 use smithay::utils::{Physical, Rectangle};
@@ -10,7 +11,7 @@ use crate::{
 };
 
 const MAX_PASSES: u32 = 6;
-pub(crate) const KEEP_UNUSED_FRAMES: u64 = 120;
+pub(crate) const KEEP_UNUSED: Duration = Duration::from_secs(2);
 
 type Level = (vk::Image, vk::ImageView, i32, i32);
 
@@ -33,14 +34,15 @@ pub struct Backdrop {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct BlurKey {
     owner: u64,
-    source: (i32, i32, i32, i32),
+    shared_size: Option<(i32, i32)>,
     format: vk::Format,
     passes: u32,
 }
 
 pub(crate) struct BlurChain {
     pub(crate) levels: Vec<Image>,
-    pub(crate) last_used: u64,
+    pub(crate) last_used: Instant,
+    source: Rect,
     drawn: bool,
     below: Option<u64>,
 }
@@ -107,8 +109,22 @@ impl VulkanFrame<'_, '_> {
         }
         let passes = blur.passes();
         let whole = rects.iter().map(|rect| rect.area()).sum::<u64>() == source.area();
-        let (levels, prior, cached) = self.blur_levels(source, passes, blur.backdrop, whole)?;
+        let key = BlurKey {
+            owner: blur.backdrop.map_or(0, |backdrop| backdrop.owner),
+            shared_size: match blur.backdrop {
+                Some(_) => None,
+                None => Some((source.width, source.height)),
+            },
+            format: self.format,
+            passes,
+        };
+        let below = blur.backdrop.map(|backdrop| backdrop.below);
+        let (levels, prior, cached) = self.blur_levels(key, source, below)?;
         if !cached {
+            if let Some(chain) = self.renderer.blur_chains.get_mut(&key) {
+                chain.drawn = false;
+                chain.below = None;
+            }
             self.pause();
             self.copy_into(source, levels[0], prior);
             for pass in 0..passes as usize {
@@ -128,6 +144,11 @@ impl VulkanFrame<'_, '_> {
                 )?;
             }
             self.resume();
+            if let Some(chain) = self.renderer.blur_chains.get_mut(&key) {
+                chain.drawn = true;
+                chain.source = source;
+                chain.below = below.filter(|_| whole);
+            }
         }
         self.bind(match blur.tone {
             Some(_) => Program::BlurTone,
@@ -152,23 +173,22 @@ impl VulkanFrame<'_, '_> {
 
     fn blur_levels(
         &mut self,
+        key: BlurKey,
         source: Rect,
-        passes: u32,
-        backdrop: Option<Backdrop>,
-        whole: bool,
+        below: Option<u64>,
     ) -> Result<(Vec<Level>, Usage, bool), RenderError> {
-        let key = BlurKey {
-            owner: backdrop.map_or(0, |backdrop| backdrop.owner),
-            source: match backdrop {
-                Some(_) => (source.x, source.y, source.width, source.height),
-                None => (0, 0, source.width, source.height),
-            },
-            format: self.format,
-            passes,
-        };
-        if !self.renderer.blur_chains.contains_key(&key) {
+        let fits = self.renderer.blur_chains.get(&key).is_some_and(|chain| {
+            (chain.source.width, chain.source.height) == (source.width, source.height)
+        });
+        if !fits {
+            if let Some(chain) = self.renderer.blur_chains.remove(&key) {
+                chain
+                    .levels
+                    .iter()
+                    .for_each(|image| self.renderer.destroy_image(image));
+            }
             let mut levels = Vec::new();
-            for level in 0..=passes {
+            for level in 0..=key.passes {
                 let created = self.renderer.create_image(
                     (source.width >> level).max(1),
                     (source.height >> level).max(1),
@@ -192,7 +212,8 @@ impl VulkanFrame<'_, '_> {
                 key,
                 BlurChain {
                     levels,
-                    last_used: 0,
+                    last_used: Instant::now(),
+                    source,
                     drawn: false,
                     below: None,
                 },
@@ -203,13 +224,9 @@ impl VulkanFrame<'_, '_> {
             .blur_chains
             .get_mut(&key)
             .ok_or(RenderError::ForeignResource)?;
-        chain.last_used = self.renderer.blur_frames;
-        let below = backdrop.map(|backdrop| backdrop.below);
-        let cached = below.is_some() && chain.below == below;
-        if !cached {
-            chain.below = below.filter(|_| whole);
-        }
-        let prior = match std::mem::replace(&mut chain.drawn, true) {
+        chain.last_used = Instant::now();
+        let cached = below.is_some() && chain.below == below && chain.source == source;
+        let prior = match chain.drawn {
             true => SAMPLED,
             false => DISCARDED,
         };

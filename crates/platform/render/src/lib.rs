@@ -334,7 +334,7 @@ struct Target {
 
 #[derive(Default)]
 struct Descriptors {
-    pools: Vec<vk::DescriptorPool>,
+    pools: Vec<(vk::DescriptorPool, u32)>,
     sets: HashMap<(vk::ImageView, vk::ImageView), (vk::DescriptorSet, vk::DescriptorPool)>,
 }
 
@@ -404,6 +404,7 @@ pub struct VulkanRenderer {
     garbage: RefCell<Vec<(u64, submit::Garbage)>>,
     external_semaphore_fd: Option<ash::khr::external_semaphore_fd::Device>,
     timestamp_period: Option<f32>,
+    timestamp_bits: u32,
     sampler: vk::Sampler,
     set_layout: vk::DescriptorSetLayout,
     descriptors: RefCell<Descriptors>,
@@ -427,7 +428,6 @@ pub struct VulkanRenderer {
     copies: Vec<PendingCopy>,
     counters: Counters,
     blur_chains: HashMap<frame::BlurKey, frame::BlurChain>,
-    blur_frames: u64,
     lost: AtomicBool,
     exhausted: AtomicBool,
     created: Instant,
@@ -484,6 +484,7 @@ struct Chosen {
     family: u32,
     sync_files: bool,
     timestamp_period: Option<f32>,
+    timestamp_bits: u32,
     output_on_device: bool,
     modifiers: formats::Modifiers,
     extensions: Vec<&'static CStr>,
@@ -569,7 +570,7 @@ fn examine(
         .iter()
         .zip(0u32..)
         .find(|(family, _)| family.queue_flags.contains(vk::QueueFlags::GRAPHICS))
-        .map(|(properties, family)| (family, properties.timestamp_valid_bits > 0))
+        .map(|(properties, family)| (family, properties.timestamp_valid_bits))
         .ok_or_else(|| refuse("it has no graphics queue".to_owned()))?;
     let sync_files = offers(ash::khr::external_semaphore_fd::NAME) && {
         let mut external = vk::ExternalSemaphoreProperties::default();
@@ -640,7 +641,8 @@ fn examine(
             physical,
             family,
             sync_files,
-            timestamp_period: timed.then_some(properties.limits.timestamp_period),
+            timestamp_period: (timed > 0).then_some(properties.limits.timestamp_period),
+            timestamp_bits: timed,
             output_on_device: on_real_gpu,
             modifiers: match modifiers {
                 true => formats::query(instance, physical),
@@ -833,6 +835,7 @@ impl VulkanRenderer {
                 .sync_files
                 .then(|| ash::khr::external_semaphore_fd::Device::new(&instance, &device)),
             timestamp_period: chosen.timestamp_period,
+            timestamp_bits: chosen.timestamp_bits,
             sampler: vk::Sampler::null(),
             set_layout: vk::DescriptorSetLayout::null(),
             descriptors: RefCell::default(),
@@ -856,7 +859,6 @@ impl VulkanRenderer {
             copies: Vec::new(),
             counters: Counters::default(),
             blur_chains: HashMap::new(),
-            blur_frames: 0,
             lost: AtomicBool::new(false),
             exhausted: AtomicBool::new(false),
             created: Instant::now(),
@@ -1047,11 +1049,9 @@ impl VulkanRenderer {
     }
 
     fn retire_unused_blur_chains(&mut self) {
-        self.blur_frames += 1;
-        let oldest = self.blur_frames.saturating_sub(frame::KEEP_UNUSED_FRAMES);
         let (kept, retired): (HashMap<_, _>, HashMap<_, _>) = std::mem::take(&mut self.blur_chains)
             .into_iter()
-            .partition(|(_, chain)| chain.last_used >= oldest);
+            .partition(|(_, chain)| chain.last_used.elapsed() < frame::KEEP_UNUSED);
         for chain in retired.values() {
             chain
                 .levels
@@ -2246,9 +2246,17 @@ impl VulkanRenderer {
     }
 
     fn allocate_set(&mut self) -> Result<(vk::DescriptorSet, vk::DescriptorPool), vk::Result> {
-        let Some(&pool) = self.descriptors.get_mut().pools.last() else {
+        let Some((pool, used)) = self
+            .descriptors
+            .get_mut()
+            .pools
+            .iter_mut()
+            .find(|(_, used)| *used < SETS_PER_POOL)
+        else {
             return Err(vk::Result::ERROR_OUT_OF_POOL_MEMORY);
         };
+        let pool = *pool;
+        *used += 1;
         // SAFETY: `pool` and `set_layout` belong to this device, and the pool is used only from
         // the renderer's thread.
         let sets = unsafe {
@@ -2257,12 +2265,12 @@ impl VulkanRenderer {
                     .descriptor_pool(pool)
                     .set_layouts(slice::from_ref(&self.set_layout)),
             )
-        }?;
-        let set = sets
-            .into_iter()
+        }
+        .inspect_err(|_| self.release_set_of(pool))?;
+        sets.into_iter()
             .next()
-            .ok_or(vk::Result::ERROR_OUT_OF_POOL_MEMORY)?;
-        Ok((set, pool))
+            .map(|set| (set, pool))
+            .ok_or(vk::Result::ERROR_OUT_OF_POOL_MEMORY)
     }
 
     fn add_descriptor_pool(&mut self) -> Result<(), RenderError> {
@@ -2285,8 +2293,27 @@ impl VulkanRenderer {
                 None,
             )
         }?;
-        self.descriptors.get_mut().pools.push(pool);
+        self.descriptors.get_mut().pools.push((pool, 0));
         Ok(())
+    }
+
+    fn release_set_of(&self, pool: vk::DescriptorPool) {
+        let mut descriptors = self.descriptors.borrow_mut();
+        let Some(index) = descriptors
+            .pools
+            .iter()
+            .position(|(owner, _)| *owner == pool)
+        else {
+            return;
+        };
+        let used = &mut descriptors.pools[index].1;
+        *used = used.saturating_sub(1);
+        if *used == 0 && descriptors.pools.len() > 1 {
+            descriptors.pools.swap_remove(index);
+            // SAFETY: every set of the pool was freed after the submissions that used it
+            // finished, so nothing refers to the pool any more.
+            unsafe { self.device.destroy_descriptor_pool(pool, None) };
+        }
     }
 
     fn forget_sets_of(&self, view: vk::ImageView) {
@@ -2297,6 +2324,7 @@ impl VulkanRenderer {
             .filter(|(first, second)| *first == view || *second == view)
             .copied()
             .collect();
+        let mut freed = Vec::new();
         for key in gone {
             if let Some((set, pool)) = descriptors.sets.remove(&key) {
                 // SAFETY: the set's image is being destroyed after every submission that read it
@@ -2308,7 +2336,12 @@ impl VulkanRenderer {
                 } {
                     tracing::warn!("cannot free a descriptor set: {error}");
                 }
+                freed.push(pool);
             }
+        }
+        drop(descriptors);
+        for pool in freed {
+            self.release_set_of(pool);
         }
     }
 
@@ -2323,7 +2356,7 @@ impl VulkanRenderer {
         });
         self.begin_commands()?;
         self.record_copies();
-        let serial = self.submit(false)?;
+        let serial = self.submit(None)?;
         self.hand_staging_to(serial);
         match from_clients {
             true => self.wait_for(serial),
@@ -2707,7 +2740,7 @@ impl Drop for VulkanRenderer {
             }
             self.device
                 .destroy_pipeline_layout(self.pipeline_layout, None);
-            for pool in std::mem::take(&mut self.descriptors.get_mut().pools) {
+            for (pool, _) in std::mem::take(&mut self.descriptors.get_mut().pools) {
                 self.device.destroy_descriptor_pool(pool, None);
             }
             self.device

@@ -50,21 +50,36 @@ ifneq (,$(filter pkg.bande.l10n-only,$(DEB_BUILD_PROFILES)))
 	$(CARGO) build $(LOCKED) --profile $(PROFILE) --bin bande-l10n-tool
 else
 	$(CARGO) build $(LOCKED) --profile $(PROFILE) --bin bande-l10n-tool --bin bande-plymouth-theme
-	$(OUT)/bande-plymouth-theme $(BUILD)/plymouth/bande
+	$(MAKE) -f debian/rules plymouth
 endif
-	$(MAKE) -f debian/rules catalogs
+	$(MAKE) -f debian/rules l10n
 
 override_dh_auto_build-arch:
 	$(CARGO) build $(LOCKED) --profile $(PROFILE) --bin bande-l10n-tool --bin bande-cursor-theme $(PROGRAMS:%=--bin %)
 	$(CARGO) build $(LOCKED) --profile $(PROFILE) --package libpam-bande-secrets --lib
-	$(MAKE) -f debian/rules catalogs
-	mkdir -p $(BUILD)/security $(BUILD)/metainfo
+	$(MAKE) -f debian/rules l10n bin security cursors metainfo
+
+.PHONY: bin security cursors metainfo plymouth l10n
+
+bin:
+	mkdir -p $(BUILD)
 	ln -sfn $(OUT) $(BUILD)/bin
+
+security:
+	mkdir -p $(BUILD)/security
 	cp $(OUT)/libpam_bande_secrets.so $(BUILD)/security/pam_bande_secrets.so
+
+cursors:
 	$(OUT)/bande-cursor-theme $(BUILD)/cursors/Bande-Cursors
+
+metainfo:
+	mkdir -p $(BUILD)/metainfo
 	debian/metainfo.py $(BUILD)/metainfo crates/*/*/data/*.metainfo.xml
 
-catalogs:
+plymouth:
+	$(OUT)/bande-plymouth-theme $(BUILD)/plymouth/bande
+
+l10n:
 	$(OUT)/bande-l10n-tool check ci/l10n-complete
 	$(OUT)/bande-l10n-tool pack $(BUILD)/l10n
 	for program in $(BUILD)/l10n/packs/*/*; do \

@@ -39,16 +39,35 @@ directories, so it never D-Bus-activates the services installed on the machine.
 
 ## Everyday development
 
-The packages are installed once (`ci/deb/source.sh` and `ci/deb/build.sh`, then `apt install`
-of the debs); they put the units, PAM, polkit and D-Bus files in place. After that, a change to a
-program is built and tried in place:
+The packages are installed once, from a quick build or a full one; their maintainer scripts put
+the users, PAM files, conffiles and alternatives in place. After that, pick the fastest step that
+covers the change:
 
-- An app runs from the tree in a Bande session: `cargo run --release -p bande-mail`.
-- `ci/dev-install.sh bande-mail bande-shell …` builds those programs with the release profile in
-  the workspace's `target/`, installs each over its packaged copy and restarts the user services
-  that run it; it says when a system service needs a restart or the session a new login.
-- A change to packaging (units, PAM, polkit, maintainer scripts, data files, translations) needs
-  the packages rebuilt and installed again, which also replaces the programs installed in place.
+- **An app from the tree**: `cargo run --release -p bande-mail` in a Bande session.
+- **`ci/dev-install.sh <package or program>...`** (a minute or two once `target/` is warm): for
+  a change to programs or their data. A program names the package that ships it. It builds that
+  package's programs with the release profile in the workspace's `target/`, makes the rest of
+  `debian/build` with the same `debian/rules` targets the package build runs, and copies what
+  differs from the installed files, at the paths `debian/<package>.install` gives: programs,
+  units and drop-ins, D-Bus, polkit and udev files, `.desktop` files, metainfo, icons, catalogs,
+  the PAM module, tmpfiles. It then reloads systemd (system and user), the buses, udev, the
+  desktop and icon caches as needed and restarts the active units that run a changed program or
+  unit, except the compositor, oneshot units and the units the package itself never restarts.
+  It lists what it skipped (conffiles under `/etc`, the PAM files, maintainer scripts,
+  alternatives, the initramfs hook and the man pages, which only the package installs) and says
+  when a new login or boot is needed. A reinstall of the package puts its own files back.
+- **`ci/deb/quick.sh <out dir>`** (about 30 to 45 minutes the first time, then about 5 to 10):
+  for a change to what only the package installs (maintainer scripts, conffiles, PAM files,
+  `debian/control`), or to try the debs themselves. It builds every package of the working tree,
+  uncommitted changes included, the way `ci/deb/build.sh` does (offline, `pkg.bande.vendor`, the
+  same `debian/` and file layout), but with the `release` profile (`PROFILE` picks another),
+  without `dh_auto_test` and in a tree and target directory kept in `~/.cache/bande-quick`, so a
+  rebuild compiles only what changed. The version is `ci/deb/version.sh`'s with `+quickN`, which
+  is never a release and upgrades the previous quick build; `check-debs.sh` and lintian check
+  it as they check a release build. A full build of the same commit sorts below it, so going
+  back to it means `apt install` with the version given.
+- **The full build** (`ci/deb/source.sh`, then `ci/deb/build.sh`, with the fat-LTO `dist`
+  profile, about two hours): releases, CI and the gate only.
 
 ## Runtime dependencies
 

@@ -125,20 +125,23 @@ writes a hex value, a corner radius or a font name of its own.
   modifier the compositor offers): two per window, a third only while the compositor still holds
   both. The device is the one on the compositor's GPU: the DRM node of the dma-buf feedback's
   main device (version 4) is matched against each Vulkan device's (`VK_EXT_physical_device_drm`);
-  without feedback only a machine with a single Vulkan device draws on it, and a window never
+  without feedback only a machine with a single GPU (lavapipe left out) draws on it, and a window never
   hands the compositor memory of another GPU. Modifiers come from the surface's feedback, its
   scan-out tranches first; when the feedback moves the surface to another GPU the window reopens
   its device, and when it only changes the modifiers it replaces its buffers. Each frame takes
   its buffer from the compositor's queue family (`QUEUE_FAMILY_FOREIGN_EXT`, in `GENERAL`) and
-  gives it back after drawing, waits for the compositor's reads of a reused buffer to finish,
+  gives it back after drawing, reuses a buffer only once the compositor has finished reading it (a third buffer instead of
+  waiting; with three it waits),
   and leaves its fence on the dma-buf (a sync file exported from Vulkan), so the compositor waits
   for the GPU and the window's thread does not. What a driver cannot do steps down one rung:
   dma-buf with a fence, then dma-buf with the window's thread waiting for each frame (no
   exportable fence, or the dma-buf takes none: logged once, for the rest of the process), then
   `wl_shm` drawn on the CPU (no shared GPU, no modifier both sides take, no dma-buf export or
-  foreign queue family, or a GPU error, for the rest of that window). The one-plane
-  rule leaves out compressed modifiers (Intel CCS, AMD DCC), so those GPUs draw windows
-  uncompressed. Frames are paced by `wl_surface.frame`. Windows follow the output's fractional
+  foreign queue family, or a GPU error, for the rest of that window). Modifiers with an
+  auxiliary compression plane (Intel CCS on gen9–12, AMD DCC on GFX9–11) have more than one plane
+  and are left out, so those GPUs draw windows uncompressed; one-plane compressed modifiers (Intel
+  Xe2, AMD GFX12, NVIDIA) are used, safe because each frame passes through the foreign queue
+  family. Frames are paced by `wl_surface.frame`. Windows follow the output's fractional
   scale through `wp_viewporter`. All windows of a process share one Vulkan device, opened with
   the first and closed with the last, with wgpu's `MemoryUsage` allocation blocks of 8–64 MiB.
   Only the drivers of the machine's render nodes are loaded (`vulkan.rs`); lavapipe only when

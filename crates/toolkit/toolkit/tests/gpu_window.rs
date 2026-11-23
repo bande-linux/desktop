@@ -4,7 +4,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use bande_test_wayland::{Frames, headless};
-use bande_toolkit::{Color, FramePath, GpuRenderer, Item, Paint, Rect, Role, Scene, Shape, Window};
+use bande_toolkit::{Color, FramePath, Item, Paint, Rect, Role, Scene, Shape, Window};
 
 const SIZE: (u32, u32) = (320, 200);
 const BACKGROUND: u32 = 0x202020;
@@ -34,17 +34,9 @@ enum Drawn {
 
 #[test]
 fn a_gpu_window_shows_every_partial_change_through_its_rotating_buffers() {
-    let software = GpuRenderer::new()
-        .map(|renderer| {
-            renderer
-                .adapter_info()
-                .name
-                .to_lowercase()
-                .contains("llvmpipe")
-        })
-        .unwrap_or(true);
+    let software = bande_graphics::GpuDevice::shared(false, None).is_err();
     if software {
-        eprintln!("skipped: only a software Vulkan device, so windows draw on the CPU");
+        eprintln!("skipped: no single hardware Vulkan device, so windows draw on the CPU");
         return;
     }
     let mut server = headless(800, 600);

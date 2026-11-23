@@ -93,6 +93,7 @@ pub struct MailSettings {
     pub sidebar_width: u16,
     pub list_width: u16,
     pub hide_sidebar: bool,
+    pub single_keys: bool,
 }
 
 impl Default for MailSettings {
@@ -116,6 +117,7 @@ impl Default for MailSettings {
             sidebar_width: 220,
             list_width: 340,
             hide_sidebar: false,
+            single_keys: true,
         }
     }
 }
@@ -161,6 +163,7 @@ impl Stored for MailSettings {
                     settings.sidebar_width = value.parse().unwrap_or(settings.sidebar_width);
                 }
                 "list-width" => settings.list_width = value.parse().unwrap_or(settings.list_width),
+                "single-keys" => settings.single_keys = flag(value).unwrap_or(settings.single_keys),
                 "hide-sidebar" => {
                     settings.hide_sidebar = flag(value).unwrap_or(settings.hide_sidebar);
                 }
@@ -178,7 +181,7 @@ impl Stored for MailSettings {
 
     fn to_text(&self) -> String {
         format!(
-            "notify = {}\nsound = {}\nload-remote = {}\ndensity = {}\nconversations = {}\nplain-text = {}\nfixed-width = {}\nquote = {}\nsend-from = {}\nsort = {}\nascending = {}\nbcc-field = {}\nindex-decrypted = {}\nbadge = {}\nmark-read = {}\nsidebar-width = {}\nlist-width = {}\nhide-sidebar = {}\n",
+            "notify = {}\nsound = {}\nload-remote = {}\ndensity = {}\nconversations = {}\nplain-text = {}\nfixed-width = {}\nquote = {}\nsend-from = {}\nsort = {}\nascending = {}\nbcc-field = {}\nindex-decrypted = {}\nbadge = {}\nmark-read = {}\nsidebar-width = {}\nlist-width = {}\nhide-sidebar = {}\nsingle-keys = {}\n",
             self.notify,
             self.sound,
             self.load_remote,
@@ -197,6 +200,7 @@ impl Stored for MailSettings {
             self.sidebar_width,
             self.list_width,
             self.hide_sidebar,
+            self.single_keys,
         )
     }
 }

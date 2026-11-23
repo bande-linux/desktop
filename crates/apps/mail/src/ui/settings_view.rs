@@ -705,6 +705,19 @@ impl SettingsView {
                         |settings, on| settings.badge = on,
                     ),
                 ),
+                heading(text!("Keyboard")),
+                row(
+                    text!("Single-key shortcuts"),
+                    toggle(
+                        &self.state,
+                        &tr!("Single-key shortcuts"),
+                        settings.single_keys,
+                        |settings, on| settings.single_keys = on,
+                    ),
+                ),
+                note(text!(
+                    "In the message list and the reader, J and K choose the next and previous message, E archives, # deletes, R, A and F reply, reply to all and forward, S flags, U marks as unread, V moves, C starts a new message, / searches and ? lists every shortcut."
+                )),
                 heading(text!("Default Email Reader")),
                 note(text!(
                     "To open email links in Mail, choose it in Settings ▸ Apps."

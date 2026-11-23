@@ -10,7 +10,7 @@ use crate::ui::symbols::Symbol;
 use crate::ui::view::{MailView, Panes, TOOLBAR_HEIGHT};
 use bande_toolkit::ui::{
     BUTTON_HEIGHT, Button, FreeLayout, Label, PopUpButton, SEGMENTED_HEIGHT, SearchField,
-    SegmentedControl, TEXT_FIELD_HEIGHT, WidgetId,
+    SegmentedControl, TEXT_FIELD_HEIGHT, TextField, WidgetId,
 };
 use bande_toolkit::{Header, Image, Point, Rect};
 
@@ -80,6 +80,7 @@ pub struct Toolbar {
     pub status: WidgetId,
     pub get_mail: WidgetId,
     pub selection: [WidgetId; 5],
+    pub reply_field: WidgetId,
 }
 
 impl Default for Toolbar {
@@ -105,12 +106,13 @@ impl Default for Toolbar {
             status: WidgetId::next(),
             get_mail: WidgetId::next(),
             selection: [WidgetId::next(); 5],
+            reply_field: WidgetId::next(),
         }
     }
 }
 
 impl Toolbar {
-    fn widgets(&self) -> [WidgetId; 22] {
+    fn widgets(&self) -> [WidgetId; 23] {
         let [archive, delete, read, move_to, flag] = self.selection;
         [
             self.sidebar,
@@ -135,6 +137,7 @@ impl Toolbar {
             read,
             move_to,
             flag,
+            self.reply_field,
         ]
     }
 
@@ -176,6 +179,8 @@ const SELECTION: [(Text, Signal); 5] = [
 ];
 const SELECTION_WIDTH: f32 = 128.0;
 pub const SELECTION_TOP: f32 = 24.0;
+pub const QUICK_REPLY_BAR: f32 = 52.0;
+const REPLY_INSET: f32 = 24.0;
 
 pub fn sort_title(sort: SortBy) -> String {
     match sort {
@@ -271,6 +276,7 @@ impl MailView {
             let send = sender(&self.signals);
             Button::new(&title.tr(), move || send(signal.clone()))
         });
+        let reply_field = TextField::new(&tr!("Reply…"), "", |_| {});
         let Some(host) = self.host_mut() else {
             return;
         };
@@ -288,6 +294,7 @@ impl MailView {
         let status = host.insert(status, Rect::default());
         let get_mail = host.insert(get_mail, Rect::default());
         let selection = selection.map(|button| host.insert(button, Rect::default()));
+        let reply_field = host.insert(reply_field, Rect::default());
         if let [reply, reply_all, forward, archive, junk, delete, flag, more] = ids[..] {
             self.toolbar = Toolbar {
                 sidebar,
@@ -310,6 +317,7 @@ impl MailView {
                 status,
                 get_mail,
                 selection,
+                reply_field,
             };
         }
     }
@@ -447,6 +455,17 @@ impl MailView {
             ),
         ]);
         frames.extend(self.selection_frames());
+        let reader = self.reader_frame();
+        let reply = match self.reader.thread.is_some() && reader.width > 0.0 {
+            true => Rect::new(
+                reader.x + REPLY_INSET,
+                reader.y + reader.height + ((QUICK_REPLY_BAR - TEXT_FIELD_HEIGHT) / 2.0).round(),
+                (reader.width - 2.0 * REPLY_INSET).max(0.0),
+                TEXT_FIELD_HEIGHT,
+            ),
+            false => Rect::default(),
+        };
+        frames.push((toolbar.reply_field, reply));
         let foot = self.sidebar_foot_frame();
         if foot.width <= 0.0 {
             frames.extend([
@@ -594,6 +613,18 @@ impl MailView {
             if let Some(button) = self.ui.widget_as::<Button>(id) {
                 button.set_enabled(enabled);
             }
+        }
+        let placeholder = self
+            .reader
+            .focused()
+            .map(|(summary, _)| match summary.sender.shown() {
+                "" => tr!("Reply…"),
+                name => tr!("Reply to {name}…", name = name.to_owned()),
+            });
+        if let Some(placeholder) = placeholder
+            && let Some(field) = self.ui.widget_as::<TextField>(self.toolbar.reply_field)
+        {
+            field.set_placeholder(&placeholder);
         }
         let status = self.sync_line();
         if let Some(label) = self.ui.widget_as::<Label>(self.toolbar.status) {

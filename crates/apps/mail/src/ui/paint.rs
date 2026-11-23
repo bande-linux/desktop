@@ -8,7 +8,9 @@ use crate::ui::reader_pane::{Look, paint_link_target};
 use crate::ui::sidebar::Place;
 use crate::ui::sidebar::Row;
 use crate::ui::symbols::Symbol;
-use crate::ui::toolbar::{LIST_HEADER_HEIGHT, LIST_TITLE_HEIGHT, SIDEBAR_FOOT_HEIGHT};
+use crate::ui::toolbar::{
+    LIST_HEADER_HEIGHT, LIST_TITLE_HEIGHT, QUICK_REPLY_BAR, SIDEBAR_FOOT_HEIGHT,
+};
 use crate::ui::view::{Hit, MailView, Pane, Panes, Quick, READER_MAX_WIDTH, TOOLBAR_HEIGHT};
 use bande_toolkit::Color;
 use bande_toolkit::ui::{BUTTON_HEIGHT, Key, Scroll, ScrollPhase, ScrollSource, Size};
@@ -136,11 +138,15 @@ impl MailView {
     pub(crate) fn reader_frame(&self) -> Rect {
         let area = self.reader_area();
         let width = area.width.min(READER_MAX_WIDTH);
+        let bar = match self.reader.thread.is_some() {
+            true => QUICK_REPLY_BAR,
+            false => 0.0,
+        };
         Rect::new(
             area.x + ((area.width - width) / 2.0).round(),
             area.y,
             width,
-            area.height,
+            (area.height - bar).max(0.0),
         )
     }
 

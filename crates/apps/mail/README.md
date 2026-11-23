@@ -124,7 +124,7 @@ apt install bande-mail
   banner, which Mail then remembers for that sender (or by themselves when Settings ▸ Privacy
   allows it), and then only over HTTPS, at
   most 20 per message, 10 MB each, decoded with limits on their size.
-- **Keys.** Get Mail (F5), New Message (Ctrl+N), Archive (Shift+Ctrl+A),
+- **Keys.** In the list and the reader, single keys act at once (Settings ▸ General turns them off, so they never fight a screen reader's own keys): J and K next and previous, E Archive, # Delete, R Reply, A Reply All, F Forward, S Flag, U Mark as Unread, V Move To…, C New Message, / Search and ? (View ▸ Keyboard Shortcuts) for the list of keys. Move To… (V or Shift+Ctrl+M) opens a list of mailboxes to type into. Ctrl+1 to Ctrl+9 go to the first nine mailboxes of the sidebar. Under an open conversation, a Reply field takes a first line: Enter opens the reply with it, ready to finish and send. Get Mail (F5), New Message (Ctrl+N), Archive (Shift+Ctrl+A),
   Delete (Delete or Backspace), Junk, Reply (Ctrl+R), Reply All (Shift+Ctrl+R),
   Forward (Shift+Ctrl+F), Flag (Message ▸ Flag picks one of seven colours, kept
   on the server), Mark as Read or Unread, Send

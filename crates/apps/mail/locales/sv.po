@@ -124,6 +124,9 @@ msgstr "Sök"
 msgid "View"
 msgstr "Visa"
 
+msgid "Keyboard Shortcuts"
+msgstr "Kortkommandon"
+
 msgid "Hide Sidebar"
 msgstr "Dölj sidofältet"
 
@@ -175,6 +178,9 @@ msgstr "Arkivera"
 
 msgid "Move to Junk"
 msgstr "Flytta till skräppost"
+
+msgid "Move To…"
+msgstr "Flytta till…"
 
 msgid "Move To"
 msgstr "Flytta till"
@@ -554,6 +560,15 @@ msgstr "Spela upp ett ljud"
 msgid "Show the unread count in the Taskbar"
 msgstr "Visa antalet olästa i Aktivitetsfältet"
 
+msgid "Keyboard"
+msgstr "Tangentbord"
+
+msgid "Single-key shortcuts"
+msgstr "Kortkommandon med en tangent"
+
+msgid "In the message list and the reader, J and K choose the next and previous message, E archives, # deletes, R, A and F reply, reply to all and forward, S flags, U marks as unread, V moves, C starts a new message, / searches and ? lists every shortcut."
+msgstr "I meddelandelistan och läsaren väljer J och K nästa och föregående meddelande, E arkiverar, # raderar, R, A och F svarar, svarar alla och vidarebefordrar, S flaggar, U markerar som oläst, V flyttar, C påbörjar ett nytt meddelande, / söker och ? listar alla kortkommandon."
+
 msgid "Default Email Reader"
 msgstr "Standardprogram för e-post"
 
@@ -840,9 +855,6 @@ msgstr "Mer"
 msgid "Mark as Read"
 msgstr "Markera som läst"
 
-msgid "Move To…"
-msgstr "Flytta till…"
-
 msgid "Date"
 msgstr "Datum"
 
@@ -869,6 +881,12 @@ msgstr "Sortera efter"
 
 msgid "Back"
 msgstr "Tillbaka"
+
+msgid "Reply…"
+msgstr "Svara…"
+
+msgid "Reply to {name}…"
+msgstr "Svara {name}…"
 
 msgid "The key could not be found"
 msgstr "Nyckeln kunde inte hittas"
@@ -969,6 +987,33 @@ msgstr "Det nya meddelandet påbörjades inte"
 
 msgid "Mail needs an account to send it from. Add one, then try again."
 msgstr "E-post behöver ett konto att skicka från. Lägg till ett och försök igen."
+
+msgid "Type a mailbox name"
+msgstr "Skriv namnet på en brevlåda"
+
+msgid "No mailbox matches"
+msgstr "Ingen brevlåda matchar"
+
+msgid "Ctrl+N: New Message"
+msgstr "Ctrl+N: Nytt meddelande"
+
+msgid "Ctrl+R: Reply · Shift+Ctrl+R: Reply All · Shift+Ctrl+F: Forward"
+msgstr "Ctrl+R: Svara · Skift+Ctrl+R: Svara alla · Skift+Ctrl+F: Vidarebefordra"
+
+msgid "Shift+Ctrl+A: Archive · Delete: Delete · Shift+Ctrl+M: Move To…"
+msgstr "Skift+Ctrl+A: Arkivera · Delete: Radera · Skift+Ctrl+M: Flytta till…"
+
+msgid "Ctrl+F: Search · F5: Get Mail · Ctrl+Z: Undo"
+msgstr "Ctrl+F: Sök · F5: Hämta e-post · Ctrl+Z: Ångra"
+
+msgid "Ctrl+1 to Ctrl+9: the first nine mailboxes in the sidebar"
+msgstr "Ctrl+1 till Ctrl+9: de nio första brevlådorna i sidofältet"
+
+msgid "Shift+Ctrl+S: Hide or Show Sidebar · F6: next pane"
+msgstr "Skift+Ctrl+S: Dölj eller visa sidofältet · F6: nästa ruta"
+
+msgid "In the list and the reader: J, K next and previous · E Archive · # Delete · R Reply · A Reply All · F Forward · S Flag · U Mark as Unread · V Move To… · C New Message · / Search · ? this list"
+msgstr "I listan och läsaren: J, K nästa och föregående · E Arkivera · # Radera · R Svara · A Svara alla · F Vidarebefordra · S Flagga · U Markera som oläst · V Flytta till… · C Nytt meddelande · / Sök · ? den här listan"
 
 msgid "Rename Mailbox…"
 msgstr "Byt namn på brevlåda…"

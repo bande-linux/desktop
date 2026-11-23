@@ -50,8 +50,9 @@ use zeroize::Zeroizing;
 
 pub(crate) mod security;
 
-pub const SHORTCUTS: [(&str, &str); 10] = [
+pub const SHORTCUTS: [(&str, &str); 11] = [
     ("toggle-sidebar", "Shift+Ctrl+S"),
+    ("move-to", "Shift+Ctrl+M"),
     ("compose", "Ctrl+N"),
     ("get-mail", "F5"),
     ("find", "Ctrl+F"),
@@ -1681,6 +1682,10 @@ impl MailView {
     }
 
     pub fn respond(&mut self, all: bool) {
+        self.respond_with(all, "");
+    }
+
+    fn respond_with(&mut self, all: bool, text: &str) {
         let Some((summary, reading)) = self.reader.focused() else {
             return;
         };
@@ -1698,7 +1703,7 @@ impl MailView {
         );
         let quote = self.settings.quote.then_some(attribution.as_str());
         let mut draft = reply(&reading.content, &Address::from(account), all, quote);
-        draft.body = signed(&draft.body, &account.signature);
+        draft.body = signed(&format!("{text}{}", draft.body), &account.signature);
         draft.sign = self.signs(account.id);
         self.requests.push(Request::Compose(Box::new(Outgoing {
             draft,
@@ -2710,6 +2715,78 @@ impl MailView {
         }
     }
 
+    fn single_key(&mut self, character: char) -> Option<bool> {
+        match character {
+            'j' => Some(self.step(1)),
+            'k' => Some(self.step(-1)),
+            'e' => Some(self.menu_action("archive")),
+            '#' => Some(self.menu_action("delete")),
+            'r' => Some(self.menu_action("reply")),
+            'a' => Some(self.menu_action("reply-all")),
+            'f' => Some(self.menu_action("forward")),
+            's' => Some(self.menu_action("toggle-flag")),
+            'u' => Some(self.menu_action("toggle-read")),
+            'c' => Some(self.menu_action("compose")),
+            'v' => Some(self.menu_action("move-to")),
+            '/' => Some(self.menu_action("find")),
+            '?' => Some(self.menu_action("shortcuts")),
+            _ => None,
+        }
+    }
+
+    fn choose_nth_place(&mut self, nth: usize) -> bool {
+        let Some(place) = self
+            .sidebar
+            .iter()
+            .filter_map(|row| match row {
+                Row::Place { place, .. } => Some(place.clone()),
+                Row::Heading(..) => None,
+            })
+            .nth(nth)
+        else {
+            return false;
+        };
+        self.focus = Pane::List;
+        self.choose_place(place);
+        true
+    }
+
+    fn show_move_finder(&mut self) {
+        if self.targets().is_empty() {
+            return;
+        }
+        let list = self.list_frame();
+        let at = Point::new(list.x + list.width / 2.0, list.y);
+        let menu = Menu::new(
+            self.move_targets()
+                .into_iter()
+                .map(|(name, id)| MenuItem::new(&name, &format!("move-to:{id}")))
+                .collect(),
+        )
+        .searchable(&tr!("Type a mailbox name"), &tr!("No mailbox matches"));
+        self.requests.push(Request::ShowMenu(menu, at));
+    }
+
+    fn show_shortcuts(&mut self) {
+        let mut lines = vec![
+            tr!("Ctrl+N: New Message"),
+            tr!("Ctrl+R: Reply · Shift+Ctrl+R: Reply All · Shift+Ctrl+F: Forward"),
+            tr!("Shift+Ctrl+A: Archive · Delete: Delete · Shift+Ctrl+M: Move To…"),
+            tr!("Ctrl+F: Search · F5: Get Mail · Ctrl+Z: Undo"),
+            tr!("Ctrl+1 to Ctrl+9: the first nine mailboxes in the sidebar"),
+            tr!("Shift+Ctrl+S: Hide or Show Sidebar · F6: next pane"),
+        ];
+        if self.settings.single_keys {
+            lines.push(tr!(
+                "In the list and the reader: J, K next and previous · E Archive · # Delete · R Reply · A Reply All · F Forward · S Flag · U Mark as Unread · V Move To… · C New Message · / Search · ? this list"
+            ));
+        }
+        self.ui.present_sheet(
+            Alert::new(&tr!("Keyboard Shortcuts"), &lines.join("\n"), |_| {})
+                .primary(&tr!("OK"), "ok"),
+        );
+    }
+
     fn search_focused(&self) -> bool {
         self.ui.focus() == Some(self.toolbar.search)
     }
@@ -2725,6 +2802,20 @@ impl MailView {
         if let Some(before) = self.ui.focus() {
             if key == Key::Escape {
                 self.ui.clear_focus();
+                return true;
+            }
+            if before == self.toolbar.reply_field && key == Key::Enter && bare {
+                let text = self
+                    .ui
+                    .widget_as::<TextField>(before)
+                    .map(|field| field.text())
+                    .unwrap_or_default();
+                if !text.trim().is_empty() {
+                    self.respond_with(false, text.trim());
+                    if let Some(field) = self.ui.widget_as::<TextField>(before) {
+                        field.replace_text("");
+                    }
+                }
                 return true;
             }
             let handled = self.ui.handle(&Event::Key { key, modifiers });
@@ -2757,6 +2848,23 @@ impl MailView {
             return self.menu_action(action);
         }
         let plain = !modifiers.control;
+        if !modifiers.control
+            && !modifiers.alt
+            && self.ui.focus().is_none()
+            && self.settings.single_keys
+            && matches!(self.focus, Pane::List | Pane::Reader)
+            && let Key::Character(character) = key
+            && let Some(handled) = self.single_key(character)
+        {
+            return handled;
+        }
+        if modifiers.control
+            && !modifiers.shift
+            && !modifiers.alt
+            && let Key::Character(digit @ '1'..='9') = key
+        {
+            return self.choose_nth_place(digit as usize - '1' as usize);
+        }
         match key {
             Key::Character('z' | 'Z') if modifiers.control && !modifiers.shift => {
                 self.undo();
@@ -3567,6 +3675,8 @@ impl MailView {
             }
             "apply-rules" => self.apply_rules_to_chosen(),
             "toggle-sidebar" => self.toggle_sidebar(),
+            "move-to" => self.show_move_finder(),
+            "shortcuts" => self.show_shortcuts(),
             "bcc-field" => {
                 self.settings.bcc_field = !self.settings.bcc_field;
                 self.keep_settings();

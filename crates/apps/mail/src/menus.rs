@@ -71,6 +71,8 @@ pub fn app_menus(view: &MailView, shown: Shown) -> Vec<Entry> {
         Entry::submenu(
             &tr!("View"),
             vec![
+                item(text!("Keyboard Shortcuts"), "shortcuts"),
+                Entry::separator(),
                 item(
                     match view.sidebar_shown() {
                         true => text!("Hide Sidebar"),
@@ -118,6 +120,7 @@ pub fn app_menus(view: &MailView, shown: Shown) -> Vec<Entry> {
                 Entry::separator(),
                 selection(text!(context = "action", "Archive"), "archive"),
                 selection(text!("Move to Junk"), "junk"),
+                selection(text!("Move To…"), "move-to"),
                 Entry::submenu(&tr!("Move To"), targets).enabled(viewer),
                 selection(text!("Delete"), "delete"),
             ],

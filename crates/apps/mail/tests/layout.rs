@@ -3,7 +3,7 @@
 use bande_mail::net::{Security, Server};
 use bande_mail::settings::MailSettings;
 use bande_mail::store::{Account, Store};
-use bande_mail::ui::{MailView, Panes};
+use bande_mail::ui::{MailView, Panes, Request};
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
@@ -137,7 +137,7 @@ fn node(view: &MailView, label: &str) -> Option<accesskit::Node> {
 }
 
 #[test]
-fn an_empty_mailbox_says_so_and_several_chosen_messages_offer_their_actions() {
+fn the_list_says_when_it_is_empty_and_acts_on_messages_by_panel_swipe_and_keys() {
     let folder = tempfile::tempdir_in(hermetic()).unwrap();
     let store_path = folder.path().join("mail.sqlite3");
     let mut store = Store::open(&store_path).unwrap();
@@ -242,4 +242,28 @@ fn an_empty_mailbox_says_so_and_several_chosen_messages_offer_their_actions() {
         1,
         "a swipe to the right archives the row"
     );
+
+    let press = |view: &mut MailView, key: Key, control: bool| {
+        view.handle(&Event::Key {
+            key,
+            modifiers: Modifiers {
+                control,
+                ..Modifiers::default()
+            },
+        });
+        view.scene(1280, 800);
+    };
+    press(&mut view, Key::Character('j'), false);
+    assert!(view.selected().is_some(), "J chooses the next message");
+    press(&mut view, Key::Character('v'), false);
+    let finder = view
+        .take_requests()
+        .into_iter()
+        .any(|request| matches!(request, Request::ShowMenu(menu, _) if menu.search.is_some()));
+    assert!(finder, "V opens a mailbox finder to type into");
+    let inbox = view.place().clone();
+    press(&mut view, Key::Character('2'), true);
+    assert_ne!(*view.place(), inbox, "Ctrl+2 goes to the second mailbox");
+    press(&mut view, Key::Character('?'), false);
+    assert!(view.has_sheet(), "? lists the shortcuts");
 }

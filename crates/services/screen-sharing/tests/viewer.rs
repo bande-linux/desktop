@@ -168,16 +168,47 @@ fn connected(port: u16) -> TcpStream {
     socket
 }
 
-fn security_types(port: u16) -> (TcpStream, Vec<u8>) {
+const BUSY: &str = "This computer is already connecting.";
+
+fn security_types(port: u16) -> Option<(TcpStream, Vec<u8>)> {
     let mut socket = connected(port);
     let mut version = [0; 12];
     socket.read_exact(&mut version).unwrap();
     socket.write_all(b"RFB 003.008\n").unwrap();
     let mut count = [0];
     socket.read_exact(&mut count).unwrap();
+    if count[0] == 0 {
+        let mut length = [0; 4];
+        socket.read_exact(&mut length).unwrap();
+        let mut reason = vec![0; u32::from_be_bytes(length) as usize];
+        socket.read_exact(&mut reason).unwrap();
+        assert_eq!(String::from_utf8(reason).unwrap(), BUSY);
+        return None;
+    }
     let mut types = vec![0; usize::from(count[0])];
     socket.read_exact(&mut types).unwrap();
-    (socket, types)
+    Some((socket, types))
+}
+
+fn signed_in(port: u16, answers: &mut Answers) -> Option<Result<client::Session, Failure>> {
+    match client::connect(connected(port), "127.0.0.1", false, answers) {
+        Err(Failure::Refused(reason)) if reason == BUSY => None,
+        signed_in => Some(signed_in),
+    }
+}
+
+fn once_handshakes_end<T>(mut attempt: impl FnMut() -> Option<T>) -> T {
+    let deadline = Instant::now() + PATIENCE;
+    loop {
+        if let Some(done) = attempt() {
+            return done;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "the earlier handshake was never let go"
+        );
+        thread::sleep(Duration::from_millis(10));
+    }
 }
 
 fn wait_for(host: &TestHost, sent: &[Sent]) {
@@ -300,7 +331,7 @@ fn the_viewer_signs_in_over_tls_sees_and_controls_the_screen_and_shares_the_clip
 #[test]
 fn a_wrong_password_is_refused_and_older_viewers_need_permission() {
     let (port, _, host) = start(false);
-    let (mut socket, types) = security_types(port);
+    let (mut socket, types) = once_handshakes_end(|| security_types(port));
     assert_eq!(types, [19], "plain VNC authentication is off by default");
     socket.write_all(&[19]).unwrap();
     let mut version = [0; 2];
@@ -319,26 +350,25 @@ fn a_wrong_password_is_refused_and_older_viewers_need_permission() {
     };
     match client::connect(connected(port), "127.0.0.1", false, &mut busy) {
         Err(Failure::Refused(reason)) => assert_eq!(
-            reason, "This computer is already connecting.",
+            reason, BUSY,
             "one handshake at a time from one address, and the viewer is told why"
         ),
         Err(other) => panic!("expected a refusal, got {other:?}"),
         Ok(_) => panic!("a second handshake from one address got in"),
     }
     drop(socket);
-    thread::sleep(Duration::from_millis(200));
     let mut answers = Answers {
         password: "guessed",
         seen: None,
     };
-    match client::connect(connected(port), "127.0.0.1", false, &mut answers) {
+    match once_handshakes_end(|| signed_in(port, &mut answers)) {
         Err(Failure::Denied(reason)) => assert_eq!(reason, "Wrong password."),
         Err(other) => panic!("expected a refused password, got {other:?}"),
         Ok(_) => panic!("a wrong password got in"),
     }
 
     host.older_viewers.store(true, Ordering::SeqCst);
-    let (mut socket, types) = security_types(port);
+    let (mut socket, types) = once_handshakes_end(|| security_types(port));
     assert_eq!(types, [19, 2]);
     socket.write_all(&[2]).unwrap();
     let mut challenge = [0; 16];

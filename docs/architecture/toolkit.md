@@ -108,26 +108,50 @@ writes a hex value, a corner radius or a font name of its own.
     match the Gaussian, corners are within 3/255 at full opacity.
 - **Text.** Laid out by Parley: HarfRust shaping with the font's kerning, bidi, ICU line breaking
   with dictionaries for Thai, Lao, Khmer and Burmese, and fallback through fontconfig (loaded at
-  run time). Interface text is Inter with Datum's alternates on (`cv05` l with a tail, `cv08` I
-  with serifs, `ss07`/`ss08` square punctuation and quotes); display text (window titles,
-  headings, 20 pt and up) is Manrope; monospace is JetBrains Mono with a slashed zero, or the
-  family a `TextSystem` was given with `set_monospace_family` (Terminal's font). A missing
+  run time). A process reads the installed fonts once and every `TextSystem` shares them; an app
+  starts reading them on a thread as it starts, so a window's first layout finds them ready.
+  Fonts installed later reach the apps started after them.
+  Interface text is Inter with Datum's alternates on (`cv05` l with a tail, `cv08` I with serifs,
+  `ss07`/`ss08` square punctuation and quotes); display text (window titles, headings, 20 pt and up)
+  is Manrope; monospace is JetBrains Mono with a slashed zero, or the family
+  a `TextSystem` was given with `set_monospace_family` (Terminal's font). A missing
   face falls back (Manrope to Inter, JetBrains Mono to DejaVu Sans Mono, then fontconfig's
   generic family), so nothing breaks without the fonts; `bande-desktop` depends on
   `fonts-inter`, `fonts-manrope` and `fonts-jetbrains-mono`. Baselines sit on whole pixels.
 - **Windows.** `Window` opens an `xdg_toplevel`, a `zwlr_layer_surface_v1` or a session-lock
-  surface through libwayland, loaded at run time, so that Vulkan's WSI can present on the same
-  connection. The first frame is drawn by `CpuRenderer` into a `wl_shm` buffer while a thread
-  creates the Vulkan device and a surface on the window; once it is ready, frames are drawn by
-  `GpuRenderer` into a kept frame texture that is copied to the surface (mailbox when offered). Frames are paced by
-  `wl_surface.frame`. Windows follow the output's fractional scale through `wp_viewporter`.
-  All windows of a process share one Vulkan device, opened with the first and closed with the
-  last. Each renderer's image atlas starts at the surface's size (rounded up to 256 px) and grows
-  only when an image does not fit. A window hidden for 30 s drops its renderer, frame textures,
-  `wl_shm` buffers and, with the last one, the device; showing it again draws the first frames on
-  the CPU while the GPU comes back. Every frame is diffed against the last one item by item
-  (`damage`): only the changed regions are redrawn (clipped on the GPU into a kept frame texture,
-  rendered region by region on the CPU) and only they are damaged on `wl_shm` buffers.
+  surface. The first frame is drawn by `CpuRenderer` into a `wl_shm` buffer while a thread opens
+  the Vulkan device; once it is ready, frames are drawn by `GpuRenderer` straight into dma-bufs
+  the toolkit allocates and exports itself (`zwp_linux_dmabuf_v1`, ARGB8888 with a one-plane
+  modifier the compositor offers): two per window, a third only while the compositor still holds
+  both. The device is the one on the compositor's GPU: the DRM node of the dma-buf feedback's
+  main device (version 4) is matched against each Vulkan device's (`VK_EXT_physical_device_drm`);
+  without feedback only a machine with a single GPU (lavapipe left out) draws on it, and a window never
+  hands the compositor memory of another GPU. Modifiers come from the surface's feedback, its
+  scan-out tranches first; when the feedback moves the surface to another GPU the window reopens
+  its device, and when it only changes the modifiers it replaces its buffers. Each frame takes
+  its buffer from the compositor's queue family (`QUEUE_FAMILY_FOREIGN_EXT`, in `GENERAL`) and
+  gives it back after drawing, reuses a buffer only once the compositor has finished reading it (a third buffer instead of
+  waiting; with three it waits),
+  and leaves its fence on the dma-buf (a sync file exported from Vulkan), so the compositor waits
+  for the GPU and the window's thread does not. What a driver cannot do steps down one rung:
+  dma-buf with a fence, then dma-buf with the window's thread waiting for each frame (no
+  exportable fence, or the dma-buf takes none: logged once, for the rest of the process), then
+  `wl_shm` drawn on the CPU (no shared GPU, no modifier both sides take, no dma-buf export or
+  foreign queue family, or a GPU error, for the rest of that window). Modifiers with an
+  auxiliary compression plane (Intel CCS on gen9–12, AMD DCC on GFX9–11) have more than one plane
+  and are left out, so those GPUs draw windows uncompressed; one-plane compressed modifiers (Intel
+  Xe2, AMD GFX12, NVIDIA) are used, safe because each frame passes through the foreign queue
+  family. Frames are paced by `wl_surface.frame`. Windows follow the output's fractional
+  scale through `wp_viewporter`. All windows of a process share one Vulkan device, opened with
+  the first and closed with the last, with wgpu's `MemoryUsage` allocation blocks of 8–64 MiB.
+  Only the drivers of the machine's render nodes are loaded (`vulkan.rs`); lavapipe only when
+  there is no known GPU or the loader's variables say otherwise. Each renderer's image atlas
+  starts at the surface's size (rounded up to 256 px) and grows only when an image does not fit.
+  A window hidden for 30 s drops its renderer, buffers and, with the last one, the device;
+  showing it again draws the first frames on the CPU while the GPU comes back. Every frame is
+  diffed against the last one item by item (`damage`): only the changed regions are redrawn
+  (into a dma-buf together with what changed since that buffer was last shown, region by region
+  on the CPU) and only they are damaged with `wl_surface.damage_buffer`.
   Text input v3 and the clipboard are supported.
   - **Window frame.** A toplevel gets its frame from the toolkit, in Datum's frame and sheet:
     the window is `chassis`, with a 48 pt header holding the title in Manrope 15/20
@@ -419,6 +443,3 @@ writes a hex value, a corner radius or a font name of its own.
 - **Clipboard changes.** `WindowEvent::ClipboardChanged` says something another window copied became
   the selection, so a guest can be offered it. It stays silent for the window's own copies and for
   anything marked as a password.
-
-Since `wayland-backend` is built with `client_system`, every Wayland client in a workspace
-build, `bande-test-wayland` included, goes through libwayland.

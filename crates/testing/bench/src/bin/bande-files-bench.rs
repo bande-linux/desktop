@@ -40,6 +40,14 @@ impl Sample {
 }
 
 fn main() -> ExitCode {
+    // SAFETY: main is still single-threaded here.
+    let _session = match unsafe { bande_test_bus::PrivateSession::enter() } {
+        Ok(session) => session,
+        Err(error) => {
+            eprintln!("bande-files-bench: cannot start a private session: {error}");
+            return ExitCode::FAILURE;
+        }
+    };
     bande_log::init("bande-files-bench");
     match run() {
         Ok(()) => ExitCode::SUCCESS,

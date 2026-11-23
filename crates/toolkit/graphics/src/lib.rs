@@ -1,5 +1,7 @@
 mod cpu;
 mod damage;
+#[cfg(feature = "gpu")]
+mod dmabuf;
 mod draw;
 #[cfg(feature = "gpu")]
 mod gpu;
@@ -20,6 +22,8 @@ pub use bande_design::{
 };
 pub use cpu::CpuRenderer;
 pub use damage::{Region, damage};
+#[cfg(feature = "gpu")]
+pub use dmabuf::{SHARED_FOURCC, SharedImage};
 #[cfg(feature = "gpu")]
 pub use gpu::{GpuDevice, GpuRenderer};
 pub use input::{

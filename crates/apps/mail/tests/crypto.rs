@@ -99,7 +99,7 @@ impl Drop for Home {
 }
 
 #[test]
-fn signed_and_encrypted_mail_shows_only_what_was_proven() {
+fn signed_and_encrypted_mail_shows_only_what_was_proven_and_goes_out_only_sealed() {
     let Some(home) = Home::alice() else {
         return;
     };
@@ -178,14 +178,7 @@ fn signed_and_encrypted_mail_shows_only_what_was_proven() {
         "The real subject"
     );
     assert!(!Content::parse(&raw).text().contains("Only Alice"));
-}
 
-#[test]
-fn a_signed_and_encrypted_message_round_trips_in_both_standards() {
-    let Some(home) = Home::alice() else {
-        return;
-    };
-    let keys = home.keys();
     let openpgp = Identity {
         openpgp: keys.gnupg.own_keys().unwrap().remove(0).fingerprint,
         ..Identity::default()

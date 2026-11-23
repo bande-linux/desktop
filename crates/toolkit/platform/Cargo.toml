@@ -10,7 +10,6 @@ repository.workspace = true
 [dependencies]
 accesskit.workspace = true
 accesskit_unix.workspace = true
-raw-window-handle.workspace = true
 rustix = { workspace = true, features = ["fs", "pipe", "time"] }
 tracing.workspace = true
 bande-bus.workspace = true
@@ -20,11 +19,9 @@ bande-keyboard.workspace = true
 bande-l10n.workspace = true
 bande-protocols = { workspace = true, features = ["client"] }
 bande-widgets.workspace = true
-wayland-backend = { workspace = true, features = ["client_system"] }
 wayland-client.workspace = true
 wayland-protocols.workspace = true
 wayland-protocols-wlr.workspace = true
-wgpu.workspace = true
 xkbcommon = { workspace = true, features = ["wayland"] }
 zbus.workspace = true
 

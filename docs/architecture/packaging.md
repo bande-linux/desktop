@@ -198,7 +198,7 @@ are in [performance.md](performance.md).
   through PackageKit on its own thread, says while Bande's text is being fetched, and says when it
   could not be. A name with no package in the APT index is skipped. Packs can also be missing
   when the language was chosen before Bande or the Browser was installed. For that case, Settings'
-  update timer (`bande-update-check.timer`: 3 minutes after login, then daily) resolves the same
+  update timer (`bande-update-check.timer`: 5 to 20 minutes after login, then daily) resolves the same
   names for the person's language in the local APT index, without fetching anything. When some
   are available and not installed, it offers them in a notification. Install installs them
   through PackageKit, asking for the administrator's password through the polkit agent. A

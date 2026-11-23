@@ -31,7 +31,8 @@ impl MinuteTimer {
         Ok(timer)
     }
 
-    fn arm(&self) -> rustix::io::Result<()> {
+    /// Fires the timer again at the next minute boundary.
+    pub fn arm(&self) -> rustix::io::Result<()> {
         timerfd_settime(
             &self.timer,
             TimerfdTimerFlags::ABSTIME | TimerfdTimerFlags::CANCEL_ON_SET,
@@ -43,11 +44,19 @@ impl MinuteTimer {
         .map(drop)
     }
 
+    /// Waits for the minute to turn (or the clock to be set) and fires again at the next one.
     pub fn wait(&self) -> rustix::io::Result<()> {
+        self.take()?;
+        self.arm()
+    }
+
+    /// Waits for the minute to turn (or the clock to be set) and leaves the timer stopped until
+    /// [`MinuteTimer::arm`], so a clock that nobody sees stops waking its process.
+    pub fn take(&self) -> rustix::io::Result<()> {
         let mut expirations = [0; 8];
         loop {
             match read(&self.timer, &mut expirations) {
-                Ok(_) | Err(Errno::CANCELED) => return self.arm(),
+                Ok(_) | Err(Errno::CANCELED) => return Ok(()),
                 Err(Errno::INTR) => continue,
                 Err(error) => return Err(error),
             }
@@ -82,7 +91,8 @@ impl ClockChanges {
         Ok(changes)
     }
 
-    fn arm(&self) -> rustix::io::Result<()> {
+    /// Fires the timer again at the next minute boundary.
+    pub fn arm(&self) -> rustix::io::Result<()> {
         self.wake_at(None)
     }
 

@@ -1,3 +1,4 @@
+use std::sync::mpsc::Receiver;
 use std::thread;
 
 use bande_datetime::MinuteTimer;
@@ -7,13 +8,15 @@ use zbus::blocking::Connection;
 
 use crate::Update;
 
-pub fn follow_minutes(outbox: &Outbox<Update>) -> rustix::io::Result<()> {
+pub fn follow_minutes(outbox: &Outbox<Update>, shown: &Receiver<()>) -> rustix::io::Result<()> {
     let timer = MinuteTimer::new()?;
     loop {
-        timer.wait()?;
-        if !outbox.send(Update::Minute) {
+        timer.take()?;
+        while shown.try_recv().is_ok() {}
+        if !outbox.send(Update::Minute) || shown.recv().is_err() {
             return Ok(());
         }
+        timer.arm()?;
     }
 }
 

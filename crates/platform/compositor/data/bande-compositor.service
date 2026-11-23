@@ -14,4 +14,5 @@ WatchdogSec=20s
 TimeoutStopSec=10s
 TimeoutAbortSec=10s
 OOMScoreAdjust=100
+OOMPolicy=continue
 ManagedOOMPreference=avoid

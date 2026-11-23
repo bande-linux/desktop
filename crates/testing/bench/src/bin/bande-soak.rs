@@ -734,7 +734,7 @@ fn run(hours: f64, out: PathBuf) -> Result<bool, Box<dyn Error>> {
 fn main() -> ExitCode {
     let mut hours = 1.0;
     let mut out = PathBuf::from("soak-out");
-    let mut args = std::env::args().skip(1);
+    let mut args = bande_test_bus::PrivateSession::arguments();
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--hog" => hog(),
@@ -746,18 +746,14 @@ fn main() -> ExitCode {
             }
         }
     }
-    let bus = match bande_test_bus::SessionBus::start() {
-        Ok(bus) => bus,
+    // SAFETY: main is still single-threaded here.
+    let _session = match unsafe { bande_test_bus::PrivateSession::enter() } {
+        Ok(session) => session,
         Err(error) => {
-            eprintln!("bande-soak: cannot start a private session bus: {error}");
+            eprintln!("bande-soak: cannot start a private session: {error}");
             return ExitCode::FAILURE;
         }
     };
-    // SAFETY: main is still single-threaded here: the bus is a child process and logging starts
-    // afterwards.
-    unsafe {
-        std::env::set_var("DBUS_SESSION_BUS_ADDRESS", bus.address());
-    }
     bande_log::init("bande-soak");
     match run(hours, out) {
         Ok(true) => ExitCode::SUCCESS,

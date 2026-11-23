@@ -3,7 +3,7 @@ use std::io;
 use std::os::fd::AsFd;
 use std::os::unix::fs::FileExt;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::AtomicBool;
 
 use bande_graphics::{CpuRenderer, Region, Scene, pixels};
 use rustix::fs::{MemfdFlags, memfd_create};
@@ -12,18 +12,8 @@ use wayland_client::protocol::wl_buffer::WlBuffer;
 use wayland_client::protocol::wl_shm::{self, WlShm};
 use wayland_client::protocol::wl_surface::WlSurface;
 
+use super::pool::{BufferPool, clamp_i32};
 use super::{State, WindowError};
-
-const MAX_STALE_REGIONS: usize = 64;
-
-struct ShmBuffer {
-    buffer: WlBuffer,
-    file: File,
-    width: u32,
-    height: u32,
-    busy: Arc<AtomicBool>,
-    stale: Option<Vec<Region>>,
-}
 
 #[derive(Clone, Copy)]
 pub(crate) struct Target<'a> {
@@ -34,7 +24,7 @@ pub(crate) struct Target<'a> {
 
 #[derive(Default)]
 pub(crate) struct ShmTarget {
-    buffers: Vec<ShmBuffer>,
+    buffers: BufferPool<File>,
     bgra: Vec<u8>,
     scratch: Vec<u8>,
     size: (u32, u32),
@@ -131,37 +121,18 @@ impl ShmTarget {
         faded: bool,
     ) -> Result<(), WindowError> {
         let (width, height) = self.size;
-        self.buffers.retain(|buffer| {
-            buffer.width == width && buffer.height == height || buffer.busy.load(Ordering::Acquire)
-        });
-        for buffer in &mut self.buffers {
-            buffer.stale = match (buffer.stale.take(), damage) {
-                (Some(mut stale), Some(regions))
-                    if stale.len() + regions.len() <= MAX_STALE_REGIONS =>
-                {
-                    stale.extend_from_slice(regions);
-                    Some(stale)
-                }
-                _ => None,
-            };
-        }
-        let index = match self.buffers.iter().position(|buffer| {
-            buffer.width == width && buffer.height == height && !buffer.busy.load(Ordering::Acquire)
-        }) {
-            Some(index) => index,
-            None => {
-                self.buffers
-                    .push(create_buffer(target.shm, target.handle, width, height)?);
-                self.buffers.len() - 1
-            }
-        };
-        let buffer = &mut self.buffers[index];
+        let (buffer, stale) = self.buffers.next(
+            self.size,
+            damage,
+            |_| true,
+            |busy| create_buffer(target.shm, target.handle, width, height, busy),
+        )?;
         let pixels = match faded {
             true => &self.scratch,
             false => &self.bgra,
         };
-        match buffer.stale.replace(Vec::new()) {
-            None => buffer.file.write_all_at(pixels, 0)?,
+        match stale {
+            None => buffer.contents.write_all_at(pixels, 0)?,
             Some(stale) => {
                 let stride = width as usize * 4;
                 for region in stale {
@@ -169,29 +140,13 @@ impl ShmTarget {
                         let start = row as usize * stride + region.x as usize * 4;
                         let end = start + region.width as usize * 4;
                         buffer
-                            .file
+                            .contents
                             .write_all_at(&pixels[start..end], start as u64)?;
                     }
                 }
             }
         }
-        buffer.busy.store(true, Ordering::Release);
-        let surface = target.surface;
-        surface.attach(Some(&buffer.buffer), 0, 0);
-        match damage {
-            Some(regions) => {
-                for region in regions {
-                    surface.damage_buffer(
-                        clamp_i32(region.x),
-                        clamp_i32(region.y),
-                        clamp_i32(region.width),
-                        clamp_i32(region.height),
-                    );
-                }
-            }
-            None => surface.damage_buffer(0, 0, clamp_i32(width), clamp_i32(height)),
-        }
-        surface.commit();
+        buffer.show(target.surface, damage);
         Ok(())
     }
 
@@ -222,9 +177,7 @@ impl ShmTarget {
     }
 
     pub(crate) fn destroy(&mut self) {
-        for buffer in self.buffers.drain(..) {
-            buffer.buffer.destroy();
-        }
+        self.buffers.clear();
         self.bgra = Vec::new();
         self.scratch = Vec::new();
     }
@@ -235,7 +188,8 @@ fn create_buffer(
     handle: &QueueHandle<State>,
     width: u32,
     height: u32,
-) -> Result<ShmBuffer, WindowError> {
+    busy: Arc<AtomicBool>,
+) -> Result<(File, WlBuffer), WindowError> {
     let stride = clamp_i32(width.saturating_mul(4));
     let length = u64::from(width) * u64::from(height) * 4;
     let file =
@@ -247,7 +201,6 @@ fn create_buffer(
         handle,
         (),
     );
-    let busy = Arc::new(AtomicBool::new(false));
     let buffer = pool.create_buffer(
         0,
         clamp_i32(width),
@@ -255,19 +208,8 @@ fn create_buffer(
         stride,
         wl_shm::Format::Argb8888,
         handle,
-        busy.clone(),
+        busy,
     );
     pool.destroy();
-    Ok(ShmBuffer {
-        buffer,
-        file,
-        width,
-        height,
-        busy,
-        stale: None,
-    })
-}
-
-fn clamp_i32(value: u32) -> i32 {
-    i32::try_from(value).unwrap_or(i32::MAX)
+    Ok((file, buffer))
 }

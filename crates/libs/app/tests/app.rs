@@ -17,7 +17,8 @@ use bande_test_wayland::{Frames, TestClient, chord, headless};
 use bande_toolkit::{Appearance, Scene, Window, WindowEvent};
 
 const STILL: Duration = Duration::from_millis(300);
-const CLOSE_LIMIT: Duration = Duration::from_millis(230);
+const TICK: Duration = Duration::from_millis(1);
+const CLOSE_LIMIT: Duration = Duration::from_millis(200);
 
 static ASKED: Mutex<Option<Sender<Asked>>> = Mutex::new(None);
 
@@ -153,6 +154,35 @@ fn last_frame_once_still(frames: &mut Frames, server: &mut Compositor) -> Instan
     last
 }
 
+fn withdrawn_without_a_frame(server: &mut Compositor) {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !server.windows().is_empty() {
+        assert!(
+            Instant::now() < deadline,
+            "the app did not withdraw its window"
+        );
+        server.dispatch().expect("server dispatch");
+        thread::sleep(Duration::from_millis(1));
+    }
+}
+
+fn last_frame_after(frames: &mut Frames, server: &mut Compositor, from: Duration) -> Duration {
+    let mut rendered = frames.rendered();
+    let (mut time, mut last) = (from, from);
+    while time - last < STILL {
+        time += TICK;
+        frames.draw_at(server, time);
+        if frames.rendered() != rendered {
+            rendered = frames.rendered();
+            last = time;
+        }
+    }
+    while frames.now() < time {
+        thread::sleep(Duration::from_millis(1));
+    }
+    last - from
+}
+
 #[test]
 fn a_second_launch_reaches_the_running_app_a_closed_window_is_gone_at_once_and_the_switcher_activates_it_windowless()
  {
@@ -221,13 +251,13 @@ fn a_second_launch_reaches_the_running_app_a_closed_window_is_gone_at_once_and_t
 
     server.set_reduce_motion(false);
     last_frame_once_still(&mut frames, &mut server);
-    let pressed = Instant::now();
+    let pressed = frames.now();
     chord(&mut server, &[KEY_LEFTALT, KEY_F4]);
-    wait_for_windows(&mut frames, &mut server, 0);
-    let closed = last_frame_once_still(&mut frames, &mut server).duration_since(pressed);
+    withdrawn_without_a_frame(&mut server);
+    let closed = last_frame_after(&mut frames, &mut server, pressed);
     assert!(
-        closed < CLOSE_LIMIT,
-        "the closed window was drawn for {closed:?}"
+        closed <= CLOSE_LIMIT,
+        "the closed window was drawn for {closed:?} of the compositor's time"
     );
     assert!(!app.is_finished());
 

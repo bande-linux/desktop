@@ -88,26 +88,14 @@ struct Row {
 }
 
 fn main() -> ExitCode {
-    let bus = match bande_test_bus::SessionBus::start() {
-        Ok(bus) => bus,
+    // SAFETY: main is still single-threaded here.
+    let _session = match unsafe { bande_test_bus::PrivateSession::enter() } {
+        Ok(session) => session,
         Err(error) => {
-            eprintln!("bande-idle: cannot start a private session bus: {error}");
+            eprintln!("bande-idle: cannot start a private session: {error}");
             return ExitCode::FAILURE;
         }
     };
-    let home = match tempfile::tempdir() {
-        Ok(home) => home,
-        Err(error) => {
-            eprintln!("bande-idle: cannot make a home folder: {error}");
-            return ExitCode::FAILURE;
-        }
-    };
-    // SAFETY: main is still single-threaded here: the bus is a child process and logging starts
-    // afterwards.
-    unsafe {
-        std::env::set_var("DBUS_SESSION_BUS_ADDRESS", bus.address());
-        std::env::set_var("HOME", home.path());
-    }
     bande_log::init("bande-idle");
     match run() {
         Ok(true) => ExitCode::SUCCESS,
@@ -130,7 +118,7 @@ fn options() -> Result<Options, Box<dyn Error>> {
         settle: DEFAULT_SETTLE,
         json: None,
     };
-    let mut args = std::env::args().skip(1);
+    let mut args = bande_test_bus::PrivateSession::arguments();
     while let Some(flag) = args.next() {
         let value = args.next().ok_or(format!("{flag} needs a value"))?;
         match flag.as_str() {
@@ -206,6 +194,9 @@ fn measure_cases(session: &mut Session, options: &Options) -> Result<Vec<Case>, 
         return Err("the lock screen did not start".into());
     }
     cases.push(("screen locked", session.measure(window)?));
+    session.server.blank_when_idle(now(), Duration::ZERO);
+    session.run_for(settle)?;
+    cases.push(("screen locked, displays off", session.measure(window)?));
     Ok(cases)
 }
 

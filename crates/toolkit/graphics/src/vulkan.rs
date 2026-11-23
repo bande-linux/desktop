@@ -1,8 +1,8 @@
-use std::ffi::{CStr, c_char};
+use std::ffi::c_char;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
-use ash::{khr, lunarg, vk};
+use ash::{lunarg, vk};
 use libloading::Library;
 use wgpu::hal;
 
@@ -30,7 +30,6 @@ const HARDWARE_DRIVERS: [(&str, &[&str]); 8] = [
     ("broadcom", &["v3d"]),
     ("powervr_mesa", &["pvr"]),
 ];
-const EXTENSIONS: [&CStr; 2] = [khr::surface::NAME, khr::wayland_surface::NAME];
 
 type GetInstanceProcAddr =
     unsafe extern "system" fn(vk::Instance, *const c_char) -> vk::PFN_vkVoidFunction;
@@ -165,11 +164,7 @@ unsafe fn create(drivers: &[Driver]) -> Result<wgpu::Instance, String> {
     let mut list = vk::DirectDriverLoadingListLUNARG::default()
         .mode(vk::DirectDriverLoadingModeLUNARG::EXCLUSIVE)
         .drivers(&infos);
-    let names: Vec<*const c_char> = EXTENSIONS
-        .iter()
-        .chain([&lunarg::direct_driver_loading::NAME])
-        .map(|name| name.as_ptr())
-        .collect();
+    let names = [lunarg::direct_driver_loading::NAME.as_ptr()];
     let application = vk::ApplicationInfo::default()
         .engine_name(c"wgpu-hal")
         .engine_version(2)
@@ -181,7 +176,7 @@ unsafe fn create(drivers: &[Driver]) -> Result<wgpu::Instance, String> {
     // SAFETY: info and everything it points to (application, names, list and infos) live across the
     // call.
     let raw = unsafe { entry.create_instance(&info, None) }.map_err(|error| error.to_string())?;
-    // SAFETY: raw was just created from entry with EXTENSIONS and API 1.3 requested, and with no
+    // SAFETY: raw was just created from entry with no extension beyond direct driver loading and API 1.3, and with no
     // drop callback the hal instance takes sole ownership and destroys it.
     let instance = unsafe {
         hal::vulkan::Instance::from_raw(
@@ -190,7 +185,7 @@ unsafe fn create(drivers: &[Driver]) -> Result<wgpu::Instance, String> {
             version,
             0,
             None,
-            EXTENSIONS.to_vec(),
+            Vec::new(),
             wgpu::InstanceFlags::empty(),
             wgpu::MemoryBudgetThresholds::default(),
             false,

@@ -51,30 +51,14 @@ struct Sample {
 }
 
 fn main() -> ExitCode {
-    let bus = match bande_test_bus::SessionBus::start() {
-        Ok(bus) => bus,
+    // SAFETY: main is still single-threaded here.
+    let _session = match unsafe { bande_test_bus::PrivateSession::enter() } {
+        Ok(session) => session,
         Err(error) => {
-            eprintln!("bande-background: cannot start a private session bus: {error}");
+            eprintln!("bande-background: cannot start a private session: {error}");
             return ExitCode::FAILURE;
         }
     };
-    let home = match tempfile::tempdir() {
-        Ok(home) => home,
-        Err(error) => {
-            eprintln!("bande-background: cannot make a home folder: {error}");
-            return ExitCode::FAILURE;
-        }
-    };
-    // SAFETY: main is still single-threaded here: the bus is a child process and logging starts
-    // afterwards.
-    unsafe {
-        std::env::set_var("DBUS_SESSION_BUS_ADDRESS", bus.address());
-        std::env::set_var("HOME", home.path());
-        std::env::remove_var("XDG_CONFIG_HOME");
-        std::env::remove_var("XDG_DATA_HOME");
-        std::env::remove_var("XDG_STATE_HOME");
-        std::env::remove_var("XDG_CACHE_HOME");
-    }
     bande_log::init("bande-background");
     match options().and_then(|options| run(&options)) {
         Ok(()) => ExitCode::SUCCESS,
@@ -92,7 +76,7 @@ fn options() -> Result<Options, Box<dyn Error>> {
         cycles: 2,
         apps: Vec::new(),
     };
-    let mut args = std::env::args().skip(1);
+    let mut args = bande_test_bus::PrivateSession::arguments();
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--settle" => options.settle = Duration::from_secs(args.next().ok_or(USAGE)?.parse()?),

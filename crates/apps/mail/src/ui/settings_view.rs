@@ -15,12 +15,12 @@ use crate::setup::{Outcome, Problem, check};
 use crate::store::{Account, AccountId, Identity, Rule, RuleAction, RuleField, Store};
 use crate::ui::view::TOOLBAR_HEIGHT;
 use crate::worker::{Event as MailEvent, Mailroom};
-use accesskit::{ActionRequest, TreeUpdate};
+use accesskit::TreeUpdate;
 use bande_app::View;
 use bande_app_settings::{Stored, settings_folder};
 use bande_keyring::Keyring;
 use bande_toolkit::ui::{
-    Alert, Axis, BUTTON_HEIGHT, Button, Cell, Column, Context, Event, Form, FormLine, FreeLayout,
+    Alert, Axis, BUTTON_HEIGHT, Button, Cell, Column, Context, Form, FormLine, FreeLayout,
     Heading as TableHeading, Label, PopUpButton, Row as TableRow, ScrollView, Stack, Table,
     TextField, TextView, Toggle, Ui, Widget, WidgetId,
 };
@@ -1684,21 +1684,11 @@ impl SettingsView {
 }
 
 impl SettingsView {
-    pub fn render(&mut self, width: u32, height: u32) -> Scene {
+    fn render(&mut self, width: u32, height: u32) -> Scene {
         self.layout(width as f32, height as f32);
         let mut scene = self.ui.scene(width, height);
         scene.background = self.ui.context().palette.sheet;
         scene
-    }
-
-    pub fn handle(&mut self, event: &Event) -> bool {
-        let handled = self.ui.handle(event);
-        self.settle() || handled
-    }
-
-    pub fn perform(&mut self, request: &ActionRequest) -> bool {
-        let handled = self.ui.perform(request);
-        self.settle() || handled
     }
 }
 
@@ -1785,5 +1775,96 @@ impl View for SettingsView {
 
     fn text_input_area(&self) -> Option<Rect> {
         self.ui.text_input_area()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::SettingsView;
+    use crate::net::{Security, Server};
+    use crate::store::{Account, Store};
+    use accesskit::{Action, ActionRequest, Node, Role, TreeId};
+    use bande_app::View;
+    use bande_toolkit::ui::Event;
+    use bande_toolkit::{Appearance, TextSystem};
+
+    fn act(view: &mut SettingsView, action: Action, find: impl Fn(&Node) -> bool) {
+        view.render(780, 640);
+        let tree = view.accessibility().unwrap();
+        let (target, _) = tree.nodes.into_iter().find(|(_, node)| find(node)).unwrap();
+        view.ui.perform(&ActionRequest {
+            action,
+            target_tree: TreeId::ROOT,
+            target_node: target,
+            data: None,
+        });
+        view.settle();
+    }
+
+    fn labels(view: &mut SettingsView) -> Vec<String> {
+        view.render(780, 640);
+        let tree = view.accessibility().unwrap();
+        tree.nodes
+            .iter()
+            .filter_map(|(_, node)| node.label().map(str::to_owned))
+            .collect()
+    }
+
+    #[test]
+    fn each_account_has_a_settings_page_whose_description_names_it_in_the_sidebar() {
+        let home = tempfile::tempdir().unwrap();
+        let path = home.path().join("mail.sqlite3");
+        let store = Store::open(&path).unwrap();
+        let server = Server {
+            host: "127.0.0.1".to_owned(),
+            port: 1,
+            security: Security::Plain,
+        };
+        let email = "ann@bande.test".to_owned();
+        let id = store
+            .add_account(&Account {
+                id: 0,
+                name: "Ann".to_owned(),
+                email: email.clone(),
+                user: email.clone(),
+                imap: server.clone(),
+                smtp: server,
+                signature: String::new(),
+                enabled: true,
+                description: String::new(),
+            })
+            .unwrap();
+        let mut view = SettingsView::new(Ok(path), Appearance::default(), TextSystem::new());
+        let shown = labels(&mut view);
+        for page in [
+            "General",
+            "Reading",
+            "Composing",
+            "Privacy",
+            "Rules",
+            &email,
+            "Add Account…",
+        ] {
+            assert!(
+                shown.iter().any(|label| label == page),
+                "no {page} in {shown:?}"
+            );
+        }
+
+        act(&mut view, Action::Click, |node| {
+            node.label() == Some(&email) && node.role() != Role::Label
+        });
+        assert!(
+            labels(&mut view)
+                .iter()
+                .any(|label| label == "Remove Account…")
+        );
+        act(&mut view, Action::Focus, |node| {
+            node.role() == Role::TextInput && node.placeholder() == Some(&email)
+        });
+        view.ui.handle(&Event::Commit("Work".to_owned()));
+        view.settle();
+        assert_eq!(store.account(id).unwrap().unwrap().description, "Work");
+        assert!(labels(&mut view).iter().any(|label| label == "Work"));
     }
 }

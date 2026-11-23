@@ -13,7 +13,6 @@ const OUTPUT: (i32, i32) = (2928, 1818);
 const SETTLE: Duration = Duration::from_secs(4);
 const HOVER_CHANGES: u32 = 40;
 const HOVER_SETTLE: Duration = Duration::from_millis(120);
-const DEVICE_MEMORY: &str = "/memfd:allocation";
 
 struct Hover {
     from: (f64, f64),
@@ -69,7 +68,7 @@ fn run() -> Result<(), Box<dyn Error>> {
             "usage: bande-footprint [--settle seconds] [--hover x1,y1,x2,y2] <client>...".into(),
         );
     }
-    println!("| Client | RSS+swap MiB | Device memory MiB | Threads | CPU per hover change ms |");
+    println!("| Client | RSS+swap MiB | GPU memory MiB | Threads | CPU per hover change ms |");
     println!("| :--- | ---: | ---: | ---: | ---: |");
     for (client, hover) in clients {
         let footprint = measure(&client, hover.as_ref(), settle)?;
@@ -184,26 +183,50 @@ fn cpu_ticks(pid: u32) -> Result<u64, Box<dyn Error>> {
 }
 
 fn memory(pid: u32) -> Result<(f64, f64), Box<dyn Error>> {
-    let smaps = fs::read_to_string(format!("/proc/{pid}/smaps"))?;
-    let mut total = 0;
+    let status = fs::read_to_string(format!("/proc/{pid}/status"))?;
+    let kib = |name: &str| -> u64 {
+        status
+            .lines()
+            .find_map(|line| line.strip_prefix(name))
+            .and_then(|value| value.trim().strip_suffix("kB"))
+            .and_then(|value| value.trim().parse().ok())
+            .unwrap_or(0)
+    };
+    let resident = kib("VmRSS:") + kib("VmSwap:");
+    let mut clients = Vec::new();
     let mut device = 0;
-    let mut in_device = false;
-    for line in smaps.lines() {
-        let mut words = line.split_whitespace();
-        let Some(first) = words.next() else {
+    for entry in fs::read_dir(format!("/proc/{pid}/fdinfo"))?.flatten() {
+        let Ok(info) = fs::read_to_string(entry.path()) else {
             continue;
         };
-        if first.contains('-') && !first.ends_with(':') {
-            in_device = line.contains(DEVICE_MEMORY);
+        let field = |name: &str| {
+            info.lines()
+                .find_map(|line| line.strip_prefix(name))
+                .map(str::trim)
+        };
+        let Some(client) = field("drm-client-id:") else {
+            continue;
+        };
+        if clients.iter().any(|seen| seen == client) {
             continue;
         }
-        if first == "Rss:" || first == "Swap:" {
-            let kib: u64 = words.next().ok_or("malformed smaps")?.parse()?;
-            total += kib;
-            if in_device {
-                device += kib;
-            }
-        }
+        clients.push(client.to_owned());
+        device += info
+            .lines()
+            .filter(|line| line.starts_with("drm-total-"))
+            .filter_map(drm_kib)
+            .sum::<u64>();
     }
-    Ok((total as f64 / 1024.0, device as f64 / 1024.0))
+    Ok((resident as f64 / 1024.0, device as f64 / 1024.0))
+}
+
+fn drm_kib(line: &str) -> Option<u64> {
+    let mut words = line.split_whitespace().skip(1);
+    let value: u64 = words.next()?.parse().ok()?;
+    Some(match words.next() {
+        Some("KiB") => value,
+        Some("MiB") => value * 1024,
+        Some("GiB") => value * 1024 * 1024,
+        _ => value / 1024,
+    })
 }

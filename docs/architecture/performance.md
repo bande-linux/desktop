@@ -16,7 +16,7 @@ reach a running session.
   wake-ups per process with windows open, minimized and locked.
 - **One client's memory and CPU:** `bande-footprint` starts a client as a shell client on a
   2928×1818 output at 1.5×, lets it settle (`--settle <seconds>`), optionally moves the pointer
-  over it, and prints RSS + swap, Vulkan device memory, threads and CPU per pointer move. For an
+  over it, and prints RSS + swap, GPU memory (`drm-total-*` in `fdinfo`), threads and CPU per pointer move. For an
   exact number read `Anonymous` from `/proc/<pid>/smaps_rollup`. `BANDE_RENDERER=gpu` or `=cpu`
   picks the path.
 

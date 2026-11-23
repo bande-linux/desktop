@@ -177,8 +177,9 @@ when they reach the screen is Bande's own.
   touching the saved settings; with none left the display waits for the next change event. The link
   is set good again in the frame path, after any pending flip. Each connector's `max bpc` is set
   to 8 before its output starts, as frames are 8 bits per channel; a display that offers more
-  would otherwise get a wider link format the frames never use. A display is named by its EDID (maker
-  from the PNP id, model and serial from the descriptors, falling back to the product code and
+  would otherwise get a wider link format the frames never use. A display is named by its EDID
+  (maker from the PNP id, model and serial from the descriptors without control characters,
+  falling back to the product code and
   serial number; two displays with the same name are told apart by their connector). A fullscreen
   opaque dma-buf window is put on the primary plane without composition. A display whose connector
   can change its refresh without a mode-set gets variable refresh while a full-screen window on its

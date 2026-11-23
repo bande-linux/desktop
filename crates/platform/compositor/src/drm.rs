@@ -237,7 +237,7 @@ fn relink(device: &DrmDevice, head: &mut Head) {
     head.tone = None;
 }
 
-fn refresh_of(mode: &Mode) -> Duration {
+pub fn refresh_of(mode: &Mode) -> Duration {
     let pixels_per_frame = u64::from(mode.hsync().2) * u64::from(mode.vsync().2);
     let kilohertz = u64::from(mode.clock());
     if pixels_per_frame == 0 || kilohertz == 0 {
@@ -258,8 +258,8 @@ fn connector_name(info: &connector::Info) -> String {
     format!("{}-{}", info.interface().as_str(), info.interface_id())
 }
 
-fn sorted_modes(info: &connector::Info) -> Vec<Mode> {
-    let mut modes = info.modes().to_vec();
+pub fn sorted_modes(modes: &[Mode]) -> Vec<Mode> {
+    let mut modes = modes.to_vec();
     let preferred = modes
         .iter()
         .find(|mode| mode.mode_type().contains(ModeTypeFlags::PREFERRED))
@@ -278,7 +278,7 @@ fn sorted_modes(info: &connector::Info) -> Vec<Mode> {
 }
 
 fn modes_of(info: &connector::Info, first: Option<Mode>) -> Vec<Mode> {
-    let mut modes = sorted_modes(info);
+    let mut modes = sorted_modes(info.modes());
     if let Some(first) = first.filter(|first| info.modes().contains(first)) {
         modes.retain(|mode| output_mode(mode) != output_mode(&first));
         modes.insert(0, first);

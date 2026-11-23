@@ -179,11 +179,22 @@ PipeWire restarts, and new Settings must run on the old compositor. It needs `qe
 `mtools` and `/dev/kvm`, so it runs by hand before a release; compare the new debs with the
 previous release's.
 
+## The EDID corpus
+
+`ci/edid-corpus.sh [count]` fetches one EDID of about 5,000 monitor models from the linuxhw EDID
+repository (CC-BY-4.0) into `~/.cache/bande-edid` (or `$BANDE_EDID_CORPUS`); the source package
+carries only the curated EDIDs in `crates/platform/compositor/tests/edid`. With the corpus there,
+`cargo test -p bande-compositor --test edid_corpus -- --nocapture` checks every EDID-driven
+decision against all of them and prints how common wide gamut, deep colour, HDR and variable
+refresh are; without it, that test prints that it skipped. An EDID that fails is a bug: copy it
+into `tests/edid` with the fix.
+
 ## Releasing
 
 1. Bump `[workspace.package] version` in `Cargo.toml` and add the entry `X.Y.Z-1` to
    `debian/changelog` (`dch -v X.Y.Z-1 -D unstable`) in a commit "Release X.Y.Z", run
-   `ci/release/verify.sh gate` (with the `dist` debs), merge it to `main` and push `main`.
+   `ci/release/verify.sh gate` (with the `dist` debs) and the EDID corpus test (fresh
+   `ci/edid-corpus.sh`), merge it to `main` and push `main`.
 2. Tag the release commit: `git tag vX.Y.Z <commit> && git push origin vX.Y.Z`. The tag run
    builds and publishes, once.
 3. Watch it: `gh run list -R bande-linux/desktop -w release.yml -e push`, then

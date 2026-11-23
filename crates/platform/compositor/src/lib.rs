@@ -87,9 +87,12 @@ pub use boot_screen::{blank_console, take_display_from_boot_screen};
 pub use clock::{
     FrameClock, FrameOutput, FrameRecovery, FrameScheduler, Poll, RecoveryStep, Submission, Vblank,
 };
+pub use colour::edid_profile;
 pub use cursor::{CursorTheme, write_cursor_theme};
 pub use display_bus::{DisplaysHandle, serve_displays};
-pub use drm::{DrmBackend, DrmBackendError, DrmNotifiers, FirstMode, HeadChanges};
+pub use drm::{
+    DrmBackend, DrmBackendError, DrmNotifiers, FirstMode, HeadChanges, refresh_of, sorted_modes,
+};
 pub use element::{ScreenElement, SurfaceElement};
 pub use environment::{
     export_session_environment, notify_service_manager, watchdog_keepalive_interval,

@@ -57,6 +57,9 @@ pub(crate) fn run<P: Program>(
     let given = arguments.len();
     arguments.retain(|argument| argument != NO_WINDOW_FLAG);
     let windowless = arguments.len() < given;
+    if !background && !windowless {
+        TextSystem::preload();
+    }
     let session = bande_bus::session()
         .inspect_err(|error| {
             tracing::warn!("no session bus, so no app menus and no single instance: {error}");

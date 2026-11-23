@@ -69,6 +69,16 @@ Calculator holds about 26 MiB of GPU memory and Files and Settings about 50 MiB.
 only what changed, so pointing at Calculator's close button makes the compositor repaint about
 1 200 pixels a frame.
 
+## Start-up
+
+An app reads the installed fonts on a thread from its first instruction while it claims its
+name on the session bus and connects to the compositor, draws its first frame on the CPU and
+opens the Vulkan device on another thread, loading only the drivers of the machine's render
+nodes. Launching an app that is already running forwards the request over D-Bus; the running
+process opens the window with the fonts it already has. Under `bande-background` on the same
+machine (loaded), Calculator's window shows about 90 ms after a first launch and 40–50 ms after
+a relaunch, Files after 170 ms and 55–80 ms, Settings after 190–240 ms and 50–75 ms.
+
 ## What wakes when idle
 
 Everything else waits on an event: Wayland, D-Bus signals with match rules narrowed to what is

@@ -100,7 +100,9 @@ debhelper compat 14, built with Debian's `rustc` and `cargo` through dh-cargo's 
   while logind (python-dbusmock's template) lists only a GNOME session of the user, exits
   without taking `org.freedesktop.secrets`, which it takes once a Bande session is listed), `services` (the
   settings service on a private bus, the compositor headless), `portal` (the colour scheme
-  through `xdg-desktop-portal`) and `metadata` (desktop entries, metainfo and units validate).
+  through `xdg-desktop-portal`) and `metadata` (desktop entries, metainfo and units validate);
+  these last three run as an ordinary user under `ci/hermetic.sh`, so they
+  reach neither that user's files nor their session.
 
 Packages are built with the `dist` profile (`PROFILE` picks another): fat LTO, one codegen
 unit, `panic = "abort"`, line tables only. `dh_strip` moves the line tables to each package's

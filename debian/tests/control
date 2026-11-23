@@ -44,7 +44,7 @@ Depends: bande-compositor, bande-notify, bande-clipboard, bande-config, bande-po
  bande-installer, bande-monitor, bande-mail, bande-calendar, bande-velox, bande-calculator,
  bande-player, bande-viewer, bande-clock, bande-text-editor, bande-disks, bande-archive,
  bande-desktop, bande-icon-theme, bande-desktop-l10n-sv, bande-desktop-l10n-en-gb,
- desktop-file-utils, appstream, systemd
+ desktop-file-utils, appstream, systemd, dbus-daemon, dbus-bin
 Restrictions: allow-stderr
 
 Tests: boot-screen

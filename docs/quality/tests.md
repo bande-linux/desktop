@@ -10,9 +10,15 @@ or feature; a new test replaces or merges with an old one before the total grows
 
 The guide is about 1,500 lines of tests for the desktop and 80–100 per app.
 
-`cargo test --workspace` runs them on the hermetic bus
-(`dbus-run-session --config-file=crates/testing/test-bus/data/session.conf -- cargo test --workspace`);
-the compositor and app tests render with lavapipe (`VK_DRIVER_FILES`).
+`cargo test --workspace` runs them; the compositor and app tests render with lavapipe
+(`VK_DRIVER_FILES`). No test reaches the files or the session of the person running it:
+`.cargo/config.toml` makes `ci/hermetic.sh` the runner of every test binary, wherever cargo runs it
+(locally, `verify.sh test`, `debian/rules`), and the non-root autopkgtests run under it too. Each
+binary gets a fresh temporary `HOME` holding the XDG base directories, `XDG_RUNTIME_DIR`,
+`GNUPGHOME` and `TMPDIR`, an environment reduced to a short list of variables (no
+`WAYLAND_DISPLAY`, `DISPLAY`, agent sockets or locale; `LANG=C.UTF-8`), an unreachable system bus
+and its own test bus as the session bus. A test binary started some other way (directly, from a
+debugger) has none of this, so run tests with `cargo test`.
 
 ## What is kept
 
@@ -78,6 +84,7 @@ Paths are under `crates/`.
 | `shell/bar/src/menus.rs` | The Wi-Fi menu for a network set up by the system never switches NetworkManager's radio and offers "Manage in Settings…" only when the hand-over is possible. |
 | `services/config/tests/config.rs` | KDL `config.kdl` parsing reports problems at their line and column while valid settings apply; edits keep comments. |
 | `shell/shell/tests/session_end.rs` | The real confirmation dialog against a fake logind and systemd: a confirmed Shut Down really reaches `PowerOff` (the dialog once exited before the call left) and the dialog stays; a hung app does not stop Restart; an inhibitor stops the call and is shown; Log Out stops the compositor service. |
+| `testing/test-bus/tests/hermetic.rs` | Security boundary: a test sees only its temporary home and runtime directory, no display or Wayland socket, the test bus as its session bus and no system bus; it fails when cargo stops running tests through `ci/hermetic.sh`. |
 | `libs/app/tests/app.rs` | App framework: the exported ⋮ menu holds the app's menus and Window (ending in About), then Quit, and Window ▸ Tile ▸ Left tiles the window; a second launch reaches the running instance, the app keeps running without windows, launching again reopens a window, the switcher activates it without a window, Ctrl+Q quits. |
 | `libs/app/tests/app.rs` | App framework: a second launch reaches the running instance, a window closed through the compositor (Alt+F4) is no longer drawn within 230 ms of the request (it was drawn for 260 ms on the `quick` spring), the app keeps running without windows, launching again reopens a window, the switcher activates it without a window, Ctrl+Q quits. |
 | `toolkit/toolkit/tests/accessibility.rs` | Toolkit: a screen reader finds a button over AT-SPI in a window on the headless compositor and presses it. |

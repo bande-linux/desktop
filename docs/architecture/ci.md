@@ -8,7 +8,7 @@ local gate call it, so CI holds no check the gate skips:
 | Stage | What it runs |
 |---|---|
 | `lint` | `actionlint` (pinned release binary, with shellcheck) over the workflows, `ci/deb/version-test.sh`, then `ci/release/lint.sh`: `cargo fmt --all --check`, workspace clippy `-D warnings`, the dependency rules (no session service except the polkit agent depends on the widget crates; graphics and widgets stay off Wayland), `ci/check-apps.sh` (every app in `crates/apps`, the template included, is a `bande-app` app packaged like the others: package `bande-<dir>`, the app id naming its `.desktop` file, `Icon=` and metainfo, `Exec=`, `StartupNotify=true`, a default in `data/x-bande-mimeapps.list` for every type its `.desktop` file declares, the toolkit's fonts in its `debian/control` Depends, no loop or menu export of its own), `ci/check-runtime-deps.py`, `ci/copyright.py --check` and `ci/deb/build-depends.py --check` (`debian/copyright` and the `librust-*-dev` Build-Depends follow `Cargo.lock`), and `data/icons/src/generate.py --check` (the committed icon themes and hicolor app icons are exactly what the generator makes, with no extra icons in its directories) |
-| `test` | the workspace tests, every app's included, on the hermetic bus with lavapipe, with `xandikos` installed for Calendar's scheduling test |
+| `test` | the workspace tests, every app's included, each binary under `ci/hermetic.sh` (a temporary home, no session, its own test bus) with lavapipe, with `xandikos` installed for Calendar's scheduling test |
 | `debs` | the source package (`ci/deb/source.sh`), every binary package built from it offline (`ci/deb/build.sh --build=binary`, without the tests, which `test` ran), `ci/release/check-debs.sh` and `lintian --fail-on error,warning` on the `.changes` |
 | `gate` | `lint test debs` |
 
@@ -34,8 +34,11 @@ pushed; `PROFILE=dev` builds the debs with the `dev` profile, a few minutes, and
 `[workspace.package] version` is gated with `dist`, as the release builds. A fat-LTO link of the
 shell needs much memory; `CARGO_PROFILE_DIST_LTO=thin`, which cargo reads through
 `debian/rules`, builds the `dist` debs with thin LTO on a machine that lacks it. The tests and
-why they exist are in [`../quality/tests.md`](../quality/tests.md). A test bus lists no service
-directories, so it never D-Bus-activates the services installed on the machine.
+why they exist are in [`../quality/tests.md`](../quality/tests.md). Cargo runs every test binary
+through `ci/hermetic.sh` (`.cargo/config.toml`), here, in `debian/rules` and in CI alike: a fresh
+temporary home and XDG directories, no display, Wayland socket or system bus, and a test bus as
+the session bus. A test bus lists no service directories, so it never D-Bus-activates the
+services installed on the machine.
 
 ## Everyday development
 

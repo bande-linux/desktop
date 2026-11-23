@@ -84,8 +84,7 @@ run() {
             ;;
         test)
             read -ra test_args <<< "${VERIFY_TEST_ARGS:---workspace}"
-            dbus-run-session \
-                --config-file=crates/testing/test-bus/data/session.conf -- cargo test --locked "${test_args[@]}"
+            cargo test --locked "${test_args[@]}"
             ;;
         debs) debs ;;
     esac

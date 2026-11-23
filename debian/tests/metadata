@@ -2,6 +2,7 @@
 # The installed desktop entries, metainfo and units validate, each app's program names itself,
 # and the session's user units load.
 set -euo pipefail
+[ -n "${BANDE_TEST_ROOT:-}" ] || exec ci/hermetic.sh "$0"
 mapfile -t ours < <(dpkg-query -W -f '${db:Status-Status} ${Package}\n' 'bande-*' xdg-desktop-portal-bande libpam-bande-secrets |
     awk '$1 == "installed" { print $2 }')
 mapfile -t desktops < <(dpkg -L "${ours[@]}" | grep -E '^/usr/share/applications/.*\.desktop$')
@@ -17,7 +18,7 @@ grep -qx 'DesktopNames=X-Bande' /usr/share/wayland-sessions/bande.desktop
 sh -n /usr/bin/bande-session
 mapfile -t units < <(dpkg -L "${ours[@]}" | grep -E '^/usr/lib/systemd/user/[^/]+\.(service|socket|timer|path|target)$')
 [ -z "$(grep -l 'WantedBy=graphical-session.target' "${units[@]}" || true)" ]
-findings=$(XDG_RUNTIME_DIR=$AUTOPKGTEST_TMP SYSTEMD_LOG_LEVEL=warning systemd-analyze --user verify "${units[@]}" 2>&1) || true
+findings=$(SYSTEMD_LOG_LEVEL=warning systemd-analyze --user verify "${units[@]}" 2>&1) || true
 echo "$findings"
 test -z "$findings"
 echo "the desktop entries, metainfo and units validate"

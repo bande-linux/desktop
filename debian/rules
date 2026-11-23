@@ -88,8 +88,7 @@ l10n:
 
 override_dh_auto_test-arch:
 ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS) $(DEB_BUILD_PROFILES)))
-	VK_DRIVER_FILES=/usr/share/vulkan/icd.d/lvp_icd.json dbus-run-session \
-		--config-file=crates/testing/test-bus/data/session.conf -- $(CARGO) test $(LOCKED) --workspace
+	VK_DRIVER_FILES=/usr/share/vulkan/icd.d/lvp_icd.json $(CARGO) test $(LOCKED) --workspace
 endif
 
 override_dh_auto_test-indep override_dh_auto_install override_dh_dwz:

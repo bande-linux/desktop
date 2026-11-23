@@ -9,7 +9,7 @@ use std::sync::Arc;
 use ash::vk;
 use smithay::backend::allocator::dmabuf::Dmabuf;
 use smithay::backend::allocator::format::FormatSet;
-use smithay::backend::allocator::{Buffer, Fourcc, Modifier};
+use smithay::backend::allocator::{Buffer, Format, Fourcc, Modifier};
 use smithay::backend::renderer::{ImportDma, ImportDmaWl, ImportMem, ImportMemWl};
 use smithay::reexports::wayland_server::protocol::wl_buffer::WlBuffer;
 use smithay::reexports::wayland_server::protocol::wl_shm;
@@ -206,6 +206,9 @@ struct LastShown(RefCell<Option<VulkanTexture>>);
 
 #[derive(Default)]
 struct LinearOnly(Cell<u64>);
+
+#[derive(Default)]
+struct ShownFormat(Cell<Option<Format>>);
 
 struct MemorySource<'a> {
     pool: &'a [u8],
@@ -776,6 +779,19 @@ impl ImportDmaWl for VulkanRenderer {
         let Some(states) = surface else {
             return imported;
         };
+        states.data_map.insert_if_missing(ShownFormat::default);
+        if let Some(shown) = states.data_map.get::<ShownFormat>()
+            && shown.0.replace(Some(dmabuf.format())) != Some(dmabuf.format())
+        {
+            tracing::info!(
+                "a surface shows {:?} dma-bufs with modifier {:?} in {} planes, strides {:?}, offsets {:?}",
+                dmabuf.format().code,
+                dmabuf.format().modifier,
+                dmabuf.num_planes(),
+                dmabuf.strides().collect::<Vec<_>>(),
+                dmabuf.offsets().collect::<Vec<_>>()
+            );
+        }
         states.data_map.insert_if_missing(LastShown::default);
         let Some(last) = states.data_map.get::<LastShown>() else {
             return imported;

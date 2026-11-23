@@ -110,7 +110,7 @@ pub use logind::{
 pub use material::{MaterialPicture, MaterialRequest, render_material};
 pub use night::NightTick;
 pub use pointing::PointerSettings;
-pub use render::{FrameStats, Renderer, Snapshot};
+pub use render::{FrameStats, Renderer, Snapshot, background};
 pub use reveal::{Awaited, ShownFrame};
 pub use screen::{OutputConfig, OutputMode, OutputSettings, automatic_scale};
 pub use session::{

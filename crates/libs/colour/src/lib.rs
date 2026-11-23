@@ -175,6 +175,15 @@ impl Profile {
         white: Chromaticity,
         curve: Curve,
     ) -> Option<Self> {
+        let [(red_x, red_y), (green_x, green_y), (blue_x, blue_y)] = primaries;
+        let plausible = red_x > green_x.max(blue_x)
+            && green_y > red_y.max(blue_y)
+            && blue_y < red_y
+            && blue_y > 0.0
+            && white.1 > 0.0;
+        if !plausible {
+            return None;
+        }
         let [red, green, blue] = primaries.map(xyz);
         let columns = [
             [red[0], green[0], blue[0]],
@@ -183,6 +192,9 @@ impl Profile {
         ];
         let white = xyz(white);
         let gains = apply(&inverse(&columns)?, white);
+        if !gains.iter().all(|gain| gain.is_finite() && *gain > 0.0) {
+            return None;
+        }
         let to_xyz: Matrix = columns.map(|row| std::array::from_fn(|k| row[k] * gains[k]));
         let source_cone = apply(&BRADFORD, white);
         let target_cone = apply(&BRADFORD, D50);

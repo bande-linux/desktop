@@ -294,39 +294,6 @@ msgstr "Skriv namnet på en stad i närheten"
 msgid "No time zone matches"
 msgstr "Ingen tidszon matchar"
 
-msgid "it is too short to be an ICC profile"
-msgstr "den är för kort för att vara en ICC-profil"
-
-msgid "it is not a display profile"
-msgstr "den är inte en skärmprofil"
-
-msgid "it does not describe RGB colors"
-msgstr "den beskriver inte RGB-färger"
-
-msgid "its colors are not described in XYZ"
-msgstr "dess färger beskrivs inte i XYZ"
-
-msgid "it uses lookup tables, and only matrix-and-curve profiles are supported"
-msgstr "den använder uppslagstabeller, och bara matris- och kurvprofiler stöds"
-
-msgid "it is missing its colorants or tone curves"
-msgstr "den saknar sina färgämnen eller tonkurvor"
-
-msgid "it uses a tone curve that isn't supported"
-msgstr "den använder en tonkurva som inte stöds"
-
-msgid "Color profiles"
-msgstr "Färgprofiler"
-
-msgid "Choose a Color Profile"
-msgstr "Välj en färgprofil"
-
-msgid "{file} can't be used: {reason}."
-msgstr "{file} kan inte användas: {reason}."
-
-msgid "there is no folder to keep it in"
-msgstr "det finns ingen mapp att spara den i"
-
 msgid "{program} can read what you type in text fields"
 msgstr "{program} kan läsa vad du skriver i textfält"
 
@@ -1178,21 +1145,6 @@ msgstr "Större text ({size})"
 
 msgid "More Space ({size})"
 msgstr "Mer utrymme ({size})"
-
-msgid "This display"
-msgstr "Den här skärmen"
-
-msgid "sRGB"
-msgstr "sRGB"
-
-msgid "Display P3"
-msgstr "Display P3"
-
-msgid "None (show colors as sent)"
-msgstr "Ingen (visa färger som de skickas)"
-
-msgid "Add Profile…"
-msgstr "Lägg till profil…"
 
 msgid "Main display"
 msgstr "Huvudskärm"

@@ -16,7 +16,7 @@ fn point((x, y): (u16, u16)) -> (f64, f64) {
     )
 }
 
-pub(crate) fn edid_profile(edid: &Edid) -> Option<Profile> {
+pub fn edid_profile(edid: &Edid) -> Option<Profile> {
     let primaries = [
         edid.primaries.red,
         edid.primaries.green,
@@ -36,7 +36,7 @@ pub(crate) fn edid_profile(edid: &Edid) -> Option<Profile> {
 }
 
 fn profile(choice: Option<&str>, display: Option<&Profile>) -> Option<Profile> {
-    match choice.unwrap_or(DISPLAY) {
+    match choice.unwrap_or(UNMANAGED) {
         DISPLAY => display.cloned(),
         SRGB | UNMANAGED => None,
         DISPLAY_P3 => Profile::display_p3(),

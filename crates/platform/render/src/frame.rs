@@ -10,8 +10,8 @@ use smithay::reexports::rustix::ioctl;
 
 use crate::{
     ATTACHMENT, BYTES_PER_PIXEL, COLOR_LAYERS, DRAWING, DeviceExport, MappedExport, Program, Rect,
-    RenderError, SAMPLED, TRANSFER_DESTINATION, TRANSFER_SOURCE, VulkanFramebuffer, VulkanRenderer,
-    VulkanTexture, barrier, disjoint, hand_over, hand_over_buffers,
+    RenderError, SAMPLED, TRANSFER_SOURCE, VulkanFramebuffer, VulkanRenderer, VulkanTexture,
+    barrier, disjoint, hand_over, hand_over_buffers,
 };
 
 mod blur;
@@ -158,6 +158,7 @@ pub struct VulkanFrame<'frame, 'buffer> {
     area: (i32, i32),
     drawn: Vec<Rect>,
     direct: bool,
+    converted_into: Option<vk::ImageView>,
     acquired: Vec<vk::Image>,
     finished: bool,
     _framebuffer: PhantomData<&'frame mut VulkanFramebuffer<'buffer>>,
@@ -198,6 +199,7 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
             target.direct,
         );
         let bounds = Rect::new(0, 0, target.image.width, target.image.height);
+        let unconverted = renderer.unconverted_image(framebuffer.id);
         let area = turn
             .invert()
             .transform_size(smithay::utils::Size::<i32, Physical>::from((
@@ -229,12 +231,23 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
             (_, false) => barrier(device, commands, image, unwritten, drawing),
             (false, true) => barrier(device, commands, image, ATTACHMENT, drawing),
         }
+        let (drawn_image, drawn_view, converted_into) = match unconverted {
+            Some((unconverted, unconverted_view, fresh)) => {
+                let before = match fresh {
+                    true => unwritten,
+                    false => SAMPLED,
+                };
+                barrier(device, commands, unconverted, before, drawing);
+                (unconverted, unconverted_view, Some(view))
+            }
+            None => (image, view, None),
+        };
         let frame = Self {
             renderer,
             target: framebuffer.id,
             format,
-            image,
-            target_view: view,
+            image: drawn_image,
+            target_view: drawn_view,
             bounds,
             bound: None,
             clip: None,
@@ -243,11 +256,12 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
             area: (area.w, area.h),
             drawn: Vec::new(),
             direct,
+            converted_into,
             acquired: Vec::new(),
             finished: false,
             _framebuffer: PhantomData,
         };
-        frame.begin_rendering(view, bounds, vk::AttachmentLoadOp::LOAD);
+        frame.begin_rendering(drawn_view, bounds, vk::AttachmentLoadOp::LOAD);
         Ok(frame)
     }
 
@@ -569,22 +583,22 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
     }
 
     fn finish_direct(&mut self, drawn: &[Rect]) -> Result<(), RenderError> {
-        if let Some(colour) = self.renderer.output_colour.clone()
-            && !drawn.is_empty()
-        {
-            match self.convert_output(colour, drawn) {
-                Ok(scratch) => self.record_converted_copy(scratch, drawn),
-                Err(error) => {
-                    tracing::warn!("showing colours unconverted: {error}");
-                    self.renderer.output_colour = None;
-                }
+        let shown = match self.converted_into {
+            Some(view) => {
+                self.convert_into(view, drawn)?;
+                self.renderer
+                    .targets
+                    .get(&self.target)
+                    .map(|target| target.image.image)
+                    .ok_or(RenderError::ForeignResource)?
             }
-        }
+            None => self.image,
+        };
         let renderer = &mut *self.renderer;
         hand_over(
             &renderer.device,
             renderer.command_buffer,
-            self.image,
+            shown,
             renderer.queue_family,
             (false, DRAWING),
         );
@@ -601,51 +615,32 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
         Ok(())
     }
 
-    fn record_converted_copy(&self, scratch: vk::Image, drawn: &[Rect]) {
-        let device = &self.renderer.device;
-        let commands = self.renderer.command_buffer;
-        let regions: Vec<_> = drawn
-            .iter()
-            .map(|rect| {
-                let offset = vk::Offset3D {
-                    x: rect.x,
-                    y: rect.y,
-                    z: 0,
-                };
-                vk::ImageCopy::default()
-                    .src_subresource(COLOR_LAYERS)
-                    .src_offset(offset)
-                    .dst_subresource(COLOR_LAYERS)
-                    .dst_offset(offset)
-                    .extent(vk::Extent3D {
-                        width: rect.width.unsigned_abs(),
-                        height: rect.height.unsigned_abs(),
-                        depth: 1,
-                    })
-            })
-            .collect();
-        barrier(device, commands, self.image, SAMPLED, TRANSFER_DESTINATION);
-        // SAFETY: the frame holds the renderer mutably from `begin_commands` until `finish_frame`
-        // ends the buffer, so `command_buffer` is recording and only this frame records into it;
-        // `convert_output` left `scratch` in `TRANSFER_SRC_OPTIMAL`, the barrier above moved the
-        // target to `TRANSFER_DST_OPTIMAL`, and both have the frame's size, which holds `drawn`.
-        unsafe {
-            device.cmd_copy_image(
-                commands,
-                scratch,
-                vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
-                self.image,
-                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-                &regions,
-            );
-        }
+    fn convert_into(&mut self, shown: vk::ImageView, drawn: &[Rect]) -> Result<(), RenderError> {
         barrier(
-            device,
-            commands,
+            &self.renderer.device,
+            self.renderer.command_buffer,
             self.image,
-            TRANSFER_DESTINATION,
             ATTACHMENT,
+            SAMPLED,
         );
+        let Some(colour) = self.renderer.output_colour.clone() else {
+            return Ok(());
+        };
+        if drawn.is_empty() {
+            return Ok(());
+        }
+        self.bound = None;
+        self.begin_rendering(shown, self.bounds, vk::AttachmentLoadOp::LOAD);
+        let drawn_colours = self.draw_display_colour(&colour, drawn);
+        // SAFETY: the frame holds the renderer mutably from `begin_commands` until `finish_frame`
+        // ends the buffer, so `command_buffer` is recording and only this frame records into it,
+        // and the rendering begun on the shown image above is still open.
+        unsafe {
+            self.renderer
+                .device
+                .cmd_end_rendering(self.renderer.command_buffer)
+        };
+        drawn_colours
     }
 
     fn record_output(&mut self, export: &DeviceExport, drawn: &[Rect]) -> Option<vk::Image> {
@@ -714,12 +709,27 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
             .map(|scratch| (scratch.image, scratch.view))
             .ok_or(RenderError::ForeignResource)?;
         self.bound = None;
-        self.bind(Program::DisplayColour)?;
         let device = &self.renderer.device;
         let commands = self.renderer.command_buffer;
         barrier(device, commands, self.image, ATTACHMENT, SAMPLED);
         barrier(device, commands, scratch.0, blur::DISCARDED, blur::DRAWN);
         self.begin_rendering(scratch.1, self.bounds, vk::AttachmentLoadOp::DONT_CARE);
+        let drawn_colours = self.draw_display_colour(&colour, drawn);
+        let device = &self.renderer.device;
+        // SAFETY: the frame holds the renderer mutably from `begin_commands` until `finish_frame`
+        // ends the buffer, so `command_buffer` is recording and only this frame records into it,
+        // and the rendering begun on the scratch image is still open.
+        unsafe { device.cmd_end_rendering(commands) };
+        barrier(device, commands, scratch.0, blur::DRAWN, TRANSFER_SOURCE);
+        drawn_colours.map(|()| scratch.0)
+    }
+
+    fn draw_display_colour(
+        &mut self,
+        colour: &crate::OutputColour,
+        drawn: &[Rect],
+    ) -> Result<(), RenderError> {
+        self.bind(Program::DisplayColour)?;
         self.push_texture(self.target_view);
         let table = self
             .renderer
@@ -747,13 +757,7 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
             },
             drawn,
         );
-        let device = &self.renderer.device;
-        // SAFETY: the frame holds the renderer mutably from `begin_commands` until `finish_frame`
-        // ends the buffer, so `command_buffer` is recording and only this frame records into it,
-        // and the rendering begun on the scratch image is still open.
-        unsafe { device.cmd_end_rendering(commands) };
-        barrier(device, commands, scratch.0, blur::DRAWN, TRANSFER_SOURCE);
-        Ok(scratch.0)
+        Ok(())
     }
 
     fn record_output_copy(&self, export: &DeviceExport, source: vk::Image, drawn: &[Rect]) {

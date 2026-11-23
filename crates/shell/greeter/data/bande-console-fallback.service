@@ -6,4 +6,5 @@ Wants=getty@tty1.service
 [Service]
 Type=oneshot
 ExecStart=-/usr/bin/plymouth quit
+ExecStart=-/bin/sh -c 'printf "\\033c" > /dev/tty1'
 ExecStart=/usr/bin/chvt 1

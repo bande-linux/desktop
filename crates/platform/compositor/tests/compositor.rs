@@ -1,12 +1,17 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
+use std::fs::{File, OpenOptions};
+use std::os::unix::fs::MetadataExt;
+use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
+use bande_compositor::background;
 use bande_compositor::{
     Compositor, KEYBOARD_MONITOR_NAME, SCREEN_READER_NAME, SessionReport, UNRESPONSIVE_AFTER,
     serve_keyboard_monitor,
 };
+use bande_render::VulkanRenderer;
 use bande_test_bus::SessionBus;
 use bande_test_wayland::keys::{
     BTN_LEFT, KEY_A, KEY_DOWN, KEY_ENTER, KEY_ESC, KEY_L, KEY_LEFTALT, KEY_LEFTCTRL, KEY_LEFTMETA,
@@ -16,6 +21,12 @@ use bande_test_wayland::{
     BLUE, ConstraintAdjustment, Frames, PopupRequest, RED, SeparateApp, ShmImage, TestClient,
     act_as_separate_app, chord, grant_consent, headless, roundtrip,
 };
+use smithay::backend::allocator::dmabuf::{AsDmabuf, Dmabuf};
+use smithay::backend::allocator::gbm::{GbmAllocator, GbmBufferFlags, GbmDevice};
+use smithay::backend::allocator::{Allocator, Buffer, Fourcc, Modifier};
+use smithay::backend::renderer::Bind;
+use smithay::backend::renderer::damage::OutputDamageTracker;
+use smithay::utils::Transform;
 use wayland_client::protocol::wl_shm::Format;
 
 const MONITOR: &str = "org.freedesktop.a11y.KeyboardMonitor";
@@ -391,6 +402,192 @@ fn an_idle_window_is_not_drawn_again_and_still_gets_a_frame_when_it_asks() {
     expect_frame(&mut frames, &mut server, &mut client, before);
 }
 
+#[test]
+fn a_window_dragged_over_scanout_buffers_leaves_the_frame_a_full_redraw_draws() {
+    drag_over_scanout_buffers(None);
+}
+
+#[test]
+fn a_window_dragged_on_a_wide_gamut_display_leaves_the_frame_a_full_redraw_draws() {
+    let converted = bande_colour::Profile::display_p3()
+        .and_then(|profile| bande_colour::conversion(&profile, [1.0; 3]))
+        .expect("a Display P3 conversion");
+    drag_over_scanout_buffers(Some(bande_render::OutputColour {
+        matrix: converted.matrix,
+        encode: Some(Arc::from(converted.encode)),
+    }));
+}
+
+fn drag_over_scanout_buffers(colour: Option<bande_render::OutputColour>) {
+    let Some((mut vulkan, gbm)) = hardware() else {
+        println!("skipped: no hardware Vulkan device with a DRM render node");
+        return;
+    };
+    vulkan.set_output_colour(colour);
+    let mut formats: Vec<_> = vulkan.render_formats().iter().copied().collect();
+    formats.sort_by_key(|format| std::cmp::Reverse(u64::from(format.modifier)));
+    let Some(format) = formats
+        .into_iter()
+        .find(|format| format.code == Fourcc::Argb8888 && format.modifier != Modifier::Linear)
+    else {
+        println!("skipped: the GPU cannot render into a tiled ARGB8888 scanout buffer");
+        return;
+    };
+    println!("drawing into {format:?} on {}", vulkan.device_info());
+    let (width, height) = (640, 480);
+    let mut allocator = GbmAllocator::new(
+        gbm.clone(),
+        GbmBufferFlags::RENDERING | GbmBufferFlags::SCANOUT,
+    );
+    let mut slots: Vec<_> = (0..3)
+        .map(|_| {
+            let buffer = allocator
+                .create_buffer(width, height, format.code, &[format.modifier])
+                .expect("scanout buffer");
+            let dmabuf = buffer.export().expect("scanout dma-buf");
+            (buffer, dmabuf, None::<usize>)
+        })
+        .collect();
+    let mut server = headless(640, 480);
+    let _back = TestClient::window(&mut server, "org.bande.Back");
+    let _front = TestClient::window(&mut server, "org.bande.Front");
+    let mut frames = Frames::start();
+    idle(&mut frames, &mut server, Duration::from_millis(300));
+    let output = server.main_output();
+    let mut damage = OutputDamageTracker::new((640, 480), 1.0, Transform::Normal);
+    let mut step = 0;
+    let mut draw = |server: &mut Compositor, step: &mut usize| {
+        let elements = server.render_elements_on(&mut vulkan, &output);
+        let slot = *step % slots.len();
+        let (_, dmabuf, used) = &mut slots[slot];
+        let age = used.map_or(0, |used| *step - used);
+        let mut framebuffer = vulkan.bind(dmabuf).expect("bind the scanout buffer");
+        damage
+            .render_output(&mut vulkan, &mut framebuffer, age, &elements, background())
+            .expect("render into the scanout buffer");
+        *used = Some(*step);
+        *step += 1;
+        slot
+    };
+    let frame = server.windows()[1]
+        .geometry()
+        .expect("the front window is mapped");
+    let mut at = (
+        f64::from(frame.loc.x + frame.size.w / 2),
+        f64::from(frame.loc.y + frame.size.h / 2),
+    );
+    server.move_pointer_to(at.into(), 0);
+    server.key(KEY_LEFTMETA, true, 0);
+    server.press_button(BTN_LEFT, true, 0);
+    let mut last = 0;
+    for time in 1..=30 {
+        at = (at.0 + 9.0, at.1 + 5.0);
+        server.move_pointer_to(at.into(), time * 10);
+        idle(&mut frames, &mut server, Duration::from_millis(5));
+        last = draw(&mut server, &mut step);
+    }
+    server.press_button(BTN_LEFT, false, 400);
+    server.key(KEY_LEFTMETA, false, 400);
+    for time in 0..20 {
+        let hover = (f64::from(40 + time * 25), f64::from(60 + time * 17));
+        server.move_pointer_to(hover.into(), 500 + time as u32 * 10);
+        idle(&mut frames, &mut server, Duration::from_millis(5));
+        last = draw(&mut server, &mut step);
+    }
+    let drawn = read_back(&gbm, &slots[last].1, (width, height));
+    let fresh = allocator
+        .create_buffer(width, height, format.code, &[format.modifier])
+        .expect("scanout buffer");
+    let mut fresh = fresh.export().expect("scanout dma-buf");
+    let elements = server.render_elements_on(&mut vulkan, &output);
+    let mut framebuffer = vulkan.bind(&mut fresh).expect("bind the fresh buffer");
+    OutputDamageTracker::new((640, 480), 1.0, Transform::Normal)
+        .render_output(&mut vulkan, &mut framebuffer, 0, &elements, background())
+        .expect("a full redraw");
+    let full = read_back(&gbm, &fresh, (width, height));
+    let wrong = drawn
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .zip(full.as_chunks::<4>().0)
+        .filter(|(drawn, full)| drawn.iter().zip(*full).any(|(a, b)| a.abs_diff(*b) > 2))
+        .count();
+    assert_eq!(
+        wrong, 0,
+        "{wrong} pixels of {format:?} differ from a full redraw"
+    );
+    assert_eq!(bande_render::vulkan_errors(), 0, "Vulkan reported errors");
+}
+
+fn hardware() -> Option<(VulkanRenderer, GbmDevice<Arc<File>>)> {
+    let mut nodes: Vec<_> = std::fs::read_dir("/dev/dri")
+        .ok()?
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| path.to_string_lossy().contains("renderD"))
+        .collect();
+    nodes.sort();
+    nodes.into_iter().find_map(|node| {
+        let file = OpenOptions::new().read(true).write(true).open(node).ok()?;
+        let device = file.metadata().ok()?.rdev();
+        let mut vulkan = VulkanRenderer::new(Some(device)).ok()?;
+        let gbm = GbmDevice::new(Arc::new(file)).ok()?;
+        let info = vulkan.device_info();
+        if info.software || info.render_device != Some(device) {
+            return None;
+        }
+        let mut allocator = GbmAllocator::new(gbm.clone(), GbmBufferFlags::RENDERING);
+        vulkan.prove_unexported(|format| {
+            let buffer = allocator
+                .create_buffer(64, 64, format.code, &[format.modifier])
+                .ok()?;
+            (buffer.format() == format)
+                .then(|| buffer.export().ok())
+                .flatten()
+        });
+        Some((vulkan, gbm))
+    })
+}
+
+fn read_back(gbm: &GbmDevice<Arc<File>>, dmabuf: &Dmabuf, (width, height): (u32, u32)) -> Vec<u8> {
+    let mut fds = [None; 4];
+    let (mut strides, mut offsets) = ([0; 4], [0; 4]);
+    for (index, ((fd, offset), stride)) in dmabuf
+        .handles()
+        .zip(dmabuf.offsets())
+        .zip(dmabuf.strides())
+        .enumerate()
+    {
+        fds[index] = Some(fd);
+        offsets[index] = offset as i32;
+        strides[index] = stride as i32;
+    }
+    let imported = gbm
+        .import_buffer_object_from_dma_buf_with_modifiers::<()>(
+            dmabuf.num_planes() as u32,
+            fds,
+            width,
+            height,
+            dmabuf.format().code,
+            GbmBufferFlags::RENDERING,
+            strides,
+            offsets,
+            dmabuf.format().modifier,
+        )
+        .expect("import the scanout buffer into GBM");
+    imported
+        .map(0, 0, width, height, |mapped| {
+            let stride = mapped.stride() as usize;
+            mapped
+                .buffer()
+                .chunks(stride)
+                .take(height as usize)
+                .flat_map(|row| row[..width as usize * 4].to_vec())
+                .collect()
+        })
+        .expect("map the scanout buffer")
+}
+
 fn act_as_a_remote_viewer(socket: std::os::unix::net::UnixStream) {
     use reis::ei;
     use reis::event::{DeviceCapability, EiEvent};
@@ -503,4 +700,38 @@ fn a_screen_sharing_viewer_only_watches_while_the_session_is_locked() {
         "no remote click reaches the lock screen"
     );
     assert!(!editor.keys().contains(&(KEY_A, true)));
+}
+
+#[test]
+fn a_closing_window_keeps_the_buffer_it_still_shows_until_it_is_gone() {
+    let mut server = headless(640, 480);
+    server.set_reduce_motion(false);
+    let mut client = TestClient::window(&mut server, "org.bande.Closing");
+    let mut frames = Frames::start();
+    let red = RED.repeat(64 * 64);
+    let blue = BLUE.repeat(64 * 64);
+    let image = |bytes| ShmImage {
+        width: 64,
+        height: 64,
+        stride: 256,
+        format: Format::Xrgb8888,
+        bytes,
+    };
+    let shown = client.commit_buffer(0, &image(&red), (0, 0, 64, 64));
+    idle(&mut frames, &mut server, Duration::from_millis(600));
+
+    let _next = client.commit_buffer(0, &image(&blue), (0, 0, 64, 64));
+    client.withdraw_window(0);
+    roundtrip(&mut server, &mut [&mut client]);
+    assert!(
+        !client.released(&shown),
+        "the app got back the buffer its closing window is still drawn from"
+    );
+
+    idle(&mut frames, &mut server, Duration::from_millis(600));
+    roundtrip(&mut server, &mut [&mut client]);
+    assert!(
+        client.released(&shown),
+        "the closed window never let go of its buffer"
+    );
 }

@@ -65,7 +65,6 @@ const SECOND: Duration = Duration::from_secs(1);
 const KEEP: &str = "keep";
 const REVERT: &str = "revert";
 pub(crate) const USE_MAIN: &str = "main";
-pub(crate) const ADD_COLOUR_PROFILE: &str = "add";
 pub(crate) const USE_EXTENDED: &str = "extended";
 pub(crate) const MIRROR_PREFIX: &str = "mirror:";
 
@@ -294,7 +293,6 @@ pub struct SettingsView {
     pub(crate) busy: Vec<String>,
     pub(crate) pairing: Option<Question>,
     pub(crate) pictures: Vec<(String, Pair)>,
-    pub(crate) colour_profiles: Vec<(String, String)>,
     pub(crate) thumbnails: HashMap<Pair, Option<Image>>,
     pub(crate) query: String,
     pub(crate) hits: Vec<PaneHit>,
@@ -421,7 +419,6 @@ impl SettingsView {
             busy: Vec::new(),
             pairing: None,
             pictures: Vec::new(),
-            colour_profiles: Vec::new(),
             thumbnails: HashMap::new(),
             query: String::new(),
             hits: Vec::new(),
@@ -758,9 +755,6 @@ impl SettingsView {
                 (Some(PaneId::SoftwareUpdate), &[SettingId::SoftwareUpdates])
             }
             Update::Pictures(_) | Update::Thumbnail(..) => (None, &[SettingId::Wallpaper]),
-            Update::ColourProfiles(_) | Update::ColourProfileAdded(..) => {
-                (None, &[SettingId::ColourProfile])
-            }
             Update::Sharing(_) => (Some(PaneId::Sharing), &[SettingId::Sharing]),
             Update::BootScreen(_) => (Some(PaneId::About), &[SettingId::BootScreen]),
             Update::Printers(_)
@@ -869,10 +863,6 @@ impl SettingsView {
                 self.pairing = question;
             }
             Update::Pictures(pictures) => self.pictures = pictures,
-            Update::ColourProfiles(profiles) => self.colour_profiles = profiles,
-            Update::ColourProfileAdded(identity, profile) => {
-                self.change_display(identity, SettingId::ColourProfile, Value::Keyword(profile));
-            }
             Update::Thumbnail(pair, picture) => {
                 let image = Image::from_rgba(picture.width, picture.height, picture.rgba);
                 self.thumbnails.insert(pair, image);
@@ -2688,14 +2678,6 @@ impl SettingsView {
             }
             (SettingId::VariableRefresh, Value::Flag(on)) => {
                 display.variable_refresh = (!on).then_some(false);
-            }
-            (SettingId::ColourProfile, Value::Keyword(profile)) => {
-                if profile == ADD_COLOUR_PROFILE {
-                    self.commands.push(Command::AddColourProfile(identity));
-                    return;
-                }
-                display.colour_profile = (profile != bande_colour::DISPLAY).then_some(profile);
-                trial = self.keep.is_some();
             }
             _ => return,
         }

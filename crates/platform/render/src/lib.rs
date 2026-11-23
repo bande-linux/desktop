@@ -327,6 +327,7 @@ struct Target {
     rendered: bool,
     export: Option<Export>,
     direct: bool,
+    unconverted: Option<Image>,
 }
 
 struct Staging {
@@ -1980,6 +1981,7 @@ impl VulkanRenderer {
                 rendered: false,
                 export: None,
                 direct: true,
+                unconverted: None,
             },
         );
         Ok(id)
@@ -2031,9 +2033,53 @@ impl VulkanRenderer {
                 rendered: false,
                 export,
                 direct: false,
+                unconverted: None,
             },
         );
         Ok(id)
+    }
+
+    fn unconverted_image(&mut self, id: u64) -> Option<(vk::Image, vk::ImageView, bool)> {
+        let target = self.targets.get_mut(&id)?;
+        if !target.direct || self.output_colour.is_none() {
+            if let Some(image) = target.unconverted.take() {
+                self.destroy_image(&image);
+            }
+            return None;
+        }
+        if let Some(image) = &target.unconverted {
+            return Some((image.image, image.view, false));
+        }
+        let (width, height, format) = (target.image.width, target.image.height, target.format);
+        let created = match self
+            .pipelines
+            .contains_key(&(format, Program::DisplayColour))
+        {
+            true => self.create_image(
+                width,
+                height,
+                format,
+                vk::ImageUsageFlags::COLOR_ATTACHMENT
+                    | vk::ImageUsageFlags::SAMPLED
+                    | vk::ImageUsageFlags::TRANSFER_SRC,
+                vk::ComponentSwizzle::IDENTITY,
+            ),
+            false => Err(RenderError::UnsupportedFormat),
+        };
+        match created {
+            Ok(image) => {
+                let unconverted = (image.image, image.view, true);
+                if let Some(target) = self.targets.get_mut(&id) {
+                    target.unconverted = Some(image);
+                }
+                Some(unconverted)
+            }
+            Err(error) => {
+                tracing::warn!("showing colours unconverted: {error}");
+                self.output_colour = None;
+                None
+            }
+        }
     }
 
     fn forget_texture(&mut self, id: u64) {
@@ -2066,6 +2112,9 @@ impl VulkanRenderer {
 
     fn destroy_target(&self, target: &Target) {
         self.destroy_image(&target.image);
+        if let Some(unconverted) = &target.unconverted {
+            self.destroy_image(unconverted);
+        }
         if let Some(device) = target.export.as_ref().and_then(|export| export.device) {
             self.destroy_imported(&device.imported);
         }
@@ -2711,12 +2760,6 @@ const TRANSFER_SOURCE: Usage = (
     vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
     vk::PipelineStageFlags2::COPY,
     vk::AccessFlags2::TRANSFER_READ,
-);
-
-const TRANSFER_DESTINATION: Usage = (
-    vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-    vk::PipelineStageFlags2::COPY,
-    vk::AccessFlags2::TRANSFER_WRITE,
 );
 
 fn hand_over(

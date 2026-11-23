@@ -21,7 +21,7 @@ Velox).
 - **Toolkit** (`bande-toolkit`): everything that draws, lays out or handles input inside a
   window; windows and their roles; the theme and `Appearance`; alerts and sheets.
 - **`bande-app`**: the process and its place in the desktop: `main`, `--version`, logging, the
-  window list and focus, close and quit, the app's menus (its primary commands, Edit and Window
+  window list and focus, close and quit, the app's menus (its own menus, Edit and Window
   menus, Settings…, About, Quit) and the menu button (⋮) that shows them in every titled window, the standard keys, appearance for every window, the Settings window, single
   instance and activation, the one session bus connection, state file paths. It draws nothing.
 - **The app**: its views (`View`), its own menus and commands, workers and sources, its
@@ -33,7 +33,7 @@ Velox).
 | --- | --- |
 | Process | one process for all of an app's windows, Settings included; a second launch hands its arguments, working folder and activation token to the first and exits |
 | Start failure | when `Program::start` returns an error, `bande-app` gives up the single-instance name, so a new launch can start, and shows the error in an alert titled "{app} could not be opened", exiting once it is dismissed so the launcher adds no notice of its own; a `--background` start posts it as a notice instead |
-| Menus | Shown from the menu button (⋮) beside each titled window's controls. First level: the app's primary commands (entries marked `Entry::primary`, at most five, in the order the app declares them, lifted out of their menus), the app's menus as submenus (File, Edit, View, …; a menu left empty is dropped), Window, then Settings… if the app has settings, About with the app's own version, and Quit. Window holds the toolkit's window commands (`Window::window_commands`: Minimize, Maximize, Full Screen, Tile ▸, Keep on Top, run through `Window::window_command`), the app's window items, Close Window, then Hide, Hide Other Apps and Show All Apps. Move stays in the title bar's window menu, since it follows a held pointer |
+| Menus | Shown from the menu button (⋮) beside each titled window's controls. First level: the app's menus as submenus (File, Edit, View, …) and Window, then Settings… if the app has settings and Quit; nothing else, so no command appears twice. Window holds the toolkit's window commands (`Window::window_commands`: Minimize, Maximize, Full Screen, Tile ▸, Keep on Top, run through `Window::window_command`), the app's window items, Close Window, Hide, Hide Other Apps and Show All Apps, and last About with the app's own version. Move stays in the title bar's window menu, since it follows a held pointer |
 | Keys | 1. Close Window, Quit and Settings… (`Ctrl+W`, `Ctrl+Q`, `Ctrl+,`; with `Shift` for Terminal) before the view. 2. The focused view. 3. A key the view did not take runs the enabled menu entry with that shortcut, so the menus are the one shortcut table |
 | Edit menu | `edit_submenu` items are `key:<shortcut>` actions: the focused view gets that key press, so Copy works in any text field |
 | Close | Close Window closes the active tab first where the app has tabs (`Program::close_tab`), else asks `should_close`; the close button closes the window; closing the last window leaves the app running until Quit; Quit asks every window and stops at the first refusal |

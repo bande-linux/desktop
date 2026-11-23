@@ -299,8 +299,6 @@ pub fn tab_menu(tab: Option<u32>, tabs: usize) -> Menu {
     Menu::new(items)
 }
 
-const PRIMARY: [Command; 3] = [Command::NewWindow, Command::NewTab, Command::Find];
-
 fn command_entries(commands: &[Option<Command>]) -> Vec<Entry> {
     commands
         .iter()
@@ -309,13 +307,9 @@ fn command_entries(commands: &[Option<Command>]) -> Vec<Entry> {
                 Entry::separator,
                 |(title, action, shortcut)| {
                     let entry = Entry::item(&title, &action);
-                    let entry = match shortcut {
+                    match shortcut {
                         Some(shortcut) => entry.shortcut(shortcut),
                         None => entry,
-                    };
-                    match command.is_some_and(|command| PRIMARY.contains(&command)) {
-                        true => entry.primary(),
-                        false => entry,
                     }
                 },
             )

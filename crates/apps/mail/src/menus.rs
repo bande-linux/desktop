@@ -27,7 +27,7 @@ pub fn message_menus(printable: bool) -> Vec<Entry> {
         Entry::submenu(
             &tr!("File"),
             vec![
-                item(text!("New Message"), "compose").primary(),
+                item(text!("New Message"), "compose"),
                 Entry::separator(),
                 item(text!("Add Account…"), "add-account"),
                 Entry::separator(),
@@ -35,10 +35,7 @@ pub fn message_menus(printable: bool) -> Vec<Entry> {
             ],
         ),
         edit_submenu(Vec::new()),
-        Entry::submenu(
-            &tr!("Mailbox"),
-            vec![item(text!("Get Mail"), "get-mail").primary()],
-        ),
+        Entry::submenu(&tr!("Mailbox"), vec![item(text!("Get Mail"), "get-mail")]),
     ]
 }
 
@@ -58,9 +55,9 @@ pub fn app_menus(view: &MailView, shown: Shown) -> Vec<Entry> {
         Entry::submenu(
             &tr!("File"),
             vec![
-                item(text!("New Message"), "compose").primary(),
+                item(text!("New Message"), "compose"),
                 Entry::separator(),
-                item(text!("Add Account…"), "add-account").primary(),
+                item(text!("Add Account…"), "add-account"),
                 Entry::separator(),
                 selection(text!("Find"), "find"),
                 Entry::separator(),

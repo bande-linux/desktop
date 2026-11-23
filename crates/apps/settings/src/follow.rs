@@ -78,8 +78,6 @@ pub enum Update {
     Bluetooth(Reading<BluetoothState>),
     Pairing(Option<Question>),
     Pictures(Vec<(String, Pair)>),
-    ColourProfiles(Vec<(String, String)>),
-    ColourProfileAdded(String, String),
     Thumbnail(Pair, bande_wallpaper::Picture),
     About(About),
     Storage(Storage),
@@ -167,7 +165,6 @@ pub enum Command {
     HandOver(String),
     ChooseCertificate(Certificate),
     ExcludeFolder,
-    AddColourProfile(String),
     ClearClipboard,
     Passwords(PasswordCommand),
     CopySecret(Concealed),
@@ -484,10 +481,6 @@ impl Services {
         spawn("proxy", move || {
             proxy.send(Update::Proxy(read_proxy()));
         });
-        let listed = updates.clone();
-        spawn("colour-profiles", move || {
-            listed.send(Update::ColourProfiles(crate::colour::installed()));
-        });
         Self {
             connection: session.clone(),
             updates: updates.clone(),
@@ -604,22 +597,6 @@ impl Services {
                             text!("Couldn't clear the clipboard history."),
                             error,
                         ));
-                    }
-                });
-                true
-            }
-            Command::AddColourProfile(identity) => {
-                let (session, updates) = (self.connection.clone(), self.updates.clone());
-                spawn("add-colour-profile", move || {
-                    match crate::colour::add(&session) {
-                        crate::colour::Added::Profile(profile) => {
-                            updates.send(Update::ColourProfiles(crate::colour::installed()));
-                            updates.send(Update::ColourProfileAdded(identity, profile));
-                        }
-                        crate::colour::Added::Refused(reason) => {
-                            updates.send(Update::Failed(SettingId::ColourProfile, reason));
-                        }
-                        crate::colour::Added::Cancelled => {}
                     }
                 });
                 true

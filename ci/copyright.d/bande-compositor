@@ -1,0 +1,5 @@
+Files: crates/platform/compositor/tests/edid/linuxhw-*
+Copyright: The Linux Hardware Project (https://linux-hardware.org) and its contributors
+License: CC-BY-4.0
+Comment: Monitor EDIDs, decoded by edid-decode, from the linuxhw EDID repository
+ (https://github.com/linuxhw/EDID), unchanged; the EDID corpus test reads them.

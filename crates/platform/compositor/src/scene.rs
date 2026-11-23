@@ -1,8 +1,11 @@
 use std::hash::{DefaultHasher, Hash, Hasher};
+use std::sync::PoisonError;
 
 use smithay::backend::renderer::element::surface::render_elements_from_surface_tree;
 use smithay::backend::renderer::element::{Element, Id, Kind, RenderElement};
-use smithay::backend::renderer::utils::{CommitCounter, DamageSet, OpaqueRegions};
+use smithay::backend::renderer::utils::{
+    Buffer as ClientBuffer, CommitCounter, DamageSet, OpaqueRegions, RendererSurfaceStateUserData,
+};
 use smithay::backend::renderer::{ContextId, Renderer as _};
 use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
 use smithay::utils::{Buffer as BufferCoords, Physical, Point, Rectangle, Scale, Transform};
@@ -11,7 +14,7 @@ use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::Logical;
 
 use smithay::backend::renderer::Texture;
-use smithay::wayland::compositor::get_role;
+use smithay::wayland::compositor::{TraversalAction, get_role, with_surface_tree_downward};
 use smithay::wayland::shell::xdg::XDG_POPUP_ROLE;
 
 use crate::effect::{backdrop_opacity, blur_rects, corner_radius, surface_opacity};
@@ -821,6 +824,7 @@ pub(crate) fn preview_elements(
 #[derive(Debug, Clone)]
 pub(crate) struct Drawn {
     pieces: Vec<Piece>,
+    _shown_buffers: Vec<ClientBuffer>,
     context: ContextId<VulkanTexture>,
     area: Area,
     pub(crate) look: Look,
@@ -1008,6 +1012,30 @@ pub(crate) fn shaped_radius(area: Area, shown: Area, scale: f64) -> f64 {
     CORNER_RADIUS * scale * shrink
 }
 
+fn shown_buffers(surface: &WlSurface) -> Vec<ClientBuffer> {
+    let mut buffers = Vec::new();
+    with_surface_tree_downward(
+        surface,
+        (),
+        |_, _, ()| TraversalAction::DoChildren(()),
+        |_, states, ()| {
+            let buffer = states
+                .data_map
+                .get::<RendererSurfaceStateUserData>()
+                .and_then(|state| {
+                    state
+                        .lock()
+                        .unwrap_or_else(PoisonError::into_inner)
+                        .buffer()
+                        .cloned()
+                });
+            buffers.extend(buffer);
+        },
+        |_, _, ()| true,
+    );
+    buffers
+}
+
 pub(crate) fn drawn_texture(
     texture: VulkanTexture,
     context: ContextId<VulkanTexture>,
@@ -1025,6 +1053,7 @@ pub(crate) fn drawn_texture(
             transform: Transform::Normal,
             geometry: area.to_i32_round(),
         }],
+        _shown_buffers: Vec::new(),
         context,
         area,
         look: Look::shown(rect),
@@ -1047,6 +1076,7 @@ pub(crate) fn drawn_screen(
         render_elements_from_surface_tree(renderer, surface, origin, scale, 1.0, Kind::Unspecified);
     Drawn {
         pieces: pieces_of(&surfaces, scale),
+        _shown_buffers: shown_buffers(surface),
         context: renderer.context_id(),
         area: rect.to_physical(scale),
         look: Look::shown(rect),
@@ -1163,6 +1193,7 @@ pub(crate) fn window_elements(
         elements,
         Some(Drawn {
             pieces,
+            _shown_buffers: shown_buffers(window.surface()),
             context: renderer.context_id(),
             area,
             look,

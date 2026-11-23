@@ -648,13 +648,19 @@ still running, `bande-session` writes a keyword to `failed` in that person's log
 folder (below); the greeter shows that person why their
 last session ended, and the next session that starts removes the note.
 
-**No black frame.** Each stage leaves its last frame on screen until the next has something to
-show: a compositor leaving the screen closes its framebuffers with `DRM_IOCTL_MODE_CLOSEFB`,
-which leaves them on their planes, and the next compositor's first commit replaces them without
-a modeset when the mode is the same. Unlocking is one compositor: the last lock frame fades out
-over the desktop, so input reaches the desktop at once. `Ctrl+Alt+F2` reaches a text console at
-any time, and when greetd gives up `bande-console-fallback.service` quits Plymouth, starts
-`getty@tty1` and brings the console forward.
+**Between the login window and the desktop.** greetd and the sessions it starts share VT 1.
+Each time greetd starts a session it sets VT 1 to text mode and clears it, and logind does the
+same when a session's compositor lets go of the display; with the kernel's console bound to
+VT 1, either puts the console's framebuffer on screen in place of the last frame. The login
+window's compositor therefore empties that console, hides its cursor and paints its background
+in Datum's `deep` (`blank_console`), and its output goes to the journal (`systemd-cat`), so the
+screen shows only `deep` until the desktop fades in over that same colour; nothing writes text
+to VT 1. A compositor leaving the screen still closes its framebuffers with
+`DRM_IOCTL_MODE_CLOSEFB`, which leaves them on their planes until something else is shown.
+Unlocking is one compositor: the last lock frame fades out over the desktop, so input reaches
+the desktop at once. `Ctrl+Alt+F2` reaches a text console at any time, and when greetd gives up
+`bande-console-fallback.service` resets VT 1's console, quits Plymouth, starts `getty@tty1` and
+brings the console forward.
 
 The boot screen (`bande-plymouth-theme`, which `bande-desktop` recommends) shows when GRUB starts
 the kernel with `splash` and `loglevel=3`, which the package's
@@ -663,8 +669,9 @@ Show a boot screen turns off and on. It keeps playing until the login window is 
 hands over without a blank frame or console text. `bande-greeter.service` starts after
 `plymouth-start.service` and conflicts with `plymouth-quit.service`, so the end of boot does not
 quit it. greetd and the sessions it starts use VT 1, Plymouth's terminal, so nothing switches
-VT; greetd sets it to text mode and clears it, which shows nothing while Plymouth holds the
-display. While Plymouth runs (`/run/plymouth/pid`), the login window's compositor sets its
+VT; greetd sets it to text mode and clears it, which puts the kernel's console on screen until
+Plymouth's next frame, as Plymouth puts its own framebuffer back whenever it finds another one
+shown. While Plymouth runs (`/run/plymouth/pid`), the login window's compositor sets its
 terminal to graphics mode, so the kernel's console cannot draw once Plymouth lets go, and asks
 for the display: only root may talk to Plymouth, so it creates `handover` in
 `/run/bande-greeter` (a `_greetd` folder from `debian/bande-greeter.tmpfiles`) and the root

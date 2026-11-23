@@ -348,7 +348,7 @@ impl Program for Viewer {
                 None => entry,
             }
         };
-        let mut file_menu = vec![item(text!("Open…"), OPEN, Some("Ctrl+O"), true).primary()];
+        let mut file_menu = vec![item(text!("Open…"), OPEN, Some("Ctrl+O"), true)];
         if cx.installed(FILES_APP_ID) {
             file_menu.push(item(text!("Show in Files"), SHOW_IN_FILES, None, file));
         }
@@ -362,7 +362,7 @@ impl Program for Viewer {
                 view.is_some_and(FileView::can_trash),
             ),
             Entry::separator(),
-            bande_app_menu::print_item(file).primary(),
+            bande_app_menu::print_item(file),
         ]);
         let edit = vec![
             item(
@@ -374,7 +374,7 @@ impl Program for Viewer {
             Entry::separator(),
             item(text!("Copy"), COPY, Some("Ctrl+C"), copyable),
             Entry::separator(),
-            item(text!("Find"), FIND, Some("Ctrl+F"), document).primary(),
+            item(text!("Find"), FIND, Some("Ctrl+F"), document),
             item(text!("Find Next"), FIND_NEXT, Some("Ctrl+G"), document),
             item(
                 text!("Find Previous"),
@@ -408,7 +408,7 @@ impl Program for Viewer {
             item(text!("Zoom Out"), ZOOM_OUT, Some("Ctrl+-"), zoomable),
             Entry::separator(),
             item(text!("Play or Pause Animation"), PLAY, None, animated),
-            item(slideshow_key, SLIDESHOW, Some("F5"), file && !document).primary(),
+            item(slideshow_key, SLIDESHOW, Some("F5"), file && !document),
         ]);
         let go = vec![
             item(text!("Next"), NEXT, Some("Right"), file),

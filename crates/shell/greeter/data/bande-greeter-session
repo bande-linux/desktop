@@ -8,4 +8,4 @@ for system_locale in /etc/locale.conf /etc/default/locale; do
         break
     fi
 done
-exec /usr/bin/bande-compositor --greeter
+exec systemd-cat --identifier=bande-greeter /usr/bin/bande-compositor --greeter

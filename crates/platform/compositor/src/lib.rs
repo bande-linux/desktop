@@ -83,13 +83,16 @@ pub use app_states::{AppStatesHandle, serve_app_states};
 pub use appearance::{SystemAppearance, follow_appearance};
 pub use assistive::follow_alerts;
 pub use bande_render::{DeviceInfo, RenderError};
-pub use boot_screen::take_display_from_boot_screen;
+pub use boot_screen::{blank_console, take_display_from_boot_screen};
 pub use clock::{
     FrameClock, FrameOutput, FrameRecovery, FrameScheduler, Poll, RecoveryStep, Submission, Vblank,
 };
+pub use colour::edid_profile;
 pub use cursor::{CursorTheme, write_cursor_theme};
 pub use display_bus::{DisplaysHandle, serve_displays};
-pub use drm::{DrmBackend, DrmBackendError, DrmNotifiers, FirstMode, HeadChanges};
+pub use drm::{
+    DrmBackend, DrmBackendError, DrmNotifiers, FirstMode, HeadChanges, refresh_of, sorted_modes,
+};
 pub use element::{ScreenElement, SurfaceElement};
 pub use environment::{
     export_session_environment, notify_service_manager, watchdog_keepalive_interval,
@@ -110,7 +113,7 @@ pub use logind::{
 pub use material::{MaterialPicture, MaterialRequest, render_material};
 pub use night::NightTick;
 pub use pointing::PointerSettings;
-pub use render::{FrameStats, Renderer, Snapshot};
+pub use render::{FrameStats, Renderer, Snapshot, background};
 pub use reveal::{Awaited, ShownFrame};
 pub use screen::{OutputConfig, OutputMode, OutputSettings, automatic_scale};
 pub use session::{

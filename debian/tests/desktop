@@ -59,7 +59,7 @@ refused runuser -u alan -- ls "$folder"
 refused runuser -u alan -- touch "$folder/failed"
 refused runuser -u alan -- mkdir "$share/$(id -u alan)"
 test -e "$folder/picture"
-DEBIAN_FRONTEND=noninteractive dpkg --purge bande-greeter < /dev/null
+DEBIAN_FRONTEND=noninteractive dpkg --purge --force-depends bande-greeter < /dev/null
 test ! -e /etc/X11/default-display-manager
 test ! -L /etc/systemd/system/display-manager.service
 test ! -e "$share"

@@ -240,13 +240,9 @@ def software():
 
 
 def mail():
-    line = '#2F7BDD'
-    body = (rect(10, 14, 28, 20, 2.5, PAPER)
-            + path('M10.9 15.3 22.3 24.4a2.7 2.7 0 0 0 3.4 0L37.1 15.3', 'none',
-                   f'stroke="{line}" stroke-opacity="0.55" stroke-width="1.4" stroke-linejoin="round"')
-            + path('M11.2 33.2 20.6 25.2M36.8 33.2 27.4 25.2', 'none',
-                   f'stroke="{line}" stroke-opacity="0.22" stroke-width="1.2"'))
-    return tile('#5FA8F2', line, body)
+    loop = 'M30 19.5V25a2.75 2.75 0 0 0 5.5 0V20a7.5 7.5 0 0 0-7.5-7.5h-8A7.5 7.5 0 0 0 12.5 20v8a7.5 7.5 0 0 0 7.5 7.5h8.5'
+    body = stroke(loop, PAPER, 3.6) + rect(20.2, 20.6, 6.8, 6.8, 1, EMBER)
+    return tile(*hue_field(285, 0.42, 0.13), body)
 
 
 def calendar():
@@ -296,4 +292,5 @@ ICONS = {
 HICOLOR = {
     'org.bande.Files': 'crates/apps/files/data/org.bande.Files.svg',
     'org.bande.Settings': 'crates/apps/settings/data/org.bande.Settings.svg',
+    'org.bande.Mail': 'crates/apps/mail/data/org.bande.Mail.svg',
 }

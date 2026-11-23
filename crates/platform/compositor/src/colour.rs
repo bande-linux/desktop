@@ -16,7 +16,7 @@ fn point((x, y): (u16, u16)) -> (f64, f64) {
     )
 }
 
-pub(crate) fn edid_profile(edid: &Edid) -> Option<Profile> {
+pub fn edid_profile(edid: &Edid) -> Option<Profile> {
     let primaries = [
         edid.primaries.red,
         edid.primaries.green,

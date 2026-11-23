@@ -782,6 +782,7 @@ dependencies = [
  "bande-watch",
  "bande-widgets",
  "bande-xdg",
+ "drm-ffi",
  "jiff",
  "libc",
  "reis",

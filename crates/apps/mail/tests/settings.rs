@@ -38,18 +38,6 @@ fn labels(view: &mut SettingsView) -> Vec<String> {
 #[test]
 fn each_account_has_a_settings_page_whose_description_names_it_in_the_sidebar() {
     let home = tempfile::tempdir().unwrap();
-    for (variable, folder) in [
-        ("HOME", ""),
-        ("XDG_CONFIG_HOME", "config"),
-        ("XDG_DATA_HOME", "data"),
-        ("XDG_CACHE_HOME", "cache"),
-        ("GNUPGHOME", "gnupg"),
-    ] {
-        let path = home.path().join(folder);
-        std::fs::create_dir_all(&path).unwrap();
-        // SAFETY: this test is alone in its binary and sets the variables before any other thread starts.
-        unsafe { std::env::set_var(variable, path) };
-    }
     let path = home.path().join("mail.sqlite3");
     let store = Store::open(&path).unwrap();
     let server = Server {

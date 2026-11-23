@@ -1850,7 +1850,6 @@ dependencies = [
  "bande-test-wayland",
  "bande-toolkit",
  "bande-xdg",
- "tempfile",
  "tracing",
  "zbus",
 ]

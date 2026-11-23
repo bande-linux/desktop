@@ -5,30 +5,10 @@ use bande_mail::settings::MailSettings;
 use bande_mail::store::{Account, Store};
 use bande_mail::ui::{MailView, Panes, Request};
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
 
 use bande_mail::imap::{Fetched, Folder, Role};
 use bande_toolkit::ui::{Event, Key, Modifiers, Pointer, Scroll, ScrollPhase, ScrollSource};
 use bande_toolkit::{Appearance, HeaderInsets, Palette, Point, Scheme, TextSystem, WindowButtons};
-
-fn hermetic() -> &'static Path {
-    static HOME: OnceLock<tempfile::TempDir> = OnceLock::new();
-    HOME.get_or_init(|| {
-        let folder = tempfile::tempdir().unwrap();
-        for (variable, name) in [
-            ("HOME", ""),
-            ("XDG_CONFIG_HOME", "config"),
-            ("XDG_DATA_HOME", "data"),
-        ] {
-            let path = folder.path().join(name);
-            std::fs::create_dir_all(&path).unwrap();
-            // SAFETY: every test calls this first, and no thread of these tests reads the environment before it returns.
-            unsafe { std::env::set_var(variable, path) };
-        }
-        folder
-    })
-    .path()
-}
 
 fn view_of(store_path: PathBuf) -> MailView {
     let mut view = MailView::new(
@@ -63,7 +43,7 @@ fn account() -> Account {
 
 #[test]
 fn every_pane_keeps_its_header_controls_clear_of_the_window_buttons_at_any_width() {
-    let folder = tempfile::tempdir_in(hermetic()).unwrap();
+    let folder = tempfile::tempdir().unwrap();
     let store_path = folder.path().join("mail.sqlite3");
     let store = Store::open(&store_path).unwrap();
     store.add_account(&account()).unwrap();
@@ -121,7 +101,10 @@ fn every_pane_keeps_its_header_controls_clear_of_the_window_buttons_at_any_width
     view.handle(&Event::PointerMove(Pointer::at(moved)));
     view.handle(&Event::PointerUp(Pointer::at(moved)));
     assert_eq!(view.settings().list_width, 380, "the list edge drags");
-    let kept = std::fs::read_to_string(hermetic().join("config/bande/mail.conf")).unwrap();
+    let kept = std::fs::read_to_string(
+        Path::new(&std::env::var_os("XDG_CONFIG_HOME").unwrap()).join("bande/mail.conf"),
+    )
+    .unwrap();
     assert!(
         kept.contains("list-width = 380"),
         "the width is kept: {kept}"
@@ -138,7 +121,7 @@ fn node(view: &MailView, label: &str) -> Option<accesskit::Node> {
 
 #[test]
 fn the_list_says_when_it_is_empty_and_acts_on_messages_by_panel_swipe_and_keys() {
-    let folder = tempfile::tempdir_in(hermetic()).unwrap();
+    let folder = tempfile::tempdir().unwrap();
     let store_path = folder.path().join("mail.sqlite3");
     let mut store = Store::open(&store_path).unwrap();
     let id = store.add_account(&account()).unwrap();

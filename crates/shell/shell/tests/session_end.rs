@@ -77,14 +77,12 @@ fn a_confirmed_ending_goes_through_and_something_in_the_way_is_shown() {
     if act_as_separate_app() {
         return;
     }
-    let state = tempfile::tempdir().expect("state dir");
     let bus = SessionBus::start().expect("private bus");
     // SAFETY: this binary's only test sets these before it starts the fake services or the shell,
     // so no other thread reads the environment yet.
     unsafe {
         std::env::set_var("DBUS_SYSTEM_BUS_ADDRESS", bus.address());
         std::env::set_var("DBUS_SESSION_BUS_ADDRESS", bus.address());
-        std::env::set_var("XDG_STATE_HOME", state.path());
     }
     let logind = FakeLogind::start(&bus).expect("fake logind");
     let systemd = FakeSystemd::start(&bus).expect("fake systemd");

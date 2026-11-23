@@ -286,7 +286,7 @@ impl Program for Notes {
         let file = Entry::submenu(
             &tr!("File"),
             vec![
-                item(text!("New Note"), "new").shortcut("Ctrl+N"),
+                item(text!("New Note"), "new").shortcut("Ctrl+N").primary(),
                 Entry::separator(),
                 Entry::submenu(&tr!("Move To"), targets).enabled(selected),
                 item(text!("Delete Note"), "delete").enabled(selected),
@@ -296,7 +296,7 @@ impl Program for Notes {
                 item(text!("Add Account…"), "add-account"),
             ],
         );
-        let find = vec![item(text!("Find"), "find").shortcut("Ctrl+F")];
+        let find = vec![item(text!("Find"), "find").shortcut("Ctrl+F").primary()];
         Menus {
             menus: vec![file, edit_submenu(find), Self::format_menu(view)],
             window: vec![item(text!("Notes"), "window")],

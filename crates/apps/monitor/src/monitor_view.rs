@@ -10,8 +10,8 @@ use bande_toolkit::ui::{
     WidgetId, opens_menu,
 };
 use bande_toolkit::{
-    Appearance, Color, HEADER_LEADING, HEADER_TRAILING, Header, Item, Palette, Point, Radius, Rect,
-    SHEET_INSET, Scene, Shape, TextAlign, TextRole, TextSize, TextStyle, TextSystem, grown_line,
+    Appearance, Color, Header, HeaderInsets, Item, Palette, Point, Radius, Rect, SHEET_INSET,
+    Scene, Shape, TextAlign, TextRole, TextSize, TextStyle, TextSystem, WindowButtons, grown_line,
 };
 
 use crate::list::{List, Signal, group_id, sender};
@@ -152,6 +152,7 @@ pub struct MonitorView {
     revealed: HashSet<String>,
     size: (f32, f32),
     full_screen: bool,
+    window_buttons: WindowButtons,
     focused: bool,
     stopping: Option<StopTarget>,
     requests: Vec<Request>,
@@ -218,6 +219,7 @@ impl MonitorView {
             revealed: HashSet::new(),
             size: (0.0, 0.0),
             full_screen: false,
+            window_buttons: WindowButtons::default(),
             focused: true,
             stopping: None,
             requests: Vec::new(),
@@ -428,14 +430,20 @@ impl MonitorView {
         )
     }
 
+    fn header_insets(&self) -> HeaderInsets {
+        match self.full_screen {
+            true => HeaderInsets::WITHOUT_CONTROLS,
+            false => HeaderInsets::of(self.window_buttons),
+        }
+    }
+
     fn toolbar_frames(&self) -> [(WidgetId, Rect); 4] {
         let middle = |height: f32| ((TOOLBAR_HEIGHT - height) / 2.0).round();
-        let (leading, trailing) = match self.full_screen {
-            true => (HEADER_LEADING, HEADER_LEADING),
-            false => (
-                HEADER_LEADING + self.title_width + ITEM_GAP,
-                HEADER_TRAILING,
-            ),
+        let insets = self.header_insets();
+        let trailing = insets.trailing;
+        let leading = match self.full_screen {
+            true => insets.leading,
+            false => insets.leading + self.title_width + ITEM_GAP,
         };
         let count = self.tabs.len() as f32;
         let tabs_for =
@@ -457,8 +465,8 @@ impl MonitorView {
             tabs_width,
             SEGMENTED_HEIGHT,
         );
-        let inspect_x = (tabs.x - ITEM_GAP - BUTTON_SIZE).max(HEADER_LEADING);
-        let stop_x = (inspect_x - BUTTON_GAP - BUTTON_SIZE).max(HEADER_LEADING);
+        let inspect_x = (tabs.x - ITEM_GAP - BUTTON_SIZE).max(insets.leading);
+        let stop_x = (inspect_x - BUTTON_GAP - BUTTON_SIZE).max(insets.leading);
         [
             (
                 self.toolbar.stop,
@@ -1086,6 +1094,7 @@ impl Screen for MonitorView {
 
     fn set_appearance(&mut self, appearance: Appearance) {
         self.palette = appearance.palette();
+        self.window_buttons = appearance.window_buttons;
         self.text_size = appearance.text_size;
         self.list.set_appearance(appearance);
         self.measure_toolbar();
@@ -1330,7 +1339,7 @@ impl Screen for MonitorView {
             .map(|(_, frame)| frame)
             .collect();
         Some(Header {
-            title_x: HEADER_LEADING,
+            title_x: self.header_insets().leading,
             items,
             tabs: Vec::new(),
         })

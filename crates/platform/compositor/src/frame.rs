@@ -5,8 +5,8 @@ use bande_l10n::tr;
 
 use bande_graphics::{
     Color, ControlHover, DOUBLE_CLICK_INTERVAL, Palette, RESIZE_WALL_BAND, Rect, ResizeEdge, Scene,
-    Scheme, TextAlign, TitleBar, WalledSides, WindowControl, WindowControls, resize_zone,
-    title_style, walled_resize_zone, window_controls_width,
+    Scheme, TextAlign, TitleBar, WalledSides, WindowButtons, WindowControl, WindowControls,
+    resize_zone, title_style, walled_resize_zone, window_controls_width,
 };
 use bande_render::{VulkanRenderer, VulkanTexture};
 use smithay::backend::allocator::Fourcc;
@@ -60,6 +60,7 @@ struct Look {
     maximizable: bool,
     alternate: bool,
     menu: Option<bool>,
+    buttons: WindowButtons,
     offset: i32,
     height: i32,
     over_content: bool,
@@ -84,6 +85,7 @@ pub(crate) struct Frame {
 #[derive(Default)]
 pub(crate) struct Decorations {
     pub(crate) scheme: Scheme,
+    pub(crate) buttons: WindowButtons,
     pointed: Option<(WlSurface, Zone)>,
     last_click: Option<(WlSurface, u32)>,
     pub(crate) announcer: Announcer,
@@ -96,6 +98,7 @@ struct Announced {
     title: String,
     fixed: bool,
     menu: bool,
+    buttons: WindowButtons,
 }
 
 fn control_label(control: WindowControl) -> String {
@@ -107,7 +110,7 @@ fn control_label(control: WindowControl) -> String {
     }
 }
 
-fn zone_at(window: &Window, location: Point<f64, Logical>) -> Option<Zone> {
+fn zone_at(window: &Window, location: Point<f64, Logical>, buttons: WindowButtons) -> Option<Zone> {
     let bar = window.title_bar_height();
     let over_content = window.controls_over_content_height();
     let height = bar.max(over_content);
@@ -124,7 +127,7 @@ fn zone_at(window: &Window, location: Point<f64, Logical>) -> Option<Zone> {
         return None;
     }
     let menu = menu_address(window.surface()).is_some();
-    match WindowControl::at(point, frame.width, height as f32, menu) {
+    match WindowControl::at(point, frame.width, height as f32, menu, buttons) {
         Some(control) => Some(Zone::Control(control)),
         None => (bar > 0).then_some(Zone::TitleBar),
     }
@@ -233,7 +236,7 @@ impl State {
                 Placed::Window(_, window) if Some(window.surface()) == dragged.as_ref() => None,
                 Placed::Window(_, window) => self
                     .walled_band(window, location)
-                    .or_else(|| zone_at(window, location))
+                    .or_else(|| zone_at(window, location, self.decorations.buttons))
                     .map(|zone| Target::Frame(window.surface().clone(), zone))
                     .or_else(|| surface_at(window.surface(), window.surface_origin(), location))
                     .or_else(|| {
@@ -429,6 +432,7 @@ impl State {
             title: toplevel_names(&surface).0,
             fixed: window.fixed_size(),
             menu: menu_address(&surface).is_some(),
+            buttons: self.decorations.buttons,
             surface,
         })
     }
@@ -448,7 +452,7 @@ impl State {
             item_role: Role::Button,
             label: focus.title.clone(),
             clickable: true,
-            entries: WindowControl::shown(focus.menu)
+            entries: WindowControl::shown(focus.menu, focus.buttons)
                 .map(|control| {
                     Entry::new(control_label(control))
                         .disabled(control == WindowControl::Maximize && focus.fixed)
@@ -466,7 +470,7 @@ impl State {
         };
         let control = entry_of(request.target_node)
             .filter(|(group, _)| *group == 0 && request.action == Action::Click)
-            .and_then(|(_, index)| WindowControl::shown(focus.menu).nth(index));
+            .and_then(|(_, index)| WindowControl::shown(focus.menu, focus.buttons).nth(index));
         let Some(index) = self.window_index(&focus.surface) else {
             return;
         };
@@ -491,6 +495,7 @@ impl State {
             .map(|window| self.screens[self.screen_of(window)].scale())
             .collect();
         let scheme = self.decorations.scheme;
+        let buttons = self.decorations.buttons;
         let palette = Palette::for_scheme(scheme);
         let context = renderer.context_id();
         let labels = self.labels.get_mut();
@@ -508,7 +513,10 @@ impl State {
                 let well = window_controls_width(menu.is_some()).ceil() as i32;
                 (String::new(), well.min(rect.size.w))
             };
-            let offset = rect.size.w - width;
+            let offset = match buttons {
+                WindowButtons::Right => rect.size.w - width,
+                WindowButtons::Left => 0,
+            };
             let look = Look {
                 title,
                 width,
@@ -521,6 +529,7 @@ impl State {
                 maximizable: !window.fixed_size(),
                 alternate,
                 menu,
+                buttons,
                 offset,
                 height,
                 over_content: bar == 0,
@@ -554,6 +563,11 @@ impl Compositor {
         self.state.refresh_materials();
         self.state.needs_redraw = true;
     }
+
+    pub fn set_window_buttons(&mut self, buttons: WindowButtons) {
+        self.state.decorations.buttons = buttons;
+        self.state.needs_redraw = true;
+    }
 }
 
 fn paint_title_bar(
@@ -575,6 +589,7 @@ fn paint_title_bar(
         maximizable: look.maximizable,
         alternate: look.alternate && look.active,
         menu_open: look.menu,
+        buttons: look.buttons,
     };
     let items = if look.over_content {
         controls.items()

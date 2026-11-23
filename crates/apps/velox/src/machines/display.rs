@@ -6,8 +6,8 @@ use bande_app::View;
 use bande_l10n::{Text, text, tr};
 use bande_toolkit::ui::{Context, Label, Ui, Widget, WidgetId};
 use bande_toolkit::{
-    Appearance, FrameRegions, HEADER_LEADING, Header, Rect, Scene, TextSystem,
-    WINDOW_HEADER_HEIGHT, Window, WindowEvent,
+    Appearance, FrameRegions, Header, HeaderInsets, Rect, Scene, TextSystem, WINDOW_HEADER_HEIGHT,
+    Window, WindowEvent,
 };
 
 use super::console::{Console, Outcome};
@@ -37,7 +37,7 @@ impl DisplayWindow {
     pub fn new(id: &str, index: u32, machine: &str, appearance: Appearance) -> Self {
         let slot = Slot::new(message(text!("Connecting to the display…")));
         let slot_id = slot.id();
-        let bar = Bar::new(Box::new(slot), Vec::new(), TOOLBAR, HEADER_LEADING);
+        let bar = Bar::new(Box::new(slot), Vec::new(), TOOLBAR, 0.0);
         let mut ui = Ui::new(
             Box::new(bar),
             Context::new(TextSystem::new(), appearance.palette()),
@@ -90,7 +90,7 @@ impl View for DisplayWindow {
             console.place(frame, window.scale());
         }
         window.set_header(Header {
-            title_x: HEADER_LEADING,
+            title_x: HeaderInsets::of(window.appearance().window_buttons).leading,
             items: Vec::new(),
             tabs: Vec::new(),
         });

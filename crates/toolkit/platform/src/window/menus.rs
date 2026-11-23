@@ -52,7 +52,7 @@ impl Window {
         items
     }
 
-    pub(super) fn open_window_menu(&mut self, at: Point) -> Result<(), WindowError> {
+    pub fn window_commands(&self) -> Vec<MenuItem> {
         let toplevel = self.state.toplevel;
         let mut items = vec![
             MenuItem::new(&tr!("Minimize"), "minimize")
@@ -92,8 +92,13 @@ impl Window {
                     .enabled(!toplevel.fullscreen),
             );
         }
+        items
+    }
+
+    pub(super) fn open_window_menu(&mut self, at: Point) -> Result<(), WindowError> {
+        let mut items = self.window_commands();
         items.extend([
-            MenuItem::new(&tr!("Move"), "move").enabled(!toplevel.fullscreen),
+            MenuItem::new(&tr!("Move"), "move").enabled(!self.state.toplevel.fullscreen),
             MenuItem::separator(),
             MenuItem::new(&tr!("Close"), "close")
                 .shortcut(&keys_of(Action::CloseWindow).unwrap_or_default()),
@@ -108,7 +113,7 @@ impl Window {
         Ok(())
     }
 
-    fn window_menu_action(&mut self, action: &str) -> Result<(), WindowError> {
+    pub fn window_command(&mut self, action: &str) -> Result<(), WindowError> {
         use bande_protocols::client::bande_app_v1::Placement;
         match action {
             "minimize" => self.minimize(),
@@ -290,7 +295,7 @@ impl Window {
             MenuOutcome::Nothing => false,
             MenuOutcome::Redraw => true,
             MenuOutcome::Activate(action) if self.window_menu => {
-                if let Err(error) = self.window_menu_action(&action) {
+                if let Err(error) = self.window_command(&action) {
                     tracing::warn!(%error, %action, "cannot perform the window menu action");
                 }
                 true

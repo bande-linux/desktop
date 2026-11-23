@@ -130,12 +130,16 @@ writes a hex value, a corner radius or a font name of its own.
   rendered region by region on the CPU) and only they are damaged on `wl_shm` buffers.
   Text input v3 and the clipboard are supported.
   - **Window frame.** A toplevel gets its frame from the toolkit, in Datum's frame and sheet:
-    the window is `chassis`, with a 48 pt header holding the title flush left in Manrope 15/20
-    bold and the window controls at the right (no separator line), and the content
+    the window is `chassis`, with a 48 pt header holding the title in Manrope 15/20
+    bold and the window controls (no separator line), and the content
     is a `sheet` inset 6 pt left, right and bottom, rounded 8 (concentric with the window's 14),
     with a `hairline` edge in dark mode. The controls are one 66×24 pill (`well`) with −, corner
-    brackets and × in `ink2`, 12 pt from the right edge, and the menu button its own 24×24
-    `well` left of it. Each control
+    brackets and × in `ink2`, 12 pt from the window's edge, and the menu button its own 24×24
+    `well` inside it. The controls sit at the right by default, or at the left
+    (`Appearance::window_buttons`, Settings ▸ Appearance ▸ Window buttons, `window-buttons` in
+    `config.kdl`): the layout mirrors, × outermost, and the title starts after the controls
+    instead of 12 pt from the edge; hit cells, the menu button's anchor and the order screen
+    readers read the buttons in mirror with it, and a change applies to open windows at once. Each control
     is its own button with the same 18 pt disc: pointing at one fades in a backfill of `ink` at
     12 % and turns its glyph `ink` (the close control a `danger` disc with an `on_danger` ×), and
     a press deepens it to 22 % (`danger` darkened by 15 %). A disabled maximize (fixed-size windows)
@@ -143,7 +147,7 @@ writes a hex value, a corner radius or a font name of its own.
     outline with `ink3` glyphs; hover and press work the same, since a click on an inactive
     window's control acts at once. The maximize glyph turns inward
     while the window is maximized; with Alt held it shows + and Alt-click enters full screen. The
-    hit cells cover the pill's full height and the close cell reaches the window's left edge.
+    hit cells cover the pill's full height and the close cell reaches the window's edge.
     Rounded corners (16 pt), the one pixel dark ring and the shadow pair are the compositor's, cut
     at the window geometry (`set_window_geometry`), so every app looks alike; only full-screen
     windows are square. They act on release inside. A drag on the header or
@@ -163,12 +167,14 @@ writes a hex value, a corner radius or a font name of its own.
     content then also covers the header (`Window::header_height` is 0 in full screen), the
     toolkit draws the title at `title_x` (clipped before the next item), presses on `items`
     (content coordinates) go to the app, and the rest of the header still moves, maximizes and
-    opens the window menu. The first item starts at `HEADER_LEADING`, the same place a plain
-    title starts. A strip or toolbar in a row below the header names its free space with
+    opens the window menu. Header items keep to `HeaderInsets::of(appearance.window_buttons)`:
+    the first starts at `leading`, the same place a plain title starts, and the last ends
+    `trailing` before the edge, so they clear the controls on either side (`HeaderInsets::WITHOUT_CONTROLS`
+    in full screen). A strip or toolbar in a row below the header names its free space with
     `Window::set_move_areas` (content coordinates), which then behaves as the header does. The header and its buttons are published to screen readers above the app's tree. Server-side frames
     for third-party apps (`compositor/src/frame.rs`) draw the same header and pill from
-    `title_bar.rs`, 40 pt high, and redraw when Alt is pressed or released so the maximize glyph
-    follows it.
+    `title_bar.rs`, 40 pt high, on the same side, and redraw when Alt is pressed or released so the
+    maximize glyph follows it.
   - **Resizing from the app.** As `NSWindow setFrame:display:animate:`,
     `Window::resize_content(size, Sizing)` gives a toplevel a new content size and makes it
     `Sizing::Fixed` (minimum and maximum size equal, no resize band or maximize) or

@@ -6,7 +6,7 @@ use std::thread;
 use std::time::Duration;
 
 use bande_bus::portal_settings::{self, APPEARANCE, BANDE_APPEARANCE, PREFER_LIGHT};
-use bande_graphics::{Accent, Appearance, Color, Contrast, Scheme, Style, TextSize};
+use bande_graphics::{Accent, Appearance, Color, Contrast, Scheme, Style, TextSize, WindowButtons};
 use zbus::blocking::Connection;
 use zbus::zvariant::OwnedValue;
 
@@ -101,6 +101,12 @@ fn apply(appearance: &mut Appearance, namespace: &str, key: &str, value: OwnedVa
         }
         (BANDE_APPEARANCE, "reduce-transparency") => {
             appearance.reduce_transparency = u32::try_from(&value).is_ok_and(|reduce| reduce != 0);
+        }
+        (BANDE_APPEARANCE, "window-buttons") => {
+            appearance.window_buttons = String::try_from(value)
+                .ok()
+                .and_then(|keyword| WindowButtons::from_keyword(&keyword))
+                .unwrap_or_default();
         }
         (BANDE_APPEARANCE, "text-size") => {
             appearance.text_size =

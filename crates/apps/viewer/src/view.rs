@@ -14,8 +14,8 @@ use bande_toolkit::ui::{
     Ui, WidgetId,
 };
 use bande_toolkit::{
-    Appearance, FrameRegions, HEADER_LEADING, HEADER_TRAILING, Header, Image, Radius, Rect,
-    SHEET_INSET, Scene, TextSystem, Transfer, WINDOW_HEADER_HEIGHT, Window, WindowEvent,
+    Appearance, FrameRegions, Header, HeaderInsets, Image, Radius, Rect, SHEET_INSET, Scene,
+    TextSystem, Transfer, WINDOW_HEADER_HEIGHT, Window, WindowButtons, WindowEvent,
 };
 
 use crate::canvas::{Canvas, Orientation, Zoom};
@@ -145,6 +145,7 @@ pub struct FileView {
     slideshow: Option<Instant>,
     hidden: bool,
     full_screen: bool,
+    window_buttons: WindowButtons,
     requests: Vec<Request>,
     drop: FileDrop,
 }
@@ -239,6 +240,7 @@ impl FileView {
             slideshow: None,
             hidden: false,
             full_screen: false,
+            window_buttons: WindowButtons::default(),
             requests: Vec::new(),
             drop: FileDrop::default(),
         };
@@ -1134,20 +1136,24 @@ impl FileView {
         )
     }
 
+    fn header_insets(&self) -> HeaderInsets {
+        match self.full_screen {
+            true => HeaderInsets::WITHOUT_CONTROLS,
+            false => HeaderInsets::of(self.window_buttons),
+        }
+    }
+
     fn tool_frames(&self, width: f32) -> Vec<(WidgetId, Rect)> {
+        let insets = self.header_insets();
         let middle = ((TOOLBAR_HEIGHT - SYMBOL_BUTTON) / 2.0).round();
         let mut frames = vec![(
             self.toolbar.sidebar,
-            Rect::new(HEADER_LEADING, middle, SYMBOL_BUTTON, SYMBOL_BUTTON),
+            Rect::new(insets.leading, middle, SYMBOL_BUTTON, SYMBOL_BUTTON),
         )];
         let searching = self.is_document();
         let search_room = if searching { SEARCH_WIDTH + SIDE } else { 0.0 };
         let count = self.toolbar.tools.len() as f32;
-        let right = width
-            - match self.full_screen {
-                true => HEADER_LEADING,
-                false => HEADER_TRAILING,
-            };
+        let right = width - insets.trailing;
         let mut x = right - search_room - count * SYMBOL_BUTTON - (count - 1.0) * GAP;
         for id in self.toolbar.tools {
             frames.push((id, Rect::new(x, middle, SYMBOL_BUTTON, SYMBOL_BUTTON)));
@@ -1168,9 +1174,10 @@ impl FileView {
 
     pub fn header(&self, width: f32) -> Header {
         let frames = self.tool_frames(width);
+        let after_button = self.header_insets().leading + SYMBOL_BUTTON + TITLE_GAP;
         let title_x = match self.sidebar_visible() {
-            true => SIDEBAR_WIDTH + TITLE_GAP,
-            false => HEADER_LEADING + SYMBOL_BUTTON + TITLE_GAP,
+            true => (SIDEBAR_WIDTH + TITLE_GAP).max(after_button),
+            false => after_button,
         };
         Header {
             title_x,
@@ -1432,6 +1439,7 @@ impl View for FileView {
     }
 
     fn set_appearance(&mut self, appearance: Appearance) {
+        self.window_buttons = appearance.window_buttons;
         self.ui.set_appearance(appearance);
     }
 

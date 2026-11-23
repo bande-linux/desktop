@@ -22,18 +22,6 @@ msgstr "Visa alla appar"
 msgid "Quit {app}"
 msgstr "Avsluta {app}"
 
-msgid "Exit Full Screen"
-msgstr "Avsluta helskärmsläge"
-
-msgid "Enter Full Screen"
-msgstr "Helskärmsläge"
-
-msgid "Minimize"
-msgstr "Minimera"
-
-msgid "Maximize"
-msgstr "Maximera"
-
 msgid "Window"
 msgstr "Fönster"
 

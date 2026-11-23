@@ -240,10 +240,13 @@ dialog that cannot start fails the request with response 2.
   for dark (the default, what clients assume until the portal answers) and 2 for light
   (Automatic is dark from sunset to sunrise at the time zone's main city, 19:00 to 07:00 when it
   is unknown), `accent-color` the exact Datum colour, `contrast`. `org.bande.appearance` carries
-  `frame-tint` and `text-size` for the toolkit. `org.gnome.desktop.interface` serves the icon
+  `frame-tint`, `text-size` and `window-buttons` (`left` or `right`) for the toolkit and the
+  compositor. `org.gnome.desktop.interface` serves the icon
   theme, fonts, cursor and animations, `org.gnome.desktop.sound` `event-sounds`, and
-  `org.gnome.desktop.wm.preferences` `button-layout` `:minimize,maximize,close`, so GTK,
-  libadwaita, Firefox and Qt put their window controls on the right in Bande's order.
+  `org.gnome.desktop.wm.preferences` `button-layout` from `window-buttons`
+  (`:minimize,maximize,close`, or `close,maximize,minimize:` on the left), so GTK, libadwaita,
+  Firefox and Qt put their window controls on the same side in Bande's order and move them when
+  it changes.
 - Not implemented: InputCapture, RemoteDesktop, Clipboard and Usb; Lockdown is
   the frontend's default (nothing locked down).
 

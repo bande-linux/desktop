@@ -895,6 +895,7 @@ impl Window {
                 .as_ref()
                 .is_some_and(|chrome| chrome.header.is_some()),
             menu: self.chrome.as_ref().is_some_and(|chrome| chrome.menu),
+            buttons: self.appearance().window_buttons,
             width: width as f32,
             height: height as f32,
         }
@@ -1153,8 +1154,12 @@ impl Window {
         if let Some((_, keep)) = kept_on_top
             .into_iter()
             .rfind(|(toplevel, _)| *toplevel == own)
+            && self.keep_on_top != keep
         {
             self.keep_on_top = keep;
+            self.state
+                .events
+                .push(WindowEvent::ToplevelChanged(self.state.toplevel));
         }
     }
 

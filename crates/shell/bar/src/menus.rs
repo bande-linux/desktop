@@ -354,65 +354,49 @@ pub fn app_menu(node: &Node, item: &str) -> Menu {
 pub struct AppMenus<'a> {
     pub name: &'a str,
     pub root: Option<&'a Node>,
+    pub laid_out: bool,
     pub item: &'a str,
     pub actions: &'a [(String, String)],
     pub windows: &'a [(String, String)],
 }
 
-fn standard_app_menu(name: &str) -> Menu {
-    Menu::new(vec![
-        MenuItem::new(&tr!("About {app}", app = name), "").enabled(false),
-        MenuItem::separator(),
+fn app_items(name: &str) -> [MenuItem; 5] {
+    [
         item(&tr!("Hide {app}", app = name), &Command::HideApp),
         item(&tr!("Hide Other Apps"), &Command::HideOthers),
         item(&tr!("Show All Apps"), &Command::ShowAll),
         MenuItem::separator(),
         item(&tr!("Quit {app}", app = name), &Command::QuitApp).shortcut("Ctrl+Q"),
-    ])
+    ]
 }
 
 pub fn cascade(menus: &AppMenus<'_>) -> Menu {
-    let exported = menus
-        .root
-        .and_then(|root| root.children.first())
-        .filter(|node| !node.children.is_empty());
-    let app_row = match exported {
-        Some(node) => app_menu(node, menus.item),
-        None => standard_app_menu(menus.name),
-    };
-    let mut items = vec![MenuItem::submenu(menus.name, app_row).strong()];
-    match menus.root {
-        Some(root) => {
-            for child in root
-                .children
-                .iter()
-                .skip(1)
-                .filter(|child| child.visible && !child.separator)
-            {
-                items.push(if child.children.is_empty() {
-                    MenuItem::new(&child.label, &command(child, menus.item).action())
-                        .enabled(child.enabled)
-                } else {
-                    MenuItem::submenu(&child.label, app_menu(child, menus.item))
-                        .enabled(child.enabled)
-                });
+    let mut items =
+        match menus.root {
+            Some(root) if menus.laid_out => {
+                return app_menu(root, menus.item)
+                    .searchable(&tr!("Type to search"), &tr!("No Results"));
             }
-        }
-        None => {
-            if !menus.actions.is_empty() {
-                items.push(MenuItem::separator());
+            Some(root) => app_menu(root, menus.item).items,
+            None => {
+                let mut items: Vec<MenuItem> = menus
+                    .actions
+                    .iter()
+                    .map(|(id, title)| item(title, &Command::AppAction(id.clone())))
+                    .collect();
+                if !items.is_empty() && !menus.windows.is_empty() {
+                    items.push(MenuItem::separator());
+                }
+                items.extend(menus.windows.iter().map(|(identifier, title)| {
+                    item(title, &Command::ShowWindow(identifier.clone()))
+                }));
+                items
             }
-            for (id, title) in menus.actions {
-                items.push(item(title, &Command::AppAction(id.clone())));
-            }
-            if !menus.windows.is_empty() {
-                items.push(MenuItem::separator());
-            }
-            for (identifier, title) in menus.windows {
-                items.push(item(title, &Command::ShowWindow(identifier.clone())));
-            }
-        }
+        };
+    if !items.is_empty() {
+        items.push(MenuItem::separator());
     }
+    items.extend(app_items(menus.name));
     Menu::new(items).searchable(&tr!("Type to search"), &tr!("No Results"))
 }
 

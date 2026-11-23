@@ -3,7 +3,7 @@ use bande_toolkit::ui::{
     BUTTON_HEIGHT, Button, FreeLayout, SEGMENTED_HEIGHT, SearchField, SegmentedControl,
     TEXT_FIELD_HEIGHT, WidgetId,
 };
-use bande_toolkit::{HEADER_LEADING, HEADER_TRAILING, Image, Rect, WINDOW_HEADER_HEIGHT};
+use bande_toolkit::{HeaderInsets, Image, Rect, WINDOW_HEADER_HEIGHT};
 
 use super::{Mode, Signal, Signals, sender};
 
@@ -27,6 +27,7 @@ pub struct Toolbar {
     pub modes: WidgetId,
     pub search: WidgetId,
     pub add_account: WidgetId,
+    pub insets: HeaderInsets,
 }
 
 fn symbol(svg: &str, label: &str, on_click: impl FnMut() + 'static) -> Button {
@@ -90,17 +91,18 @@ impl Toolbar {
             modes,
             search,
             add_account,
+            insets: HeaderInsets::default(),
         }
     }
 
     pub fn title_x(&self) -> f32 {
-        HEADER_LEADING + SYMBOL_BUTTON + 2.0 * GAP
+        self.insets.leading + SYMBOL_BUTTON + 2.0 * GAP
     }
 
     pub fn frames(&self, width: f32) -> [(WidgetId, Rect); 6] {
         let middle = |height: f32| ((TOOLBAR_HEIGHT - height) / 2.0).round();
         let search = Rect::new(
-            width - HEADER_TRAILING - SEARCH_WIDTH,
+            width - self.insets.trailing - SEARCH_WIDTH,
             middle(TEXT_FIELD_HEIGHT),
             SEARCH_WIDTH,
             TEXT_FIELD_HEIGHT,
@@ -131,7 +133,7 @@ impl Toolbar {
             SYMBOL_BUTTON,
         );
         let add = Rect::new(
-            HEADER_LEADING,
+            self.insets.leading,
             middle(SYMBOL_BUTTON),
             SYMBOL_BUTTON,
             SYMBOL_BUTTON,

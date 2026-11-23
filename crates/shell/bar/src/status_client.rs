@@ -27,7 +27,7 @@ use bande_status::gtkmenu;
 use bande_status::hub::StatusHub;
 use bande_status::session::full_name;
 use bande_status::status::{InputSource, InputSources, Reading};
-use bande_status::tray::{Errand, TrayIcon, TrayItem};
+use bande_status::tray::{Errand, TrayIcon, TrayItem, is_bande_app_menu};
 use bande_status::unread::{ClockMark, set_do_not_disturb};
 use bande_status::{Command, Update};
 use bande_toolkit::ui::{Event, Menu, MenuItem, PointerButton};
@@ -318,6 +318,7 @@ impl StatusClient {
         cascade(&AppMenus {
             name: self.bar.app(),
             root: self.app_root.as_ref(),
+            laid_out: is_bande_app_menu(&self.menu_key),
             item: &self.menu_key,
             actions: &actions,
             windows: &windows,

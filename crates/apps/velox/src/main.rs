@@ -1057,11 +1057,12 @@ impl Program for Velox {
             })
             .collect();
         sections.push(Entry::separator());
-        sections.push(Entry::item(&tr!("Find"), FIND).shortcut("Ctrl+F"));
+        sections.push(Entry::item(&tr!("Find"), FIND).shortcut("Ctrl+F").primary());
         sections.push(
             Entry::item(&tr!("Command Palette…"), PALETTE)
                 .shortcut("Ctrl+K")
-                .enabled(ready),
+                .enabled(ready)
+                .primary(),
         );
         sections.extend(view.map(VeloxView::view_entries).unwrap_or_default());
         let pane = view.and_then(VeloxView::resource_menu).unwrap_or_else(|| {

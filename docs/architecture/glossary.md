@@ -7,8 +7,8 @@ the part today.
 | :--- | :--- | :--- |
 | Taskbar | The whole bar on the chosen edge (left, bottom, right or top) of every display, holding everything below | crate `bande-bar`, `BarClient`, `TaskbarView`, `StatusClient`, `Taskbar`, layer namespace `bar` |
 | Bande menu | The logo at the start of the bar (top, or left on a horizontal bar): a click opens Search, a right click the Bande menu (About, Settings…, Force Quit…, Sleep, Restart…, Shut Down…, Lock Screen, Log Out) | `Slot::BandeMenu`, `Slot::Search`, `Symbol::Logo`, `system_menu` |
-| Menu button | The ⋮ left of a window's minimize, maximize and close controls, in Bande apps' title bars and in the compositor's bar of third-party windows that export menus; it opens the App menu below it | `WindowControl::Menu`, `show_app_menu` |
-| App menu | The cascade the menu button opens: the "Type to search" field, the app row, then File, Edit, View… | `menus::cascade` |
+| Menu button | The ⋮ beside a window's minimize, maximize and close controls, on the side the person chose, in Bande apps' title bars and in the compositor's bar of third-party windows that export menus; it opens the App menu below it | `WindowControl::Menu`, `show_app_menu` |
+| App menu | The cascade the menu button opens: the "Type to search" field, the app's primary commands, its menus as submenus (File, Edit, View…, Window), then Settings…, About and Quit | `menus::cascade`, `bande_app::menus::assemble` |
 | Search | The centred card on a tap of Super: apps, settings, files, calculator; also Clipboard History (Super+V) and Emoji & Symbols (Super+.) | crate `bande-launcher`, `Action::ShowLauncher` |
 | Taskbar icons | The app icons of the Taskbar: kept apps, a hairline, running apps, then the Trash | `Taskbar`, `TaskbarLayout` |
 | Kept apps / running apps | The two groups of the Taskbar icons: apps kept in the Taskbar, and running apps that are not | `kept`, `running` |

@@ -1,9 +1,12 @@
 use bande_app_menu::{
-    Entry, FULL_SCREEN, Standard, app_submenu, close_window, settings, window_submenu,
+    Entry, FULL_SCREEN, Standard, WINDOW_ACTION, about_item, close_window, hide_items, quit_item,
+    settings, take_primary, tidy, window_submenu,
 };
-use bande_toolkit::ui::{Event, shortcut_pressed};
+use bande_toolkit::ui::{Event, MenuItem, MenuToggle, shortcut_pressed};
 
 use crate::{Info, Keys, Menus};
+
+const PRIMARY_LIMIT: usize = 5;
 
 impl Keys {
     fn close(self) -> &'static str {
@@ -41,22 +44,55 @@ impl Keys {
     }
 }
 
+fn window_entry(item: MenuItem) -> Entry {
+    if item.separator {
+        return Entry::separator();
+    }
+    let entry = match item.submenu {
+        Some(menu) => Entry::submenu(
+            &item.title,
+            menu.items.into_iter().map(window_entry).collect(),
+        ),
+        None => Entry::item(&item.title, &format!("{WINDOW_ACTION}{}", item.action)),
+    }
+    .enabled(item.enabled);
+    let entry = match item.shortcut.filter(|shortcut| !shortcut.is_empty()) {
+        Some(shortcut) => entry.shortcut(&shortcut),
+        None => entry,
+    };
+    match item.toggle {
+        Some(MenuToggle::Check(on)) => entry.check(on),
+        Some(MenuToggle::Radio(on)) => entry.radio(on),
+        None => entry,
+    }
+}
+
 pub(crate) fn assemble(
     info: &Info,
     menus: Menus,
     windowed: bool,
-    (maximizable, full_screen): (bool, Option<bool>),
+    commands: Vec<MenuItem>,
 ) -> Vec<Entry> {
     let name = (info.name)();
-    let items = match info.settings {
-        Some(_) => vec![settings(info.keys.settings())],
-        None => Vec::new(),
-    };
-    let mut entries = vec![app_submenu(&name, info.version, items, info.keys.quit())];
-    entries.extend(menus.menus);
-    let mut window = vec![close_window(info.keys.close())];
+    let (primary, headings) = take_primary(menus.menus, PRIMARY_LIMIT);
+    let mut window: Vec<Entry> = commands.into_iter().map(window_entry).collect();
+    window.push(Entry::separator());
     window.extend(menus.window);
-    entries.push(window_submenu(window, maximizable, full_screen));
+    window.push(Entry::separator());
+    window.push(close_window(info.keys.close()));
+    window.push(Entry::separator());
+    window.extend(hide_items(&name));
+    let mut entries = primary;
+    entries.push(Entry::separator());
+    entries.extend(headings);
+    entries.push(window_submenu(window));
+    entries.push(Entry::separator());
+    if info.settings.is_some() {
+        entries.push(settings(info.keys.settings()));
+    }
+    entries.push(about_item(&name, info.version));
+    entries.push(quit_item(&name, info.keys.quit()));
+    let entries = tidy(entries);
     match windowed {
         true => entries,
         false => entries.into_iter().map(Entry::without_window).collect(),

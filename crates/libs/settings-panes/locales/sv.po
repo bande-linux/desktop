@@ -457,6 +457,20 @@ msgstr "Belyst av skrivbordsbild"
 msgid "Glass"
 msgstr "Glas"
 
+msgid "Window buttons"
+msgstr "Fönsterknappar"
+
+msgid "close, minimize, maximize, title bar, controls, left, right"
+msgstr "stäng, minimera, maximera, namnlist, titelrad, knappar, vänster, höger"
+
+msgctxt "window buttons"
+msgid "Left"
+msgstr "Vänster"
+
+msgctxt "window buttons"
+msgid "Right"
+msgstr "Höger"
+
 msgid "Accent color"
 msgstr "Dekorfärg"
 

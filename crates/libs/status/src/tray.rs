@@ -12,7 +12,7 @@ use zbus::zvariant::{OwnedObjectPath, Value};
 use zbus::{MatchRule, Message, message};
 
 use crate::Update;
-use crate::dbusmenu::{APP_MENU_PATH, DBusMenu, Node, find, tree, with_app_row};
+use crate::dbusmenu::{APP_MENU_PATH, DBusMenu, Node, find, tree};
 use crate::gtkmenu::{self, ACTIONS_INTERFACE, Importer, MENUS_INTERFACE};
 
 const ITEM_INTERFACE: &str = "org.kde.StatusNotifierItem";
@@ -342,6 +342,10 @@ pub fn run_errands(connection: &Connection, errands: &Receiver<Errand>, outbox: 
     }
 }
 
+pub fn is_bande_app_menu(menu: &str) -> bool {
+    !gtkmenu::is_gtk(menu) && split(menu).1 == APP_MENU_PATH
+}
+
 fn app_menu(connection: &Connection, gtk: &mut Importer, menu: &str) -> Option<Node> {
     if gtkmenu::is_gtk(menu) {
         return gtk
@@ -349,22 +353,18 @@ fn app_menu(connection: &Connection, gtk: &mut Importer, menu: &str) -> Option<N
             .inspect_err(|error| tracing::warn!("cannot read the app menu {menu}: {error}"))
             .ok();
     }
-    let (service, path) = split(menu);
+    let (service, _) = split(menu);
     let running = BusName::try_from(service).is_ok_and(|name| {
         DBusProxy::new(connection)
             .and_then(|bus| Ok(bus.name_has_owner(name)?))
             .inspect_err(|error| tracing::warn!("cannot tell whether {service} runs: {error}"))
             .unwrap_or(false)
     });
-    let root = running
+    running
         .then(|| dbus_menu(connection, menu).and_then(|proxy| proxy.get_layout(0, -1, &[])))?
         .inspect_err(|error| tracing::warn!("cannot read the app menu {menu}: {error}"))
         .ok()
-        .map(|(_, root)| tree(root))?;
-    Some(match path == APP_MENU_PATH {
-        true => root,
-        false => with_app_row(root),
-    })
+        .map(|(_, root)| tree(root))
 }
 
 fn run_errand(

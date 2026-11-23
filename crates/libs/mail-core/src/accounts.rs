@@ -22,11 +22,8 @@ CREATE TABLE IF NOT EXISTS accounts (
     smtp_port INTEGER NOT NULL,
     smtp_security TEXT NOT NULL,
     signature TEXT NOT NULL DEFAULT '',
-    enabled INTEGER NOT NULL DEFAULT 1
-);
-CREATE TABLE IF NOT EXISTS account_descriptions (
-    account INTEGER PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
-    description TEXT NOT NULL
+    enabled INTEGER NOT NULL DEFAULT 1,
+    description TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS notes_accounts (
     account INTEGER PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE
@@ -114,8 +111,7 @@ fn account_from(row: &Row<'_>) -> rusqlite::Result<Account> {
 pub fn list(connection: &Connection) -> Result<Vec<Account>> {
     let mut statement = connection.prepare(
         "SELECT id, name, email, user, imap_host, imap_port, imap_security, \
-         smtp_host, smtp_port, smtp_security, signature, enabled, \
-         COALESCE((SELECT description FROM account_descriptions WHERE account = accounts.id), '') \
+         smtp_host, smtp_port, smtp_security, signature, enabled, description \
          FROM accounts ORDER BY id",
     )?;
     let accounts = statement
@@ -127,8 +123,8 @@ pub fn list(connection: &Connection) -> Result<Vec<Account>> {
 pub fn add(connection: &Connection, account: &Account) -> Result<AccountId> {
     connection.execute(
         "INSERT INTO accounts (name, email, user, imap_host, imap_port, imap_security, \
-         smtp_host, smtp_port, smtp_security, signature) \
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+         smtp_host, smtp_port, smtp_security, signature, description) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
         params![
             account.name,
             account.email,
@@ -140,11 +136,10 @@ pub fn add(connection: &Connection, account: &Account) -> Result<AccountId> {
             account.smtp.port,
             account.smtp.security.name(),
             account.signature,
+            account.description.trim(),
         ],
     )?;
-    let id = connection.last_insert_rowid();
-    set_description(connection, id, &account.description)?;
-    Ok(id)
+    Ok(connection.last_insert_rowid())
 }
 
 pub fn set_description(
@@ -152,17 +147,10 @@ pub fn set_description(
     account: AccountId,
     description: &str,
 ) -> Result<()> {
-    match description.trim() {
-        "" => connection.execute(
-            "DELETE FROM account_descriptions WHERE account = ?1",
-            [account],
-        )?,
-        description => connection.execute(
-            "INSERT INTO account_descriptions (account, description) VALUES (?1, ?2) \
-             ON CONFLICT (account) DO UPDATE SET description = excluded.description",
-            params![account, description],
-        )?,
-    };
+    connection.execute(
+        "UPDATE accounts SET description = ?2 WHERE id = ?1",
+        params![account, description.trim()],
+    )?;
     Ok(())
 }
 

@@ -898,7 +898,7 @@ impl ComposeView {
     pub fn handle(&mut self, event: &Event) -> bool {
         if SHORTCUTS
             .iter()
-            .any(|(action, shortcut)| *action == "send" && shortcut_pressed(event, shortcut))
+            .any(|(action, shortcut, _)| *action == "send" && shortcut_pressed(event, shortcut))
             && !self.ui.has_sheet()
         {
             self.try_send();

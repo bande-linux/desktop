@@ -273,6 +273,7 @@ impl MessageView {
                 summary,
                 reading: Some(reading),
                 quotes: false,
+                mine: false,
             }],
             focus: MESSAGE,
             reveal: self.reader.thread.is_none(),

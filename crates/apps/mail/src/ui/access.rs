@@ -160,6 +160,9 @@ impl MailView {
     }
 
     fn describe_sidebar(&self, tree: &mut TreeUpdate) -> Option<NodeId> {
+        if self.sidebar_frame().width <= 0.0 {
+            return None;
+        }
         let mut children = Vec::new();
         for (index, row) in self.sidebar.iter().enumerate() {
             let (node, bounds) = match row {
@@ -167,6 +170,10 @@ impl MailView {
                     let mut node = Node::new(Role::Heading);
                     node.set_label(title.as_str());
                     node.set_level(2);
+                    if let Some(account) = account {
+                        node.set_expanded(!self.collapsed.contains(account));
+                        node.add_action(Action::Click);
+                    }
                     let offline = account.filter(|account| self.offline(*account));
                     if let Some(account) = offline {
                         let mut button = clickable(Role::Button, &tr!("Offline"));
@@ -179,7 +186,9 @@ impl MailView {
                                 .collect::<Vec<_>>(),
                         );
                     }
-                    (node, None)
+                    let bounds = account
+                        .and_then(|account| self.bounds_of(|hit| *hit == Hit::Section(account)));
+                    (node, bounds)
                 }
                 Row::Place {
                     place,
@@ -241,6 +250,9 @@ impl MailView {
     }
 
     fn describe_list(&self, tree: &mut TreeUpdate) -> Option<NodeId> {
+        if self.list_frame().width <= 0.0 {
+            return None;
+        }
         let now = self.now.unwrap_or_else(Timestamp::now);
         let mut children = Vec::new();
         let shown = self
@@ -339,8 +351,14 @@ impl MailView {
             Part::List => self.focus = Pane::List,
             Part::Reader => self.focus = Pane::Reader,
             Part::Place(index) => {
-                let Some(Row::Place { place, .. }) = self.sidebar.get(index).cloned() else {
-                    return Some(false);
+                let place = match self.sidebar.get(index).cloned() {
+                    Some(Row::Place { place, .. }) => place,
+                    Some(Row::Heading(_, Some(account))) if request.action == Action::Click => {
+                        self.focus = Pane::Sidebar;
+                        self.toggle_section(account);
+                        return Some(true);
+                    }
+                    _ => return Some(false),
                 };
                 self.focus = Pane::Sidebar;
                 if place != self.place {

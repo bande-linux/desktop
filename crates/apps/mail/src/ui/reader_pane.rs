@@ -605,10 +605,7 @@ impl ReaderPane {
             Target::Card(_) => return None,
             Target::Expand(id) => {
                 let entry = thread.entry(*id)?;
-                let sender = match entry.summary.sender.shown() {
-                    "" => tr!("No Sender"),
-                    shown => shown.to_owned(),
-                };
+                let sender = entry.sender_shown(&entry.summary.sender);
                 (
                     Role::Button,
                     tr!("Show Message from {sender}", sender = sender),
@@ -665,10 +662,7 @@ impl ReaderPane {
             let Some(reading) = &entry.reading else {
                 continue;
             };
-            let sender = match reading.content.envelope.sender().shown() {
-                "" => tr!("No Sender"),
-                shown => shown.to_owned(),
-            };
+            let sender = entry.sender_shown(&reading.content.envelope.sender());
             let date = reading
                 .content
                 .envelope

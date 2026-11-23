@@ -4,11 +4,12 @@ use std::rc::Rc;
 use bande_l10n::tr;
 
 use crate::discover::Settings;
+use crate::guide::Options;
 use crate::net::{Security, Server};
-use accesskit::{Node, Role};
+use accesskit::{Live, Node, Role};
 use bande_toolkit::ui::{
-    Button, CheckState, Checkbox, Context, PopUpButton, SPINNER_SIZE, SecureField, Size, Spinner,
-    TextField, Widget, WidgetId,
+    Animated, Button, CheckState, Checkbox, Context, PopUpButton, SPINNER_SIZE, SecureField, Size,
+    Spinner, Spring, TextField, Widget, WidgetId,
 };
 use bande_toolkit::{
     Color, ControlSize, Image, Item, Paragraph, Path, Point, Rect, Shape, TextAlign, TextRole,
@@ -33,6 +34,7 @@ const BUTTON_SPACING: f32 = 8.0;
 const BUTTON_MIN_WIDTH: f32 = 96.0;
 const MARK_GAP: f32 = 8.0;
 const FIELD_FONT: f32 = 13.0;
+const SHAKE_NUDGE: f32 = 8.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Field {
@@ -126,13 +128,13 @@ impl Mode {
         }
     }
 
-    fn other(&self) -> Option<String> {
+    fn other(&self, server_settings: bool) -> Option<String> {
         match self {
             Self::Address => Some(tr!("Set Up Manually…")),
             Self::Confirm(_) => Some(tr!("Change Settings…")),
             Self::Servers => Some(tr!("Back")),
-            Self::Password(_) => Some(tr!("Server Settings…")),
-            Self::Checking | Self::Added(_) => None,
+            Self::Password(_) if server_settings => Some(tr!("Server Settings…")),
+            Self::Password(_) | Self::Checking | Self::Added(_) => None,
         }
     }
 
@@ -170,10 +172,7 @@ impl Mode {
             ),
             Self::Added(email) => (
                 tr!("Account Added"),
-                tr!(
-                    "{email} is ready. Mail is downloading your mail; you can start reading now.",
-                    email = email.clone()
-                ),
+                tr!("{email} is ready.", email = email.clone()),
             ),
             Self::Password(email) => (
                 tr!("Enter Your Password"),
@@ -207,7 +206,6 @@ pub enum Progress {
     Waiting,
     Running,
     Done,
-    Failed,
 }
 
 #[derive(Default)]
@@ -218,6 +216,7 @@ pub struct SheetState {
     pub lines: Vec<(String, Option<Progress>)>,
     pub problem: Option<(Field, String)>,
     pub status: Option<(String, bool)>,
+    pub shake: bool,
     pub closed: bool,
 }
 
@@ -334,19 +333,37 @@ pub struct AccountSheet {
     mode: Mode,
     inline: bool,
     icon: Option<Image>,
+    other: bool,
     laid: Laid,
     spinning: bool,
+    shake: Animated,
     size: Size,
     frame: Rect,
 }
 
+fn spoken_label(field: Field) -> String {
+    field.label().trim_end_matches([':', ' ']).to_owned()
+}
+
+fn problem_at(state: &SheetState, field: Field) -> Option<String> {
+    state
+        .problem
+        .as_ref()
+        .filter(|(known, _)| *known == field)
+        .map(|(_, problem)| problem.clone())
+}
+
 fn text_field(state: &Shared, field: Field) -> TextField {
     let shared = Rc::clone(state);
-    let value = state.borrow().value(field);
+    let (value, problem) = {
+        let state = state.borrow();
+        (state.value(field), problem_at(&state, field))
+    };
     TextField::new(&field.placeholder(), &value, move |text| {
         shared.borrow_mut().set(field, text);
     })
     .without_text_checking()
+    .named(&spoken_label(field), problem.as_deref())
 }
 
 fn security_choice(state: &Shared, field: Field) -> PopUpButton {
@@ -401,19 +418,6 @@ fn paint_mark(cx: &Context, at: Point, progress: Progress, items: &mut Vec<Item>
             width: 2.0,
             paint: cx.palette.success.into(),
         }),
-        Progress::Failed => {
-            for (from, to) in [
-                (point(0.22, 0.22), point(0.78, 0.78)),
-                (point(0.78, 0.22), point(0.22, 0.78)),
-            ] {
-                items.push(Item::Line {
-                    from,
-                    to,
-                    width: 2.0,
-                    paint: cx.palette.danger_text.into(),
-                });
-            }
-        }
         Progress::Running => {}
     }
 }
@@ -428,24 +432,28 @@ fn body(cx: &mut Context, text: &str, role: TextRole, color: Color, width: f32) 
 }
 
 impl AccountSheet {
-    pub fn new(state: Shared, mode: Mode, icon: &[u8], offer_notes: bool, inline: bool) -> Self {
-        let fields = mode.fields(offer_notes);
+    pub fn new(state: Shared, mode: Mode, options: &Options, inline: bool) -> Self {
+        let shake = std::mem::take(&mut state.borrow_mut().shake);
+        let fields = mode.fields(options.offer_notes);
+        let other = mode.other(options.server_settings);
         let mut children: Vec<Box<dyn Widget>> = Vec::new();
         for field in &fields {
             let child: Box<dyn Widget> = match field {
                 Field::Password => {
                     let shared = Rc::clone(&state);
-                    Box::new(SecureField::new(
-                        &field.placeholder(),
-                        FIELD_FONT,
-                        move |secret| {
+                    let (kept, problem) = {
+                        let state = state.borrow();
+                        (state.password.clone(), problem_at(&state, *field))
+                    };
+                    Box::new(
+                        SecureField::new(&field.placeholder(), FIELD_FONT, move |secret| {
                             let mut state = shared.borrow_mut();
-                            if !secret.is_empty() {
-                                state.password = Zeroizing::new(secret.to_owned());
-                            }
+                            state.password = Zeroizing::new(secret.to_owned());
                             state.action = Some(Action::Primary);
-                        },
-                    ))
+                        })
+                        .with_secret(&kept)
+                        .named(&spoken_label(*field), problem.as_deref()),
+                    )
                 }
                 Field::IncomingSecurity | Field::OutgoingSecurity => {
                     Box::new(security_choice(&state, *field))
@@ -458,9 +466,9 @@ impl AccountSheet {
         let spinner = children.len();
         children.push(Box::new(Spinner::new(&tr!("Checking the account…"))));
         let mut buttons = Vec::new();
-        if let Some(other) = mode.other() {
+        if let Some(other) = &other {
             buttons.push(children.len());
-            children.push(Box::new(action_button(&state, &other, Action::Other)));
+            children.push(Box::new(action_button(&state, other, Action::Other)));
         }
         if mode.cancels(inline) {
             buttons.push(children.len());
@@ -483,9 +491,14 @@ impl AccountSheet {
             buttons,
             mode,
             inline,
-            icon: Image::from_svg(icon, 96, 96),
+            icon: Image::from_svg(options.icon, 96, 96),
+            other: other.is_some(),
             laid: Laid::default(),
             spinning: false,
+            shake: Animated::points(match shake {
+                true => SHAKE_NUDGE,
+                false => 0.0,
+            }),
             size: Size::default(),
             frame: Rect::default(),
         }
@@ -525,6 +538,9 @@ impl Widget for AccountSheet {
         let field_x = PADDING + LABEL_WIDTH + LABEL_GAP;
         let field_width = width - PADDING - field_x;
         let control = cx.control_height(ControlSize::Regular);
+        if self.shake.target() != 0.0 {
+            cx.animate(&mut self.shake, 0.0, Spring::SHAKE);
+        }
         let state = Rc::clone(&self.state);
         let state = state.borrow();
         let mut laid = Laid::default();
@@ -613,7 +629,6 @@ impl Widget for AccountSheet {
             };
             let color = match progress {
                 Some(Progress::Waiting) => cx.palette.ink3,
-                Some(Progress::Failed) => cx.palette.danger_text,
                 _ => cx.palette.ink,
             };
             let line = body(cx, text, TextRole::Body, color, lines_width - indent);
@@ -656,7 +671,7 @@ impl Widget for AccountSheet {
         y += SECTION_GAP - LINE_GAP;
 
         let mut right = width - PADDING;
-        let has_other = self.mode.other().is_some();
+        let has_other = self.other;
         for (order, index) in self.buttons.iter().enumerate().rev() {
             let size = Size::new(sizes[*index].width.max(BUTTON_MIN_WIDTH), control);
             let x = match order == 0 && has_other {
@@ -693,14 +708,31 @@ impl Widget for AccountSheet {
             false => frame,
         };
         let (x, y) = (self.frame.x, self.frame.y);
-        for slot in &self.laid.slots {
-            let rect = Rect::new(
-                x + slot.rect.x,
-                y + slot.rect.y,
-                slot.rect.width,
-                slot.rect.height,
-            );
-            self.children[slot.child].place(cx, rect);
+        let shaken = self
+            .state
+            .borrow()
+            .problem
+            .as_ref()
+            .map(|(field, _)| *field);
+        let nudge = cx.sample(&self.shake);
+        for index in 0..self.children.len() {
+            let rect = match self.laid.slots.iter().find(|slot| slot.child == index) {
+                Some(slot) => {
+                    let moved = match shaken.is_some() && self.fields.get(index) == shaken.as_ref()
+                    {
+                        true => nudge,
+                        false => 0.0,
+                    };
+                    Rect::new(
+                        x + slot.rect.x + moved,
+                        y + slot.rect.y,
+                        slot.rect.width,
+                        slot.rect.height,
+                    )
+                }
+                None => Rect::default(),
+            };
+            self.children[index].place(cx, rect);
         }
     }
 
@@ -743,6 +775,7 @@ impl Widget for AccountSheet {
             }
         };
         node.set_label(title);
+        node.set_live(Live::Polite);
         let state = self.state.borrow();
         let details = std::iter::once(message)
             .chain(state.lines.iter().map(|(line, _)| line.clone()))
@@ -755,6 +788,10 @@ impl Widget for AccountSheet {
 
     fn dismissed(&self) -> bool {
         self.state.borrow().closed
+    }
+
+    fn shows_child(&self, index: usize) -> bool {
+        index != self.spinner || self.spinning
     }
 
     fn children(&self) -> &[Box<dyn Widget>] {

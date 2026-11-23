@@ -2,6 +2,7 @@
 
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
@@ -20,7 +21,7 @@ use bande_mail_core::sheet::Mode;
 use bande_mail_core::testing::{Dovecot, PASSWORD, USER, local};
 use bande_search::Offer;
 use bande_toolkit::ui::{Context, Event as Input, FreeLayout, Key, Modifiers, Size, Ui, Widget};
-use bande_toolkit::{Palette, Scheme, TextSystem};
+use bande_toolkit::{Palette, Rect, Scheme, TextSystem};
 use zbus::blocking::Connection;
 
 const WAIT: Duration = Duration::from_secs(20);
@@ -177,6 +178,8 @@ fn the_setup_guide_asks_before_signing_in_off_domain_and_shows_each_problem_at_i
     let options = Options {
         icon: b"<svg xmlns='http://www.w3.org/2000/svg'/>",
         offer_notes: true,
+        server_settings: true,
+        ready_note: String::new(),
         taken: Vec::new(),
         network: network.clone(),
         reporter: Arc::new(move |report| {
@@ -184,6 +187,7 @@ fn the_setup_guide_asks_before_signing_in_off_domain_and_shows_each_problem_at_i
         }),
     };
     let mut guide = Guide::open(&mut ui, Host::Inline(host), Mode::Address, options);
+    guide.place(&mut ui, Rect::new(0.0, 0.0, 900.0, 700.0));
     let wait = |ui: &mut Ui, guide: &mut Guide, until: &dyn Fn(&Mode) -> bool| loop {
         let report = received
             .recv_timeout(WAIT)
@@ -252,7 +256,13 @@ fn the_setup_guide_asks_before_signing_in_off_domain_and_shows_each_problem_at_i
 
     let mut token_only = settings;
     token_only.smtp = local(token_only_smtp());
-    let refused = check(&token_only, PASSWORD, &network, |_| {});
+    let refused = check(
+        &token_only,
+        PASSWORD,
+        &network,
+        &AtomicBool::new(false),
+        |_| {},
+    );
     assert!(
         matches!(refused, Outcome::Failed(_, Problem::NoPasswordSignIn(_))),
         "{refused:?}"

@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use bande_l10n::tr;
 use bande_toolkit::Rect;
@@ -37,6 +37,8 @@ pub enum Host {
 pub struct Options {
     pub icon: &'static [u8],
     pub offer_notes: bool,
+    pub server_settings: bool,
+    pub ready_note: String,
     pub taken: Vec<String>,
     pub network: Network,
     pub reporter: Reporter,
@@ -70,6 +72,7 @@ pub struct Guide {
     mode: Mode,
     widget: WidgetId,
     run: u64,
+    cancelled: Arc<AtomicBool>,
     manual: bool,
     stage: Stage,
 }
@@ -112,11 +115,11 @@ fn stage_line(stage: Stage, settings: &Settings) -> String {
 
 fn server_line(settings: &Settings) -> [(String, Option<Progress>); 2] {
     let describe = |server: &crate::net::Server| {
-        format!(
-            "{} : {}  {}",
-            server.host,
-            server.port,
-            server.security.title()
+        tr!(
+            "{host}, port {port}, {security}",
+            host = server.host.clone(),
+            port = server.port,
+            security = server.security.title()
         )
     };
     [
@@ -140,6 +143,7 @@ impl Guide {
             mode: mode.clone(),
             widget: WidgetId::next(),
             run: 0,
+            cancelled: Arc::new(AtomicBool::new(false)),
             manual: false,
             stage: Stage::Incoming,
         };
@@ -159,15 +163,21 @@ impl Guide {
         self.widget
     }
 
+    fn start_run(&mut self) -> Arc<AtomicBool> {
+        self.stop_run();
+        self.run = next_run();
+        self.cancelled = Arc::new(AtomicBool::new(false));
+        Arc::clone(&self.cancelled)
+    }
+
+    fn stop_run(&mut self) {
+        self.cancelled.store(true, Ordering::Relaxed);
+        self.run = 0;
+    }
+
     fn show(&mut self, ui: &mut Ui, mode: Mode) {
         let inline = matches!(self.host, Host::Inline(_));
-        let sheet = AccountSheet::new(
-            Rc::clone(&self.state),
-            mode.clone(),
-            self.options.icon,
-            self.options.offer_notes,
-            inline,
-        );
+        let sheet = AccountSheet::new(Rc::clone(&self.state), mode.clone(), &self.options, inline);
         let focus = self
             .state
             .borrow()
@@ -176,6 +186,9 @@ impl Guide {
             .and_then(|(field, _)| sheet.field(*field));
         let id = sheet.id();
         match self.host {
+            Host::Sheet if ui.widget_ref::<AccountSheet>(self.widget).is_some() => {
+                ui.replace_sheet(sheet);
+            }
             Host::Sheet => ui.present_sheet(sheet),
             Host::Inline(layout) => {
                 if let Some(layout) = ui.widget_as::<FreeLayout>(layout) {
@@ -205,7 +218,8 @@ impl Guide {
         }
     }
 
-    pub fn close(self, ui: &mut Ui) {
+    pub fn close(mut self, ui: &mut Ui) {
+        self.stop_run();
         self.state.borrow_mut().closed = true;
         if let Host::Inline(layout) = self.host
             && let Some(layout) = ui.widget_as::<FreeLayout>(layout)
@@ -267,13 +281,24 @@ impl Guide {
         }
         match (action, self.mode.clone()) {
             (Action::Cancel, Mode::Checking) => {
-                self.run = 0;
+                self.stop_run();
                 let back = match self.manual {
                     true => Mode::Servers,
                     false => Mode::Address,
                 };
                 self.state.borrow_mut().lines.clear();
                 self.show(ui, back);
+                None
+            }
+            (Action::Cancel, Mode::Confirm(_) | Mode::Servers)
+                if matches!(self.host, Host::Inline(_)) =>
+            {
+                let mut state = self.state.borrow_mut();
+                state.lines.clear();
+                state.problem = None;
+                state.status = None;
+                drop(state);
+                self.show(ui, Mode::Address);
                 None
             }
             (Action::Cancel, _) => Some(Done::Cancelled),
@@ -338,17 +363,20 @@ impl Guide {
         let email = self.state.borrow().value(Field::Email);
         let domain = bande_discovery::domain_of(&email).unwrap_or_default();
         self.state.borrow_mut().lines = vec![lookup_line(&domain, None)];
-        self.run = next_run();
+        let cancelled = self.start_run();
         let (run, network, reporter) = (
             self.run,
             self.options.network.clone(),
             Arc::clone(&self.options.reporter),
         );
         std::thread::spawn(move || {
-            reporter(Report {
-                run,
-                news: News::Found(find(&email, &network)),
-            });
+            let found = find(&email, &network, &cancelled);
+            if !cancelled.load(Ordering::Relaxed) {
+                reporter(Report {
+                    run,
+                    news: News::Found(found),
+                });
+            }
         });
         self.show(ui, Mode::Checking);
     }
@@ -399,7 +427,7 @@ impl Guide {
     }
 
     fn check(&mut self, servers: Settings) {
-        self.run = next_run();
+        let cancelled = self.start_run();
         self.stage = Stage::Incoming;
         let password = Zeroizing::new(self.state.borrow().password.to_string());
         let (run, network, reporter) = (
@@ -408,7 +436,7 @@ impl Guide {
             Arc::clone(&self.options.reporter),
         );
         std::thread::spawn(move || {
-            let outcome = check(&servers, &password, &network, |stage| {
+            let outcome = check(&servers, &password, &network, &cancelled, |stage| {
                 reporter(Report {
                     run,
                     news: News::Stage(stage),
@@ -432,7 +460,7 @@ impl Guide {
             }
             News::Stage(stage) => {
                 self.stage = stage;
-                let running = self.state.borrow().lines.len() - 2 + stage as usize;
+                let running = (self.state.borrow().lines.len() + stage as usize).saturating_sub(2);
                 for (index, (_, progress)) in self.state.borrow_mut().lines.iter_mut().enumerate() {
                     if progress.is_some() {
                         *progress = Some(match index.cmp(&running) {
@@ -460,6 +488,7 @@ impl Guide {
                 self.failed(ui, &settings, problem);
                 None
             }
+            News::Checked(Outcome::Stopped) => None,
         }
     }
 
@@ -467,6 +496,12 @@ impl Guide {
         let Some((settings, source)) = found.settings.clone() else {
             let mut state = self.state.borrow_mut();
             state.lines.clear();
+            state.values.retain(|(field, _)| {
+                matches!(
+                    field,
+                    Field::Name | Field::Email | Field::Description | Field::Notes
+                )
+            });
             state.status = Some((found.message(), false));
             drop(state);
             self.show(ui, Mode::Servers);
@@ -508,6 +543,7 @@ impl Guide {
             };
             if password_problem {
                 state.password = Zeroizing::default();
+                state.shake = true;
             }
             state.problem = Some((field, problem.message()));
         }
@@ -522,7 +558,9 @@ impl Guide {
         let mut state = self.state.borrow_mut();
         state.lines.clear();
         state.problem = None;
-        state.status = None;
+        state.status = Some(self.options.ready_note.clone())
+            .filter(|note| !note.is_empty())
+            .map(|note| (note, false));
         state.password = Zeroizing::default();
         drop(state);
         self.show(ui, Mode::Added(email));

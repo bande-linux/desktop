@@ -36,9 +36,9 @@ use bande_datetime::DateFormats;
 use bande_keyring::Keyring;
 use bande_mail_core::guide::{Done, Guide, Host, Options, Report};
 use bande_toolkit::ui::{
-    Alert, Button, ClipboardRequest, Context, Cursor, Event, FreeLayout, Key, Menu, MenuItem,
-    Modifiers, Pointer, PointerButton, ScrollState, TextField, Ui, Widget, WidgetId, opens_menu,
-    past_drag_slop, shortcut_pressed,
+    Alert, Animated, Button, ClipboardRequest, Context, Cursor, Event, FreeLayout, Key, Menu,
+    MenuItem, Modifiers, Pointer, PointerButton, ScrollState, Spring, TextField, Ui, Widget,
+    WidgetId, opens_menu, past_drag_slop, shortcut_label, shortcut_pressed,
 };
 use bande_toolkit::{
     Appearance, Header, HeaderInsets, Palette, Point, Rect, SHEET_INSET, TextSystem,
@@ -50,19 +50,28 @@ use zeroize::Zeroizing;
 
 pub(crate) mod security;
 
-pub const SHORTCUTS: [(&str, &str); 11] = [
-    ("toggle-sidebar", "Shift+Ctrl+S"),
-    ("move-to", "Shift+Ctrl+M"),
-    ("compose", "Ctrl+N"),
-    ("get-mail", "F5"),
-    ("find", "Ctrl+F"),
-    ("reply", "Ctrl+R"),
-    ("reply-all", "Shift+Ctrl+R"),
-    ("forward", "Shift+Ctrl+F"),
-    ("archive", "Shift+Ctrl+A"),
-    ("delete", "Delete"),
-    ("send", "Ctrl+Enter"),
+pub const SHORTCUTS: [(&str, &str, Text); 11] = [
+    ("compose", "Ctrl+N", text!("New Message")),
+    ("reply", "Ctrl+R", text!("Reply")),
+    ("reply-all", "Shift+Ctrl+R", text!("Reply All")),
+    ("forward", "Shift+Ctrl+F", text!("Forward")),
+    (
+        "archive",
+        "Shift+Ctrl+A",
+        text!(context = "action", "Archive"),
+    ),
+    ("delete", "Delete", text!("Delete")),
+    ("move-to", "Shift+Ctrl+M", text!("Move To…")),
+    ("find", "Ctrl+F", text!("Search")),
+    ("get-mail", "F5", text!("Get Mail")),
+    (
+        "toggle-sidebar",
+        "Shift+Ctrl+S",
+        text!("Show or Hide Sidebar"),
+    ),
+    ("send", "Ctrl+Enter", text!("Send")),
 ];
+const MORE_SHORTCUTS: [(&str, Text); 2] = [("Ctrl+Z", text!("Undo")), ("F6", text!("Next Pane"))];
 pub const READER_MAX_WIDTH: f32 = 860.0;
 const SIDEBAR_SIZES: (f32, f32) = (180.0, 320.0);
 const LIST_SIZES: (f32, f32) = (280.0, 560.0);
@@ -124,6 +133,7 @@ pub enum Hit {
     Place(usize),
     Message(MessageId),
     Quick(MessageId, Quick),
+    Section(AccountId),
     Conversation(MessageId),
     Reader(Target),
     Offline(AccountId),
@@ -266,11 +276,19 @@ pub struct MailView {
     requests: Vec<Request>,
     pub(crate) setup: Option<Guide>,
     pub(crate) open_file: Option<WidgetId>,
-    read_later: Option<(Instant, Vec<MessageId>)>,
+    read_later: Vec<(Instant, MessageId)>,
     pub(crate) filter: Filter,
     pub(crate) groups: Vec<(usize, String)>,
     pub(crate) swipe: Option<(MessageId, f32)>,
+    release: Option<(MessageId, Animated, Option<Quick>)>,
+    releasing: bool,
+    pub(crate) swipe_shown: Option<(MessageId, f32)>,
     pub(crate) overlay: bool,
+    slide: Animated,
+    pub(crate) slid: f32,
+    sliding: bool,
+    pub(crate) collapsed: HashSet<AccountId>,
+    pub(crate) everywhere: bool,
     pub(crate) single_reader: bool,
     resizing: Option<(Edge, f32)>,
     on_edge: bool,
@@ -283,6 +301,13 @@ pub struct MailView {
     moved_in: HashMap<(MailboxId, String), Instant>,
     pub(crate) drag: Option<Drag>,
     pub(crate) conversations: Conversations,
+}
+
+fn is_mine(accounts: &[(Account, Vec<Mailbox>)], sender: &Address) -> bool {
+    !sender.email.is_empty()
+        && accounts
+            .iter()
+            .any(|(account, _)| account.email.eq_ignore_ascii_case(&sender.email))
 }
 
 fn keyring_password(email: String, host: String) -> crate::worker::PasswordSource {
@@ -342,11 +367,19 @@ impl MailView {
             requests: Vec::new(),
             setup: None,
             open_file: None,
-            read_later: None,
+            read_later: Vec::new(),
             filter: Filter::All,
             groups: Vec::new(),
             swipe: None,
+            release: None,
+            releasing: false,
+            swipe_shown: None,
             overlay: false,
+            slide: Animated::new(0.0),
+            slid: 0.0,
+            sliding: false,
+            collapsed: HashSet::new(),
+            everywhere: false,
             single_reader: false,
             resizing: None,
             on_edge: false,
@@ -578,6 +611,9 @@ impl MailView {
     }
 
     pub fn title(&self) -> String {
+        if self.searching_everywhere() {
+            return tr!("All Mailboxes");
+        }
         self.sidebar
             .iter()
             .find_map(|row| match row {
@@ -614,11 +650,61 @@ impl MailView {
         match self.size.0 >= THREE_PANES {
             true => {
                 self.settings.hide_sidebar = !self.settings.hide_sidebar;
-                self.overlay = false;
+                self.set_overlay(false);
                 self.keep_settings();
             }
-            false => self.overlay = !self.overlay,
+            false => self.set_overlay(!self.overlay),
         }
+    }
+
+    pub(crate) fn set_overlay(&mut self, shown: bool) {
+        self.overlay = shown;
+        match shown {
+            true => self.focus = Pane::Sidebar,
+            false if self.focus == Pane::Sidebar && self.panes() != Panes::Three => {
+                self.focus = Pane::List;
+            }
+            false => {}
+        }
+        let target = if shown { 1.0 } else { 0.0 };
+        self.ui
+            .context()
+            .animate(&mut self.slide, target, Spring::STANDARD);
+    }
+
+    pub(crate) fn advance_motion(&mut self) {
+        if self.panes() == Panes::Three && (self.overlay || self.slid > 0.0) {
+            self.overlay = false;
+            self.slide.jump_to(0.0);
+        }
+        let now = self.ui.context().now();
+        (self.slid, self.sliding) = self.slide.value_at(now);
+        self.swipe_shown = self.swipe.or_else(|| {
+            let (id, offset, _) = self.release.as_ref()?;
+            let (moved, moving) = offset.value_at(now);
+            self.releasing = moving;
+            Some((*id, moved))
+        });
+    }
+
+    pub(crate) fn release_swipe(&mut self, id: MessageId, moved: f32, quick: Option<Quick>) {
+        let target = match quick {
+            Some(_) => moved.signum() * self.list_frame().width,
+            None => 0.0,
+        };
+        let mut offset = Animated::points(moved);
+        self.ui
+            .context()
+            .animate(&mut offset, target, Spring::INTERACTIVE);
+        self.release = Some((id, offset, quick));
+        self.releasing = true;
+    }
+
+    pub(crate) fn toggle_section(&mut self, account: AccountId) {
+        if !self.collapsed.remove(&account) {
+            self.collapsed.insert(account);
+        }
+        self.refresh_sidebar();
     }
 
     pub fn sidebar_shown(&self) -> bool {
@@ -672,7 +758,9 @@ impl MailView {
             return Cursor::ColumnResize;
         }
         match &self.hover {
-            Some(Hit::Conversation(_) | Hit::Offline(_) | Hit::Quick(..)) => Cursor::Pointer,
+            Some(Hit::Conversation(_) | Hit::Offline(_) | Hit::Section(_) | Hit::Quick(..)) => {
+                Cursor::Pointer
+            }
             Some(Hit::Reader(Target::Card(_))) => Cursor::Text,
             Some(Hit::Reader(_)) => Cursor::Pointer,
             _ => self.ui.cursor(),
@@ -680,12 +768,18 @@ impl MailView {
     }
 
     pub fn animating(&self) -> bool {
-        self.ui.is_animating()
+        self.ui.is_animating() || self.sliding || self.releasing
     }
 
     pub fn deadline(&self) -> Option<Instant> {
-        let read_at = self.read_later.as_ref().map(|(at, _)| *at);
-        self.ui.deadline().into_iter().chain(read_at).min()
+        let read_at = self.read_later.iter().map(|(at, _)| *at).min();
+        let released = (self.release.is_some() && !self.releasing).then(Instant::now);
+        self.ui
+            .deadline()
+            .into_iter()
+            .chain(read_at)
+            .chain(released)
+            .min()
     }
 
     fn opened_unseen(&mut self, unseen: Vec<MessageId>) {
@@ -694,17 +788,33 @@ impl MailView {
         }
         match self.settings.mark_read {
             MarkRead::OnOpen => self.set_flag_on(&unseen, Flag::Seen, true),
-            MarkRead::Later => self.read_later = Some((Instant::now() + READ_AFTER, unseen)),
+            MarkRead::Later => {
+                let at = Instant::now() + READ_AFTER;
+                self.read_later.retain(|(_, id)| !unseen.contains(id));
+                self.read_later
+                    .extend(unseen.into_iter().map(|id| (at, id)));
+            }
             MarkRead::Manually => {}
         }
     }
 
     pub fn tick(&mut self, now: Instant) {
-        let Some((_, ids)) = self.read_later.take_if(|(at, _)| *at <= now) else {
-            return;
-        };
-        let still_open = ids
+        if !self.releasing
+            && let Some((id, _, quick)) = self.release.take()
+        {
+            self.swipe_shown = None;
+            if let Some(quick) = quick {
+                self.quick(id, quick);
+                self.refresh_toolbar();
+            }
+        }
+        let (due, later) = std::mem::take(&mut self.read_later)
             .into_iter()
+            .partition::<Vec<_>, _>(|(at, _)| *at <= now);
+        self.read_later = later;
+        let still_open = due
+            .into_iter()
+            .map(|(_, id)| id)
             .filter(|id| {
                 self.reader
                     .thread
@@ -815,7 +925,7 @@ impl MailView {
             })
             .collect();
         let store = &self.store;
-        self.sidebar = rows(&self.accounts, |scope| {
+        self.sidebar = rows(&self.accounts, &self.collapsed, |scope| {
             store
                 .unread(scope)
                 .inspect_err(|error| tracing::warn!("cannot count unread mail: {error}"))
@@ -825,17 +935,28 @@ impl MailView {
 
     pub fn reload(&mut self) {
         self.refresh_sidebar();
-        let exists = self
-            .sidebar
-            .iter()
-            .any(|row| matches!(row, Row::Place { place, .. } if *place == self.place));
+        let exists = match &self.place {
+            Place::Mailbox(id) => self
+                .accounts
+                .iter()
+                .flat_map(|(_, mailboxes)| mailboxes)
+                .any(|mailbox| mailbox.id == *id),
+            place => self
+                .sidebar
+                .iter()
+                .any(|row| matches!(row, Row::Place { place: shown, .. } if shown == place)),
+        };
         if !exists {
             self.place = Place::All(Role::Inbox);
         }
+        let scope = match self.searching_everywhere() {
+            true => crate::store::Scope::Everywhere,
+            false => self.place.scope(),
+        };
         let all = self
             .store
             .listing(
-                &self.place.scope(),
+                &scope,
                 &self.search,
                 self.filter,
                 self.settings.sort,
@@ -921,7 +1042,7 @@ impl MailView {
             return;
         }
         let mut old = std::mem::take(&mut thread.entries);
-        thread.entries = messages
+        let entries = messages
             .into_iter()
             .map(
                 |summary| match old.iter().position(|entry| entry.summary.id == summary.id) {
@@ -930,6 +1051,7 @@ impl MailView {
                         ..old.swap_remove(index)
                     },
                     None => Entry {
+                        mine: is_mine(&self.accounts, &summary.sender),
                         summary,
                         reading: None,
                         quotes: false,
@@ -937,6 +1059,10 @@ impl MailView {
                 },
             )
             .collect();
+        let Some(thread) = self.reader.thread.as_mut() else {
+            return;
+        };
+        thread.entries = entries;
         if thread.entry(thread.focus).is_none()
             && let Some(last) = thread.entries.last()
         {
@@ -945,10 +1071,27 @@ impl MailView {
         self.reader.layout = None;
     }
 
+    pub(crate) fn searching_everywhere(&self) -> bool {
+        self.everywhere && !self.search.trim().is_empty()
+    }
+
+    pub(crate) fn offers_everywhere(&self) -> bool {
+        self.messages.is_empty() && !self.search.trim().is_empty() && !self.everywhere
+    }
+
+    fn search_everywhere(&mut self) {
+        self.everywhere = true;
+        self.listed = LIST_PAGE;
+        self.scrolls[1] = ScrollState::default();
+        self.focus = Pane::List;
+        self.reload();
+    }
+
     pub fn choose_place(&mut self, place: Place) {
-        if place == self.place {
+        if place == self.place && !self.everywhere {
             return;
         }
+        self.everywhere = false;
         self.place = place;
         self.listed = LIST_PAGE;
         self.selected = None;
@@ -960,6 +1103,9 @@ impl MailView {
     }
 
     pub fn search_for(&mut self, text: &str) {
+        if text.trim().is_empty() {
+            self.everywhere = false;
+        }
         self.search = text.to_owned();
         self.listed = LIST_PAGE;
         self.scrolls[1] = ScrollState::default();
@@ -1119,6 +1265,7 @@ impl MailView {
             entries: messages
                 .into_iter()
                 .map(|summary| Entry {
+                    mine: is_mine(&self.accounts, &summary.sender),
                     summary,
                     reading: None,
                     quotes: false,
@@ -1809,6 +1956,14 @@ impl MailView {
         }
     }
 
+    pub(crate) fn offline_accounts(&self) -> Vec<AccountId> {
+        self.accounts
+            .iter()
+            .map(|(account, _)| account.id)
+            .filter(|account| self.offline(*account))
+            .collect()
+    }
+
     pub(crate) fn offline(&self, account: AccountId) -> bool {
         self.statuses
             .iter()
@@ -2233,6 +2388,8 @@ impl MailView {
         let options = Options {
             icon: include_bytes!("../../data/org.bande.Mail.svg"),
             offer_notes: bande_xdg::is_installed("org.bande.Notes"),
+            server_settings: true,
+            ready_note: tr!("Mail is downloading your mail; you can start reading now."),
             taken: self
                 .accounts
                 .iter()
@@ -2527,6 +2684,13 @@ impl MailView {
                     self.retrying.push(account);
                     self.send_command(account, Command::Sync);
                 }
+                Signal::TryOffline => {
+                    for account in self.offline_accounts() {
+                        self.retrying.push(account);
+                        self.send_command(account, Command::Sync);
+                    }
+                }
+                Signal::SearchEverywhere => self.search_everywhere(),
                 Signal::ServerSettings => self.requests.push(Request::OpenSettings),
                 Signal::OpenMessageFile => self.choose_message_file(),
                 Signal::OpenLink(url) => self.requests.push(Request::OpenLink(url)),
@@ -2593,7 +2757,7 @@ impl MailView {
                     && !self.sidebar_foot_frame().contains(pointer.position)
                     && !self.over_control(pointer.position) =>
             {
-                self.overlay = false;
+                self.set_overlay(false);
                 true
             }
             Event::PointerDown(pointer) => {
@@ -2725,7 +2889,16 @@ impl MailView {
             'a' => Some(self.menu_action("reply-all")),
             'f' => Some(self.menu_action("forward")),
             's' => Some(self.menu_action("toggle-flag")),
-            'u' => Some(self.menu_action("toggle-read")),
+            'u' => {
+                let ids = self
+                    .targets()
+                    .iter()
+                    .map(|summary| summary.id)
+                    .collect::<Vec<_>>();
+                self.read_later.retain(|(_, id)| !ids.contains(id));
+                self.set_flag_on(&ids, Flag::Seen, false);
+                Some(!ids.is_empty())
+            }
             'c' => Some(self.menu_action("compose")),
             'v' => Some(self.menu_action("move-to")),
             '/' => Some(self.menu_action("find")),
@@ -2768,14 +2941,27 @@ impl MailView {
     }
 
     fn show_shortcuts(&mut self) {
-        let mut lines = vec![
-            tr!("Ctrl+N: New Message"),
-            tr!("Ctrl+R: Reply · Shift+Ctrl+R: Reply All · Shift+Ctrl+F: Forward"),
-            tr!("Shift+Ctrl+A: Archive · Delete: Delete · Shift+Ctrl+M: Move To…"),
-            tr!("Ctrl+F: Search · F5: Get Mail · Ctrl+Z: Undo"),
-            tr!("Ctrl+1 to Ctrl+9: the first nine mailboxes in the sidebar"),
-            tr!("Shift+Ctrl+S: Hide or Show Sidebar · F6: next pane"),
-        ];
+        let line = |shortcut: &str, title: &Text| {
+            tr!(
+                "{shortcut}: {action}",
+                shortcut = shortcut_label(shortcut),
+                action = title.tr()
+            )
+        };
+        let mut lines = SHORTCUTS
+            .iter()
+            .map(|(_, shortcut, title)| line(shortcut, title))
+            .chain(
+                MORE_SHORTCUTS
+                    .iter()
+                    .map(|(shortcut, title)| line(shortcut, title)),
+            )
+            .collect::<Vec<_>>();
+        lines.push(tr!(
+            "{first} to {last}: the first nine mailboxes in the sidebar",
+            first = shortcut_label("Ctrl+1"),
+            last = shortcut_label("Ctrl+9")
+        ));
         if self.settings.single_keys {
             lines.push(tr!(
                 "In the list and the reader: J, K next and previous · E Archive · # Delete · R Reply · A Reply All · F Forward · S Flag · U Mark as Unread · V Move To… · C New Message · / Search · ? this list"
@@ -2841,9 +3027,9 @@ impl MailView {
             }
         }
         let event = Event::Key { key, modifiers };
-        if let Some((action, _)) = SHORTCUTS
+        if let Some((action, ..)) = SHORTCUTS
             .iter()
-            .find(|(_, shortcut)| shortcut_pressed(&event, shortcut))
+            .find(|(_, shortcut, _)| shortcut_pressed(&event, shortcut))
         {
             return self.menu_action(action);
         }
@@ -2854,12 +3040,14 @@ impl MailView {
             && self.settings.single_keys
             && matches!(self.focus, Pane::List | Pane::Reader)
             && let Key::Character(character) = key
-            && let Some(handled) = self.single_key(character)
+            && let Some(handled) = self.single_key(match modifiers.shift {
+                true => character,
+                false => character.to_ascii_lowercase(),
+            })
         {
             return handled;
         }
         if modifiers.control
-            && !modifiers.shift
             && !modifiers.alt
             && let Key::Character(digit @ '1'..='9') = key
         {
@@ -2889,7 +3077,7 @@ impl MailView {
             Key::Down if plain && modifiers.shift => self.extend(1),
             Key::Enter if plain && self.focus == Pane::Sidebar => {
                 self.focus = Pane::List;
-                self.overlay = false;
+                self.set_overlay(false);
                 true
             }
             Key::Enter
@@ -2907,7 +3095,7 @@ impl MailView {
                 true
             }
             Key::Escape if self.overlay => {
-                self.overlay = false;
+                self.set_overlay(false);
                 true
             }
             _ if opens_menu(key, modifiers) => self.keyboard_menu(),
@@ -2921,6 +3109,9 @@ impl MailView {
                 self.press_reader_target(false)
             }
             Key::Backspace | Key::Delete if self.focus == Pane::Sidebar => false,
+            Key::Right | Key::Left if plain && !modifiers.shift && self.focus == Pane::Sidebar => {
+                self.fold_section(key == Key::Right)
+            }
             Key::Right | Key::Left if plain && !modifiers.shift => {
                 let expanded = self.selected.is_some_and(|id| {
                     self.conversations.children.contains(&id)
@@ -3055,12 +3246,24 @@ impl MailView {
         if places.is_empty() {
             return false;
         }
-        let next = places
-            .iter()
-            .position(|(_, place)| *place == self.place)
-            .map_or(0, |current| {
-                current.saturating_add_signed(by).min(places.len() - 1)
-            });
+        let hidden_under = self.place_account().and_then(|account| {
+            self.sidebar
+                .iter()
+                .position(|row| matches!(row, Row::Heading(_, Some(known)) if *known == account))
+        });
+        let next = match places.iter().position(|(_, place)| *place == self.place) {
+            Some(current) => current.saturating_add_signed(by).min(places.len() - 1),
+            None => match hidden_under {
+                Some(heading) => {
+                    let after = places.partition_point(|(index, _)| *index < heading);
+                    match by > 0 {
+                        true => after.min(places.len() - 1),
+                        false => after.saturating_sub(1),
+                    }
+                }
+                None => 0,
+            },
+        };
         let (index, place) = places[next].clone();
         if place == self.place {
             return false;
@@ -3193,7 +3396,9 @@ impl MailView {
                             .push(Request::ShowMenu(menu, pointer.position));
                     } else {
                         self.choose_place(place);
-                        self.overlay = false;
+                        if self.overlay {
+                            self.set_overlay(false);
+                        }
                     }
                 }
             }
@@ -3246,6 +3451,10 @@ impl MailView {
                 self.click_reader(target, pointer);
             }
             Hit::Offline(account) => self.show_failure(account),
+            Hit::Section(account) => {
+                self.focus = Pane::Sidebar;
+                self.toggle_section(account);
+            }
         }
         true
     }
@@ -3336,6 +3545,23 @@ impl MailView {
             .flat_map(|(_, mailboxes)| mailboxes)
             .find(|mailbox| mailbox.id == id)
             .cloned()
+    }
+
+    fn place_account(&self) -> Option<AccountId> {
+        match self.place {
+            Place::Mailbox(id) => self.mailbox(id).map(|mailbox| mailbox.account),
+            _ => None,
+        }
+    }
+
+    fn fold_section(&mut self, expand: bool) -> bool {
+        match self.place_account() {
+            Some(account) if self.collapsed.contains(&account) == expand => {
+                self.toggle_section(account);
+                true
+            }
+            _ => false,
+        }
     }
 
     pub fn current_account(&self) -> Option<AccountId> {

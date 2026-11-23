@@ -216,6 +216,7 @@ pub enum Scope {
     Mailbox(MailboxId),
     AllOf(Role),
     Flagged,
+    Everywhere,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -496,6 +497,7 @@ fn scope_filter(scope: &Scope) -> (&'static str, Box<dyn rusqlite::ToSql>) {
         Scope::Mailbox(id) => ("m.mailbox = ?1", Box::new(*id)),
         Scope::AllOf(role) => ("b.role = ?1", Box::new(role.name())),
         Scope::Flagged => ("m.flagged = ?1", Box::new(true)),
+        Scope::Everywhere => ("?1", Box::new(true)),
     }
 }
 

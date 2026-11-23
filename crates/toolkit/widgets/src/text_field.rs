@@ -2,7 +2,7 @@ use accesskit::{ActionRequest, Node, Role};
 
 use std::ops::Range;
 
-use super::control::{field_focus, paint_field};
+use super::control::{Naming, field_focus, paint_field};
 use super::editor::Editor;
 use super::{Context, Cursor, DragAction, Event, Menu, Parts, Size, Widget, WidgetId};
 use bande_graphics::{
@@ -35,6 +35,7 @@ pub struct TextField {
     on_change: Box<dyn FnMut(&str)>,
     scroll: f32,
     field_height: f32,
+    naming: Naming,
     frame: Rect,
 }
 
@@ -53,8 +54,18 @@ impl TextField {
             on_change: Box::new(on_change),
             scroll: 0.0,
             field_height: TEXT_FIELD_HEIGHT,
+            naming: Naming::default(),
             frame: Rect::default(),
         }
+    }
+
+    /// Names the field for assistive technology, and describes a problem with its value.
+    pub fn named(mut self, label: &str, problem: Option<&str>) -> Self {
+        self.naming = Naming {
+            label: Some(label.to_owned()),
+            problem: problem.map(str::to_owned),
+        };
+        self
     }
 
     pub fn without_text_checking(mut self) -> Self {
@@ -284,6 +295,7 @@ impl Widget for TextField {
         let mut node = Node::new(Role::TextInput);
         node.set_value(self.editor.text());
         node.set_placeholder(self.placeholder.clone());
+        self.naming.apply(&mut node);
         let runs = self.editor.runs(WHOLE_LINE);
         self.editor.describe(&mut node, self.id, &runs);
         node

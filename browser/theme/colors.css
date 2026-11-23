@@ -1,0 +1,38 @@
+:root {
+  --bande-chassis: #F1F0ED;
+  --bande-sheet: #FEFDFD;
+  --bande-overlay: #FFFFFF;
+  --bande-well: #E2DFDB;
+  --bande-hairline: #D4D0CB;
+  --bande-edge: #BAB7B2;
+  --bande-ink: #201E1A;
+  --bande-ink2: #5B5752;
+  --bande-ink3: #83807A;
+  --bande-field-edge: transparent;
+  --bande-accent: AccentColor;
+  --bande-accent-fill: AccentColor;
+  --bande-on-accent: AccentColorText;
+  @media (prefers-color-scheme: dark) {
+    --bande-chassis: #282A2E;
+    --bande-sheet: #1E2124;
+    --bande-overlay: #33353A;
+    --bande-well: #3D4044;
+    --bande-hairline: #45484C;
+    --bande-edge: #575B62;
+    --bande-ink: #E4E6EA;
+    --bande-ink2: #B9BEC6;
+    --bande-ink3: #8D9198;
+    --bande-accent-fill: oklch(from AccentColor 0.566 c h);
+    --bande-on-accent: #FFFFFF;
+  }
+  @media (prefers-contrast: more) {
+    --bande-edge: #898681;
+    --bande-field-edge: var(--bande-edge);
+  }
+  @media (prefers-contrast: more) and (prefers-color-scheme: dark) {
+    --bande-edge: #767A82;
+    --bande-ink: #F1F3F8;
+    --bande-ink2: #CDD1D9;
+    --bande-ink3: #A7ABB3;
+  }
+}

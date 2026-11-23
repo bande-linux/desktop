@@ -50,6 +50,7 @@ fn descriptor_text(block: &[u8], kind: u8) -> Option<String> {
             .iter()
             .take_while(|byte| **byte != b'\n')
             .map(|byte| char::from(*byte))
+            .filter(|character| !character.is_control())
             .collect();
         let text = text.trim();
         (!text.is_empty()).then(|| text.to_owned())

@@ -99,7 +99,12 @@ TMPFILES
 printf '[terminal]\nvt = 1\n[general]\nservice = "bande-greeter"\n[default_session]\ncommand = "/usr/libexec/bande-greeter-session"\nuser = "_greetd"\n' \
     > "$old/usr/share/bande-greeter/greetd-config.toml"
 dpkg-deb --root-owner-group --build "$old" "$work/old.deb" > /dev/null
-dpkg -i "$work/old.deb" < /dev/null
+install_old() {
+    mkdir -p /etc/X11
+    echo /usr/bin/bande-greeter > /etc/X11/default-display-manager
+    dpkg -i "$work/old.deb" < /dev/null
+}
+install_old
 
 useradd --create-home ada
 echo ada:hunter2 | chpasswd
@@ -155,7 +160,7 @@ if [ -n "$booted" ]; then
     wait_for 15 listening
 
     dpkg --purge --force-depends bande-greeter < /dev/null
-    dpkg -i "$work/old.deb" < /dev/null
+    install_old
     touch /run/greetd-upgrade-sign-in
     start_old_greeter
     wait_for 30 signed_in

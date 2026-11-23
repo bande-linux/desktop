@@ -1,25 +1,26 @@
-use std::ffi::c_void;
-use std::ptr::NonNull;
+use std::os::fd::AsFd;
 use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver};
 use std::thread;
 
-use bande_graphics::{DrawError, GpuDevice, GpuRenderer, Region, Scene, pixels};
-use raw_window_handle::{
-    RawDisplayHandle, RawWindowHandle, WaylandDisplayHandle, WaylandWindowHandle,
+use bande_graphics::{
+    DrawError, GpuDevice, GpuRenderer, Region, SHARED_FOURCC, Scene, SharedImage, pixels,
 };
+use wayland_client::QueueHandle;
 use wayland_client::protocol::wl_surface::WlSurface;
-use wayland_client::{Connection, Proxy};
+use wayland_protocols::wp::linux_dmabuf::zv1::client::zwp_linux_dmabuf_v1::ZwpLinuxDmabufV1;
+
+use super::State;
+use super::pool::BufferPool;
+use crate::external::{Dmabuf, DmabufPlane, dmabuf_buffer};
 
 pub const RENDERER_VARIABLE: &str = "BANDE_RENDERER";
 
 pub(super) struct GpuSurface {
     gpu: Arc<GpuDevice>,
     renderer: GpuRenderer,
-    surface: wgpu::Surface<'static>,
-    config: wgpu::SurfaceConfiguration,
-    configured: Option<(u32, u32)>,
-    pub(super) transparent: bool,
+    modifiers: Vec<u64>,
+    buffers: BufferPool<SharedImage>,
 }
 
 pub(super) enum Gpu {
@@ -29,6 +30,13 @@ pub(super) enum Gpu {
     Unavailable,
 }
 
+#[derive(Clone, Copy)]
+pub(super) struct GpuTarget<'a> {
+    pub(super) dmabuf: &'a ZwpLinuxDmabufV1,
+    pub(super) handle: &'a QueueHandle<State>,
+    pub(super) surface: &'a WlSurface,
+}
+
 impl GpuSurface {
     pub(super) fn release_uploads(&mut self) {
         self.renderer.release_uploads();
@@ -36,18 +44,35 @@ impl GpuSurface {
 
     pub(super) fn present(
         &mut self,
+        target: GpuTarget<'_>,
         scene: &Scene,
         scale: f64,
         damage: Option<&[Region]>,
     ) -> Result<(), DrawError> {
         let size = (pixels(scene.width, scale), pixels(scene.height, scale));
-        if self.configured != Some(size) {
-            self.config.width = size.0;
-            self.config.height = size.1;
-            self.gpu.configure(&self.surface, &self.config)?;
-            self.configured = Some(size);
-        }
-        self.renderer.present(scene, scale, &self.surface, damage)
+        let (gpu, modifiers) = (&self.gpu, &self.modifiers);
+        let (buffer, stale) = self.buffers.next(size, damage, |busy| {
+            let image = gpu.shared_image(size, modifiers)?;
+            let planes = [DmabufPlane {
+                fd: image.fd.as_fd(),
+                offset: image.offset,
+                stride: image.stride,
+            }];
+            let dmabuf = Dmabuf {
+                planes: &planes,
+                width: size.0,
+                height: size.1,
+                fourcc: SHARED_FOURCC,
+                modifier: image.modifier,
+                flipped: false,
+            };
+            let buffer = dmabuf_buffer(target.dmabuf, target.handle, &dmabuf, busy);
+            Ok((image, buffer))
+        })?;
+        self.renderer
+            .present(scene, scale, &buffer.contents, stale.as_deref())?;
+        buffer.show(target.surface, damage);
+        Ok(())
     }
 }
 
@@ -66,19 +91,25 @@ fn renderer_choice() -> RendererChoice {
     }
 }
 
-pub(super) fn start_gpu(connection: &Connection, surface: &WlSurface, atlas: (u32, u32)) -> Gpu {
+pub(super) fn start_gpu(state: &State, atlas: (u32, u32)) -> Gpu {
     let choice = renderer_choice();
+    let modifiers: Vec<u64> = state
+        .dmabuf_formats
+        .iter()
+        .filter(|(fourcc, _)| *fourcc == SHARED_FOURCC)
+        .map(|(_, modifier)| *modifier)
+        .collect();
     if choice == RendererChoice::Cpu
         || choice == RendererChoice::Automatic && GpuDevice::known_software_only()
+        || state.dmabuf.is_none()
+        || modifiers.is_empty()
     {
         return Gpu::Unavailable;
     }
     let allow_software = choice == RendererChoice::Gpu;
-    let display = connection.backend().display_ptr() as usize;
-    let wl_surface = surface.id().as_ptr() as usize;
     let (sender, receiver) = mpsc::channel();
     thread::spawn(move || {
-        let opened = open_gpu(display, wl_surface, atlas, allow_software);
+        let opened = open_gpu(modifiers, atlas, allow_software);
         match &opened {
             Ok(_) => {}
             Err(error @ DrawError::Software(_)) => tracing::info!("drawing on the CPU: {error}"),
@@ -90,74 +121,20 @@ pub(super) fn start_gpu(connection: &Connection, surface: &WlSurface, atlas: (u3
 }
 
 fn open_gpu(
-    display: usize,
-    surface: usize,
+    modifiers: Vec<u64>,
     atlas: (u32, u32),
     allow_software: bool,
 ) -> Result<GpuSurface, DrawError> {
-    let missing = || DrawError::Gpu("the Wayland surface has no libwayland pointer".to_owned());
-    let display = NonNull::new(display as *mut c_void).ok_or_else(missing)?;
-    let window = NonNull::new(surface as *mut c_void).ok_or_else(missing)?;
-    let target = wgpu::SurfaceTargetUnsafe::RawHandle {
-        raw_display_handle: Some(RawDisplayHandle::Wayland(WaylandDisplayHandle::new(
-            display,
-        ))),
-        raw_window_handle: RawWindowHandle::Wayland(WaylandWindowHandle::new(window)),
-    };
-    // SAFETY: display and surface come from the Window's Connection and WlSurface, and Window waits
-    // for this thread and drops the GPU surface before it destroys the WlSurface or closes the
-    // connection.
-    let (gpu, surface) = unsafe { GpuDevice::shared_for(target, allow_software) }?;
-    let capabilities = surface.get_capabilities(gpu.adapter());
-    let format = capabilities
-        .formats
-        .iter()
-        .copied()
-        .find(|format| {
-            matches!(
-                format,
-                wgpu::TextureFormat::Bgra8Unorm | wgpu::TextureFormat::Rgba8Unorm
-            )
-        })
-        .ok_or_else(|| DrawError::Gpu("the surface offers no 8-bit UNORM format".to_owned()))?;
-    let alpha_mode = if capabilities
-        .alpha_modes
-        .contains(&wgpu::CompositeAlphaMode::PreMultiplied)
-    {
-        wgpu::CompositeAlphaMode::PreMultiplied
-    } else {
-        wgpu::CompositeAlphaMode::Auto
-    };
-    let present_mode = if capabilities
-        .present_modes
-        .contains(&wgpu::PresentMode::Mailbox)
-    {
-        wgpu::PresentMode::Mailbox
-    } else {
-        wgpu::PresentMode::Fifo
-    };
-    if !capabilities.usages.contains(wgpu::TextureUsages::COPY_DST) {
+    let gpu = GpuDevice::shared(allow_software)?;
+    if !gpu.shares_images(&modifiers) {
         return Err(DrawError::Gpu(
-            "the surface cannot receive copied frames".to_owned(),
+            "the compositor takes none of the GPU's image layouts".to_owned(),
         ));
     }
-    let config = wgpu::SurfaceConfiguration {
-        usage: wgpu::TextureUsages::COPY_DST,
-        format,
-        color_space: wgpu::SurfaceColorSpace::Auto,
-        width: 1,
-        height: 1,
-        present_mode,
-        desired_maximum_frame_latency: 2,
-        alpha_mode,
-        view_formats: Vec::new(),
-    };
     Ok(GpuSurface {
-        transparent: alpha_mode == wgpu::CompositeAlphaMode::PreMultiplied,
-        renderer: GpuRenderer::with_device(Arc::clone(&gpu), format, atlas),
+        renderer: GpuRenderer::with_device(Arc::clone(&gpu), atlas),
         gpu,
-        surface,
-        config,
-        configured: None,
+        modifiers,
+        buffers: BufferPool::default(),
     })
 }

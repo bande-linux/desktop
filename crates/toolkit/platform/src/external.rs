@@ -131,7 +131,7 @@ pub(crate) struct External {
     flipped: bool,
     position: Option<(i32, i32)>,
     destination: Option<(i32, i32)>,
-    below: Option<bool>,
+    below: bool,
     synced: bool,
 }
 
@@ -210,7 +210,7 @@ impl Window {
             flipped: false,
             position: None,
             destination: None,
-            below: None,
+            below: false,
             synced: false,
         }));
         self.externals.push(Rc::downgrade(&shared));
@@ -294,7 +294,7 @@ impl Window {
         self.state.dmabuf_formats.contains(&(fourcc, modifier))
     }
 
-    pub(crate) fn place_externals(&mut self, placed: &[(SurfaceId, Rect)], below: bool) {
+    pub(crate) fn place_externals(&mut self, placed: &[(SurfaceId, Rect)]) {
         self.externals
             .retain(|external| external.strong_count() > 0);
         for external in self.externals.iter().filter_map(Weak::upgrade) {
@@ -303,7 +303,7 @@ impl Window {
                 .iter()
                 .find(|(id, _)| *id == external.id)
                 .map(|(_, area)| *area);
-            external.place(area, below, &self.surface);
+            external.place(area, &self.surface);
         }
     }
 
@@ -318,7 +318,7 @@ impl Window {
 }
 
 impl External {
-    fn place(&mut self, area: Option<Rect>, below: bool, parent: &WlSurface) {
+    fn place(&mut self, area: Option<Rect>, parent: &WlSurface) {
         let Some(area) = area else {
             if self.destination.take().is_some() {
                 self.subsurface.set_sync();
@@ -329,12 +329,9 @@ impl External {
             self.position = None;
             return;
         };
-        if self.below != Some(below) {
-            match below {
-                true => self.subsurface.place_below(parent),
-                false => self.subsurface.place_above(parent),
-            }
-            self.below = Some(below);
+        if !self.below {
+            self.subsurface.place_below(parent);
+            self.below = true;
         }
         let position = (area.x.round() as i32, area.y.round() as i32);
         if self.position != Some(position) {
@@ -472,26 +469,7 @@ impl ExternalSurface {
             .dmabuf
             .as_ref()
             .ok_or(WindowError::Missing("zwp_linux_dmabuf_v1"))?;
-        let params = manager.create_params(&external.handle, ());
-        for (index, plane) in dmabuf.planes.iter().enumerate() {
-            params.add(
-                plane.fd,
-                u32::try_from(index).unwrap_or(u32::MAX),
-                plane.offset,
-                plane.stride,
-                (dmabuf.modifier >> 32) as u32,
-                dmabuf.modifier as u32,
-            );
-        }
-        let buffer = params.create_immed(
-            whole(dmabuf.width),
-            whole(dmabuf.height),
-            dmabuf.fourcc,
-            Flags::empty(),
-            &external.handle,
-            data,
-        );
-        params.destroy();
+        let buffer = dmabuf_buffer(manager, &external.handle, dmabuf, data);
         Ok(SurfaceBuffer {
             held: Rc::new(HeldBuffer {
                 buffer,
@@ -532,6 +510,38 @@ impl ExternalSurface {
         external.surface.commit();
         external.flush()
     }
+}
+
+pub(crate) fn dmabuf_buffer<U: Send + Sync + 'static>(
+    manager: &ZwpLinuxDmabufV1,
+    handle: &QueueHandle<State>,
+    dmabuf: &Dmabuf<'_>,
+    data: U,
+) -> WlBuffer
+where
+    State: Dispatch<WlBuffer, U>,
+{
+    let params = manager.create_params(handle, ());
+    for (index, plane) in dmabuf.planes.iter().enumerate() {
+        params.add(
+            plane.fd,
+            u32::try_from(index).unwrap_or(u32::MAX),
+            plane.offset,
+            plane.stride,
+            (dmabuf.modifier >> 32) as u32,
+            dmabuf.modifier as u32,
+        );
+    }
+    let buffer = params.create_immed(
+        whole(dmabuf.width),
+        whole(dmabuf.height),
+        dmabuf.fourcc,
+        Flags::empty(),
+        handle,
+        data,
+    );
+    params.destroy();
+    buffer
 }
 
 impl Drop for External {

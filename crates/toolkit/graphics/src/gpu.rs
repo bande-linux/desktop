@@ -1,6 +1,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError, Weak, mpsc};
 
+use ash::khr;
 use vello_cpu::Glyph;
 
 use vello_gpu::kurbo::{self, Affine, BezPath};
@@ -9,8 +10,10 @@ use vello_gpu::{
     AtlasConfig, ClearSettings, MemorySettings, PaintType, RectU16, RenderSettings, RenderSize,
     RenderTargetConfig, Renderer, Resources, TargetInit, TextureBindings,
 };
+use wgpu::hal;
 
 use crate::damage::Region;
+use crate::dmabuf::{SHARED_FORMAT, SharedImage, Sharing};
 use crate::draw::{self, Caches, Canvas, Frame};
 use crate::render::{DrawError, Snapshot};
 use crate::scene::{Image, Scene};
@@ -23,7 +26,7 @@ const ATLAS_STEP: u32 = 256;
 const ATLAS_BUDGET_PIXELS: u64 = 8 * 4096 * 4096;
 
 pub struct GpuDevice {
-    instance: wgpu::Instance,
+    sharing: Option<Sharing>,
     adapter: wgpu::Adapter,
     device: wgpu::Device,
     queue: wgpu::Queue,
@@ -42,70 +45,70 @@ fn is_software(info: &wgpu::AdapterInfo) -> bool {
 
 impl GpuDevice {
     fn offscreen() -> Result<Self, DrawError> {
-        let instance = vulkan_instance();
         let adapter = futures_lite::future::block_on(
-            instance.request_adapter(&wgpu::RequestAdapterOptions::default()),
+            instance().request_adapter(&wgpu::RequestAdapterOptions::default()),
         )
         .map_err(DrawError::Adapter)?;
-        Self::open(instance, adapter)
+        Self::open(adapter)
     }
 
     pub fn known_software_only() -> bool {
         SOFTWARE_ONLY.load(Ordering::Relaxed)
     }
 
-    /// # Safety
-    ///
-    /// The handles in `target` must stay valid until the returned surface is dropped.
-    pub unsafe fn shared_for(
-        target: wgpu::SurfaceTargetUnsafe,
-        allow_software: bool,
-    ) -> Result<(Arc<Self>, wgpu::Surface<'static>), DrawError> {
+    pub fn shared(allow_software: bool) -> Result<Arc<Self>, DrawError> {
         let mut shared = SHARED.lock().unwrap_or_else(PoisonError::into_inner);
         if let Some(gpu) = shared.upgrade() {
-            // SAFETY: the caller of shared_for guarantees the handles in target outlive the
-            // surface.
-            let surface = unsafe { gpu.instance.create_surface_unsafe(target) }
-                .map_err(|error| DrawError::Gpu(error.to_string()))?;
-            if !gpu.adapter.is_surface_supported(&surface) {
-                return Err(DrawError::Gpu(
-                    "the shared device cannot present to this surface".to_owned(),
-                ));
-            }
-            return Ok((gpu, surface));
+            return Ok(gpu);
         }
-        let instance = (!allow_software)
-            .then(crate::vulkan::hardware_instance)
-            .flatten()
-            .unwrap_or_else(vulkan_instance);
-        // SAFETY: the caller of shared_for guarantees the handles in target outlive the surface.
-        let surface = unsafe { instance.create_surface_unsafe(target) }
-            .map_err(|error| DrawError::Gpu(error.to_string()))?;
-        let adapter = futures_lite::future::block_on(instance.request_adapter(
-            &wgpu::RequestAdapterOptions {
-                compatible_surface: Some(&surface),
-                ..wgpu::RequestAdapterOptions::default()
-            },
-        ))
+        let adapter = futures_lite::future::block_on(
+            instance().request_adapter(&wgpu::RequestAdapterOptions::default()),
+        )
         .map_err(DrawError::Adapter)?;
         let info = adapter.get_info();
         if !allow_software && is_software(&info) {
             SOFTWARE_ONLY.store(true, Ordering::Relaxed);
             return Err(DrawError::Software(info.name));
         }
-        let gpu = Arc::new(Self::open(instance, adapter)?);
+        let gpu = Arc::new(Self::open(adapter)?);
         *shared = Arc::downgrade(&gpu);
-        Ok((gpu, surface))
+        Ok(gpu)
     }
 
-    fn open(instance: wgpu::Instance, adapter: wgpu::Adapter) -> Result<Self, DrawError> {
-        let (device, queue) = futures_lite::future::block_on(
-            adapter.request_device(&wgpu::DeviceDescriptor::default()),
-        )
-        .map_err(DrawError::Device)?;
+    fn open(adapter: wgpu::Adapter) -> Result<Self, DrawError> {
+        let descriptor = wgpu::DeviceDescriptor {
+            memory_hints: wgpu::MemoryHints::MemoryUsage,
+            ..wgpu::DeviceDescriptor::default()
+        };
+        // SAFETY: the hal adapter is only used to open the device and is released before wgpu
+        // wraps it.
+        let hal_adapter = unsafe { adapter.as_hal::<hal::api::Vulkan>() }
+            .ok_or_else(|| DrawError::Gpu("the adapter is not a Vulkan adapter".to_owned()))?;
+        let fences = hal_adapter
+            .physical_device_capabilities()
+            .supports_extension(khr::external_semaphore_fd::NAME);
+        // SAFETY: the features and limits are wgpu's defaults, which every adapter supports, and
+        // the callback only adds an extension the adapter supports.
+        let opened = unsafe {
+            hal_adapter.open_with_callback(
+                descriptor.required_features,
+                &descriptor.required_limits,
+                &descriptor.memory_hints,
+                Some(Box::new(move |arguments| {
+                    if fences {
+                        arguments.extensions.push(khr::external_semaphore_fd::NAME);
+                    }
+                })),
+            )
+        }
+        .map_err(|error| DrawError::Gpu(format!("cannot open the Vulkan device: {error}")))?;
+        drop(hal_adapter);
+        // SAFETY: opened was just created from this adapter with descriptor's features and limits.
+        let (device, queue) = unsafe { adapter.create_device_from_hal(opened, &descriptor) }
+            .map_err(DrawError::Device)?;
         device.on_uncaptured_error(Arc::new(|error| tracing::error!(%error, "GPU error")));
         Ok(Self {
-            instance,
+            sharing: Sharing::new(&device),
             adapter,
             device,
             queue,
@@ -113,35 +116,27 @@ impl GpuDevice {
         })
     }
 
-    pub fn configure(
+    pub fn shares_images(&self, offered: &[u64]) -> bool {
+        self.sharing
+            .as_ref()
+            .is_some_and(|sharing| sharing.accepts_any(offered))
+    }
+
+    pub fn shared_image(
         &self,
-        surface: &wgpu::Surface<'static>,
-        config: &wgpu::SurfaceConfiguration,
-    ) -> Result<(), DrawError> {
-        let _submitting = self.submitting();
-        let validation = self.device.push_error_scope(wgpu::ErrorFilter::Validation);
-        let memory = self.device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
-        let internal = self.device.push_error_scope(wgpu::ErrorFilter::Internal);
-        surface.configure(&self.device, config);
-        let errors = [
-            futures_lite::future::block_on(internal.pop()),
-            futures_lite::future::block_on(memory.pop()),
-            futures_lite::future::block_on(validation.pop()),
-        ];
-        match errors.into_iter().flatten().next() {
-            Some(error) => Err(DrawError::Gpu(error.to_string())),
-            None => Ok(()),
-        }
+        size: (u32, u32),
+        offered: &[u64],
+    ) -> Result<SharedImage, DrawError> {
+        self.sharing
+            .as_ref()
+            .ok_or_else(|| DrawError::Gpu("the GPU cannot share images".to_owned()))?
+            .image(&self.device, size, offered)
     }
 
     fn submitting(&self) -> MutexGuard<'_, ()> {
         self.submission
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
-    }
-
-    pub fn adapter(&self) -> &wgpu::Adapter {
-        &self.adapter
     }
 }
 
@@ -154,8 +149,11 @@ pub struct GpuRenderer {
     caches: Caches,
     scene: vello_gpu::Scene,
     depth: Option<(RenderSize, wgpu::TextureView)>,
-    frame: Option<wgpu::Texture>,
     uploaded: bool,
+}
+
+fn instance() -> wgpu::Instance {
+    crate::vulkan::hardware_instance().unwrap_or_else(vulkan_instance)
 }
 
 fn vulkan_instance() -> wgpu::Instance {
@@ -210,18 +208,18 @@ fn renderer(
 
 impl GpuRenderer {
     pub fn new() -> Result<Self, DrawError> {
-        Ok(Self::with_device(
+        Ok(Self::create(
             Arc::new(GpuDevice::offscreen()?),
             OFFSCREEN_FORMAT,
             OFFSCREEN_ATLAS,
         ))
     }
 
-    pub fn with_device(
-        gpu: Arc<GpuDevice>,
-        format: wgpu::TextureFormat,
-        atlas_hint: (u32, u32),
-    ) -> Self {
+    pub fn with_device(gpu: Arc<GpuDevice>, atlas_hint: (u32, u32)) -> Self {
+        Self::create(gpu, SHARED_FORMAT, atlas_hint)
+    }
+
+    fn create(gpu: Arc<GpuDevice>, format: wgpu::TextureFormat, atlas_hint: (u32, u32)) -> Self {
         let limit = gpu.device.limits().max_texture_dimension_2d;
         let clamped = (atlas_hint.0.min(limit), atlas_hint.1.min(limit));
         let atlas = atlas_size(clamped, limit).unwrap_or(FALLBACK_ATLAS);
@@ -235,7 +233,6 @@ impl GpuRenderer {
             caches: Caches::default(),
             scene: vello_gpu::Scene::new(1, 1),
             depth: None,
-            frame: None,
             uploaded: false,
         }
     }
@@ -282,53 +279,20 @@ impl GpuRenderer {
         &mut self,
         scene: &Scene,
         scale: f64,
-        surface: &wgpu::Surface<'static>,
+        image: &SharedImage,
         damage: Option<&[Region]>,
     ) -> Result<(), DrawError> {
-        let output = match surface.get_current_texture() {
-            wgpu::CurrentSurfaceTexture::Success(output)
-            | wgpu::CurrentSurfaceTexture::Suboptimal(output) => output,
-            other => return Err(DrawError::Gpu(format!("no surface texture: {other:?}"))),
-        };
+        if damage.is_some_and(<[Region]>::is_empty) {
+            return Ok(());
+        }
         let gpu = Arc::clone(&self.gpu);
         let _submitting = gpu.submitting();
-        let size = output.texture.size();
-        let kept = self
-            .frame
+        let encoder = self.draw(scene, scale, &image.texture, damage)?;
+        let sharing = gpu
+            .sharing
             .as_ref()
-            .is_some_and(|frame| frame.size() == size && frame.format() == output.texture.format());
-        if !kept {
-            self.frame = Some(self.gpu.device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("toolkit frame"),
-                size,
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: output.texture.format(),
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
-                view_formats: &[],
-            }));
-        }
-        let frame = self
-            .frame
-            .clone()
-            .ok_or_else(|| DrawError::Gpu("no frame texture".to_owned()))?;
-        let damage = damage.filter(|_| kept);
-        let mut encoder = match damage {
-            Some([]) => self
-                .gpu
-                .device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor::default()),
-            _ => self.draw(scene, scale, &frame, damage)?,
-        };
-        encoder.copy_texture_to_texture(
-            frame.as_image_copy(),
-            output.texture.as_image_copy(),
-            size,
-        );
-        self.gpu.queue.submit([encoder.finish()]);
-        self.gpu.queue.present(output);
-        Ok(())
+            .ok_or_else(|| DrawError::Gpu("the GPU cannot share images".to_owned()))?;
+        sharing.submit(&gpu.device, &gpu.queue, encoder.finish(), image)
     }
 
     fn draw(

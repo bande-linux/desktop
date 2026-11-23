@@ -63,6 +63,12 @@ A redraw wakes its client once more, at the frame callback: when a commit asks f
 compositor holds the buffer it replaces and sends its `wl_buffer.release` in the same flush as
 the frame callback and presentation feedback of the frame that shows the new buffer.
 
+On the GPU an app's window costs two window-sized dma-bufs, its image atlas, Vello's depth
+buffer and the device's 8–64 MiB allocation blocks: under `bande-footprint` on an Intel UHD 630,
+Calculator holds about 26 MiB of GPU memory and Files and Settings about 50 MiB. A frame damages
+only what changed, so pointing at Calculator's close button makes the compositor repaint about
+1 200 pixels a frame.
+
 ## What wakes when idle
 
 Everything else waits on an event: Wayland, D-Bus signals with match rules narrowed to what is

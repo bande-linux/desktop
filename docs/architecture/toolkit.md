@@ -116,18 +116,24 @@ writes a hex value, a corner radius or a font name of its own.
   generic family), so nothing breaks without the fonts; `bande-desktop` depends on
   `fonts-inter`, `fonts-manrope` and `fonts-jetbrains-mono`. Baselines sit on whole pixels.
 - **Windows.** `Window` opens an `xdg_toplevel`, a `zwlr_layer_surface_v1` or a session-lock
-  surface through libwayland, loaded at run time, so that Vulkan's WSI can present on the same
-  connection. The first frame is drawn by `CpuRenderer` into a `wl_shm` buffer while a thread
-  creates the Vulkan device and a surface on the window; once it is ready, frames are drawn by
-  `GpuRenderer` into a kept frame texture that is copied to the surface (mailbox when offered). Frames are paced by
-  `wl_surface.frame`. Windows follow the output's fractional scale through `wp_viewporter`.
-  All windows of a process share one Vulkan device, opened with the first and closed with the
-  last. Each renderer's image atlas starts at the surface's size (rounded up to 256 px) and grows
-  only when an image does not fit. A window hidden for 30 s drops its renderer, frame textures,
-  `wl_shm` buffers and, with the last one, the device; showing it again draws the first frames on
-  the CPU while the GPU comes back. Every frame is diffed against the last one item by item
-  (`damage`): only the changed regions are redrawn (clipped on the GPU into a kept frame texture,
-  rendered region by region on the CPU) and only they are damaged on `wl_shm` buffers.
+  surface. The first frame is drawn by `CpuRenderer` into a `wl_shm` buffer while a thread opens
+  the Vulkan device; once it is ready, frames are drawn by `GpuRenderer` straight into dma-bufs
+  the toolkit allocates and exports itself (`zwp_linux_dmabuf_v1`, ARGB8888 with a one-plane
+  modifier the compositor offers): two per window, a third only while the compositor still holds
+  both. Each frame's dma-buf carries the frame's fence (a sync file exported from Vulkan), so the
+  compositor waits for the GPU and the window's thread does not; a driver without exportable
+  fences makes the thread wait instead. Frames are paced by `wl_surface.frame`. Windows follow
+  the output's fractional scale through `wp_viewporter`. All windows of a process share one
+  Vulkan device, opened with the first and closed with the last, with wgpu's `MemoryUsage`
+  allocation blocks of 8–64 MiB. Only the drivers of the machine's render
+  nodes are loaded (`vulkan.rs`); lavapipe only when there is no known GPU or the loader's
+  variables say otherwise. Each renderer's image atlas starts at the surface's size (rounded up to
+  256 px) and grows only when an image does not fit. A window hidden for 30 s drops its renderer,
+  buffers and, with the last one, the device; showing it again draws the first frames on the CPU
+  while the GPU comes back. Every frame is diffed against the last one item by item (`damage`):
+  only the changed regions are redrawn (into a dma-buf together with what changed since that
+  buffer was last shown, region by region on the CPU) and only they are damaged with
+  `wl_surface.damage_buffer`.
   Text input v3 and the clipboard are supported.
   - **Window frame.** A toplevel gets its frame from the toolkit, in Datum's frame and sheet:
     the window is `chassis`, with a 48 pt header holding the title in Manrope 15/20
@@ -419,6 +425,3 @@ writes a hex value, a corner radius or a font name of its own.
 - **Clipboard changes.** `WindowEvent::ClipboardChanged` says something another window copied became
   the selection, so a guest can be offered it. It stays silent for the window's own copies and for
   anything marked as a password.
-
-Since `wayland-backend` is built with `client_system`, every Wayland client in a workspace
-build, `bande-test-wayland` included, goes through libwayland.

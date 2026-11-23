@@ -4,6 +4,7 @@ mod error;
 mod gpu;
 mod layer;
 mod menus;
+mod pool;
 mod shm;
 
 use std::cell::RefCell;
@@ -51,7 +52,7 @@ use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::ZwlrL
 
 pub use self::error::{WindowError, report};
 pub use self::gpu::RENDERER_VARIABLE;
-use self::gpu::{Gpu, start_gpu};
+use self::gpu::{Gpu, GpuTarget, start_gpu};
 pub use self::layer::{Edges, KeyboardFocus, LayerKind, LayerOptions};
 use self::layer::{anchor_of, keyboard_interactivity, layer_of};
 pub(crate) use self::shm::{ShmTarget, Target};
@@ -698,11 +699,7 @@ impl Window {
             Some(_) => state.scaling.scale(),
             None => 1.0,
         };
-        let gpu = start_gpu(
-            &connection,
-            &surface,
-            (pixels(size.0, scale), pixels(size.1, scale)),
-        );
+        let gpu = start_gpu(&state, (pixels(size.0, scale), pixels(size.1, scale)));
         if fresh {
             appearance.borrow_mut().wait_for_first_reading();
         }
@@ -870,11 +867,7 @@ impl Window {
     }
 
     fn resize_margin(&self) -> u32 {
-        let transparent = match &self.gpu {
-            Gpu::Ready(gpu) => gpu.transparent,
-            Gpu::Starting(_) | Gpu::Released | Gpu::Unavailable => true,
-        };
-        if self.resizes_from_band() && transparent {
+        if self.resizes_from_band() {
             RESIZE_MARGIN
         } else {
             0
@@ -1494,13 +1487,6 @@ impl Window {
         self.shown_opaque = opaque;
     }
 
-    fn externals_below(&self) -> bool {
-        match &self.gpu {
-            Gpu::Ready(gpu) => gpu.transparent,
-            Gpu::Starting(_) | Gpu::Released | Gpu::Unavailable => true,
-        }
-    }
-
     pub fn set_backdrop(&mut self, area: Option<Rect>) {
         if self.shown_backdrop == area {
             return;
@@ -1595,11 +1581,7 @@ impl Window {
         if matches!(self.gpu, Gpu::Released) {
             let size = self.geometry();
             let scale = self.scale();
-            self.gpu = start_gpu(
-                &self.connection,
-                &self.surface,
-                (pixels(size.0, scale), pixels(size.1, scale)),
-            );
+            self.gpu = start_gpu(&self.state, (pixels(size.0, scale), pixels(size.1, scale)));
         }
         self.needs_redraw = true;
         Ok(())
@@ -1639,7 +1621,6 @@ impl Window {
             (scene, opaque)
         };
         let scale = self.scale();
-        let below = self.externals_below();
         let placed: Vec<(SurfaceId, Rect)> = match self.externals.is_empty() {
             true => Vec::new(),
             false => placed_surfaces(&scene, scale)
@@ -1647,10 +1628,7 @@ impl Window {
                 .map(|placed| (placed.id, placed.area))
                 .collect(),
         };
-        let holes = match below {
-            true => placed.iter().map(|(_, area)| *area).collect(),
-            false => Vec::new(),
-        };
+        let holes = placed.iter().map(|(_, area)| *area).collect();
         self.declare_opaque(opaque.map(|area| Opaque { area, holes }));
         self.needs_redraw = self.chrome.as_ref().is_some_and(|chrome| chrome.animating);
         let unchanged = !self.state.configure_unapplied
@@ -1681,11 +1659,18 @@ impl Window {
             .filter(|(_, shown_scale)| *shown_scale == scale)
             .and_then(|(shown, _)| damage(&shown, &scene, scale));
         if !self.externals.is_empty() {
-            self.place_externals(&placed, below);
+            self.place_externals(&placed);
         }
-        let presented = match &mut self.gpu {
-            Gpu::Ready(gpu) => Some(gpu.present(&scene, scale, damage.as_deref())),
-            Gpu::Starting(_) | Gpu::Released | Gpu::Unavailable => None,
+        let presented = match (&mut self.gpu, &self.state.dmabuf) {
+            (Gpu::Ready(gpu), Some(dmabuf)) => {
+                let target = GpuTarget {
+                    dmabuf,
+                    handle: &handle,
+                    surface: &self.surface,
+                };
+                Some(gpu.present(target, &scene, scale, damage.as_deref()))
+            }
+            _ => None,
         };
         let path = match presented {
             Some(Ok(())) => {

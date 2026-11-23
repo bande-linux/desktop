@@ -2,7 +2,7 @@ use std::sync::Mutex;
 
 use super::{Compositor, OutputElement, State};
 use crate::cursor_set::Pointer;
-use crate::element::ScreenElement;
+use crate::element::{ScreenElement, keep_backdrops_whole};
 use smithay::backend::renderer::Renderer as _;
 use smithay::backend::renderer::element::Kind as ElementKind;
 use smithay::backend::renderer::element::memory::MemoryRenderBufferRenderElement;
@@ -14,7 +14,7 @@ use bande_render::VulkanRenderer;
 use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
 use smithay::reexports::wayland_server::Resource;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
-use smithay::utils::{Logical, Physical, Point};
+use smithay::utils::{Logical, Physical, Point, Rectangle};
 use smithay::wayland::compositor::with_states;
 use smithay::wayland::shell::wlr_layer::Layer;
 
@@ -163,7 +163,11 @@ impl Compositor {
         let scale = self.state.render_scale(screen);
         let (elements, drawn, icon) = self.compose_at(renderer, screen, scale, with_cursor);
         let origin = self.state.view_origin_in_pixels(screen, scale);
-        (relocated(elements, Point::default() - origin), drawn, icon)
+        let mut elements = relocated(elements, Point::default() - origin);
+        let shown = &self.state.screens[screen];
+        let area = shown.settings.transform.transform_size(shown.mode_size());
+        keep_backdrops_whole(&mut elements, scale, Rectangle::from_size(area));
+        (elements, drawn, icon)
     }
 
     fn compose_mirror(
@@ -187,7 +191,9 @@ impl Compositor {
             Point::<i32, Physical>::from(((frame.w - shown.w) / 2, (frame.h - shown.h) / 2));
         let (elements, _, _) = self.compose_at(renderer, source, scale, with_cursor);
         let origin = self.state.screens[source].origin_in_pixels(scale);
-        (relocated(elements, inset - origin), Vec::new(), None)
+        let mut elements = relocated(elements, inset - origin);
+        keep_backdrops_whole(&mut elements, scale, Rectangle::from_size(frame));
+        (elements, Vec::new(), None)
     }
 
     fn compose_at(

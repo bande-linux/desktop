@@ -29,6 +29,7 @@ pub struct Blur {
 pub struct Backdrop {
     pub owner: u64,
     pub below: u64,
+    pub uncovered: u64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -70,6 +71,13 @@ impl Blur {
         self.passes.clamp(1, MAX_PASSES)
     }
 
+    pub fn support(&self) -> i32 {
+        let level = |pass: u32| 1i32 << pass;
+        (0..self.passes())
+            .map(|pass| ((self.offset.max(0.0) * 1.5).ceil() as i32 + 3) * level(pass + 1))
+            .sum()
+    }
+
     pub fn reach(&self) -> i32 {
         (self.offset.max(0.0) * 2.0 * (1u32 << self.passes()) as f32).ceil() as i32
     }
@@ -108,7 +116,11 @@ impl VulkanFrame<'_, '_> {
             return Ok(());
         }
         let passes = blur.passes();
-        let whole = rects.iter().map(|rect| rect.area()).sum::<u64>() == source.area();
+        let redrawn = rects.iter().map(|rect| rect.area()).sum::<u64>();
+        let whole = match blur.backdrop {
+            Some(backdrop) => redrawn >= backdrop.uncovered.min(source.area()),
+            None => redrawn == source.area(),
+        };
         let key = BlurKey {
             owner: blur.backdrop.map_or(0, |backdrop| backdrop.owner),
             shared_size: match blur.backdrop {

@@ -480,6 +480,7 @@ pub struct BlurElement {
     id: Id,
     blur: Blur,
     params: u64,
+    below: u64,
     commit: CommitCounter,
 }
 
@@ -526,11 +527,22 @@ impl BlurElement {
             id,
             blur,
             params,
+            below: 0,
             commit: CommitCounter::from(params as usize),
         }
     }
 
     pub(crate) fn depend_on(&mut self, below: u64) {
+        self.below = below;
+        self.cover(0, u64::MAX);
+    }
+
+    pub(crate) fn support(&self) -> i32 {
+        self.blur.support()
+    }
+
+    pub(crate) fn cover(&mut self, occluders: u64, uncovered: u64) {
+        let below = self.below ^ occluders;
         self.commit = CommitCounter::from((self.params ^ below) as usize);
         let mut owner = DefaultHasher::new();
         self.id.hash(&mut owner);
@@ -539,6 +551,7 @@ impl BlurElement {
         self.blur.backdrop = Some(Backdrop {
             owner: owner.finish(),
             below: backdrop.finish(),
+            uncovered,
         });
     }
 }

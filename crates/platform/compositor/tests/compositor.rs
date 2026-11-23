@@ -11,7 +11,7 @@ use bande_compositor::{
     Compositor, KEYBOARD_MONITOR_NAME, OutputConfig, SCREEN_READER_NAME, SessionReport,
     UNRESPONSIVE_AFTER, serve_keyboard_monitor,
 };
-use bande_render::VulkanRenderer;
+use bande_render::{OffscreenTarget, VulkanRenderer};
 use bande_test_bus::SessionBus;
 use bande_test_wayland::keys::{
     BTN_LEFT, KEY_A, KEY_DOWN, KEY_ENTER, KEY_ESC, KEY_L, KEY_LEFTALT, KEY_LEFTCTRL, KEY_LEFTMETA,
@@ -24,8 +24,8 @@ use bande_test_wayland::{
 use smithay::backend::allocator::dmabuf::{AsDmabuf, Dmabuf};
 use smithay::backend::allocator::gbm::{GbmAllocator, GbmBufferFlags, GbmDevice};
 use smithay::backend::allocator::{Allocator, Buffer, Fourcc, Modifier};
-use smithay::backend::renderer::Bind;
 use smithay::backend::renderer::damage::OutputDamageTracker;
+use smithay::backend::renderer::{Bind, Offscreen};
 use smithay::utils::Transform;
 use wayland_client::protocol::wl_shm::Format;
 
@@ -805,4 +805,115 @@ fn moving_the_pointer_redraws_only_the_display_it_is_on() {
         .map(|output| server.take_redraw_on(output))
         .collect();
     assert_eq!(redrawn, [true, false], "a pointer move redrew {outputs:?}");
+}
+
+fn shown(
+    server: &mut Compositor,
+    app_id: &str,
+    size: (i32, i32),
+    (pixel, format): ([u8; 4], Format),
+) -> TestClient {
+    let bytes = pixel.repeat((size.0 * size.1) as usize);
+    let mut client = TestClient::connect(server);
+    client.use_seat(server);
+    client.show_window(
+        server,
+        &ShmImage {
+            width: size.0,
+            height: size.1,
+            stride: size.0 * 4,
+            format,
+            bytes: &bytes,
+        },
+    );
+    client.set_app_id(server, 0, app_id);
+    roundtrip(server, &mut [&mut client]);
+    client
+}
+
+#[test]
+fn a_blurred_backdrop_drawn_frame_by_frame_matches_a_full_redraw() {
+    let Some((mut vulkan, _)) = hardware() else {
+        println!("skipped: no hardware Vulkan device with a DRM render node");
+        return;
+    };
+    let size = (800, 600);
+    let mut server = headless(size.0, size.1);
+    let _below = shown(
+        &mut server,
+        "org.bande.Below",
+        (500, 400),
+        ([0, 0, 255, 255], Format::Xrgb8888),
+    );
+    let mut glass = shown(
+        &mut server,
+        "org.bande.Glass",
+        (420, 320),
+        ([40, 60, 20, 128], Format::Argb8888),
+    );
+    glass.blur_behind(&mut server, 0, (420, 320));
+    let _above = shown(
+        &mut server,
+        "org.bande.Above",
+        (260, 200),
+        ([0, 200, 0, 255], Format::Xrgb8888),
+    );
+    let output = server.main_output();
+    let mut drawn: OffscreenTarget =
+        Offscreen::create_buffer(&mut vulkan, Fourcc::Abgr8888, size.into()).expect("target");
+    let mut full: OffscreenTarget =
+        Offscreen::create_buffer(&mut vulkan, Fourcc::Abgr8888, size.into()).expect("target");
+    let mut damage = OutputDamageTracker::new(size, 1.0, Transform::Normal);
+    let frame = server.windows()[2]
+        .geometry()
+        .expect("the window above is mapped");
+    let mut at = (
+        f64::from(frame.loc.x + frame.size.w / 2),
+        f64::from(frame.loc.y + frame.size.h / 2),
+    );
+    server.move_pointer_to(at.into(), 0);
+    server.key(KEY_LEFTMETA, true, 0);
+    server.press_button(BTN_LEFT, true, 0);
+    let mut elements = Vec::new();
+    for step in 0..40 {
+        at = (at.0 - 7.0, at.1 + 4.0);
+        server.move_pointer_to(at.into(), step * 10);
+        server.dispatch().expect("server dispatch");
+        elements = server.render_elements_on(&mut vulkan, &output);
+        let mut framebuffer = vulkan.bind(&mut drawn).expect("bind the target");
+        damage
+            .render_output(
+                &mut vulkan,
+                &mut framebuffer,
+                usize::from(step > 0),
+                &elements,
+                background(),
+            )
+            .expect("render a frame")
+            .sync
+            .wait()
+            .expect("the GPU finishes the frame");
+    }
+    server.press_button(BTN_LEFT, false, 400);
+    server.key(KEY_LEFTMETA, false, 400);
+    let mut framebuffer = vulkan.bind(&mut full).expect("bind the target");
+    OutputDamageTracker::new(size, 1.0, Transform::Normal)
+        .render_output(&mut vulkan, &mut framebuffer, 0, &elements, background())
+        .expect("a full redraw")
+        .sync
+        .wait()
+        .expect("the GPU finishes the full redraw");
+    let drawn = vulkan.read_target(&drawn).expect("read the frame back");
+    let full = vulkan
+        .read_target(&full)
+        .expect("read the full redraw back");
+    let wrong = drawn
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .zip(full.as_chunks::<4>().0)
+        .filter(|(drawn, full)| drawn.iter().zip(*full).any(|(a, b)| a.abs_diff(*b) > 2))
+        .count();
+    assert_eq!(wrong, 0, "{wrong} pixels differ from a full redraw");
+    assert_eq!(bande_render::vulkan_errors(), 0, "Vulkan reported errors");
 }

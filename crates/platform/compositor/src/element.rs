@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::hash::{DefaultHasher, Hash, Hasher};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{LazyLock, Mutex};
 
@@ -43,11 +44,75 @@ fn skip_failed(id: &Id, error: RenderError) -> Result<(), RenderError> {
 pub struct ScreenElement {
     inner: OutputElement,
     by: Point<i32, Physical>,
+    opaque_inset: i32,
 }
 
 impl ScreenElement {
     pub(crate) fn new(inner: OutputElement, by: Point<i32, Physical>) -> Self {
-        Self { inner, by }
+        Self {
+            inner,
+            by,
+            opaque_inset: 0,
+        }
+    }
+}
+
+fn eroded(
+    regions: OpaqueRegions<i32, Physical>,
+    inset: i32,
+) -> impl Iterator<Item = Rectangle<i32, Physical>> {
+    regions.into_iter().filter_map(move |region| {
+        let size = (region.size.w - 2 * inset, region.size.h - 2 * inset);
+        (size.0 > 0 && size.1 > 0).then(|| {
+            Rectangle::new(
+                (region.loc.x + inset, region.loc.y + inset).into(),
+                size.into(),
+            )
+        })
+    })
+}
+
+pub(crate) fn keep_backdrops_whole(
+    elements: &mut [ScreenElement],
+    scale: f64,
+    output: Rectangle<i32, Physical>,
+) {
+    let scale = Scale::from(scale);
+    for index in 0..elements.len() {
+        let support = match &elements[index].inner {
+            OutputElement::Blur(blur) => blur.support(),
+            _ => continue,
+        };
+        let Some(reach) = elements[index].geometry(scale).intersection(output) else {
+            continue;
+        };
+        let mut covered = Vec::new();
+        for above in &mut elements[..index] {
+            if !above.geometry(scale).overlaps(reach) {
+                continue;
+            }
+            above.opaque_inset = above.opaque_inset.max(support);
+            let at = above.location(scale);
+            covered.extend(
+                eroded(above.inner.opaque_regions(scale), support).filter_map(|mut region| {
+                    region.loc += at;
+                    region.intersection(reach)
+                }),
+            );
+        }
+        let mut hasher = DefaultHasher::new();
+        for rect in &covered {
+            (rect.loc.x, rect.loc.y, rect.size.w, rect.size.h).hash(&mut hasher);
+        }
+        let uncovered = Rectangle::subtract_rects_many([reach], covered)
+            .iter()
+            .map(|rect| {
+                u64::from(rect.size.w.unsigned_abs()) * u64::from(rect.size.h.unsigned_abs())
+            })
+            .sum();
+        if let OutputElement::Blur(blur) = &mut elements[index].inner {
+            blur.cover(hasher.finish(), uncovered);
+        }
     }
 }
 
@@ -87,7 +152,10 @@ impl Element for ScreenElement {
     }
 
     fn opaque_regions(&self, scale: Scale<f64>) -> OpaqueRegions<i32, Physical> {
-        self.inner.opaque_regions(scale)
+        match self.opaque_inset {
+            0 => self.inner.opaque_regions(scale),
+            inset => eroded(self.inner.opaque_regions(scale), inset).collect(),
+        }
     }
 
     fn alpha(&self) -> f32 {

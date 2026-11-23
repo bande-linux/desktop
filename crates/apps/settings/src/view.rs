@@ -58,6 +58,7 @@ use crate::widgets::{Column, Crossfade, Root};
 use crate::wifi::{HIDDEN_SECURITY, Other};
 use bande_network::Security;
 use bande_status::pointing::PointingDevices;
+use zeroize::Zeroizing;
 
 pub(crate) const PICK_RESULTS: usize = 8;
 const SECOND: Duration = Duration::from_secs(1);
@@ -154,6 +155,8 @@ pub(crate) enum Intent {
     PausePrinter((String, bool)),
     Scan(ScanIntent),
     UnsavedScans(String),
+    ScreenPasswordAnswer(String),
+    RevealScreenPassword(bool),
     AskPassword(bool),
     PasswordEntry(usize, String),
     OpenAccount(String),
@@ -330,6 +333,9 @@ pub struct SettingsView {
     pub(crate) printers: Option<PrintersState>,
     pub(crate) sharing: Option<SharingState>,
     pub(crate) installing_sharing: bool,
+    pub(crate) screen_password: Rc<RefCell<Zeroizing<String>>>,
+    pub(crate) screen_password_field: Option<WidgetId>,
+    pub(crate) turning_on_screen: bool,
     pub(crate) boot_screen: Option<BootScreenState>,
     pub(crate) changing_boot_screen: bool,
     pub(crate) installing_vpn_plugin: bool,
@@ -454,6 +460,9 @@ impl SettingsView {
             printers: None,
             sharing: None,
             installing_sharing: false,
+            screen_password: Rc::default(),
+            screen_password_field: None,
+            turning_on_screen: false,
             boot_screen: None,
             changing_boot_screen: false,
             installing_vpn_plugin: false,
@@ -999,6 +1008,7 @@ impl SettingsView {
             Update::InstallingVpnPlugin(installing) => self.installing_vpn_plugin = installing,
             Update::Sharing(state) => {
                 self.installing_sharing = false;
+                self.turning_on_screen = false;
                 self.sharing = Some(state);
             }
             Update::BootScreen(state) => {
@@ -1770,6 +1780,11 @@ impl SettingsView {
                     self.commands
                         .push(Command::Printers(PrinterCommand::SetDefault(name)));
                 }
+                Intent::Sharing(SharingCommand::ScreenSharing(true))
+                    if self.needs_screen_password() =>
+                {
+                    self.ask_screen_password(None);
+                }
                 Intent::Sharing(command) => {
                     self.installing_sharing |= matches!(
                         command,
@@ -1820,6 +1835,8 @@ impl SettingsView {
                 | Intent::NewAccountAdmin(_) => {}
                 Intent::Scan(change) => self.scan_intent(change),
                 Intent::UnsavedScans(choice) => self.unsaved_scans(&choice),
+                Intent::ScreenPasswordAnswer(choice) => self.screen_password_answered(&choice),
+                Intent::RevealScreenPassword(shown) => self.reveal_screen_password(shown),
                 Intent::PausePrinter((name, paused)) => {
                     self.focus_next = Some(Anchor::Item("printer-pause".to_owned()));
                     self.commands

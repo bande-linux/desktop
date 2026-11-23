@@ -58,7 +58,8 @@ impl GpuDevice {
     }
 
     /// The process's device on the GPU whose DRM node is `node` (the compositor's main device), or
-    /// on the only GPU there is when the compositor does not say which one it uses.
+    /// on the only GPU there is when the compositor does not say which one it uses (software
+    /// devices such as lavapipe count only when there is no GPU).
     pub fn shared(allow_software: bool, node: Option<u64>) -> Result<Arc<Self>, DrawError> {
         let mut shared = SHARED.lock().unwrap_or_else(PoisonError::into_inner);
         if let Some(gpu) = shared.upgrade()
@@ -76,11 +77,16 @@ impl GpuDevice {
                     DrawError::Gpu("no Vulkan device draws on the compositor's GPU".to_owned())
                 })?,
             None => {
-                let mut adapters = adapters.into_iter();
-                match (adapters.next(), adapters.next()) {
-                    (Some(adapter), None) => adapter,
-                    (None, _) => return Err(DrawError::Gpu("no Vulkan device".to_owned())),
-                    (Some(_), Some(_)) => {
+                let (software, mut hardware): (Vec<_>, Vec<_>) = adapters
+                    .into_iter()
+                    .partition(|adapter| is_software(&adapter.get_info()));
+                match hardware.len() {
+                    1 => hardware.remove(0),
+                    0 => software
+                        .into_iter()
+                        .next()
+                        .ok_or_else(|| DrawError::Gpu("no Vulkan device".to_owned()))?,
+                    _ => {
                         return Err(DrawError::Gpu(
                             "several GPUs, and the compositor does not say which one it uses"
                                 .to_owned(),

@@ -14,6 +14,7 @@ bande-toolkit-platform.workspace = true
 bande-widgets.workspace = true
 
 [dev-dependencies]
+bande-graphics = { workspace = true, features = ["gpu"] }
 bande-test-bus.workspace = true
 bande-test-wayland.workspace = true
 zbus.workspace = true

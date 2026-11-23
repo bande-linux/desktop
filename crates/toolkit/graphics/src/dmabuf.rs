@@ -36,6 +36,22 @@ pub struct SharedImage {
     pub stride: u32,
 }
 
+impl SharedImage {
+    /// Whether the compositor has finished every read of this image's last frame.
+    pub fn is_idle(&self) -> bool {
+        if !self.handed_over.load(Ordering::Acquire) {
+            return true;
+        }
+        let mut writable = libc::pollfd {
+            fd: self.fd.as_raw_fd(),
+            events: libc::POLLOUT,
+            revents: 0,
+        };
+        // SAFETY: writable is one valid pollfd for an open descriptor and lives across the call.
+        unsafe { libc::poll(&mut writable, 1, 0) == 1 }
+    }
+}
+
 pub(crate) struct Sharing {
     instance: ash::Instance,
     physical: vk::PhysicalDevice,

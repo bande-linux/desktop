@@ -71,24 +71,26 @@ impl GpuSurface {
     ) -> Result<(), DrawError> {
         let size = (pixels(scene.width, scale), pixels(scene.height, scale));
         let (gpu, modifiers) = (&self.gpu, &self.modifiers);
-        let (buffer, stale) = self.buffers.next(size, damage, |busy| {
-            let image = gpu.shared_image(size, modifiers)?;
-            let planes = [DmabufPlane {
-                fd: image.fd.as_fd(),
-                offset: image.offset,
-                stride: image.stride,
-            }];
-            let dmabuf = Dmabuf {
-                planes: &planes,
-                width: size.0,
-                height: size.1,
-                fourcc: SHARED_FOURCC,
-                modifier: image.modifier,
-                flipped: false,
-            };
-            let buffer = dmabuf_buffer(target.dmabuf, target.handle, &dmabuf, busy);
-            Ok((image, buffer))
-        })?;
+        let (buffer, stale) = self
+            .buffers
+            .next(size, damage, SharedImage::is_idle, |busy| {
+                let image = gpu.shared_image(size, modifiers)?;
+                let planes = [DmabufPlane {
+                    fd: image.fd.as_fd(),
+                    offset: image.offset,
+                    stride: image.stride,
+                }];
+                let dmabuf = Dmabuf {
+                    planes: &planes,
+                    width: size.0,
+                    height: size.1,
+                    fourcc: SHARED_FOURCC,
+                    modifier: image.modifier,
+                    flipped: false,
+                };
+                let buffer = dmabuf_buffer(target.dmabuf, target.handle, &dmabuf, busy);
+                Ok((image, buffer))
+            })?;
         self.renderer
             .present(scene, scale, &buffer.contents, stale.as_deref())?;
         buffer.show(target.surface, damage);

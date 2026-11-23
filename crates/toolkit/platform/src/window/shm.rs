@@ -121,9 +121,12 @@ impl ShmTarget {
         faded: bool,
     ) -> Result<(), WindowError> {
         let (width, height) = self.size;
-        let (buffer, stale) = self.buffers.next(self.size, damage, |busy| {
-            create_buffer(target.shm, target.handle, width, height, busy)
-        })?;
+        let (buffer, stale) = self.buffers.next(
+            self.size,
+            damage,
+            |_| true,
+            |busy| create_buffer(target.shm, target.handle, width, height, busy),
+        )?;
         let pixels = match faded {
             true => &self.scratch,
             false => &self.bgra,

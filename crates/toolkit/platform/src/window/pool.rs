@@ -6,6 +6,7 @@ use wayland_client::protocol::wl_buffer::WlBuffer;
 use wayland_client::protocol::wl_surface::WlSurface;
 
 const MAX_STALE_REGIONS: usize = 64;
+const MAX_BUFFERS: usize = 3;
 
 pub(super) struct Pooled<T> {
     pub(super) contents: T,
@@ -32,6 +33,7 @@ impl<T> BufferPool<T> {
         &mut self,
         size: (u32, u32),
         damage: Option<&[Region]>,
+        idle: impl Fn(&T) -> bool,
         create: impl FnOnce(Arc<AtomicBool>) -> Result<(T, WlBuffer), E>,
     ) -> Result<(&mut Pooled<T>, Option<Vec<Region>>), E> {
         self.buffers
@@ -47,11 +49,23 @@ impl<T> BufferPool<T> {
                 _ => None,
             };
         }
-        let free = self
+        let free = |buffer: &Pooled<T>| buffer.size == size && !buffer.busy.load(Ordering::Acquire);
+        let idle_buffer = self
             .buffers
             .iter()
-            .position(|buffer| buffer.size == size && !buffer.busy.load(Ordering::Acquire));
-        let index = match free {
+            .position(|buffer| free(buffer) && idle(&buffer.contents));
+        let room = self
+            .buffers
+            .iter()
+            .filter(|buffer| buffer.size == size)
+            .count()
+            < MAX_BUFFERS;
+        let reused = match (idle_buffer, room) {
+            (Some(index), _) => Some(index),
+            (None, true) => None,
+            (None, false) => self.buffers.iter().position(free),
+        };
+        let index = match reused {
             Some(index) => index,
             None => {
                 let busy = Arc::new(AtomicBool::new(false));
@@ -123,6 +137,7 @@ mod tests {
     struct Frames {
         pool: BufferPool<u32>,
         busy: Vec<Arc<AtomicBool>>,
+        reading: Vec<u32>,
         connection: Connection,
         _server: UnixStream,
     }
@@ -142,6 +157,7 @@ mod tests {
             Self {
                 pool: BufferPool::default(),
                 busy: Vec::new(),
+                reading: Vec::new(),
                 connection: Connection::from_socket(client).unwrap(),
                 _server: server,
             }
@@ -157,10 +173,15 @@ mod tests {
             let mut made = None;
             let (buffer, stale) = self
                 .pool
-                .next(size, damage, |busy| {
-                    made = Some(Arc::clone(&busy));
-                    Ok::<_, Infallible>((created, WlBuffer::inert(backend)))
-                })
+                .next(
+                    size,
+                    damage,
+                    |buffer| !self.reading.contains(buffer),
+                    |busy| {
+                        made = Some(Arc::clone(&busy));
+                        Ok::<_, Infallible>((created, WlBuffer::inert(backend)))
+                    },
+                )
                 .unwrap();
             buffer.busy.store(true, Ordering::Release);
             let shown = (buffer.contents, stale);
@@ -223,6 +244,28 @@ mod tests {
                 .buffers
                 .iter()
                 .all(|buffer| buffer.size == (9, 9))
+        );
+    }
+
+    #[test]
+    fn a_buffer_the_compositor_still_reads_is_skipped_up_to_a_third_buffer() {
+        let mut frames = Frames::new();
+        let size = (8, 8);
+        frames.show(size, None);
+        frames.show(size, None);
+        frames.release(0);
+        frames.reading.push(0);
+        assert_eq!(
+            frames.show(size, None).0,
+            2,
+            "a third buffer instead of waiting"
+        );
+        frames.release(1);
+        frames.reading.push(1);
+        assert_eq!(
+            frames.show(size, None).0,
+            0,
+            "no fourth buffer: the oldest released one"
         );
     }
 }

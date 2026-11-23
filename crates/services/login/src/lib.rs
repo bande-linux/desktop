@@ -6,4 +6,4 @@ mod shown;
 
 pub use admission::{login_shell, refusal};
 pub use conversation::{Relay, Unattended};
-pub use shown::ShownWatch;
+pub use shown::{FirstFrame, Progress, ShownWatch};

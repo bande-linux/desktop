@@ -23,7 +23,7 @@ Depends: bande-desktop, lightdm, bsdutils, debconf
 Restrictions: needs-root, breaks-testbed, allow-stderr
 
 Tests: greetd-upgrade
-Depends: bande-greeter, greetd, apt, debconf, passwd, systemd
+Depends: bande-greeter, greetd, apt, debconf, passwd, python3, systemd
 Restrictions: needs-root, breaks-testbed, allow-stderr
 
 Tests: coexistence

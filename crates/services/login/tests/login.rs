@@ -10,7 +10,7 @@ use bande_login::protocol::{
     AuthMessageType, Class, Deadline, ErrorType, FromWorker, Request, Response, ToWorker,
     read_message, write_message,
 };
-use bande_login::{Relay, ShownWatch, login_shell, refusal};
+use bande_login::{FirstFrame, Progress, Relay, ShownWatch, login_shell, refusal};
 use bande_pam::Conversation;
 use bande_xdg::DESKTOP_SHOWN;
 use zeroize::Zeroizing;
@@ -200,14 +200,14 @@ fn a_desktop_that_never_appears_gives_the_screen_back_and_allows_signing_in_agai
     signed_in(&mut manager);
     let gave_up = FromWorker::Failed {
         error_type: ErrorType::Error,
-        description: "the desktop did not appear within 20 s".to_owned(),
+        description: "the desktop stopped starting before it appeared".to_owned(),
     };
     assert_eq!(
         manager.worker_said(ADA, gave_up),
         vec![
             Action::Reply(Response::error(
                 ErrorType::Error,
-                "the desktop did not appear within 20 s"
+                "the desktop stopped starting before it appeared"
             )),
             Action::ShowGreeter,
         ]
@@ -326,7 +326,7 @@ fn the_desktops_first_frame_is_seen_but_a_mark_left_by_an_earlier_session_is_not
     std::fs::write(&mark, b"").unwrap();
     let watch = ShownWatch::new(runtime.path()).unwrap();
     assert!(!mark.exists());
-    assert!(!watch.is_shown().unwrap());
+    assert!(!watch.progress().unwrap().shown);
     std::fs::write(&mark, b"").unwrap();
     let mut ready = [rustix::event::PollFd::from_borrowed_fd(
         watch.fd(),
@@ -337,5 +337,41 @@ fn the_desktops_first_frame_is_seen_but_a_mark_left_by_an_earlier_session_is_not
         tv_nsec: 0,
     };
     assert_eq!(rustix::event::poll(&mut ready, Some(&timeout)).unwrap(), 1);
-    assert!(watch.is_shown().unwrap());
+    let progress = watch.progress().unwrap();
+    assert!(progress.shown && progress.changed && !progress.compositor_started);
+    std::os::unix::net::UnixListener::bind(runtime.path().join("wayland-1")).unwrap();
+    std::fs::write(runtime.path().join("wayland-1.lock"), b"").unwrap();
+    assert!(watch.progress().unwrap().compositor_started);
+}
+
+#[test]
+fn a_slow_first_login_is_waited_for_and_only_a_hung_compositor_is_given_up() {
+    let spawned = Instant::now();
+    let after = |seconds| spawned + Duration::from_secs(seconds);
+    let mut first_frame = FirstFrame::new(spawned);
+    let busy = Progress {
+        changed: true,
+        ..Progress::default()
+    };
+    first_frame.saw(busy, after(60));
+    assert_eq!(
+        first_frame.deadline(),
+        spawned + FirstFrame::CEILING,
+        "before the compositor starts, a slow profile has the whole ceiling"
+    );
+    let started = Progress {
+        compositor_started: true,
+        changed: true,
+        shown: false,
+    };
+    first_frame.saw(started, after(90));
+    assert_eq!(first_frame.deadline(), after(90) + FirstFrame::QUIET);
+    first_frame.saw(busy, after(110));
+    assert_eq!(
+        first_frame.deadline(),
+        after(110) + FirstFrame::QUIET,
+        "a session that keeps showing progress is waited for"
+    );
+    first_frame.saw(busy, after(290));
+    assert_eq!(first_frame.deadline(), spawned + FirstFrame::CEILING);
 }

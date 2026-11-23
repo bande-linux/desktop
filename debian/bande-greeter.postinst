@@ -42,6 +42,7 @@ signed_in_through_greetd() {
 }
 
 if [ "$1" = configure ] && [ -n "$2" ] && [ -z "$DPKG_ROOT" ] && [ -d /run/systemd/system ]; then
+	systemctl --system daemon-reload
 	for folder in /var/lib/bande-greeter/users/*; do
 		if [ -d "$folder" ] && [ "$(stat -c %G "$folder")" != _bande-greeter ]; then
 			deb-systemd-invoke start "bande-greeter-share@$(basename "$folder").service" || true

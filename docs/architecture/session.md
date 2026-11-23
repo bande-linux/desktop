@@ -599,9 +599,11 @@ part of login small and the UI unprivileged:
    runs `/usr/bin/bande-session` through the person's login shell (`-bash -c 'exec …'`, so it
    reads `/etc/profile` and `~/.profile` or its own files). The session's output goes to the
    journal as the person's (`bande-session`, `_UID` theirs, in their session's scope), from a
-   stream the child opens after taking their uid. `bande-greeter.service` stops with
+   stream the child opens after taking their uid; when the journal cannot be reached the
+   output is dropped and the worker logs why. `bande-greeter.service` stops with
    `KillMode=mixed`: `SIGTERM` reaches only the daemon, which lets go of every worker, and each
-   worker (which handles `SIGTERM` and `SIGHUP` itself) ends its session within 10 s, closes it
+   worker (which catches `SIGTERM` and `SIGHUP` through a pipe, without blocking them for the
+   programs it starts) ends its session within 10 s, closes it
    in PAM, deletes its credentials and gives its virtual terminal back to the console.
 2. **The greeter**: `bande-greeter` runs as `_bande-greeter` (a system account from
    `debian/bande-greeter.sysusers`, home `/var/lib/bande-greeter/home`) in a session of class
@@ -698,8 +700,9 @@ desktop has drawn its first frame, then the desktop fades in over it:
    with inotify), `bande-login` answers `start_session` and ends the login window's session.
 
 When the session ends before its first frame (`bande-session` failing, the compositor
-crashing), or has not shown it within 20 s (`~/.profile` blocking, a hung compositor; the
-worker then ends it), the worker brings VT 1 back and `bande-login`
+crashing), or its compositor has hung (the worker ends it when, after the compositor opened its
+Wayland socket, nothing new has appeared in the runtime directory for 30 s, or after 5 minutes
+in all, so a slow first login or `~/.profile` is waited for), the worker brings VT 1 back and `bande-login`
 answers `start_session` with an error and accepts a new `create_session`;
 the login window, still running, comes back with its content and the reason `bande-session` left
 for it (above). Logging out ends the session: logind gives the terminal back to the console,
@@ -707,8 +710,9 @@ which shows only `deep`, and `bande-login` starts the login window again on VT 1
 graphics mode before it comes to the front, which fades in from that colour. A compositor
 leaving the screen closes its framebuffers with `DRM_IOCTL_MODE_CLOSEFB`, which leaves them on
 their planes until something else is shown, so the login window imports what is on screen only
-while Plymouth runs and otherwise starts from `deep`: it never reads a person's last frame. One
-person is signed in at a time: the login window comes back only once the session has ended. Unlocking is one compositor: the last lock frame
+while Plymouth runs and otherwise starts from `deep`: it never reads a person's last frame. No
+second person can sign in while a session runs: the login window comes back only once that
+session has ended. Unlocking is one compositor: the last lock frame
 fades out over the desktop, so input reaches the desktop at once. A session takes the first free
 virtual terminal, usually VT 2, and `bande-login` keeps VT 1 open, so logind starts no `getty`
 there (which would conflict with `bande-greeter.service`); `Ctrl+Alt+F3` and above reach a text
@@ -716,7 +720,8 @@ console at any time. When the login window ends three times within 10 s of start
 session runs, `bande-login` exits with a failure; after five failed starts in 30 s
 `bande-console-fallback.service` quits Plymouth, gives VT 1 back to the console
 (`bande-login --console`: text mode and automatic switching, whoever left it in graphics mode,
-then a reset), starts `getty@tty1` and brings the console forward. Stopping
+the keyboard in Unicode mode, then a reset), starts `getty@tty1` and brings the console
+forward. Stopping
 `bande-greeter.service` ends every session it started.
 
 The boot screen (`bande-plymouth-theme`, which `bande-desktop` recommends) shows when GRUB starts

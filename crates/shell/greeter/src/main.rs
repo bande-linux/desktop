@@ -77,6 +77,7 @@ struct Greeter {
     other: Option<String>,
     peers: Vec<Option<usize>>,
     screen: LockScreen,
+    login_socket: PathBuf,
     daemon: Option<UnixStream>,
     login: Option<Login>,
     awaiting: bool,
@@ -381,9 +382,7 @@ impl Greeter {
     fn send(&mut self, request: &Request) {
         let connected = match self.daemon.take() {
             Some(daemon) => Ok(daemon),
-            None => std::env::var_os(SOCKET_VARIABLE)
-                .ok_or_else(|| std::io::Error::other(format!("{SOCKET_VARIABLE} is not set")))
-                .and_then(UnixStream::connect),
+            None => UnixStream::connect(&self.login_socket),
         };
         match connected.and_then(|mut daemon| write_message(&mut daemon, request).map(|()| daemon))
         {
@@ -976,6 +975,9 @@ fn listed_users(system: Option<&Connection>) -> Vec<User> {
 
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     set_dumpable_behavior(DumpableBehavior::NotDumpable)?;
+    let login_socket = std::env::var_os(SOCKET_VARIABLE)
+        .map(PathBuf::from)
+        .ok_or_else(|| format!("{SOCKET_VARIABLE} is not set: bande-login did not start me"))?;
     let system = bande_bus::system()
         .inspect_err(|error| tracing::warn!("no system bus: {error}"))
         .ok();
@@ -1031,6 +1033,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         other: None,
         peers: Vec::new(),
         screen: placeholder,
+        login_socket,
         daemon: None,
         login: None,
         awaiting: false,

@@ -13,7 +13,7 @@ use bande_bus::logind::{ManagerProxyBlocking, SessionProxyBlocking};
 use bande_login::protocol::{
     Class, ErrorType, FromWorker, SOCKET_VARIABLE, ToWorker, read_message, write_message,
 };
-use bande_login::{Relay, ShownWatch, Unattended, login_shell, refusal};
+use bande_login::{FirstFrame, Relay, ShownWatch, Unattended, login_shell, refusal};
 use bande_pam::{Code, Conversation, DELETE_CRED, ESTABLISH_CRED, REINITIALIZE_CRED, Transaction};
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use rustix::process::{Pid, PidfdFlags, Signal, pidfd_open};
@@ -33,7 +33,6 @@ const DEFAULT_PATH: &str = "/usr/local/bin:/usr/bin:/bin:/usr/games";
 const ACTIVE_LIMIT: Duration = Duration::from_secs(3);
 const ACTIVE_POLL: Duration = Duration::from_millis(10);
 const STOP_LIMIT: Duration = Duration::from_secs(10);
-const FIRST_FRAME_LIMIT: Duration = Duration::from_secs(20);
 
 struct Failure {
     error_type: ErrorType,
@@ -267,7 +266,10 @@ fn session_environment(class: Class, account: &Account, number: u32) -> Vec<Stri
         format!("HOME={}", text(&account.home)),
         format!("USER={}", text(&account.name)),
         format!("LOGNAME={}", text(&account.name)),
-        format!("SHELL={}", text(&account.shell)),
+        format!(
+            "SHELL={}",
+            login_shell(Path::new(OsStr::from_bytes(account.shell.as_bytes()))).display()
+        ),
         format!("PATH={DEFAULT_PATH}"),
     ];
     environment.extend(match class {
@@ -376,10 +378,9 @@ fn launch(
         ending.status
     );
     match ending.gave_up {
-        true => Err(Failure::other(format!(
-            "the desktop did not appear within {} s",
-            FIRST_FRAME_LIMIT.as_secs()
-        ))),
+        true => Err(Failure::other(
+            "the desktop stopped starting before it appeared",
+        )),
         false => Ok(shown),
     }
 }
@@ -397,13 +398,11 @@ fn spawn(
             login_name.push(shell.file_name().unwrap_or(shell.as_os_str()));
             let mut command = Command::new(shell);
             command.arg0(login_name).arg("-c").arg(SESSION_COMMAND);
-            (command, JournalStream::new("bande-session"))
+            (command, "bande-session")
         }
-        Class::Greeter => (
-            Command::new(GREETER_COMMAND),
-            JournalStream::new("bande-greeter-session"),
-        ),
+        Class::Greeter => (Command::new(GREETER_COMMAND), "bande-greeter-session"),
     };
+    let (journal, failures) = JournalStream::new(journal)?;
     command
         .env_clear()
         .envs(environment.iter().map(|(key, value)| (key, value)))
@@ -425,7 +424,7 @@ fn spawn(
             if libc::chdir(home.as_ptr()) == -1 {
                 checked(libc::chdir(c"/".as_ptr()))?;
             }
-            let _ = journal.attach();
+            journal.attach();
             checked(libc::close_range(
                 3,
                 libc::c_uint::MAX,
@@ -433,7 +432,12 @@ fn spawn(
             ))
         });
     }
-    command.spawn()
+    let child = command.spawn()?;
+    drop(command);
+    if let Some(error) = failures.reason() {
+        tracing::warn!("the session's output is lost: cannot reach the journal: {error}");
+    }
+    Ok(child)
 }
 
 fn follow(
@@ -444,7 +448,7 @@ fn follow(
 ) -> io::Result<Ending> {
     let pid = Pid::from_child(child);
     let exited = pidfd_open(pid, PidfdFlags::empty())?;
-    let started = Instant::now();
+    let mut first_frame = FirstFrame::new(Instant::now());
     let mut stopping: Option<Instant> = None;
     let mut gave_up = false;
     loop {
@@ -463,7 +467,7 @@ fn follow(
         });
         let deadline = match stopping {
             Some(since) => Some(since + STOP_LIMIT),
-            None => watching.map(|_| started + FIRST_FRAME_LIMIT),
+            None => watching.map(|_| first_frame.deadline()),
         };
         let timeout = deadline
             .map(|deadline| Timespec::try_from(deadline.saturating_duration_since(Instant::now())))
@@ -485,24 +489,24 @@ fn follow(
                 gave_up,
             });
         }
-        if marked
-            && watching.is_some_and(|watch| {
-                watch.is_shown().unwrap_or_else(|error| {
-                    tracing::warn!("cannot look for the desktop's first frame: {error}");
-                    false
-                })
-            })
-        {
-            *shown = true;
-            tell(links.socket, &FromWorker::Shown);
+        if marked && let Some(watch) = watching {
+            match watch.progress() {
+                Ok(progress) => {
+                    first_frame.saw(progress, Instant::now());
+                    if progress.shown {
+                        *shown = true;
+                        tell(links.socket, &FromWorker::Shown);
+                    }
+                }
+                Err(error) => tracing::warn!("cannot look for the desktop's first frame: {error}"),
+            }
         }
         let asked_to_stop = signalled && signals::arrived(links.signals)?;
-        let too_late = watching.is_some() && !*shown && started.elapsed() >= FIRST_FRAME_LIMIT;
+        let too_late = watching.is_some() && !*shown && Instant::now() >= first_frame.deadline();
         if stopping.is_none() && (hung_up || asked_to_stop || too_late) {
             if too_late {
                 tracing::warn!(
-                    "the desktop did not appear within {} s; ending the session",
-                    FIRST_FRAME_LIMIT.as_secs()
+                    "the desktop stopped starting before it appeared; ending the session"
                 );
                 gave_up = true;
             } else {

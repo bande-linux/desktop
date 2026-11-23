@@ -9,6 +9,8 @@ use std::time::{Duration, Instant};
 use bande_design::{Palette, Scheme};
 use libc::{c_char, c_int, c_short, c_ulong, c_ushort};
 
+use crate::signals;
+
 pub const GREETER_VT: u32 = 1;
 const CONSOLE: &str = "/dev/tty0";
 const VT_OPENQRY: c_ulong = 0x5600;
@@ -17,6 +19,8 @@ const VT_GETSTATE: c_ulong = 0x5603;
 const VT_RELDISP: c_ulong = 0x5605;
 const VT_ACTIVATE: c_ulong = 0x5606;
 const KDSETMODE: c_ulong = 0x4B3A;
+const KDSKBMODE: c_ulong = 0x4B45;
+const K_UNICODE: c_int = 3;
 const KD_TEXT: c_int = 0;
 const KD_GRAPHICS: c_int = 1;
 const VT_AUTO: c_char = 0;
@@ -118,18 +122,6 @@ extern "C" fn acquired(_: c_int) {
     unsafe { libc::ioctl(HELD.load(Ordering::Relaxed), VT_RELDISP, VT_ACKACQ) };
 }
 
-fn handle(signal: c_int, handler: extern "C" fn(c_int)) -> io::Result<()> {
-    // SAFETY: a zeroed sigaction with only the handler and SA_RESTART set is valid; the handler
-    // makes one async-signal-safe call.
-    unsafe {
-        let mut action: libc::sigaction = std::mem::zeroed();
-        action.sa_sigaction = handler as libc::sighandler_t;
-        action.sa_flags = libc::SA_RESTART;
-        checked(libc::sigemptyset(&mut action.sa_mask))?;
-        checked(libc::sigaction(signal, &action, std::ptr::null_mut()))
-    }
-}
-
 /// A session's virtual terminal, kept open while the session runs so no one else takes it.
 pub struct Terminal {
     file: File,
@@ -191,8 +183,8 @@ impl Terminal {
         }
         let fd: RawFd = self.file.as_raw_fd();
         HELD.store(fd, Ordering::Relaxed);
-        handle(libc::SIGUSR1, released)?;
-        handle(libc::SIGUSR2, acquired)?;
+        signals::handle(libc::SIGUSR1, released)?;
+        signals::handle(libc::SIGUSR2, acquired)?;
         let signal = |number: c_int| c_short::try_from(number).map_err(io::Error::other);
         self.set_mode(&VtMode {
             mode: VT_PROCESS,
@@ -217,10 +209,12 @@ impl Terminal {
         })
     }
 
-    /// Gives the terminal back to the kernel's console whoever left it in graphics mode, resets
-    /// it and brings it to the front, so a login prompt there can be seen.
+    /// Gives the terminal back to the kernel's console whoever left it in graphics mode or with
+    /// its keyboard off, resets it and brings it to the front, so a login prompt there can be
+    /// seen and typed into.
     pub fn give_to_console(&self) -> io::Result<()> {
         self.restore()?;
+        self.ioctl(KDSKBMODE, K_UNICODE)?;
         (&self.file).write_all(b"\x1bc")?;
         switch_to(self.number)
     }

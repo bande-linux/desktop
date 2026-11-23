@@ -1,5 +1,5 @@
-use std::fs::OpenOptions;
-use std::io;
+use std::fs::{File, OpenOptions};
+use std::io::{self, Write};
 use std::os::fd::AsFd;
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
@@ -17,12 +17,16 @@ const HANDOVER_LIMIT: Duration = Duration::from_secs(3);
 const KDSETMODE: Opcode = 0x4B3A;
 const KD_GRAPHICS: usize = 1;
 
-fn hide_console_text() -> io::Result<()> {
-    let terminal = OpenOptions::new()
+fn own_terminal() -> io::Result<File> {
+    OpenOptions::new()
         .read(true)
         .write(true)
         .custom_flags(libc::O_NOCTTY | libc::O_CLOEXEC)
-        .open("/dev/tty")?;
+        .open("/dev/tty")
+}
+
+fn hide_console_text() -> io::Result<()> {
+    let terminal = own_terminal()?;
     // SAFETY: KDSETMODE takes the console mode as a plain integer, not a pointer.
     let graphics = unsafe { IntegerSetter::<KDSETMODE>::new_usize(KD_GRAPHICS) };
     // SAFETY: terminal is this process's open controlling terminal, and the request carries no pointer.
@@ -53,6 +57,21 @@ fn ask_for_display() -> io::Result<bool> {
         }
     }
     Ok(true)
+}
+
+/// Empties the login window's text console and paints it in the login window's background with
+/// no cursor, so that whenever the kernel shows that console between two sessions it shows only
+/// that colour.
+pub fn blank_console() {
+    let background = bande_splash::splash_background();
+    let blank = format!(
+        "\x1b[?25l\x1b]P0{:02x}{:02x}{:02x}\x1b[H\x1b[2J",
+        background.r, background.g, background.b
+    );
+    if let Err(error) = own_terminal().and_then(|mut terminal| terminal.write_all(blank.as_bytes()))
+    {
+        tracing::warn!("the console may show text between sessions: {error}");
+    }
 }
 
 /// Takes the display over from Plymouth while the boot screen still shows: keeps the kernel's

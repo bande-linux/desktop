@@ -10,9 +10,12 @@ use std::time::{Duration, Instant};
 use bande_app::{Cx, Error, Info, Keys, Kind, Program, View};
 use bande_compositor::Compositor;
 use bande_test_bus::SessionBus;
-use bande_test_wayland::keys::{KEY_LEFTALT, KEY_LEFTCTRL, KEY_Q, KEY_TAB, KEY_W};
+use bande_test_wayland::keys::{KEY_F4, KEY_LEFTALT, KEY_LEFTCTRL, KEY_Q, KEY_TAB, KEY_W};
 use bande_test_wayland::{Frames, TestClient, chord, headless};
 use bande_toolkit::{Appearance, Scene, Window, WindowEvent};
+
+const STILL: Duration = Duration::from_millis(300);
+const CLOSE_LIMIT: Duration = Duration::from_millis(230);
 
 static ASKED: Mutex<Option<Sender<Asked>>> = Mutex::new(None);
 
@@ -103,8 +106,23 @@ fn wait_for_windows(frames: &mut Frames, server: &mut Compositor, wanted: usize)
     }
 }
 
+fn last_frame_once_still(frames: &mut Frames, server: &mut Compositor) -> Instant {
+    let mut rendered = frames.rendered();
+    let mut last = Instant::now();
+    while last.elapsed() < STILL {
+        let mut stepped = false;
+        frames.run_until(server, || std::mem::replace(&mut stepped, true));
+        if frames.rendered() != rendered {
+            rendered = frames.rendered();
+            last = Instant::now();
+        }
+    }
+    last
+}
+
 #[test]
-fn a_second_launch_reaches_the_running_app_and_the_switcher_activates_it_windowless() {
+fn a_second_launch_reaches_the_running_app_a_closed_window_is_gone_at_once_and_the_switcher_activates_it_windowless()
+ {
     let bus = SessionBus::start().expect("private session bus");
     // SAFETY: this binary's only test sets these before it starts the app, so no other thread reads
     // the environment yet.
@@ -135,8 +153,16 @@ fn a_second_launch_reaches_the_running_app_and_the_switcher_activates_it_windowl
     });
     assert_eq!(second_launch.join().expect("second launch"), Ok(()));
 
-    chord(&mut server, &[KEY_LEFTCTRL, KEY_W]);
+    server.set_reduce_motion(false);
+    last_frame_once_still(&mut frames, &mut server);
+    let pressed = Instant::now();
+    chord(&mut server, &[KEY_LEFTALT, KEY_F4]);
     wait_for_windows(&mut frames, &mut server, 0);
+    let closed = last_frame_once_still(&mut frames, &mut server).duration_since(pressed);
+    assert!(
+        closed < CLOSE_LIMIT,
+        "the closed window was drawn for {closed:?}"
+    );
     assert!(!app.is_finished());
 
     let (unused, _) = UnixStream::pair().expect("socket pair");

@@ -269,8 +269,10 @@ when they reach the screen is Bande's own.
   samples its own vblank, even one earlier than another display's last frame, and displays
   of different rates never repeat a frame. An animation stops once its remaining motion is
   invisible: within 0.25 physical pixel (1/512 for opacity) and slower than that per 20 ms.
-  Opening grows from 96 % and fades in (`standard`); closing keeps the last frame's textures
-  and shrinks to 98 % while fading out (`quick`); minimizing scales
+  Opening grows from 96 % and fades in (`standard`); closing keeps the last frame's textures,
+  and the app's buffers they were drawn from unreleased until the window is gone (a released
+  buffer may already hold the app's next frame, or garbage while it tears down), and shrinks to 98 % while fading out (`fade`, settled within 170 ms), and the toolkit
+  withdraws the window before it releases its GPU surface; minimizing scales
   into the app's taskbar icon, reported with `bande_shell_v1.set_icon_rect`, or toward the
   taskbar's centre (the bottom edge without a taskbar), drawn above the taskbar (`gentle`); restoring
   plays it back. Maximize and full screen (`standard`) start at the request and stretch

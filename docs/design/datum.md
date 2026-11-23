@@ -251,7 +251,7 @@ not gloss. Third-party icons are shown unmodified.
 The presets are `bande-spring`'s (`QUICK`, `STANDARD`, `GENTLE`, `FADE`, `INTERACTIVE`, `MOMENTUM`, `BOUNCY`, `SHAKE`). Datum adds **how** things move, Material 3-style: *spatial* springs for position and size, *effects* springs (`fade`) for colour and opacity, never mixed.
 
 - **Axis-true:** objects travel in straight lines from their source. Minimize slides and scales into its exact bar slot along one straight path (`gentle`), keeping its shape. Restore reverses it.
-- **Open / close:** the window scales 0.96 → 1 and fades in from the bar icon's side (`standard`); close is 1 → 0.98 + fade (`quick`).
+- **Open / close:** the window scales 0.96 → 1 and fades in from the bar icon's side (`standard`); close is 1 → 0.98 + fade (`fade`), so the window is gone within 170 ms of the app letting it go.
 - **The selection block glides:** in lists, menus, segmented controls and the sidebar, the highlight *moves* to the new row (`quick`) rather than blinking. This is the most visible "Datum" motion.
 - **The signal square blinks only once:** running and launch feedback pulses the square indicator (opacity 1 → .35 → 1 on `fade`) until the first window maps; icons never move.
 - **The fader knob** follows 1:1 and settles on detents with `interactive`.

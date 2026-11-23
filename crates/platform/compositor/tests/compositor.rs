@@ -504,3 +504,37 @@ fn a_screen_sharing_viewer_only_watches_while_the_session_is_locked() {
     );
     assert!(!editor.keys().contains(&(KEY_A, true)));
 }
+
+#[test]
+fn a_closing_window_keeps_the_buffer_it_still_shows_until_it_is_gone() {
+    let mut server = headless(640, 480);
+    server.set_reduce_motion(false);
+    let mut client = TestClient::window(&mut server, "org.bande.Closing");
+    let mut frames = Frames::start();
+    let red = RED.repeat(64 * 64);
+    let blue = BLUE.repeat(64 * 64);
+    let image = |bytes| ShmImage {
+        width: 64,
+        height: 64,
+        stride: 256,
+        format: Format::Xrgb8888,
+        bytes,
+    };
+    let shown = client.commit_buffer(0, &image(&red), (0, 0, 64, 64));
+    idle(&mut frames, &mut server, Duration::from_millis(600));
+
+    let _next = client.commit_buffer(0, &image(&blue), (0, 0, 64, 64));
+    client.withdraw_window(0);
+    roundtrip(&mut server, &mut [&mut client]);
+    assert!(
+        !client.released(&shown),
+        "the app got back the buffer its closing window is still drawn from"
+    );
+
+    idle(&mut frames, &mut server, Duration::from_millis(600));
+    roundtrip(&mut server, &mut [&mut client]);
+    assert!(
+        client.released(&shown),
+        "the closed window never let go of its buffer"
+    );
+}

@@ -337,7 +337,7 @@ impl State {
         let (to, spring) = match (self.reduce_motion, window.origin) {
             (true, _) => (Look::hidden(from.rect), Spring::FADE),
             (false, Some(origin)) => (Look::hidden(origin), Spring::QUICK),
-            (false, None) => (Look::hidden(from.rect).scaled(CLOSING_SCALE), Spring::QUICK),
+            (false, None) => (Look::hidden(from.rect).scaled(CLOSING_SCALE), Spring::FADE),
         };
         self.closing
             .push(Closing::new(drawn, Motion::new(spring, from, to), output));

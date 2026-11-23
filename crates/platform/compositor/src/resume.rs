@@ -74,14 +74,7 @@ pub(crate) struct Resume {
     live: Vec<(XdgSessionV1, String)>,
     spaces: Vec<(String, usize, u64)>,
     fingerprint: u64,
-    frozen: bool,
     pub(crate) ask_after_crash: bool,
-}
-
-impl Resume {
-    pub(crate) fn freeze(&mut self) {
-        self.frozen = true;
-    }
 }
 
 pub(crate) fn create_global(handle: &DisplayHandle) {
@@ -223,7 +216,7 @@ impl State {
     }
 
     pub(crate) fn note_window_sessions(&mut self) {
-        if self.resume.writer.is_none() || self.resume.frozen || !self.quitting.is_empty() {
+        if self.resume.writer.is_none() || !self.quitting.is_empty() {
             return;
         }
         let fingerprint = self.placement_fingerprint();
@@ -232,6 +225,13 @@ impl State {
         }
         self.resume.fingerprint = fingerprint;
         self.write_window_sessions();
+    }
+
+    pub(crate) fn finish_window_sessions(&mut self) {
+        self.note_window_sessions();
+        if let Some(writer) = self.resume.writer.take() {
+            writer.finish();
+        }
     }
 
     fn write_window_sessions(&mut self) {

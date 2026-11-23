@@ -1,4 +1,6 @@
 use std::error::Error;
+use std::io::{self, Read};
+use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::process::{Child, ExitCode};
 use std::time::{Duration, Instant};
@@ -19,6 +21,7 @@ use bande_datetime::ClockChanges;
 use bande_datetime::timedate::zone_changes;
 use bande_inbox::Inbox;
 use bande_log::fault::StallWatch;
+use signal_hook::consts::{SIGINT, SIGTERM};
 use smithay::backend::drm::{DrmEvent, DrmEventMetadata};
 use smithay::backend::input::{
     ButtonState, Event as _, InputEvent, KeyState, KeyboardKeyEvent, PointerButtonEvent, Switch,
@@ -66,6 +69,7 @@ struct App<O> {
     displays: Option<DisplaysHandle>,
     loop_handle: LoopHandle<'static, App<O>>,
     lid: Lid,
+    asked_to_stop: bool,
 }
 
 #[derive(Default)]
@@ -282,6 +286,7 @@ fn run_headless(session: Session, started: Duration, buses: Buses) -> Result<(),
         displays: None,
         loop_handle: event_loop.handle(),
         lid: Lid::default(),
+        asked_to_stop: false,
     };
     serve(&mut event_loop, app, session).map(drop)
 }
@@ -591,6 +596,7 @@ fn run_drm(
         displays: None,
         loop_handle: event_loop.handle(),
         lid: Lid::default(),
+        asked_to_stop: false,
     };
     let input = app.output.input_backend()?;
     handle.insert_source(input, |event, _, app| {
@@ -849,6 +855,26 @@ fn follow_session_bus<O: FrameOutput + 'static>(
     )
 }
 
+fn stop_on_signals<O: 'static>(handle: &LoopHandle<'static, App<O>>) -> io::Result<()> {
+    let (asked, wake) = UnixStream::pair()?;
+    asked.set_nonblocking(true)?;
+    for signal in [SIGTERM, SIGINT] {
+        signal_hook::low_level::pipe::register(signal, wake.try_clone()?)?;
+    }
+    handle
+        .insert_source(
+            Generic::new(asked, Interest::READ, Mode::Level),
+            |_, asked, app: &mut App<O>| {
+                let mut wakes = [0; 16];
+                while matches!((&**asked).read(&mut wakes), Ok(read) if read > 0) {}
+                app.asked_to_stop = true;
+                Ok(PostAction::Continue)
+            },
+        )
+        .map_err(|error| io::Error::other(error.to_string()))?;
+    Ok(())
+}
+
 fn note_running_apps<O>(app: &mut App<O>) {
     let (Some(running), Some(reopen), Some(crashed)) = (
         bande_xdg::running_apps_file(),
@@ -935,6 +961,9 @@ where
     O: FrameOutput + 'static,
     O::Error: Into<Box<dyn Error>>,
 {
+    if let Err(error) = stop_on_signals(&event_loop.handle()) {
+        tracing::warn!("a request to stop ends the session as a crash: {error}");
+    }
     listen(&event_loop.handle(), &mut app)?;
     if let (Session::User, Some(system)) = (&session, &app.buses.system) {
         let (presses, received) = std::sync::mpsc::channel();
@@ -1009,6 +1038,13 @@ where
     let mut frame_error = None;
     loop {
         event_loop.dispatch(timeout, &mut app)?;
+        if app.asked_to_stop {
+            tracing::info!("stopping as asked");
+            if session == Session::User {
+                app.compositor.end_session_cleanly();
+            }
+            return Ok(app);
+        }
         if let Some(child) = review.as_mut()
             && child.try_wait()?.is_some()
         {
@@ -1039,6 +1075,7 @@ where
             None => {
                 if app.compositor.take_log_out() {
                     tracing::info!("logging out from Force Quit");
+                    app.compositor.end_session_cleanly();
                     return Ok(app);
                 }
                 app.compositor.keep_session_clients_running()

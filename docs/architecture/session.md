@@ -797,8 +797,18 @@ what the one before could not save:
   normal priority; without that flag it is not raised at all.
 - **The disk is full**: configuration and state are written to a staging file and renamed
   (`bande_xdg::replace_file`), so a failed write leaves the old file whole.
-- **After a crash**: the compositor keeps the open apps in `$XDG_STATE_HOME/bande/running`; after
-  a session without a clean log out, the next asks "Reopen your apps?" before anything starts.
+- **After a crash**: the compositor keeps the open apps in `$XDG_STATE_HOME/bande/running` and
+  writes them to `bande/reopen` when the session ends cleanly: when the confirmed Log Out, Restart
+  or Shut Down asks the apps to quit, on logind's `PrepareForShutdown` (held back by a delay
+  inhibitor, so `systemctl reboot` and a power button left to logind count too), when it is asked
+  to stop (`SIGTERM` or `SIGINT`: `bande-session` stopping the service at log out, or a root
+  `shutdown` that bypasses logind) and when it logs out from Force Quit. On a stop it writes the
+  list and the last window places before it exits; app scopes are ordered
+  `Before=bande-compositor.service`, so it still sees every app, and an app that loses the display
+  keeps its saved windows. A session
+  that leaves `running` without `reopen` (a panic, a crash signal, the watchdog or `SIGKILL`)
+  crashed: the next login moves the list to `bande/crashed` and asks "Reopen your apps?" once;
+  the next start discards an unanswered question, so it never repeats.
 - **The record**: every failure of a Bande program leaves one report, kept on the computer unless
   sending is on ([fault reports](fault-reports.md)). Core dumps go to `systemd-coredump`
   (`bande-crash-reports` depends on it), whose own `user.conf.d` and `system.conf.d` drop-ins

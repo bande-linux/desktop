@@ -2,9 +2,12 @@
 
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-use bande_xdg::{Apps, DesktopEntry, ExecError};
+use bande_xdg::{
+    Apps, DesktopEntry, ExecError, listed_apps, reopening_marker, saved_windows_file,
+    set_aside_apps_of_unclean_end, take_apps_to_reopen,
+};
 use tempfile::TempDir;
 
 fn app(exec: &str) -> DesktopEntry {
@@ -54,4 +57,62 @@ fn a_launcher_file_runs_only_when_installed_or_marked_executable_by_its_owner() 
     assert!(apps.launcher(&downloaded, mime).is_none());
     fs::set_permissions(&downloaded, fs::Permissions::from_mode(0o755)).expect("chmod");
     assert!(apps.launcher(&downloaded, mime).is_some());
+}
+
+struct LastSession {
+    _state: TempDir,
+    running: PathBuf,
+    reopen: PathBuf,
+    crashed: PathBuf,
+}
+
+impl LastSession {
+    fn new() -> Self {
+        let state = TempDir::new().expect("state");
+        Self {
+            running: state.path().join("running"),
+            reopen: state.path().join("reopen"),
+            crashed: state.path().join("crashed"),
+            _state: state,
+        }
+    }
+
+    fn ended(&self, cleanly: bool) {
+        fs::write(&self.running, "org.bande.Files\n").expect("running");
+        if cleanly {
+            fs::write(&self.reopen, "org.bande.Files\n").expect("reopen");
+        }
+    }
+
+    fn next_login(&self) -> Vec<String> {
+        set_aside_apps_of_unclean_end(&self.running, &self.reopen, &self.crashed)
+            .expect("set aside");
+        assert!(!self.running.exists());
+        take_apps_to_reopen(&self.reopen);
+        listed_apps(&self.crashed)
+    }
+}
+
+#[test]
+fn only_a_crash_asks_to_reopen_and_only_once() {
+    let session = LastSession::new();
+    session.ended(true);
+    assert!(session.next_login().is_empty());
+
+    session.ended(false);
+    assert_eq!(session.next_login(), ["org.bande.Files"]);
+    assert!(
+        session.next_login().is_empty(),
+        "an unanswered question is not asked again"
+    );
+
+    session.ended(true);
+    assert!(session.next_login().is_empty());
+}
+
+#[test]
+fn each_app_notes_its_own_reopening() {
+    let viewer = saved_windows_file("org.bande.Viewer").expect("state");
+    let files = saved_windows_file("org.bande.Files").expect("state");
+    assert_ne!(reopening_marker(&viewer), reopening_marker(&files));
 }

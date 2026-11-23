@@ -21,7 +21,7 @@ use bande_mail_core::sheet::Mode;
 use bande_mail_core::testing::{Dovecot, PASSWORD, USER, local};
 use bande_search::Offer;
 use bande_toolkit::ui::{Context, Event as Input, FreeLayout, Key, Modifiers, Size, Ui, Widget};
-use bande_toolkit::{Palette, Scheme, TextSystem};
+use bande_toolkit::{Palette, Rect, Scheme, TextSystem};
 use zbus::blocking::Connection;
 
 const WAIT: Duration = Duration::from_secs(20);
@@ -187,6 +187,7 @@ fn the_setup_guide_asks_before_signing_in_off_domain_and_shows_each_problem_at_i
         }),
     };
     let mut guide = Guide::open(&mut ui, Host::Inline(host), Mode::Address, options);
+    guide.place(&mut ui, Rect::new(0.0, 0.0, 900.0, 700.0));
     let wait = |ui: &mut Ui, guide: &mut Guide, until: &dyn Fn(&Mode) -> bool| loop {
         let report = received
             .recv_timeout(WAIT)

@@ -133,6 +133,10 @@ impl Widget for FreeLayout {
         Node::new(Role::Unknown)
     }
 
+    fn shows_child(&self, index: usize) -> bool {
+        self.frames.get(index).is_some_and(|frame| shown(*frame))
+    }
+
     fn children(&self) -> &[Box<dyn Widget>] {
         &self.children
     }

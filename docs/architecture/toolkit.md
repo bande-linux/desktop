@@ -197,8 +197,8 @@ writes a hex value, a corner radius or a font name of its own.
 - **Widgets.** `ui` holds the widget tree: `Stack` (rows and columns with spacing and padding; a
   column stretches its children across, a row centres them), `Label`, `Shortcut`, the controls
   below, `Table`, `ScrollView`, `Disclosure` and `FreeLayout`, laid out, painted into a `Scene`
-  and driven by `Ui`. A child placed with no area (a `FreeLayout` frame of zero) inside a laid-out
-  parent is hidden: it is not painted, not in the accessibility tree and not in the focus order.
+  and driven by `Ui`. A child its parent does not show (`Widget::shows_child`, e.g. a `FreeLayout` child
+  with a frame of zero) is not painted, not in the accessibility tree and not in the focus order.
   `TextField::named` and `SecureField::named` give a field its spoken label and a problem with its
   value (described, and marked invalid). `Ui::update_widget(id, |widget, cx| ...)` changes a widget from code with the context it needs (e.g. `SegmentedControl::set_selected`, `Slider::set_value`), so the change animates. Buttons and switches act on release inside. Tab moves focus
   through every control in every window and sheet; tabbing into a field selects its text. A

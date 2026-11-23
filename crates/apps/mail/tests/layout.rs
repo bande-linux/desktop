@@ -73,6 +73,7 @@ fn every_pane_keeps_its_header_controls_clear_of_the_window_buttons_at_any_width
         for buttons in [WindowButtons::Right, WindowButtons::Left] {
             view.set_appearance(Appearance {
                 window_buttons: buttons,
+                reduce_motion: true,
                 ..Appearance::default()
             });
             view.scene(width, height);
@@ -97,25 +98,55 @@ fn every_pane_keeps_its_header_controls_clear_of_the_window_buttons_at_any_width
                 .into_iter()
                 .filter_map(|(_, node)| node.label().map(str::to_owned))
                 .collect::<Vec<_>>();
-            for name in [
-                "New Message",
-                "Reply",
-                "Archive",
-                "More",
-                "Get Mail",
-                "Sort by",
-            ] {
+            for name in ["New Message", "Sort by"] {
                 assert!(
                     names.iter().any(|known| known == name),
                     "no {name} with the buttons on the {buttons:?} at {width}"
                 );
             }
-            assert_eq!(view.sidebar_region() > 0.0, panes == Panes::Three);
+            for name in ["Reply", "Archive", "More"] {
+                assert_eq!(
+                    names.iter().any(|known| known == name),
+                    panes != Panes::One,
+                    "{name} is in the tree only while the reader shows, at {width}"
+                );
+            }
+            let sidebar_shown = panes == Panes::Three;
+            for name in ["Get Mail", "Mailboxes"] {
+                assert_eq!(
+                    names.iter().any(|known| known == name),
+                    sidebar_shown,
+                    "{name} is in the tree only while the sidebar shows, at {width}"
+                );
+            }
+            assert_eq!(view.sidebar_region() > 0.0, sidebar_shown);
+            if panes == Panes::Two {
+                view.toggle_sidebar();
+                view.scene(width, height);
+                assert!(
+                    node(&view, "Get Mail").is_some() && node(&view, "Mailboxes").is_some(),
+                    "the sidebar slides over the list"
+                );
+                view.handle(&Event::Key {
+                    key: Key::Escape,
+                    modifiers: Modifiers::default(),
+                });
+                view.scene(width, height);
+                assert!(node(&view, "Mailboxes").is_none(), "Escape closes it");
+            }
         }
     }
 
     view.scene(1280, height);
-    let edge = Point::new(220.0 + 340.0, 400.0);
+    let list = view
+        .accessibility()
+        .nodes
+        .into_iter()
+        .map(|(_, node)| node)
+        .find(|node| node.role() == accesskit::Role::ListBox && node.label() == Some("Inbox"))
+        .and_then(|node| node.bounds())
+        .unwrap();
+    let edge = Point::new(list.x1 as f32, 400.0);
     let moved = Point::new(edge.x + 40.0, edge.y);
     view.handle(&Event::PointerDown(Pointer::at(edge)));
     view.handle(&Event::PointerMove(Pointer::at(moved)));
@@ -158,6 +189,10 @@ fn the_list_says_when_it_is_empty_and_acts_on_messages_by_panel_swipe_and_keys()
     };
     store.replace_mailboxes(id, &[inbox, archive]).unwrap();
     let mut view = view_of(store_path);
+    view.set_appearance(Appearance {
+        reduce_motion: true,
+        ..Appearance::default()
+    });
     view.scene(1280, 800);
     let list = view
         .accessibility()
@@ -220,7 +255,15 @@ fn the_list_says_when_it_is_empty_and_acts_on_messages_by_panel_swipe_and_keys()
         key: Key::Escape,
         modifiers: Modifiers::default(),
     });
-    let row = Point::new(400.0, 112.0 + 26.0 + 20.0);
+    let row = node(&view, "Plan 8")
+        .and_then(|node| node.bounds())
+        .map(|bounds| {
+            Point::new(
+                bounds.x0 as f32 + 100.0,
+                (bounds.y0 + bounds.y1) as f32 / 2.0,
+            )
+        })
+        .unwrap();
     view.handle(&Event::PointerMove(Pointer::at(row)));
     view.scene(1280, 800);
     for (delta, phase) in [
@@ -237,10 +280,11 @@ fn the_list_says_when_it_is_empty_and_acts_on_messages_by_panel_swipe_and_keys()
         }));
         view.scene(1280, 800);
     }
+    view.tick(std::time::Instant::now());
     assert_eq!(
         view.messages().len(),
         1,
-        "a swipe to the right archives the row"
+        "a swipe to the right archives the row once it has slid out"
     );
 
     let press = |view: &mut MailView, key: Key, control: bool| {

@@ -1098,7 +1098,7 @@ impl MailView {
         match (self.swipe, scroll.phase) {
             (Some((id, moved)), ScrollPhase::Ended) => {
                 self.swipe = None;
-                let quick = (moved.abs() >= SWIPE_COMMIT).then(|| match moved > 0.0 {
+                let quick = (moved.abs() >= SWIPE_COMMIT).then_some(match moved > 0.0 {
                     true => Quick::Archive,
                     false => Quick::Delete,
                 });

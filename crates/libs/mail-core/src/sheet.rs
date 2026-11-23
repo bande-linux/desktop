@@ -468,7 +468,7 @@ impl AccountSheet {
         let mut buttons = Vec::new();
         if let Some(other) = &other {
             buttons.push(children.len());
-            children.push(Box::new(action_button(&state, &other, Action::Other)));
+            children.push(Box::new(action_button(&state, other, Action::Other)));
         }
         if mode.cancels(inline) {
             buttons.push(children.len());
@@ -718,7 +718,8 @@ impl Widget for AccountSheet {
         for index in 0..self.children.len() {
             let rect = match self.laid.slots.iter().find(|slot| slot.child == index) {
                 Some(slot) => {
-                    let moved = match self.fields.get(index) == shaken.as_ref() {
+                    let moved = match shaken.is_some() && self.fields.get(index) == shaken.as_ref()
+                    {
                         true => nudge,
                         false => 0.0,
                     };
@@ -787,6 +788,10 @@ impl Widget for AccountSheet {
 
     fn dismissed(&self) -> bool {
         self.state.borrow().closed
+    }
+
+    fn shows_child(&self, index: usize) -> bool {
+        index != self.spinner || self.spinning
     }
 
     fn children(&self) -> &[Box<dyn Widget>] {

@@ -394,6 +394,12 @@ pub trait Widget: Any {
 
     fn focused_by_keyboard(&mut self) {}
 
+    /// Whether the child at `index` is on screen; a hidden child is left out of the
+    /// accessibility tree and the focus order.
+    fn shows_child(&self, _index: usize) -> bool {
+        true
+    }
+
     fn dismissed(&self) -> bool {
         false
     }
@@ -522,17 +528,13 @@ pub fn opens_menu(key: Key, modifiers: Modifiers) -> bool {
     }
 }
 
-fn has_area(frame: Rect) -> bool {
-    frame.width > 0.0 && frame.height > 0.0
-}
-
 fn shown_children(widget: &dyn Widget) -> impl Iterator<Item = &dyn Widget> {
-    let laid_out = has_area(widget.frame());
     widget
         .children()
         .iter()
-        .map(Box::as_ref)
-        .filter(move |child| !laid_out || has_area(child.frame()))
+        .enumerate()
+        .filter(|(index, _)| widget.shows_child(*index))
+        .map(|(_, child)| child.as_ref())
 }
 
 fn focus_order(widget: &dyn Widget, cx: &Context, order: &mut Vec<WidgetId>) {

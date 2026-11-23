@@ -1,7 +1,7 @@
 use bande_l10n::{tr, trn};
 
 use crate::settings::Density;
-use crate::store::{AccountId, Filter, Summary};
+use crate::store::{AccountId, Filter, MessageId, Summary};
 use crate::ui::format::list_date;
 use crate::ui::reader::{Clock, Target};
 use crate::ui::reader_pane::{Look, paint_link_target};
@@ -9,9 +9,9 @@ use crate::ui::sidebar::Place;
 use crate::ui::sidebar::Row;
 use crate::ui::symbols::Symbol;
 use crate::ui::toolbar::{LIST_HEADER_HEIGHT, LIST_TITLE_HEIGHT, SIDEBAR_FOOT_HEIGHT};
-use crate::ui::view::{Hit, MailView, Pane, Panes, READER_MAX_WIDTH, TOOLBAR_HEIGHT};
+use crate::ui::view::{Hit, MailView, Pane, Panes, Quick, READER_MAX_WIDTH, TOOLBAR_HEIGHT};
 use bande_toolkit::Color;
-use bande_toolkit::ui::{BUTTON_HEIGHT, Key, Scroll, Size};
+use bande_toolkit::ui::{BUTTON_HEIGHT, Key, Scroll, ScrollPhase, ScrollSource, Size};
 use bande_toolkit::{
     Elevation, Item, Paragraph, Point, Radius, Rect, Scene, Shape, TextAlign, TextRole, TextStyle,
 };
@@ -44,6 +44,9 @@ const ACCOUNT_MARK_INSET: f32 = 2.0;
 const ACCOUNT_COLORS: [usize; 5] = [4, 3, 5, 1, 0];
 const GROUP_HEIGHT: f32 = 26.0;
 const EMPTY_SYMBOL: f32 = 32.0;
+const QUICK_SIZE: f32 = 22.0;
+const QUICK_GAP: f32 = 2.0;
+const SWIPE_COMMIT: f32 = 96.0;
 const OPEN_FILE_WIDTH: f32 = 240.0;
 const OPEN_FILE_BOTTOM: f32 = 64.0;
 
@@ -635,7 +638,39 @@ impl MailView {
             let y = frame.y + self.row_top(index, row_height) - offset;
             let rect = Rect::new(frame.x, y, frame.width, row_height);
             self.hits.push((rect, Hit::Message(summary.id)));
-            self.paint_row(&mut drawn, &summary, rect, now);
+            match self.swipe.filter(|(id, _)| *id == summary.id) {
+                Some((_, moved)) => {
+                    let (paint, symbol, x) = match moved > 0.0 {
+                        true => (palette.success, Symbol::Archive, rect.x + LIST_TEXT_X),
+                        false => (
+                            palette.danger,
+                            Symbol::Trash,
+                            rect.x + rect.width - LIST_TEXT_X - ICON_SIZE,
+                        ),
+                    };
+                    drawn.push(Item::Fill {
+                        shape: Shape::rect(rect),
+                        paint: paint.into(),
+                    });
+                    let icon = Rect::new(
+                        x,
+                        rect.y + ((rect.height - ICON_SIZE) / 2.0).round(),
+                        ICON_SIZE,
+                        ICON_SIZE,
+                    );
+                    self.put_symbol(&mut drawn, symbol, icon, palette.on_accent);
+                    let mut row = vec![Item::Fill {
+                        shape: Shape::rect(rect),
+                        paint: palette.sheet.into(),
+                    }];
+                    self.paint_row(&mut row, &summary, rect, now);
+                    drawn.push(Item::Translate {
+                        offset: Point::new(moved, 0.0),
+                        items: row,
+                    });
+                }
+                None => self.paint_row(&mut drawn, &summary, rect, now),
+            }
         }
         items.push(Item::Clip {
             shape: Shape::rect(frame),
@@ -705,12 +740,20 @@ impl MailView {
             None,
             TextAlign::End,
         );
-        let mut date_x = right - date.width();
         let line = (18.0 * scale).round();
-        items.push(Item::Text {
-            origin: Point::new(date_x, y + ((line - date.height()) / 2.0).round()),
-            paragraph: date,
-        });
+        let hovered = self.swipe.is_none()
+            && matches!(&self.hover, Some(Hit::Message(id) | Hit::Quick(id, _)) if *id == summary.id);
+        let mut date_x = match hovered {
+            true => self.paint_quick(items, summary.id, right, y, line, ink2),
+            false => {
+                let x = right - date.width();
+                items.push(Item::Text {
+                    origin: Point::new(x, y + ((line - date.height()) / 2.0).round()),
+                    paragraph: date,
+                });
+                x
+            }
+        };
         if let Some(count) = self.conversations.count(summary.id) {
             let paragraph = self.ui.context().text.paragraph(
                 &count.to_string(),
@@ -859,6 +902,47 @@ impl MailView {
         }
     }
 
+    fn paint_quick(
+        &mut self,
+        items: &mut Vec<Item>,
+        id: MessageId,
+        right: f32,
+        y: f32,
+        line: f32,
+        ink: Color,
+    ) -> f32 {
+        let mut x = right;
+        for (quick, symbol) in [
+            (Quick::Flag, Symbol::Flag),
+            (Quick::Delete, Symbol::Trash),
+            (Quick::Archive, Symbol::Archive),
+        ] {
+            x -= QUICK_SIZE;
+            let rect = Rect::new(
+                x,
+                y + ((line - QUICK_SIZE) / 2.0).round(),
+                QUICK_SIZE,
+                QUICK_SIZE,
+            );
+            if self.hover == Some(Hit::Quick(id, quick)) {
+                items.push(Item::Fill {
+                    shape: Shape::rounded(rect, Radius::S),
+                    paint: self.palette.well.into(),
+                });
+            }
+            let icon = Rect::new(
+                rect.x + ((QUICK_SIZE - SMALL_SYMBOL) / 2.0).round(),
+                rect.y + ((QUICK_SIZE - SMALL_SYMBOL) / 2.0).round(),
+                SMALL_SYMBOL,
+                SMALL_SYMBOL,
+            );
+            self.put_symbol(items, symbol, icon, ink);
+            self.hits.push((rect, Hit::Quick(id, quick)));
+            x -= QUICK_GAP;
+        }
+        x
+    }
+
     fn account_mark(&self, account: AccountId) -> Option<Color> {
         if self.accounts.len() < 2 || matches!(self.place, Place::Mailbox(_)) {
             return None;
@@ -942,6 +1026,12 @@ impl MailView {
 
     pub(crate) fn scroll(&mut self, scroll: &Scroll) -> bool {
         let at = scroll.position;
+        if scroll.source == ScrollSource::Finger
+            && self.list_frame().contains(at)
+            && self.swiped(scroll)
+        {
+            return true;
+        }
         let index = if self.sidebar_frame().contains(at) {
             0
         } else if self.list_frame().contains(at) {
@@ -955,6 +1045,41 @@ impl MailView {
         let state = &mut self.scrolls[index];
         let cx = self.ui.context();
         state.scroll(cx, scroll)
+    }
+
+    fn swiped(&mut self, scroll: &Scroll) -> bool {
+        let sideways = scroll.delta.x.abs() > 1.5 * scroll.delta.y.abs();
+        let row = match self.hit(scroll.position) {
+            Some(Hit::Message(id) | Hit::Quick(id, _)) => Some(id),
+            _ => None,
+        };
+        match (self.swipe, scroll.phase) {
+            (Some((id, moved)), ScrollPhase::Ended) => {
+                self.swipe = None;
+                if moved.abs() >= SWIPE_COMMIT {
+                    let quick = match moved > 0.0 {
+                        true => Quick::Archive,
+                        false => Quick::Delete,
+                    };
+                    self.quick(id, quick);
+                }
+                true
+            }
+            (Some((id, moved)), _) => {
+                let width = self.list_frame().width;
+                self.swipe = Some((id, (moved - scroll.delta.x).clamp(-width, width)));
+                true
+            }
+            (None, ScrollPhase::Ended) => false,
+            (None, _) if sideways => match row {
+                Some(id) => {
+                    self.swipe = Some((id, -scroll.delta.x));
+                    true
+                }
+                None => false,
+            },
+            (None, _) => false,
+        }
     }
 
     pub(crate) fn page_reader(&mut self) -> bool {

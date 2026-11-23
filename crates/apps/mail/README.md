@@ -59,7 +59,9 @@ apt install bande-mail
   accounts, then each account's folders with unread counts. The list shows sender, subject, a
   preview, the date, an unread dot, a flag and a paperclip, under day labels (Today, Yesterday,
   This Week, then months) when sorted by date; in a mailbox of all accounts a coloured mark tells
-  the accounts apart. An empty mailbox, filter or search says so, with when Mail last updated or
+  the accounts apart. Under the pointer a row's date gives way to Archive, Delete and Flag, and a
+  two-finger swipe on a touchpad archives the row (to the right) or deletes it (to the left);
+  Undo (Ctrl+Z) brings it back. An empty mailbox, filter or search says so, with when Mail last updated or
   where search looks. With nothing chosen the reader names the keys to start with; with several
   messages chosen it offers Archive, Delete, Mark as Read, Move To… and Flag for all of them. Messages of one conversation (the first `References` entry, else the
   `Message-ID`; a reply that has neither joins the latest message of the account with the same

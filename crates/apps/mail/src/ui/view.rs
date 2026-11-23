@@ -111,10 +111,18 @@ pub enum Request {
     OpenMessage(PathBuf),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Quick {
+    Archive,
+    Delete,
+    Flag,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Hit {
     Place(usize),
     Message(MessageId),
+    Quick(MessageId, Quick),
     Conversation(MessageId),
     Reader(Target),
     Offline(AccountId),
@@ -260,6 +268,7 @@ pub struct MailView {
     read_later: Option<(Instant, Vec<MessageId>)>,
     pub(crate) filter: Filter,
     pub(crate) groups: Vec<(usize, String)>,
+    pub(crate) swipe: Option<(MessageId, f32)>,
     pub(crate) overlay: bool,
     pub(crate) single_reader: bool,
     resizing: Option<(Edge, f32)>,
@@ -335,6 +344,7 @@ impl MailView {
             read_later: None,
             filter: Filter::All,
             groups: Vec::new(),
+            swipe: None,
             overlay: false,
             single_reader: false,
             resizing: None,
@@ -661,7 +671,7 @@ impl MailView {
             return Cursor::ColumnResize;
         }
         match &self.hover {
-            Some(Hit::Conversation(_) | Hit::Offline(_)) => Cursor::Pointer,
+            Some(Hit::Conversation(_) | Hit::Offline(_) | Hit::Quick(..)) => Cursor::Pointer,
             Some(Hit::Reader(Target::Card(_))) => Cursor::Text,
             Some(Hit::Reader(_)) => Cursor::Pointer,
             _ => self.ui.cursor(),
@@ -1454,8 +1464,12 @@ impl MailView {
     }
 
     pub fn move_selected(&mut self, role: Role) {
-        let moves = self
-            .targets()
+        let targets = self.targets();
+        self.move_summaries(targets, role);
+    }
+
+    fn move_summaries(&mut self, summaries: Vec<Summary>, role: Role) {
+        let moves = summaries
             .into_iter()
             .filter_map(|summary| {
                 let target = self.mailbox_with_role(summary.account, role)?;
@@ -3111,6 +3125,8 @@ impl MailView {
                 self.focus = Pane::List;
                 self.toggle_conversation(id);
             }
+            Hit::Quick(id, quick) if !secondary => self.quick(id, quick),
+            Hit::Quick(..) => {}
             Hit::Reader(target) => {
                 self.focus = Pane::Reader;
                 self.reader.target = None;
@@ -3363,6 +3379,32 @@ impl MailView {
         {
             true => prefix,
             false => String::new(),
+        }
+    }
+
+    pub(crate) fn quick(&mut self, id: MessageId, quick: Quick) {
+        let Some(summary) = self
+            .messages
+            .iter()
+            .find(|summary| summary.id == id)
+            .cloned()
+        else {
+            return;
+        };
+        let summaries = self.conversation_of(&summary);
+        match quick {
+            Quick::Archive => self.move_summaries(summaries, Role::Archive),
+            Quick::Delete => {
+                let gone = self.delete(summaries);
+                self.leave_targets(&gone);
+            }
+            Quick::Flag => {
+                let ids = summaries
+                    .iter()
+                    .map(|summary| summary.id)
+                    .collect::<Vec<_>>();
+                self.set_flag_on(&ids, Flag::Flagged, !summary.flags.flagged);
+            }
         }
     }
 

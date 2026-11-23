@@ -18,4 +18,4 @@ pub use message_view::{MESSAGE_SIZE, MessageView};
 pub use settings_view::{SETTINGS_SIZE, SettingsView};
 pub use setup_sheet::Mode;
 pub use sidebar::{Place, Row};
-pub use view::{Hit, MailView, Panes, Request, SHORTCUTS, TOOLBAR_HEIGHT};
+pub use view::{Hit, MailView, Panes, Quick, Request, SHORTCUTS, TOOLBAR_HEIGHT};

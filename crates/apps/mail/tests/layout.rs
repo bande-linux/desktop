@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 use bande_mail::imap::{Fetched, Folder, Role};
-use bande_toolkit::ui::{Event, Key, Modifiers, Pointer};
+use bande_toolkit::ui::{Event, Key, Modifiers, Pointer, Scroll, ScrollPhase, ScrollSource};
 use bande_toolkit::{Appearance, HeaderInsets, Palette, Point, Scheme, TextSystem, WindowButtons};
 
 fn hermetic() -> &'static Path {
@@ -149,7 +149,14 @@ fn an_empty_mailbox_says_so_and_several_chosen_messages_offer_their_actions() {
         role: Some(Role::Inbox),
         selectable: true,
     };
-    store.replace_mailboxes(id, &[inbox]).unwrap();
+    let archive = Folder {
+        path: "Archive".to_owned(),
+        name: "Archive".to_owned(),
+        delimiter: None,
+        role: Some(Role::Archive),
+        selectable: true,
+    };
+    store.replace_mailboxes(id, &[inbox, archive]).unwrap();
     let mut view = view_of(store_path);
     view.scene(1280, 800);
     let list = view
@@ -165,7 +172,13 @@ fn an_empty_mailbox_says_so_and_several_chosen_messages_offer_their_actions() {
         "{list:?}"
     );
 
-    let mailbox = store.mailboxes(id).unwrap()[0].id;
+    let mailbox = store
+        .mailboxes(id)
+        .unwrap()
+        .into_iter()
+        .find(|mailbox| mailbox.role == Some(Role::Inbox))
+        .unwrap()
+        .id;
     let fetched = [7, 8].map(|uid| Fetched {
         uid,
         flags: None,
@@ -201,5 +214,32 @@ fn an_empty_mailbox_says_so_and_several_chosen_messages_offer_their_actions() {
     assert!(
         width(&mut view) > 0.0,
         "choosing both messages offers Mark as Read"
+    );
+
+    view.handle(&Event::Key {
+        key: Key::Escape,
+        modifiers: Modifiers::default(),
+    });
+    let row = Point::new(400.0, 112.0 + 26.0 + 20.0);
+    view.handle(&Event::PointerMove(Pointer::at(row)));
+    view.scene(1280, 800);
+    for (delta, phase) in [
+        (-50.0, ScrollPhase::Began),
+        (-60.0, ScrollPhase::Changed),
+        (0.0, ScrollPhase::Ended),
+    ] {
+        view.handle(&Event::Scroll(Scroll {
+            position: row,
+            delta: Point::new(delta, 0.0),
+            source: ScrollSource::Finger,
+            phase,
+            ..Scroll::default()
+        }));
+        view.scene(1280, 800);
+    }
+    assert_eq!(
+        view.messages().len(),
+        1,
+        "a swipe to the right archives the row"
     );
 }

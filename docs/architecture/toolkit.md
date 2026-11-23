@@ -197,7 +197,10 @@ writes a hex value, a corner radius or a font name of its own.
 - **Widgets.** `ui` holds the widget tree: `Stack` (rows and columns with spacing and padding; a
   column stretches its children across, a row centres them), `Label`, `Shortcut`, the controls
   below, `Table`, `ScrollView`, `Disclosure` and `FreeLayout`, laid out, painted into a `Scene`
-  and driven by `Ui`. `Ui::update_widget(id, |widget, cx| ...)` changes a widget from code with the context it needs (e.g. `SegmentedControl::set_selected`, `Slider::set_value`), so the change animates. Buttons and switches act on release inside. Tab moves focus
+  and driven by `Ui`. A child placed with no area (a `FreeLayout` frame of zero) inside a laid-out
+  parent is hidden: it is not painted, not in the accessibility tree and not in the focus order.
+  `TextField::named` and `SecureField::named` give a field its spoken label and a problem with its
+  value (described, and marked invalid). `Ui::update_widget(id, |widget, cx| ...)` changes a widget from code with the context it needs (e.g. `SegmentedControl::set_selected`, `Slider::set_value`), so the change animates. Buttons and switches act on release inside. Tab moves focus
   through every control in every window and sheet; tabbing into a field selects its text. A
   click focuses fields, lists, sliders, steppers and other widgets whose `focuses_on_click`
   holds, so the arrow keys drive them next, but not buttons, switches, checkboxes, radio
@@ -261,7 +264,8 @@ writes a hex value, a corner radius or a font name of its own.
   data, end something or reach outside the app makes that choice `.destructive` (no Return)
   with a cancel or `.safe` choice beside it. The parent dims
   with `scrim` (18 % light, 40 % dark); `Ui::present_sheet` drops the card from under the header (`Ui::set_sheet_top` for an app whose content covers the header),
-  `Ui::present_dialog` centres it.
+  `Ui::present_dialog` centres it; `Ui::replace_sheet` swaps the open sheet's content for a next
+  step without sliding it in again, keeping where focus returns when it closes.
 - **Tables**. Rows 32 (24 with `Table::compact` for dense lists such as System Monitor), header 28 with `Label`-style
   tracked capitals in `ink3` (`ink2` for the sorted column) over a `hairline` underline, no
   stripes and no column separators. Contiguous selected rows form one block of radius 6 inset

@@ -179,3 +179,21 @@ pub fn paint_field_for(palette: &Palette, frame: Rect, focused: bool, items: &mu
         false => outline(shape, palette.edge, items),
     }
 }
+
+#[derive(Debug, Clone, Default)]
+pub(crate) struct Naming {
+    pub(crate) label: Option<String>,
+    pub(crate) problem: Option<String>,
+}
+
+impl Naming {
+    pub(crate) fn apply(&self, node: &mut accesskit::Node) {
+        if let Some(label) = &self.label {
+            node.set_label(label.as_str());
+        }
+        if let Some(problem) = &self.problem {
+            node.set_description(problem.as_str());
+            node.set_invalid(accesskit::Invalid::True);
+        }
+    }
+}

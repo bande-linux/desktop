@@ -50,7 +50,7 @@ pub use checkbox::{CHECKBOX_SIZE, CheckState, Checkbox};
 pub use clock::{FrameTime, frame_time, request_wake, set_frame_time, take_wake};
 pub use combo_box::ComboBox;
 pub use context_menu::ContextMenu;
-pub use disclosure::{DISCLOSURE_HEIGHT, Disclosure};
+pub use disclosure::{DISCLOSURE_HEIGHT, Disclosure, chevron};
 pub use editor::{
     Alignment, ListMarker, ParagraphAttributes, PrintedBlock, RichText, TextAttributes,
 };
@@ -522,12 +522,25 @@ pub fn opens_menu(key: Key, modifiers: Modifiers) -> bool {
     }
 }
 
+fn has_area(frame: Rect) -> bool {
+    frame.width > 0.0 && frame.height > 0.0
+}
+
+fn shown_children(widget: &dyn Widget) -> impl Iterator<Item = &dyn Widget> {
+    let laid_out = has_area(widget.frame());
+    widget
+        .children()
+        .iter()
+        .map(Box::as_ref)
+        .filter(move |child| !laid_out || has_area(child.frame()))
+}
+
 fn focus_order(widget: &dyn Widget, cx: &Context, order: &mut Vec<WidgetId>) {
     if widget.accepts_focus(cx) {
         order.push(widget.id());
     }
-    for child in widget.children() {
-        focus_order(child.as_ref(), cx, order);
+    for child in shown_children(widget) {
+        focus_order(child, cx, order);
     }
 }
 
@@ -550,17 +563,15 @@ fn collect(widget: &dyn Widget, cx: &Context, nodes: &mut Vec<(NodeId, Node)>) {
     }
     let parts = widget.parts(cx);
     node.set_children(
-        widget
-            .children()
-            .iter()
+        shown_children(widget)
             .map(|child| child.id().node())
             .chain(parts.children)
             .collect::<Vec<_>>(),
     );
     nodes.push((widget.id().node(), node));
     nodes.extend(parts.nodes);
-    for child in widget.children() {
-        collect(child.as_ref(), cx, nodes);
+    for child in shown_children(widget) {
+        collect(child, cx, nodes);
     }
 }
 
@@ -686,6 +697,20 @@ impl Ui {
             previous_focus,
             floating,
         });
+        self.focus_in_sheet();
+    }
+
+    pub fn replace_sheet(&mut self, sheet: impl Widget + 'static) {
+        match &mut self.sheet {
+            Some(open) if !open.closing => {
+                open.widget = Box::new(sheet);
+                self.focus_in_sheet();
+            }
+            _ => self.present_sheet(sheet),
+        }
+    }
+
+    fn focus_in_sheet(&mut self) {
         let mut order = Vec::new();
         focus_order(self.active(), &self.cx, &mut order);
         let primary = equivalent(self.active(), Key::Enter).filter(|id| self.accepts_focus(*id));

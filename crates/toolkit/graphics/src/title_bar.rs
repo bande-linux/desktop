@@ -41,15 +41,22 @@ impl WindowControl {
     pub const ALL: [Self; 3] = [Self::Minimize, Self::Maximize, Self::Close];
 
     pub fn shown(menu: bool, buttons: WindowButtons) -> impl Iterator<Item = Self> {
-        let mut shown: Vec<Self> = menu
-            .then_some(Self::Menu)
+        const ORDER: [WindowControl; 4] = [
+            WindowControl::Menu,
+            WindowControl::Minimize,
+            WindowControl::Maximize,
+            WindowControl::Close,
+        ];
+        let skip = usize::from(!menu);
+        let (forward, backward) = match buttons {
+            WindowButtons::Left => (None, Some(ORDER[skip..].iter().rev())),
+            WindowButtons::Right => (Some(ORDER[skip..].iter()), None),
+        };
+        forward
             .into_iter()
-            .chain(Self::ALL)
-            .collect();
-        if buttons == WindowButtons::Left {
-            shown.reverse();
-        }
-        shown.into_iter()
+            .flatten()
+            .chain(backward.into_iter().flatten())
+            .copied()
     }
 
     pub fn area(self, width: f32, height: f32, buttons: WindowButtons) -> Rect {

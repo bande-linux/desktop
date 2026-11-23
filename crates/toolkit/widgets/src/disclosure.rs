@@ -74,7 +74,7 @@ impl Disclosure {
     }
 }
 
-pub(crate) fn chevron(centre: Point, turn: f32, color: Color, items: &mut Vec<Item>) {
+pub fn chevron(centre: Point, turn: f32, color: Color, items: &mut Vec<Item>) {
     let angle = turn * std::f32::consts::FRAC_PI_2;
     let rotate = |x: f32, y: f32| {
         Point::new(

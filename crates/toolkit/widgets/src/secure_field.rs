@@ -3,7 +3,7 @@ use std::ops::Range;
 use accesskit::{Action, ActionData, ActionRequest, Node, Role};
 use bande_l10n::tr;
 
-use super::control::paint_field;
+use super::control::{Naming, paint_field};
 use super::{Context, Cursor, Event, Key, Modifiers, Size, Widget, WidgetId};
 use bande_graphics::{
     ControlSize, Item, Palette, Paragraph, Path, Point, Radius, Rect, Shape, TextAlign, TextStyle,
@@ -37,6 +37,7 @@ pub struct SecureField {
     advances: Vec<f32>,
     placeholder_paragraph: Option<Paragraph>,
     go_button: bool,
+    naming: Naming,
     frame: Rect,
 }
 
@@ -58,8 +59,24 @@ impl SecureField {
             advances: Vec::new(),
             placeholder_paragraph: None,
             go_button: false,
+            naming: Naming::default(),
             frame: Rect::default(),
         }
+    }
+
+    /// Names the field for assistive technology, and describes a problem with its value.
+    pub fn named(mut self, label: &str, problem: Option<&str>) -> Self {
+        self.naming = Naming {
+            label: Some(label.to_owned()),
+            problem: problem.map(str::to_owned),
+        };
+        self
+    }
+
+    pub fn with_secret(mut self, secret: &str) -> Self {
+        self.secret = Zeroizing::new(secret.to_owned());
+        self.go(self.length(), false);
+        self
     }
 
     pub fn on_edit(mut self, on_edit: impl FnMut(&str) + 'static) -> Self {
@@ -413,6 +430,7 @@ impl Widget for SecureField {
         if cx.caps_lock && cx.is_focused(self.id) {
             node.set_description(tr!("Caps Lock is on"));
         }
+        self.naming.apply(&mut node);
         node.add_action(Action::Focus);
         node.add_action(Action::SetValue);
         node

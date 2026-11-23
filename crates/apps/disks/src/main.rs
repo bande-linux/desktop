@@ -196,8 +196,7 @@ impl Program for Disks {
         let file = vec![
             Entry::item(&tr!("Open Disk Image…"), OPEN_IMAGE)
                 .shortcut("Ctrl+O")
-                .without_window()
-                .primary(),
+                .without_window(),
             self.item(cx, tr!("Image from Selection…"), IMAGE_FROM),
         ];
         let edit = edit_submenu(vec![

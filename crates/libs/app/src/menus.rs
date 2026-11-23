@@ -1,12 +1,10 @@
 use bande_app_menu::{
     Entry, FULL_SCREEN, Standard, WINDOW_ACTION, about_item, close_window, hide_items, quit_item,
-    settings, take_primary, tidy, window_submenu,
+    settings, tidy, window_submenu,
 };
 use bande_toolkit::ui::{Event, MenuItem, MenuToggle, shortcut_pressed};
 
 use crate::{Info, Keys, Menus};
-
-const PRIMARY_LIMIT: usize = 5;
 
 impl Keys {
     fn close(self) -> &'static str {
@@ -74,7 +72,6 @@ pub(crate) fn assemble(
     commands: Vec<MenuItem>,
 ) -> Vec<Entry> {
     let name = (info.name)();
-    let (primary, headings) = take_primary(menus.menus, PRIMARY_LIMIT);
     let mut window: Vec<Entry> = commands.into_iter().map(window_entry).collect();
     window.push(Entry::separator());
     window.extend(menus.window);
@@ -82,15 +79,14 @@ pub(crate) fn assemble(
     window.push(close_window(info.keys.close()));
     window.push(Entry::separator());
     window.extend(hide_items(&name));
-    let mut entries = primary;
-    entries.push(Entry::separator());
-    entries.extend(headings);
+    window.push(Entry::separator());
+    window.push(about_item(&name, info.version));
+    let mut entries = menus.menus;
     entries.push(window_submenu(window));
     entries.push(Entry::separator());
     if info.settings.is_some() {
         entries.push(settings(info.keys.settings()));
     }
-    entries.push(about_item(&name, info.version));
     entries.push(quit_item(&name, info.keys.quit()));
     let entries = tidy(entries);
     match windowed {

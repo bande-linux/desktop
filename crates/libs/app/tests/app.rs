@@ -72,14 +72,12 @@ impl Program for Example {
                 Entry::submenu(
                     "File",
                     vec![
-                        Entry::item("New Window", "new")
-                            .shortcut("Ctrl+N")
-                            .primary(),
+                        Entry::item("New Window", "new").shortcut("Ctrl+N"),
                         Entry::separator(),
                         Entry::item("Export…", "export"),
                     ],
                 ),
-                Entry::submenu("View", vec![Entry::item("Zoom In", "zoom-in").primary()]),
+                Entry::submenu("View", vec![Entry::item("Zoom In", "zoom-in")]),
             ],
             window: Vec::new(),
         }
@@ -187,22 +185,14 @@ fn a_second_launch_reaches_the_running_app_a_closed_window_is_gone_at_once_and_t
     let root = tree(layout);
     assert_eq!(
         labels(&root),
-        [
-            "New Window",
-            "Zoom In",
-            "",
-            "File",
-            "Window",
-            "",
-            "About Example",
-            "Quit Example"
-        ]
+        ["File", "View", "Window", "", "Quit Example"]
     );
-    assert_eq!(labels(child(&root, "File")), ["Export…"]);
+    assert_eq!(labels(child(&root, "File")), ["New Window", "", "Export…"]);
     let window = child(&root, "Window");
     for item in ["Tile", "Keep on Top", "Close Window", "Hide Example"] {
         child(window, item);
     }
+    assert_eq!(labels(window).last(), Some(&"About Example"));
     let left = child(child(window, "Tile"), "Left");
     menu.event(left.id, "clicked", &zbus::zvariant::Value::from(""), 0)
         .expect("click Window ▸ Tile ▸ Left");

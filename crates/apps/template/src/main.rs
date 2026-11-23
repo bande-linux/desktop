@@ -40,9 +40,7 @@ impl Program for Template {
     }
 
     fn menus(&self, _cx: &Cx<Self>) -> Menus {
-        let new_window = Entry::item(&tr!("New Window"), NEW_WINDOW)
-            .shortcut("Ctrl+N")
-            .primary();
+        let new_window = Entry::item(&tr!("New Window"), NEW_WINDOW).shortcut("Ctrl+N");
         Menus {
             menus: vec![Entry::submenu(&tr!("File"), vec![new_window])],
             window: Vec::new(),

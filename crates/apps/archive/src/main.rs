@@ -360,9 +360,7 @@ impl Program for Utility {
     }
 
     fn menus(&self, _cx: &Cx<Self>) -> Menus {
-        let expand = Entry::item(&tr!("Expand Archive…"), EXPAND_ARCHIVE)
-            .shortcut("Ctrl+O")
-            .primary();
+        let expand = Entry::item(&tr!("Expand Archive…"), EXPAND_ARCHIVE).shortcut("Ctrl+O");
         Menus {
             menus: vec![Entry::submenu(&tr!("File"), vec![expand])],
             window: vec![Entry::item(&tr!("Archives"), SHOW_PANEL)],

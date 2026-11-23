@@ -248,8 +248,8 @@ writes a hex value, a corner radius or a font name of its own.
   separators in `hairline`, the highlight accent radius 6 with `on_accent` text, disabled items
   `ink3`, the shortcut column right-aligned in `ink3` as words, square-capped
   checkmarks for `MenuItem::check` and a dot for the chosen `MenuItem::radio` (announced as
-  check box and radio items, on or off, as app menus carry them over dbusmenu), submenu chevrons. Searchable menus (`Menu::searchable`) have a `well` search
-  field; Alt swaps items for their `alternate`.
+  check box and radio items, on or off, as app menus carry them over dbusmenu), submenu chevrons. Searchable menus (`Menu::searchable`) search as soon as one
+  types, and only then show a search field above the results, so they take no extra row; Alt swaps items for their `alternate`.
 - **Alerts and sheets**. `Alert` is a card of radius
   14: the body on `overlay` with an optional 36 pt icon (`.icon(image)`), a Manrope `Heading`
   and the message in `ink2`; a footer tray on `chassis` holds the buttons: default at the right

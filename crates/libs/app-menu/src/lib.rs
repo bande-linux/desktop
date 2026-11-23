@@ -115,29 +115,6 @@ pub fn window_submenu(items: Vec<Entry>) -> Entry {
     Entry::submenu(&tr!("Window"), tidy(items))
 }
 
-pub fn take_primary(menus: Vec<Entry>, limit: usize) -> (Vec<Entry>, Vec<Entry>) {
-    let mut primary = Vec::new();
-    let rest = without_primary(menus, &mut primary, limit);
-    (primary, rest)
-}
-
-fn without_primary(entries: Vec<Entry>, primary: &mut Vec<Entry>, limit: usize) -> Vec<Entry> {
-    let mut kept = Vec::with_capacity(entries.len());
-    for entry in entries {
-        if entry.primary && primary.len() < limit {
-            primary.push(entry);
-        } else if entry.children.is_empty() {
-            kept.push(entry);
-        } else {
-            let children = without_primary(entry.children, primary, limit);
-            if !children.is_empty() {
-                kept.push(Entry { children, ..entry });
-            }
-        }
-    }
-    tidy(kept)
-}
-
 pub fn tidy(entries: Vec<Entry>) -> Vec<Entry> {
     let mut kept: Vec<Entry> = Vec::with_capacity(entries.len());
     for entry in entries {
@@ -245,7 +222,6 @@ pub struct Entry {
     enabled: bool,
     separator: bool,
     toggle: Option<Toggle>,
-    primary: bool,
     children: Vec<Entry>,
 }
 
@@ -260,7 +236,6 @@ impl Entry {
             enabled: true,
             separator: false,
             toggle: None,
-            primary: false,
             children: Vec::new(),
         }
     }
@@ -289,13 +264,6 @@ impl Entry {
     pub fn shell_action(self, shell_action: ShellAction) -> Self {
         Self {
             shell_action: Some(shell_action),
-            ..self
-        }
-    }
-
-    pub fn primary(self) -> Self {
-        Self {
-            primary: true,
             ..self
         }
     }

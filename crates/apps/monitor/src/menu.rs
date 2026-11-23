@@ -128,13 +128,9 @@ pub fn app_menus(tabs: &[Tab], shown: Filter, windowed: bool, files: bool) -> Ve
         Entry::separator(),
         entry(text!("Show CPU Cores"), MenuCommand::ShowCores),
         Entry::separator(),
-        process(text!("Quit Process…"), MenuCommand::Quit)
-            .shortcut("Ctrl+E")
-            .primary(),
+        process(text!("Quit Process…"), MenuCommand::Quit).shortcut("Ctrl+E"),
         process(text!("Force Quit Process…"), MenuCommand::ForceQuit),
-        process(text!("Inspect"), MenuCommand::Inspect)
-            .shortcut("Ctrl+I")
-            .primary(),
+        process(text!("Inspect"), MenuCommand::Inspect).shortcut("Ctrl+I"),
     ]);
     if files {
         view.extend([
@@ -147,9 +143,7 @@ pub fn app_menus(tabs: &[Tab], shown: Filter, windowed: bool, files: bool) -> Ve
             process(text!("Copy Name"), MenuCommand::CopyName),
             process(text!("Copy PID"), MenuCommand::CopyPid),
             Entry::separator(),
-            process(text!("Find"), MenuCommand::Find)
-                .shortcut("Ctrl+F")
-                .primary(),
+            process(text!("Find"), MenuCommand::Find).shortcut("Ctrl+F"),
         ]),
         Entry::submenu(&tr!("View"), view),
     ]

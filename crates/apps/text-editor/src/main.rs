@@ -346,14 +346,13 @@ impl TextEditor {
         Entry::submenu(
             &tr!("File"),
             vec![
-                item(text!("New"), "new").shortcut("Ctrl+N").primary(),
-                item(text!("Open…"), "open").shortcut("Ctrl+O").primary(),
-                Entry::submenu(&tr!("Open Recent"), recent).primary(),
+                item(text!("New"), "new").shortcut("Ctrl+N"),
+                item(text!("Open…"), "open").shortcut("Ctrl+O"),
+                Entry::submenu(&tr!("Open Recent"), recent),
                 Entry::separator(),
                 item(text!("Save"), "save")
                     .shortcut("Ctrl+S")
-                    .enabled(windowed)
-                    .primary(),
+                    .enabled(windowed),
                 item(text!("Save As…"), "save-as")
                     .shortcut("Shift+Ctrl+S")
                     .enabled(windowed),
@@ -729,8 +728,7 @@ impl Program for TextEditor {
         let find = vec![
             item(text!("Find"), "find")
                 .shortcut("Ctrl+F")
-                .enabled(windowed)
-                .primary(),
+                .enabled(windowed),
             item(text!("Find and Replace…"), "find-replace")
                 .shortcut("Ctrl+H")
                 .enabled(windowed),

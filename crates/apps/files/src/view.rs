@@ -24,7 +24,9 @@ use bande_toolkit::ui::{
     PointerButton, Scroll, ScrollState, Slider, TabStrip, TypeSelect, Ui, Widget, WidgetId,
     opens_menu,
 };
-use bande_toolkit::{Appearance, Image, Item, Palette, Point, Rect, SHEET_INSET, TextSystem};
+use bande_toolkit::{
+    Appearance, HeaderInsets, Image, Item, Palette, Point, Rect, SHEET_INSET, TextSystem,
+};
 use bande_volumes::{
     EjectFailure, SavedServer, mounted_volumes, on_connected_volume, quick_is_dir, volume_icon,
 };
@@ -252,6 +254,7 @@ pub struct FilesView {
     pub(crate) terminal: bool,
     pub(crate) icons: Icons,
     pub(crate) palette: Palette,
+    pub(crate) header_insets: HeaderInsets,
     pub(crate) ui: Ui,
     pub(crate) host: WidgetId,
     pub(crate) table: WidgetId,
@@ -422,6 +425,7 @@ impl FilesView {
             terminal: false,
             icons,
             palette,
+            header_insets: HeaderInsets::default(),
             ui: Ui::new(Box::new(host), Context::new(text, palette)),
             host: host_id,
             table: table_id,
@@ -634,6 +638,7 @@ impl FilesView {
 
     pub fn set_appearance(&mut self, appearance: Appearance) {
         self.palette = appearance.palette();
+        self.header_insets = HeaderInsets::of(appearance.window_buttons);
         self.ui.set_appearance(appearance);
         self.layout_controls();
     }

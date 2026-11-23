@@ -103,7 +103,9 @@ impl Program for ScreenSharing {
                 Entry::submenu(
                     &tr!("File"),
                     vec![
-                        Entry::item(&tr!("New Connection"), NEW_CONNECTION).shortcut("Ctrl+N"),
+                        Entry::item(&tr!("New Connection"), NEW_CONNECTION)
+                            .shortcut("Ctrl+N")
+                            .primary(),
                         Entry::item(&tr!("Disconnect"), DISCONNECT).enabled(viewing),
                     ],
                 ),

@@ -114,7 +114,8 @@ cp "$repo"/search/2c4b8834-030c-4097-a887-c7506689095c* services/settings/dumps/
 
 find browser/locales/en-US toolkit/locales/en-US dom/locales/en-US -type f \( -name '*.ftl' -o -name '*.properties' -o -name '*.dtd' \) \
     -exec sed -i -E '/^\s*(#|<!--)/! s/\bFirefox\b/Browser/g' {} +
-cat "$repo/theme/bande.css" >> browser/themes/linux/browser.css
+python3 "$repo/scripts/check-theme.py" .
+cat "$repo/theme/colors.css" "$repo/theme/bande.css" >> browser/themes/linux/browser.css
 cp "$repo/l10n/languages" debian/bande-languages
 sed -i 's/^L10N_LANGS = .*/L10N_LANGS = $(shell cat debian\/bande-languages)/' debian/upstream.mk
 sed -i 's/^         @browser@ (>= ${source:Version}), @browser@ (<< ${source:Version}.1~)$/         @browser@ (= ${source:Version})\nEnhances: @browser@/' debian/l10n/browser-l10n.control.in
@@ -128,6 +129,7 @@ python3 "$repo/scripts/gut.py" . browser/components/asrouter browser/components/
     toolkit/components/ipprotection browser/components/genai browser/components/aiwindow \
     browser/components/reportbrokensite toolkit/components/reportbrokensite browser/components/messagepreview
 cp "$repo"/theme/pages/* browser/base/content/
+cat "$repo/theme/colors.css" >> browser/base/content/bande-newtab.css
 cp "$repo/l10n/en-US/bande.ftl" browser/locales/en-US/browser/
 for lang in $(cat "$repo/l10n/languages"); do
     [ ! -f "$repo/l10n/$lang/bande.ftl" ] || cp "$repo/l10n/$lang/bande.ftl" "l10n-$lang/browser/browser/"

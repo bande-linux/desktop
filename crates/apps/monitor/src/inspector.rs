@@ -19,8 +19,7 @@ use bande_toolkit::ui::{
     WidgetId,
 };
 use bande_toolkit::{
-    Appearance, HEADER_LEADING, HEADER_TRAILING, Header, Palette, Rect, SHEET_INSET, Scene,
-    TextSystem,
+    Appearance, Header, HeaderInsets, Palette, Rect, SHEET_INSET, Scene, TextSystem, WindowButtons,
 };
 
 pub const INSPECTOR_SIZE: (u32, u32) = (680, 520);
@@ -125,6 +124,7 @@ pub struct InspectorView {
     sections: WidgetId,
     size: (f32, f32),
     full_screen: bool,
+    window_buttons: WindowButtons,
     stopping: Option<StopTarget>,
     requests: Vec<Request>,
     finished: bool,
@@ -176,6 +176,7 @@ impl InspectorView {
             sections,
             size: (0.0, 0.0),
             full_screen: false,
+            window_buttons: WindowButtons::default(),
             stopping: None,
             requests: Vec::new(),
             finished: false,
@@ -597,10 +598,10 @@ impl InspectorView {
         }
     }
 
-    fn trailing(&self) -> f32 {
+    fn header_insets(&self) -> HeaderInsets {
         match self.full_screen {
-            true => HEADER_LEADING,
-            false => HEADER_TRAILING,
+            true => HeaderInsets::WITHOUT_CONTROLS,
+            false => HeaderInsets::of(self.window_buttons),
         }
     }
 
@@ -608,7 +609,7 @@ impl InspectorView {
         let middle = |height: f32| ((HEADER - height) / 2.0).round();
         let width = SEGMENT_WIDTH * Section::ALL.len() as f32;
         let sections = Rect::new(
-            self.size.0 - self.trailing() - width,
+            self.size.0 - self.header_insets().trailing - width,
             middle(SEGMENTED_HEIGHT),
             width,
             SEGMENTED_HEIGHT,
@@ -648,6 +649,7 @@ impl Screen for InspectorView {
 
     fn set_appearance(&mut self, appearance: Appearance) {
         self.palette = appearance.palette();
+        self.window_buttons = appearance.window_buttons;
         self.list.set_appearance(appearance);
     }
 
@@ -766,7 +768,7 @@ impl Screen for InspectorView {
 
     fn header(&self) -> Option<Header> {
         Some(Header {
-            title_x: HEADER_LEADING,
+            title_x: self.header_insets().leading,
             items: self
                 .toolbar_frames()
                 .into_iter()

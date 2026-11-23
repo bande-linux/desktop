@@ -8,6 +8,30 @@ pub enum Style {
     Glass,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum WindowButtons {
+    Left,
+    #[default]
+    Right,
+}
+
+impl WindowButtons {
+    pub const ALL: [Self; 2] = [Self::Left, Self::Right];
+
+    pub const fn keyword(self) -> &'static str {
+        match self {
+            Self::Left => "left",
+            Self::Right => "right",
+        }
+    }
+
+    pub fn from_keyword(keyword: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|buttons| buttons.keyword() == keyword)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Material {
     Opaque,

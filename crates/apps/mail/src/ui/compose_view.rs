@@ -19,8 +19,8 @@ use bande_toolkit::ui::{
     Ui, Widget, WidgetId, access_rect, shortcut_pressed,
 };
 use bande_toolkit::{
-    Appearance, HEADER_LEADING, HEADER_TRAILING, Header, Image, Item, Palette, Point, Radius, Rect,
-    Scene, Shape, TextAlign, TextRole, TextStyle, TextSystem, Transfer, Window, WindowEvent,
+    Appearance, Header, HeaderInsets, Image, Item, Palette, Point, Radius, Rect, Scene, Shape,
+    TextAlign, TextRole, TextStyle, TextSystem, Transfer, Window, WindowEvent,
 };
 
 static NEXT_TOKEN: AtomicU64 = AtomicU64::new(1);
@@ -91,6 +91,7 @@ pub struct ComposeView {
     replaces: Option<Original>,
     initial: Draft,
     palette: Palette,
+    header_insets: HeaderInsets,
     size: (f32, f32),
     sent: Option<Outgoing>,
     requests: Vec<ComposeRequest>,
@@ -259,6 +260,7 @@ impl ComposeView {
             replaces,
             initial: Draft::default(),
             palette,
+            header_insets: HeaderInsets::default(),
             size: (0.0, 0.0),
             sent: None,
             requests: Vec::new(),
@@ -332,6 +334,7 @@ impl ComposeView {
 
     pub fn set_appearance(&mut self, appearance: Appearance) {
         self.palette = appearance.palette();
+        self.header_insets = HeaderInsets::of(appearance.window_buttons);
         self.ui.set_appearance(appearance);
     }
 
@@ -344,7 +347,7 @@ impl ComposeView {
         let (width, height) = self.size;
         let button = |slot: f32| {
             Rect::new(
-                width - HEADER_TRAILING - slot * BUTTON_HEIGHT,
+                width - self.header_insets.trailing - slot * BUTTON_HEIGHT,
                 ((TOOLBAR_HEIGHT - BUTTON_HEIGHT) / 2.0).round(),
                 BUTTON_HEIGHT,
                 BUTTON_HEIGHT,
@@ -423,7 +426,7 @@ impl ComposeView {
 
     pub fn header(&self) -> Header {
         Header {
-            title_x: HEADER_LEADING,
+            title_x: self.header_insets.leading,
             items: self
                 .frames()
                 .into_iter()

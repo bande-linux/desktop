@@ -152,19 +152,6 @@ pub fn tree((id, properties, children): Layout) -> Node {
     )
 }
 
-pub fn with_app_row(mut root: Node) -> Node {
-    root.children.insert(
-        0,
-        Node {
-            id: -1,
-            enabled: true,
-            visible: true,
-            ..Node::default()
-        },
-    );
-    root
-}
-
 pub fn find(node: Node, id: i32) -> Option<Node> {
     if node.id == id {
         return Some(node);

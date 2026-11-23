@@ -492,6 +492,7 @@ dependencies = [
  "bande-log",
  "bande-notify",
  "bande-pdf",
+ "bande-status",
  "bande-test-bus",
  "bande-test-wayland",
  "bande-toolkit",
@@ -509,7 +510,6 @@ name = "bande-app-menu"
 version = "0.2.0"
 dependencies = [
  "bande-inbox",
- "bande-keyboard",
  "bande-l10n",
  "futures-lite",
  "tracing",

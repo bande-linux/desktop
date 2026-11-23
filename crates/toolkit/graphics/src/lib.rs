@@ -15,8 +15,8 @@ mod vulkan;
 
 pub use bande_design::{
     Accent, Appearance, BackdropTone, Color, Contrast, ControlSize, Elevation, Look, Material,
-    Palette, Radius, Scheme, Shadow, Spacing, Style, TextRole, TextSize, Typeface, backdrop_tone,
-    grown_line, limit_backdrop, window_edge_opacity,
+    Palette, Radius, Scheme, Shadow, Spacing, Style, TextRole, TextSize, Typeface, WindowButtons,
+    backdrop_tone, grown_line, limit_backdrop, window_edge_opacity,
 };
 pub use cpu::CpuRenderer;
 pub use damage::{Region, damage};
@@ -37,8 +37,8 @@ pub use text::{
     Cut, GlyphRun, Paragraph, PositionedGlyph, TextAlign, TextRun, TextStyle, TextSystem, shortened,
 };
 pub use title_bar::{
-    ControlHover, FRAME_HEADER_HEIGHT, HEADER_LEADING, HEADER_TRAILING, PLACEMENTS_AFTER_HOLD,
-    PLACEMENTS_AFTER_REST, RESIZE_MARGIN, RESIZE_WALL_BAND, ResizeEdge, TitleBar,
-    WINDOW_HEADER_HEIGHT, WalledSides, WindowControl, WindowControls, menu_button_area,
-    resize_zone, title_style, walled_resize_zone, window_controls_width,
+    ControlHover, FRAME_HEADER_HEIGHT, HeaderInsets, PLACEMENTS_AFTER_HOLD, PLACEMENTS_AFTER_REST,
+    RESIZE_MARGIN, RESIZE_WALL_BAND, ResizeEdge, TitleBar, WINDOW_HEADER_HEIGHT, WalledSides,
+    WindowControl, WindowControls, menu_button_area, resize_zone, title_span, title_style,
+    walled_resize_zone, window_controls_width,
 };

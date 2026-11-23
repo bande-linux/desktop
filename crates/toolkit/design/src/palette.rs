@@ -1,4 +1,4 @@
-use crate::{Color, Look, Style, TextSize};
+use crate::{Color, Look, Style, TextSize, WindowButtons};
 
 const LIGHT_NEUTRAL_HUE: f64 = 80.0;
 const DARK_NEUTRAL_HUE: f64 = 262.0;
@@ -334,6 +334,7 @@ pub struct Appearance {
     pub text_size: TextSize,
     pub style: Style,
     pub reduce_transparency: bool,
+    pub window_buttons: WindowButtons,
 }
 
 const FRAME_TINT: f32 = 0.06;

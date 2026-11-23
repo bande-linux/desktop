@@ -45,6 +45,7 @@ const IMPORT: &str = "import";
 const EXPORT: &str = "export";
 const WINDOW_SIZE: (u32, u32) = (1120, 740);
 const VIEW_FILE: &str = "calendar-view";
+const WELCOME_FILE: &str = "calendar-welcome";
 const FEED_COLOR_PROPERTIES: [&str; 2] = ["COLOR", "X-APPLE-CALENDAR-COLOR"];
 const PUSH_DELAY: Duration = Duration::from_secs(2);
 const RETRY: SignedDuration = SignedDuration::from_mins(15);
@@ -253,22 +254,28 @@ fn app_menus(view: &CalendarView, time_zones: bool) -> Vec<Entry> {
     }
     view_menu.extend([
         Entry::separator(),
-        entry(text!("Go to Today"), "today").shortcut("Ctrl+T"),
+        entry(text!("Go to Today"), "today")
+            .shortcut("Ctrl+T")
+            .primary(),
         entry(text!("Previous"), "previous"),
         entry(text!("Next"), "next"),
         Entry::separator(),
-        entry(text!("Find"), "find").shortcut("Ctrl+F"),
+        entry(text!("Find"), "find").shortcut("Ctrl+F").primary(),
     ]);
     vec![
         Entry::submenu(
             &tr!("File"),
             vec![
-                entry(text!("New Event"), NEW_EVENT).shortcut("Ctrl+N"),
+                entry(text!("New Event"), NEW_EVENT)
+                    .shortcut("Ctrl+N")
+                    .primary(),
                 Entry::separator(),
                 entry(text!("New Calendar…"), "new-calendar"),
                 entry(text!("Add Account…"), "add-account"),
                 entry(text!("Open Colleague’s Calendar…"), "open-shared"),
-                entry(text!("Refresh Calendars"), REFRESH).shortcut("Ctrl+R"),
+                entry(text!("Refresh Calendars"), REFRESH)
+                    .shortcut("Ctrl+R")
+                    .primary(),
                 Entry::separator(),
                 entry(text!("Import…"), IMPORT),
                 entry(text!("Export…"), EXPORT),
@@ -1146,6 +1153,9 @@ impl Program for CalendarApp {
         let title = view.title();
         let directory = std::env::current_dir().unwrap_or_default();
         open_arguments(&mut view, &arguments, &directory);
+        if let Some(file) = cx.state_file(WELCOME_FILE) {
+            view.welcome(file);
+        }
         let worker = Worker::start()?;
         let changes = Inbox::new()?;
         listen(changes.outbox());

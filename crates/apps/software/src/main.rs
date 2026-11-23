@@ -198,18 +198,19 @@ impl Program for Store {
         };
         Menus {
             menus: vec![
-                edit_submenu(vec![item(text!("Find"), COMMAND_FIND, "Ctrl+F")]),
+                edit_submenu(vec![item(text!("Find"), COMMAND_FIND, "Ctrl+F").primary()]),
                 Entry::submenu(
                     &tr!("View"),
                     vec![
                         item(text!("Back"), COMMAND_BACK, "Alt+Left"),
                         Entry::separator(),
-                        item(text!("Discover"), COMMAND_DISCOVER, "Ctrl+1"),
+                        item(text!("Discover"), COMMAND_DISCOVER, "Ctrl+1").primary(),
                         item(
                             text!(context = "section", "Installed"),
                             COMMAND_INSTALLED,
                             "Ctrl+2",
-                        ),
+                        )
+                        .primary(),
                     ],
                 ),
             ],

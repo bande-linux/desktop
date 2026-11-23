@@ -409,6 +409,7 @@ pub enum SettingId {
     VolumeFeedback,
     Appearance,
     Style,
+    WindowButtons,
     ScreenReader,
     Zoom,
     IncreaseContrast,
@@ -1090,6 +1091,18 @@ fn desktop_panes() -> Vec<Pane> {
                             (tr!("Refined Solid"), "refined"),
                             (tr!("Wallpaper-Lit"), "wallpaper-lit"),
                             (tr!("Glass"), "glass"),
+                        ])),
+                    )],
+                ),
+                section(
+                    None,
+                    vec![setting(
+                        SettingId::WindowButtons,
+                        tr!("Window buttons"),
+                        tr!("close, minimize, maximize, title bar, controls, left, right"),
+                        Kind::Choices(keyword_choices(vec![
+                            (tr!(context = "window buttons", "Left"), "left"),
+                            (tr!(context = "window buttons", "Right"), "right"),
                         ])),
                     )],
                 ),

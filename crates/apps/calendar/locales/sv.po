@@ -581,6 +581,15 @@ msgstr "Lägg till ett CalDAV-konto för att öppna en kollegas kalender."
 msgid "{owner} shares no calendars with you."
 msgstr "{owner} delar inga kalendrar med dig."
 
+msgid "Set Up Calendar"
+msgstr "Kom igång med Kalender"
+
+msgid "Sync with a CalDAV account, or keep your calendar on this computer only."
+msgstr "Synkronisera med ett CalDAV-konto, eller ha kalendern bara på den här datorn."
+
+msgid "Use on This Computer"
+msgstr "Använd på den här datorn"
+
 msgid "Add {count} event to “{calendar}”?"
 msgid_plural "Add {count} events to “{calendar}”?"
 msgstr[0] "Vill du lägga till {count} händelse i ”{calendar}”?"

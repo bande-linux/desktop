@@ -9,7 +9,7 @@ use crate::ui::view::{LIST_WIDTH, MailView, SIDEBAR_WIDTH, TOOLBAR_HEIGHT};
 use bande_toolkit::ui::{
     BUTTON_HEIGHT, Button, FreeLayout, SearchField, TEXT_FIELD_HEIGHT, WidgetId,
 };
-use bande_toolkit::{HEADER_TRAILING, Header, Image, Point, Rect};
+use bande_toolkit::{Header, Image, Point, Rect};
 
 const SYMBOL_PIXELS: u32 = 32;
 const GROUP_GAP: f32 = 14.0;
@@ -193,7 +193,7 @@ impl MailView {
                 button(list_end - BUTTON_HEIGHT - COLUMN_INSET),
             ),
         ];
-        let right = self.size.0 - HEADER_TRAILING;
+        let right = self.size.0 - self.header_insets.trailing;
         let groups: [&[WidgetId]; 3] = [
             &[toolbar.archive, toolbar.delete, toolbar.junk],
             &[toolbar.reply, toolbar.reply_all, toolbar.forward],

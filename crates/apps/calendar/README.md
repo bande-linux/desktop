@@ -6,6 +6,10 @@ views. Packaged as `bande-calendar`.
 
 ## What it does
 
+- **First launch.** With no account, Calendar asks once whether to add one (Add Account…) or
+  to use the calendar on this computer only; the answer is kept in
+  `~/.local/state/bande/calendar-welcome`. Without an account it works with a local calendar and
+  never asks again. Accounts are added later from File ▸ Add Account… or Settings ▸ Accounts.
 - **Accounts.** The account sheet first asks for the type: CalDAV account (RFC 4791) or
   calendar subscription. For CalDAV it takes an address and a password and looks up the
   server of the address's own domain (RFC 6764: `_caldavs._tcp` and `_caldav._tcp` SRV records
@@ -169,7 +173,9 @@ Settings.
 
 ## Tests
 
-`tests/untrusted.rs` opens a hostile `.ics` file without panicking and refuses a FIFO or a file
+`tests/first_launch.rs` answers the first-launch question through the accessibility tree:
+Use on This Computer keeps only the local calendar and is not asked again, Add Account… opens the
+account sheet. `tests/untrusted.rs` opens a hostile `.ics` file without panicking and refuses a FIFO or a file
 over 64 MiB. `tests/accounts.rs` finds a CalDAV server from a domain's records and signs in with
 Digest after a wrong password, and never sends a password over plain HTTP to anything but this
 computer. `tests/time_zone.rs` moves a repeating event to another zone and checks that its times,

@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use bande_design::{Color, Palette, Radius, TextRole};
+use bande_design::{Color, Palette, Radius, TextRole, WindowButtons};
 
 use crate::{Item, Paragraph, Path, Point, Rect, Shape, TextStyle};
 
@@ -10,8 +10,6 @@ pub const RESIZE_MARGIN: u32 = 8;
 pub const RESIZE_WALL_BAND: f32 = 3.0;
 pub const PLACEMENTS_AFTER_REST: Duration = Duration::from_millis(800);
 pub const PLACEMENTS_AFTER_HOLD: Duration = Duration::from_millis(500);
-pub const HEADER_LEADING: f32 = EDGE_INSET;
-pub const HEADER_TRAILING: f32 = window_controls_width(true) + TITLE_GAP;
 const RESIZE_CORNER_MARGIN: f32 = 16.0;
 const RESIZE_CORNER_REACH: f32 = 32.0;
 const EDGE_INSET: f32 = 12.0;
@@ -42,13 +40,21 @@ pub enum WindowControl {
 impl WindowControl {
     pub const ALL: [Self; 3] = [Self::Minimize, Self::Maximize, Self::Close];
 
-    pub fn shown(menu: bool) -> impl Iterator<Item = Self> {
-        menu.then_some(Self::Menu).into_iter().chain(Self::ALL)
+    pub fn shown(menu: bool, buttons: WindowButtons) -> impl Iterator<Item = Self> {
+        let mut shown: Vec<Self> = menu
+            .then_some(Self::Menu)
+            .into_iter()
+            .chain(Self::ALL)
+            .collect();
+        if buttons == WindowButtons::Left {
+            shown.reverse();
+        }
+        shown.into_iter()
     }
 
-    pub fn area(self, width: f32, height: f32) -> Rect {
+    pub fn area(self, width: f32, height: f32, buttons: WindowButtons) -> Rect {
         let well = well_start(width);
-        let centre = self.centre(width, height).x;
+        let centre = self.centre(width, height, WindowButtons::Right).x;
         let start = match self {
             Self::Minimize => well,
             Self::Maximize | Self::Close => centre - CELL_PITCH / 2.0,
@@ -59,14 +65,21 @@ impl WindowControl {
             Self::Minimize | Self::Maximize => centre + CELL_PITCH / 2.0,
             Self::Menu => well,
         };
-        Rect::new(start, 0.0, end - start, height)
+        mirrored(Rect::new(start, 0.0, end - start, height), width, buttons)
     }
 
-    pub fn at(point: Point, width: f32, height: f32, menu: bool) -> Option<Self> {
-        Self::shown(menu).find(|control| control.area(width, height).contains(point))
+    pub fn at(
+        point: Point,
+        width: f32,
+        height: f32,
+        menu: bool,
+        buttons: WindowButtons,
+    ) -> Option<Self> {
+        Self::shown(menu, buttons)
+            .find(|control| control.area(width, height, buttons).contains(point))
     }
 
-    fn centre(self, width: f32, height: f32) -> Point {
+    fn centre(self, width: f32, height: f32, buttons: WindowButtons) -> Point {
         let well = well_start(width);
         let x = match self {
             Self::Minimize => well + FIRST_GLYPH,
@@ -74,7 +87,20 @@ impl WindowControl {
             Self::Close => well + FIRST_GLYPH + 2.0 * CELL_PITCH,
             Self::Menu => well - MENU_GAP - WELL_HEIGHT / 2.0,
         };
+        let x = match buttons {
+            WindowButtons::Right => x,
+            WindowButtons::Left => width - x,
+        };
         Point::new(x, height / 2.0)
+    }
+}
+
+fn mirrored(rect: Rect, width: f32, buttons: WindowButtons) -> Rect {
+    match buttons {
+        WindowButtons::Right => rect,
+        WindowButtons::Left => {
+            Rect::new(width - rect.x - rect.width, rect.y, rect.width, rect.height)
+        }
     }
 }
 
@@ -82,19 +108,61 @@ fn well_start(width: f32) -> f32 {
     width - EDGE_INSET - WELL_WIDTH
 }
 
-pub fn menu_button_area(width: f32, height: f32) -> Rect {
-    Rect::new(
+pub fn menu_button_area(width: f32, height: f32, buttons: WindowButtons) -> Rect {
+    let area = Rect::new(
         well_start(width) - MENU_GAP - WELL_HEIGHT,
         ((height - WELL_HEIGHT) / 2.0).round(),
         WELL_HEIGHT,
         WELL_HEIGHT,
-    )
+    );
+    mirrored(area, width, buttons)
 }
 
 pub const fn window_controls_width(menu: bool) -> f32 {
     match menu {
         true => EDGE_INSET + WELL_WIDTH + MENU_GAP + WELL_HEIGHT,
         false => EDGE_INSET + WELL_WIDTH,
+    }
+}
+
+pub fn title_span(width: f32, menu: bool, buttons: WindowButtons) -> (f32, f32) {
+    let controls = window_controls_width(menu) + TITLE_GAP;
+    match buttons {
+        WindowButtons::Right => (EDGE_INSET, width - controls),
+        WindowButtons::Left => (controls, width - EDGE_INSET),
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct HeaderInsets {
+    pub leading: f32,
+    pub trailing: f32,
+}
+
+impl Default for HeaderInsets {
+    fn default() -> Self {
+        Self::of(WindowButtons::default())
+    }
+}
+
+impl HeaderInsets {
+    pub const WITHOUT_CONTROLS: Self = Self {
+        leading: EDGE_INSET,
+        trailing: EDGE_INSET,
+    };
+
+    pub const fn of(buttons: WindowButtons) -> Self {
+        let controls = window_controls_width(true) + TITLE_GAP;
+        match buttons {
+            WindowButtons::Right => Self {
+                leading: EDGE_INSET,
+                trailing: controls,
+            },
+            WindowButtons::Left => Self {
+                leading: controls,
+                trailing: EDGE_INSET,
+            },
+        }
     }
 }
 
@@ -215,14 +283,12 @@ impl TitleBar<'_> {
             });
         }
         items.extend(self.controls.items());
-        let title_x = HEADER_LEADING;
-        let controls = window_controls_width(self.controls.menu_open.is_some());
-        let available = Rect::new(
-            title_x,
-            0.0,
-            (width - title_x - controls - TITLE_GAP).max(0.0),
-            height,
+        let (title_x, end) = title_span(
+            width,
+            self.controls.menu_open.is_some(),
+            self.controls.buttons,
         );
+        let available = Rect::new(title_x, 0.0, (end - title_x).max(0.0), height);
         items.push(Item::Clip {
             shape: Shape::rect(available),
             items: vec![Item::Text {
@@ -245,23 +311,31 @@ pub struct WindowControls<'a> {
     pub maximizable: bool,
     pub alternate: bool,
     pub menu_open: Option<bool>,
+    pub buttons: WindowButtons,
 }
 
 impl WindowControls<'_> {
     pub fn items(&self) -> Vec<Item> {
         let mut items = Vec::new();
-        let well = Rect::new(
-            well_start(self.width),
-            ((self.height - WELL_HEIGHT) / 2.0).round(),
-            WELL_WIDTH,
-            WELL_HEIGHT,
+        let well = mirrored(
+            Rect::new(
+                well_start(self.width),
+                ((self.height - WELL_HEIGHT) / 2.0).round(),
+                WELL_WIDTH,
+                WELL_HEIGHT,
+            ),
+            self.width,
+            self.buttons,
         );
         self.well(well, &mut items);
         for control in WindowControl::ALL {
             self.control(control, &mut items);
         }
         if self.menu_open.is_some() {
-            self.well(menu_button_area(self.width, self.height), &mut items);
+            self.well(
+                menu_button_area(self.width, self.height, self.buttons),
+                &mut items,
+            );
             self.control(WindowControl::Menu, &mut items);
         }
         items
@@ -294,7 +368,7 @@ impl WindowControls<'_> {
 
     fn control(&self, control: WindowControl, items: &mut Vec<Item>) {
         let palette = self.palette;
-        let centre = control.centre(self.width, self.height);
+        let centre = control.centre(self.width, self.height, self.buttons);
         let disc = Shape::rounded(
             Rect::new(
                 centre.x - DISC_RADIUS,

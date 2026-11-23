@@ -1,6 +1,6 @@
 use accesskit::{Node, Role};
 use bande_toolkit::ui::{Context, Size, Widget, WidgetId};
-use bande_toolkit::{HEADER_TRAILING, Item, Rect, Shape};
+use bande_toolkit::{HeaderInsets, Item, Rect, Shape};
 
 pub struct Slot {
     id: WidgetId,
@@ -145,9 +145,9 @@ pub struct Bar {
     id: WidgetId,
     children: Vec<Box<dyn Widget>>,
     toolbar: f32,
-    start: f32,
+    title_room: f32,
     gap: f32,
-    trailing: f32,
+    insets: HeaderInsets,
     sizes: Vec<Size>,
     frame: Rect,
 }
@@ -159,7 +159,7 @@ impl Bar {
         content: Box<dyn Widget>,
         tools: Vec<Box<dyn Widget>>,
         toolbar: f32,
-        start: f32,
+        title_room: f32,
     ) -> Self {
         let mut children = vec![content];
         children.extend(tools);
@@ -167,9 +167,9 @@ impl Bar {
             id: WidgetId::next(),
             children,
             toolbar,
-            start,
+            title_room,
             gap: 8.0,
-            trailing: HEADER_TRAILING,
+            insets: HeaderInsets::default(),
             sizes: Vec::new(),
             frame: Rect::default(),
         }
@@ -184,14 +184,15 @@ impl Bar {
         self.children.extend(tools);
     }
 
-    pub fn set_trailing(&mut self, trailing: f32) {
-        self.trailing = trailing;
+    pub fn set_insets(&mut self, insets: HeaderInsets) {
+        self.insets = insets;
     }
 
     pub fn tool_frames(&self) -> Vec<Rect> {
         let width: f32 = self.sizes.iter().map(|size| size.width).sum::<f32>()
             + self.gap * self.sizes.len().saturating_sub(1) as f32;
-        let mut x = (self.frame.width - self.trailing - width).max(self.start);
+        let mut x = (self.frame.width - self.insets.trailing - width)
+            .max(self.insets.leading + self.title_room);
         self.sizes
             .iter()
             .map(|size| {

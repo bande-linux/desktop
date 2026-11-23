@@ -215,8 +215,7 @@ fn over_controls(view: &CalendarView, point: Point) -> bool {
         .as_ref()
         .map(|inspector| inspector.frame(view.sheet()))
         .is_some_and(|frame| frame.contains(point));
-    let add_account = point.x < SIDEBAR_WIDTH && point.y > view.size.1 - 44.0;
-    point.y < TOOLBAR_HEIGHT || inspector || add_account
+    point.y < TOOLBAR_HEIGHT || inspector
 }
 
 pub fn handle(view: &mut CalendarView, event: &Event) -> bool {
@@ -1051,6 +1050,19 @@ fn resolve(view: &mut CalendarView, action: &str) {
             }
             return;
         }
+        Some(Confirm::Welcome(remembered)) => {
+            let choice = match action {
+                "accept" => "account",
+                _ => "this-computer",
+            };
+            if let Err(error) = bande_xdg::replace_file(&remembered, choice) {
+                tracing::warn!("cannot remember the first-launch choice: {error}");
+            }
+            if action == "accept" {
+                view.open_account_setup();
+            }
+            return;
+        }
         Some(confirm) => confirm,
         None => return,
     };
@@ -1081,6 +1093,9 @@ fn resolve(view: &mut CalendarView, action: &str) {
             view.requests.push(Request::Changed);
         }
         Confirm::DeleteCalendar(index) => view.delete_calendar(index),
-        Confirm::Invitation(_) | Confirm::Counter { .. } | Confirm::Cancelled { .. } => {}
+        Confirm::Invitation(_)
+        | Confirm::Counter { .. }
+        | Confirm::Cancelled { .. }
+        | Confirm::Welcome(_) => {}
     }
 }

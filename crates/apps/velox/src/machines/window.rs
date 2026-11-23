@@ -11,8 +11,8 @@ use bande_toolkit::ui::{
     Stepper, Table, TextField, Toggle, Ui, Widget, WidgetId,
 };
 use bande_toolkit::{
-    Appearance, FrameRegions, HEADER_LEADING, HEADER_TRAILING, Header, Palette, Rect, Scene,
-    TextSystem, WINDOW_HEADER_HEIGHT, Window, WindowEvent,
+    Appearance, FrameRegions, Header, HeaderInsets, Palette, Rect, Scene, TextSystem,
+    WINDOW_HEADER_HEIGHT, Window, WindowEvent,
 };
 
 use super::backend::{Act, Change};
@@ -81,7 +81,6 @@ pub struct MachineWindow {
     sheet: Option<Sheet>,
     intents: Intents,
     requests: Vec<Request>,
-    full_screen: bool,
     terminal: bool,
 }
 
@@ -94,12 +93,7 @@ impl MachineWindow {
         let fleet = hub.fleet();
         let palette = appearance.palette();
         let intents = Intents::default();
-        let bar = Bar::new(
-            super::page::blank(),
-            Vec::new(),
-            TOOLBAR,
-            HEADER_LEADING + TITLE_ROOM,
-        );
+        let bar = Bar::new(super::page::blank(), Vec::new(), TOOLBAR, TITLE_ROOM);
         let bar_id = bar.id();
         let mut ui = Ui::new(Box::new(bar), Context::new(TextSystem::new(), palette));
         ui.set_appearance(appearance);
@@ -123,7 +117,6 @@ impl MachineWindow {
             sheet: None,
             intents,
             requests: Vec::new(),
-            full_screen: false,
             terminal,
         };
         window.make_tools(palette);
@@ -955,15 +948,12 @@ fn row(widget: Box<dyn Widget>) -> Box<dyn Widget> {
 impl View for MachineWindow {
     fn scene(&mut self, window: &mut Window) -> Scene {
         let full_screen = window.header_height() == 0;
-        if full_screen != self.full_screen {
-            self.full_screen = full_screen;
-            let trailing = match full_screen {
-                true => HEADER_LEADING,
-                false => HEADER_TRAILING,
-            };
-            if let Some(bar) = self.ui.widget_as::<Bar>(self.bar) {
-                bar.set_trailing(trailing);
-            }
+        let insets = match full_screen {
+            true => HeaderInsets::WITHOUT_CONTROLS,
+            false => HeaderInsets::of(window.appearance().window_buttons),
+        };
+        if let Some(bar) = self.ui.widget_as::<Bar>(self.bar) {
+            bar.set_insets(insets);
         }
         window.set_frame_regions(FrameRegions {
             sidebar: 0.0,
@@ -988,7 +978,7 @@ impl View for MachineWindow {
             .map(Bar::tool_frames)
             .unwrap_or_default();
         window.set_header(Header {
-            title_x: HEADER_LEADING,
+            title_x: insets.leading,
             items,
             tabs: Vec::new(),
         });

@@ -7,8 +7,10 @@ use std::sync::{Mutex, PoisonError};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-use bande_app::{Cx, Error, Info, Keys, Kind, Program, View};
+use bande_app::{Cx, Error, Info, Keys, Kind, Menus, Program, View};
+use bande_app_menu::{Entry, MENU_PATH};
 use bande_compositor::Compositor;
+use bande_status::dbusmenu::{DBusMenu, Node, tree};
 use bande_test_bus::SessionBus;
 use bande_test_wayland::keys::{KEY_LEFTALT, KEY_LEFTCTRL, KEY_Q, KEY_TAB, KEY_W};
 use bande_test_wayland::{Frames, TestClient, chord, headless};
@@ -61,6 +63,25 @@ impl Program for Example {
         open(cx);
     }
 
+    fn menus(&self, _cx: &Cx<Self>) -> Menus {
+        Menus {
+            menus: vec![
+                Entry::submenu(
+                    "File",
+                    vec![
+                        Entry::item("New Window", "new")
+                            .shortcut("Ctrl+N")
+                            .primary(),
+                        Entry::separator(),
+                        Entry::item("Export…", "export"),
+                    ],
+                ),
+                Entry::submenu("View", vec![Entry::item("Zoom In", "zoom-in").primary()]),
+            ],
+            window: Vec::new(),
+        }
+    }
+
     fn open(&mut self, _cx: &mut Cx<Self>, arguments: Vec<String>, directory: &Path) {
         if let Some(sender) = ASKED
             .lock()
@@ -86,6 +107,20 @@ fn launch(arguments: &[&str], display: UnixStream) -> JoinHandle<Result<(), Stri
     thread::spawn(move || {
         bande_app::run_on::<Example>(&INFO, arguments, display).map_err(|error| error.to_string())
     })
+}
+
+fn labels(node: &Node) -> Vec<&str> {
+    node.children
+        .iter()
+        .map(|child| child.label.as_str())
+        .collect()
+}
+
+fn child<'a>(node: &'a Node, label: &str) -> &'a Node {
+    node.children
+        .iter()
+        .find(|child| child.label == label)
+        .unwrap_or_else(|| panic!("no {label} in {:?}", labels(node)))
 }
 
 fn wait_for_windows(frames: &mut Frames, server: &mut Compositor, wanted: usize) {
@@ -124,6 +159,47 @@ fn a_second_launch_reaches_the_running_app_and_the_switcher_activates_it_windowl
     let mut frames = Frames::start();
 
     wait_for_windows(&mut frames, &mut server, 1);
+    let menus = bus.connect().expect("menu reader");
+    let menu = DBusMenu::builder(&menus)
+        .destination(INFO.id)
+        .and_then(|builder| builder.path(MENU_PATH))
+        .and_then(|builder| builder.build())
+        .expect("the app's menus");
+    let (_, layout) = menu.get_layout(0, -1, &[]).expect("menu layout");
+    let root = tree(layout);
+    assert_eq!(
+        labels(&root),
+        [
+            "New Window",
+            "Zoom In",
+            "",
+            "File",
+            "Window",
+            "",
+            "About Example",
+            "Quit Example"
+        ]
+    );
+    assert_eq!(labels(child(&root, "File")), ["Export…"]);
+    let window = child(&root, "Window");
+    for item in ["Tile", "Keep on Top", "Close Window", "Hide Example"] {
+        child(window, item);
+    }
+    let left = child(child(window, "Tile"), "Left");
+    menu.event(left.id, "clicked", &zbus::zvariant::Value::from(""), 0)
+        .expect("click Window ▸ Tile ▸ Left");
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !server
+        .windows()
+        .iter()
+        .filter_map(|window| window.geometry())
+        .any(|geometry| geometry.loc.x < 40 && geometry.size.w > 200 && geometry.size.h > 300)
+    {
+        assert!(Instant::now() < deadline, "the window never tiled left");
+        let mut stepped = false;
+        frames.run_until(&mut server, || std::mem::replace(&mut stepped, true));
+    }
+
     let (unused, _) = UnixStream::pair().expect("socket pair");
     let second_launch = launch(&["notes.txt"], unused);
     let wanted = (

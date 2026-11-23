@@ -5,7 +5,7 @@ use std::sync::mpsc;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::thread;
 
-use bande_config::{ACCENTS, Accent, CURSOR_THEME, Style};
+use bande_config::{ACCENTS, Accent, CURSOR_THEME, Style, WindowButtons};
 use bande_design::{Color, Scheme, Typeface};
 use bande_wallpaper::{Choice, Variant};
 use jiff::tz::TimeZone;
@@ -31,7 +31,6 @@ pub const BANDE_APPEARANCE: &str = "org.bande.appearance";
 pub const GNOME_INTERFACE: &str = "org.gnome.desktop.interface";
 pub const GNOME_SOUND: &str = "org.gnome.desktop.sound";
 pub const GNOME_WM_PREFERENCES: &str = "org.gnome.desktop.wm.preferences";
-pub const BUTTON_LAYOUT: &str = ":minimize,maximize,close";
 pub const SOUND_THEME: &str = "Bande";
 pub const ICON_THEME: &str = "Bande";
 pub const VERSION: u32 = 2;
@@ -80,6 +79,13 @@ impl From<Scheme> for ColorScheme {
     }
 }
 
+fn button_layout(buttons: WindowButtons) -> &'static str {
+    match buttons {
+        WindowButtons::Left => "close,maximize,minimize:",
+        WindowButtons::Right => ":minimize,maximize,close",
+    }
+}
+
 fn font(typeface: Typeface, points: u32) -> String {
     format!("{} {points}", typeface.family())
 }
@@ -105,6 +111,7 @@ pub fn icon_theme(accent: Accent) -> String {
 struct Look {
     scheme: ColorScheme,
     style: Style,
+    window_buttons: WindowButtons,
     accent: Accent,
     tint: Option<Color>,
     increase_contrast: bool,
@@ -125,6 +132,8 @@ trait Config {
     fn appearance(&self) -> zbus::Result<String>;
     #[zbus(property)]
     fn style(&self) -> zbus::Result<String>;
+    #[zbus(property)]
+    fn window_buttons(&self) -> zbus::Result<String>;
     #[zbus(property)]
     fn accent(&self) -> zbus::Result<String>;
     #[zbus(property)]
@@ -248,6 +257,11 @@ impl Reader {
                 .ok()
                 .and_then(|keyword| Style::from_keyword(&keyword))
                 .unwrap_or_default(),
+            window_buttons: config
+                .window_buttons()
+                .ok()
+                .and_then(|keyword| WindowButtons::from_keyword(&keyword))
+                .unwrap_or_default(),
             accent: ACCENTS
                 .iter()
                 .find(|(keyword, _)| *keyword == accent)
@@ -298,6 +312,7 @@ fn namespaces(look: Look) -> Namespaces {
             owned(vec![
                 ("frame-tint", Value::from(tint)),
                 ("style", Value::from(look.style.keyword())),
+                ("window-buttons", Value::from(look.window_buttons.keyword())),
                 (
                     "reduce-transparency",
                     Value::from(u32::from(look.reduce_transparency)),
@@ -347,7 +362,10 @@ fn namespaces(look: Look) -> Namespaces {
         ),
         (
             GNOME_WM_PREFERENCES,
-            owned(vec![("button-layout", Value::from(BUTTON_LAYOUT))]),
+            owned(vec![(
+                "button-layout",
+                Value::from(button_layout(look.window_buttons)),
+            )]),
         ),
     ]
 }

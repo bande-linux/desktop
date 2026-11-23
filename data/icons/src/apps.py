@@ -189,7 +189,7 @@ def screen_sharing():
     body = rect(8, 11, 24, 17, 2.5, PAPER, 'opacity="0.55"')
     body += rect(16, 18, 24, 17, 2.5, PAPER, 'opacity="0.96"')
     body += rect(18.2, 20.2, 19.6, 12.6, 1.2, INK, 'opacity="0.16"')
-    body += stroke('M23 26.5h9.2M28.6 22.9l3.6 3.6-3.6 3.6', EMBER, 2, 'stroke-linecap="round" stroke-linejoin="round" fill="none"')
+    body += stroke('M23 26.5h9.2M28.6 22.9l3.6 3.6-3.6 3.6', EMBER, 2)
     body += rect(25, 36.5, 6, 1.6, 0.8, PAPER, 'opacity="0.85"')
     return tile(*hue_field(215, 0.46, 0.1), body)
 
@@ -240,13 +240,9 @@ def software():
 
 
 def mail():
-    line = '#2F7BDD'
-    body = (rect(10, 14, 28, 20, 2.5, PAPER)
-            + path('M10.9 15.3 22.3 24.4a2.7 2.7 0 0 0 3.4 0L37.1 15.3', 'none',
-                   f'stroke="{line}" stroke-opacity="0.55" stroke-width="1.4" stroke-linejoin="round"')
-            + path('M11.2 33.2 20.6 25.2M36.8 33.2 27.4 25.2', 'none',
-                   f'stroke="{line}" stroke-opacity="0.22" stroke-width="1.2"'))
-    return tile('#5FA8F2', line, body)
+    loop = 'M30 19.5V25a2.75 2.75 0 0 0 5.5 0V20a7.5 7.5 0 0 0-7.5-7.5h-8A7.5 7.5 0 0 0 12.5 20v8a7.5 7.5 0 0 0 7.5 7.5h8.5'
+    body = stroke(loop, PAPER, 3.6) + rect(20.2, 20.6, 6.8, 6.8, 1, EMBER)
+    return tile(*hue_field(285, 0.42, 0.13), body)
 
 
 def calendar():
@@ -294,6 +290,22 @@ ICONS = {
 }
 
 HICOLOR = {
+    'org.bande.Archives': 'crates/apps/archive/data/org.bande.Archives.svg',
+    'org.bande.Calculator': 'crates/apps/calculator/data/org.bande.Calculator.svg',
+    'org.bande.Calendar': 'crates/apps/calendar/data/org.bande.Calendar.svg',
+    'org.bande.Clock': 'crates/apps/clock/data/org.bande.Clock.svg',
+    'org.bande.Disks': 'crates/apps/disks/data/org.bande.Disks.svg',
     'org.bande.Files': 'crates/apps/files/data/org.bande.Files.svg',
+    'org.bande.Installer': 'crates/apps/installer/data/org.bande.Installer.svg',
+    'org.bande.Mail': 'crates/apps/mail/data/org.bande.Mail.svg',
+    'org.bande.Notes': 'crates/apps/notes/data/org.bande.Notes.svg',
+    'org.bande.Player': 'crates/apps/player/data/org.bande.Player.svg',
+    'org.bande.ScreenSharing': 'crates/apps/screen-viewer/data/org.bande.ScreenSharing.svg',
     'org.bande.Settings': 'crates/apps/settings/data/org.bande.Settings.svg',
+    'org.bande.Software': 'crates/apps/software/data/org.bande.Software.svg',
+    'org.bande.SystemMonitor': 'crates/apps/monitor/data/org.bande.SystemMonitor.svg',
+    'org.bande.Terminal': 'crates/apps/terminal/data/org.bande.Terminal.svg',
+    'org.bande.TextEditor': 'crates/apps/text-editor/data/org.bande.TextEditor.svg',
+    'org.bande.Velox': 'crates/apps/velox/data/org.bande.Velox.svg',
+    'org.bande.Viewer': 'crates/apps/viewer/data/org.bande.Viewer.svg',
 }

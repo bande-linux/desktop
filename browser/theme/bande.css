@@ -1,80 +1,68 @@
 :root {
-  --bande-chassis: #F1F0ED;
-  --bande-sheet: #FEFDFD;
-  --bande-overlay: #FFFFFF;
-  --bande-well: #E2DFDB;
-  --bande-hairline: #D4D0CB;
-  --bande-edge: #BAB7B2;
-  --bande-field-edge: transparent;
-  --bande-ink: #201E1A;
-  --bande-ink2: #5B5752;
-  --bande-ink3: #83807A;
-  --bande-accent: AccentColor;
-  --bande-danger: #D42F34;
-  @media (prefers-color-scheme: dark) {
-    --bande-chassis: #282A2E;
-    --bande-sheet: #1E2124;
-    --bande-overlay: #33353A;
-    --bande-well: #3D4044;
-    --bande-hairline: #45484C;
-    --bande-edge: #575B62;
-    --bande-ink: #E4E6EA;
-    --bande-ink2: #B9BEC6;
-    --bande-ink3: #8D9198;
-    --bande-danger: #CF4040;
-  }
-  @media (prefers-contrast: more) {
-    --bande-edge: #898681;
-    --bande-field-edge: var(--bande-edge);
-  }
-  @media (prefers-contrast: more) and (prefers-color-scheme: dark) {
-    --bande-edge: #767A82;
-    --bande-ink: #F1F3F8;
-    --bande-ink2: #CDD1D9;
-    --bande-ink3: #A7ABB3;
-  }
-  --toolbox-bgcolor: var(--bande-chassis) !important;
-  --toolbox-bgcolor-inactive: var(--bande-chassis) !important;
-  --toolbox-textcolor: var(--bande-ink) !important;
-  --toolbox-textcolor-inactive: var(--bande-ink3) !important;
-  --toolbar-bgcolor: var(--bande-chassis) !important;
-  --toolbar-color: var(--bande-ink) !important;
+  --toolbox-background-color: var(--bande-chassis) !important;
+  --toolbox-background-color-inactive: var(--bande-chassis) !important;
+  --toolbox-text-color: var(--bande-ink) !important;
+  --toolbox-text-color-inactive: var(--bande-ink3) !important;
+  --toolbar-background-color: var(--bande-chassis) !important;
+  --toolbar-text-color: var(--bande-ink) !important;
   --toolbarbutton-icon-fill: var(--bande-ink2) !important;
+  --toolbarbutton-icon-fill-attention: var(--bande-accent) !important;
+  --toolbarbutton-background-color-hover: var(--bande-well) !important;
+  --toolbarbutton-background-color-active: var(--bande-hairline) !important;
   --toolbarbutton-border-radius: 6px !important;
   --chrome-content-separator-color: transparent !important;
   --tabs-navbar-separator-style: none !important;
   --toolbarseparator-color: var(--bande-hairline) !important;
-  --urlbar-box-bgcolor: var(--bande-well) !important;
-  --urlbar-box-focus-bgcolor: var(--bande-sheet) !important;
-  --urlbar-box-hover-bgcolor: var(--bande-well) !important;
-  --urlbar-box-text-color: var(--bande-ink) !important;
   --toolbar-field-background-color: var(--bande-well) !important;
-  --toolbar-field-focus-background-color: var(--bande-sheet) !important;
-  --toolbar-field-color: var(--bande-ink) !important;
-  --toolbar-field-focus-color: var(--bande-ink) !important;
+  --toolbar-field-background-color-focus: var(--bande-well) !important;
+  --toolbar-field-text-color: var(--bande-ink) !important;
+  --toolbar-field-text-color-focus: var(--bande-ink) !important;
   --toolbar-field-border-color: var(--bande-field-edge) !important;
-  --toolbar-field-focus-border-color: var(--bande-accent) !important;
+  --toolbar-field-border-color-focus: var(--bande-accent) !important;
+  --urlbarview-background-color-hover: var(--bande-well) !important;
+  --urlbarview-background-color-selected: var(--bande-accent-fill) !important;
+  --urlbarview-text-color-selected: var(--bande-on-accent) !important;
   --focus-outline-color: var(--bande-accent) !important;
-  --tab-selected-bgcolor: var(--bande-sheet) !important;
+  --tab-background-color-selected: var(--bande-well) !important;
+  --tab-background-color-hover: color-mix(in srgb, var(--bande-well) 50%, transparent) !important;
   --tab-selected-textcolor: var(--bande-ink) !important;
-  --tab-hover-background-color: var(--bande-well) !important;
+  --tab-box-shadow: none !important;
+  --tab-loading-fill: var(--bande-accent) !important;
   --tab-border-radius: 8px !important;
-  --arrowpanel-background: var(--bande-overlay) !important;
-  --arrowpanel-color: var(--bande-ink) !important;
-  --arrowpanel-border-color: var(--bande-hairline) !important;
-  --arrowpanel-border-radius: 10px !important;
-  --panel-background: var(--bande-overlay) !important;
-  --panel-color: var(--bande-ink) !important;
-  --font-family-system: Inter, sans-serif !important;
+  --tabpanel-background-color: var(--bande-sheet) !important;
+  --sidebar-background-color: var(--bande-chassis) !important;
+  --sidebar-text-color: var(--bande-ink) !important;
+  --button-background-color: var(--bande-well) !important;
+  --button-background-color-hover: var(--bande-hairline) !important;
+  --button-background-color-active: var(--bande-edge) !important;
+  --button-text-color: var(--bande-ink) !important;
+  --button-background-color-ghost-hover: var(--bande-well) !important;
+  --button-background-color-ghost-active: var(--bande-hairline) !important;
+  --button-background-color-primary: var(--bande-accent-fill) !important;
+  --button-text-color-primary: var(--bande-on-accent) !important;
 }
+
+menupopup, panel {
+  --panel-background-color: var(--bande-overlay) !important;
+  --panel-text-color: var(--bande-ink) !important;
+  --panel-border-color: var(--bande-hairline) !important;
+  --panel-border-radius: 10px !important;
+}
+menu, menuitem {
+  border-radius: 6px;
+  min-height: 28px;
+  &[_moz-menuactive]:not([disabled]) {
+    background-color: var(--bande-accent-fill) !important;
+    color: var(--bande-on-accent) !important;
+  }
+}
+menuseparator { border-color: var(--bande-hairline) !important; }
 
 #navigator-toolbox { border-bottom: none; }
 #main-window { font-family: Inter, sans-serif; }
-#urlbar-background, #searchbar { border-radius: 8px; }
+.urlbar-background, #searchbar { border-radius: 8px; }
+.tabbrowser-tab:not([selected]) { color: var(--bande-ink2); }
 .tab-label { font-size: 13px; }
-menupopup, panel { --panel-border-radius: 10px; }
-menuitem, menu { border-radius: 6px; min-height: 28px; }
-#TabsToolbar, #nav-bar, #PersonalToolbar, #navigator-toolbox { background: var(--bande-chassis) !important; color: var(--bande-ink) !important; }
 
 #main-window {
   --bande-row-height: 48px;
@@ -128,7 +116,7 @@ menuitem, menu { border-radius: 6px; min-height: 28px; }
 #PersonalToolbar {
   min-height: 32px !important;
   padding: 0 10px 4px !important;
-  --toolbarbutton-inner-padding: 4px !important;
+  --toolbarbutton-padding-inner: 4px !important;
 }
 #PersonalToolbar toolbarbutton.bookmark-item:not(.subviewbutton) {
   margin: 0 1px !important;

@@ -771,6 +771,7 @@ fn follow_session_bus<O: FrameOutput + 'static>(
             app.compositor.set_reduce_motion(look.reduce_motion);
             app.compositor.set_dark_appearance(look.dark);
             app.compositor.set_text_size(look.text_size);
+            app.compositor.set_window_buttons(look.window_buttons);
             app.compositor
                 .set_style(look.style, look.increased_contrast);
         },

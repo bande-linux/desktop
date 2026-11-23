@@ -8,13 +8,14 @@ use crate::{
     Config, ConfigError, DEFAULT_BAR_GAP, DEFAULT_BAR_ICON_SIZE, DisplaySettings, Dragging,
     FocusSchedule, InputSource, LidOnPower, Mouse, NightLight, Placement, PrimaryButton,
     ScrollMethod, Search, SearchCategory, SecondaryClick, SoftwareUpdates, Sound, Style, Suspend,
-    Trackpad, WallpaperFit, WallpaperVariant, accent_keyword, same_displays,
+    Trackpad, WallpaperFit, WallpaperVariant, WindowButtons, accent_keyword, same_displays,
 };
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Setting {
     Appearance(Appearance),
     Style(Style),
+    WindowButtons(WindowButtons),
     Accent(Accent),
     TintedFrame(bool),
     ReopenApps(bool),
@@ -89,6 +90,12 @@ impl Setting {
                 Some(appearance.keyword().into()),
             ),
             Self::Style(style) => set(&mut document, None, "style", Some(style.keyword().into())),
+            Self::WindowButtons(buttons) => set(
+                &mut document,
+                None,
+                "window-buttons",
+                Some(buttons.keyword().into()),
+            ),
             Self::Accent(accent) => set(
                 &mut document,
                 None,

@@ -340,6 +340,7 @@ fn render_image<E: RenderElement<VulkanRenderer>>(
         damage
             .render_output(renderer, &mut framebuffer, 0, elements, clear)
             .map_err(rendering_error)?;
+        renderer.wait_idle()?;
         return Ok(Vec::new());
     }
     let mut target = renderer.create_buffer(Fourcc::Argb8888, Size::from((size.w, size.h)))?;

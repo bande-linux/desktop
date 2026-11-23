@@ -67,6 +67,8 @@ struct Row {
     frames: usize,
     p50: f64,
     p99: f64,
+    gpu_p50: f64,
+    gpu_p99: f64,
     compositor_cpu: f64,
     clients_cpu: f64,
     busy: f64,
@@ -151,20 +153,22 @@ fn run() -> Result<(), Box<dyn Error>> {
             .join(" ")
     );
     println!(
-        "| Action | Frames | Frame p50 ms | Frame p99 ms | Compositor CPU per frame ms | Clients CPU per frame ms | CPU busy (cores) | Repainted Mpx per frame |"
+        "| Action | Frames | Frame p50 ms | Frame p99 ms | GPU p50 ms | GPU p99 ms | Compositor CPU per frame ms | Clients CPU per frame ms | CPU busy (cores) | Repainted Mpx per frame |"
     );
-    println!("| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |");
+    println!("| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |");
     for (name, scenario) in scenarios {
         if !only.is_empty() && !only.iter().any(|wanted| name.contains(wanted.as_str())) {
             continue;
         }
         let row = bench.measure(name, scenario)?;
         println!(
-            "| {} | {} | {:.1} | {:.1} | {:.1} | {:.1} | {:.2} | {:.2} |",
+            "| {} | {} | {:.1} | {:.1} | {:.1} | {:.1} | {:.1} | {:.1} | {:.2} | {:.2} |",
             row.name,
             row.frames,
             row.p50,
             row.p99,
+            row.gpu_p50,
+            row.gpu_p99,
             row.compositor_cpu,
             row.clients_cpu,
             row.busy,
@@ -456,6 +460,7 @@ impl Bench {
     fn measure(&mut self, name: &'static str, scenario: Scenario) -> Result<Row, Box<dyn Error>> {
         self.run_for(AFTERMATH)?;
         self.output.frames.clear();
+        self.output.renderer.gpu_frame_times()?;
         let compositor_before = cpu_ticks(std::process::id())?;
         let clients_before = self.clients_ticks()?;
         let started = Instant::now();
@@ -476,6 +481,8 @@ impl Bench {
             .map(|((name, _), ticks)| format!("{name} {} ms", *ticks as f64 * TICK_MS))
             .collect::<Vec<_>>()
             .join(", ");
+        let mut gpu = self.output.renderer.gpu_frame_times()?;
+        gpu.sort();
         let elapsed_ms = started.elapsed().as_secs_f64() * 1000.0;
         let frames = &self.output.frames;
         if self.list_frames {
@@ -494,6 +501,8 @@ impl Bench {
             frames: frames.len(),
             p50: percentile(&times, 0.50),
             p99: percentile(&times, 0.99),
+            gpu_p50: percentile(&gpu, 0.50),
+            gpu_p99: percentile(&gpu, 0.99),
             compositor_cpu: compositor as f64 * TICK_MS / count,
             clients_cpu: clients as f64 * TICK_MS / count,
             busy: (compositor + clients) as f64 * TICK_MS / elapsed_ms,

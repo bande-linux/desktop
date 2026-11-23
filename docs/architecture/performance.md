@@ -32,7 +32,8 @@ reach a running session.
 - **Frame times:** `bande-session-bench` runs the compositor in-process with the shell, Files and
   Terminal (`bande-terminal` in `target/release` or on `PATH`) and replays
   typical actions (pointer over Files, dragging a window, typing, scrolling, the launcher, the
-  overview, a context menu, banners); it prints frame time p50/p99, CPU per frame and pixels
+  overview, a context menu, banners); it prints the CPU time to record and submit a frame
+  (p50/p99), the GPU time of its submission from timestamps (p50/p99), CPU per frame and pixels
   repainted. `bande-toolkit-bench` measures the toolkit sample (`crates/testing/sample`).
 - **Files at 100 000 items:** `bande-files-bench` drives `FilesView` in-process over a folder of
   100 000 files and prints UI-thread time per step.

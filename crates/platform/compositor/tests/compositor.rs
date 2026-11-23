@@ -464,7 +464,10 @@ fn drag_over_scanout_buffers(colour: Option<bande_render::OutputColour>) {
         let mut framebuffer = vulkan.bind(dmabuf).expect("bind the scanout buffer");
         damage
             .render_output(&mut vulkan, &mut framebuffer, age, &elements, background())
-            .expect("render into the scanout buffer");
+            .expect("render into the scanout buffer")
+            .sync
+            .wait()
+            .expect("the GPU finishes the frame");
         *used = Some(*step);
         *step += 1;
         slot
@@ -503,7 +506,10 @@ fn drag_over_scanout_buffers(colour: Option<bande_render::OutputColour>) {
     let mut framebuffer = vulkan.bind(&mut fresh).expect("bind the fresh buffer");
     OutputDamageTracker::new((640, 480), 1.0, Transform::Normal)
         .render_output(&mut vulkan, &mut framebuffer, 0, &elements, background())
-        .expect("a full redraw");
+        .expect("a full redraw")
+        .sync
+        .wait()
+        .expect("the GPU finishes the full redraw");
     let full = read_back(&gbm, &fresh, (width, height));
     let wrong = drawn
         .as_chunks::<4>()

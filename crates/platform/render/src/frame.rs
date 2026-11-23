@@ -484,7 +484,7 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
         }
     }
 
-    fn finish_frame(&mut self) -> Result<(), RenderError> {
+    fn finish_frame(&mut self) -> Result<u64, RenderError> {
         self.finished = true;
         // SAFETY: the frame holds the renderer mutably from `begin_commands` until `finish_frame`
         // ends the buffer, so `command_buffer` is recording and only this frame records into it,
@@ -531,31 +531,28 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
             }
             self.record_readbacks(converted.unwrap_or(self.image), &readbacks);
         }
-        // SAFETY: the frame holds the renderer mutably from `begin_commands` until `finish_frame`
-        // ends the buffer, so `command_buffer` is recording and only this frame records into it,
-        // and every rendering it began has ended.
-        unsafe {
-            self.renderer
-                .device
-                .end_command_buffer(self.renderer.command_buffer)
-        }?;
         if verifying {
             self.mark_output(&readbacks)?;
         }
-        self.renderer.submit_and_wait()?;
+        let serial = self.renderer.submit(true)?;
         self.renderer.retire_unused_blur_chains();
+        if let Some(target) = self.renderer.targets.get_mut(&self.target) {
+            target.rendered = true;
+        }
+        if readbacks.is_empty() {
+            self.renderer.hand_staging_to(serial);
+            return Ok(serial);
+        }
+        self.renderer.wait_for(serial)?;
         let written = match verifying {
             true => self.verify_output(&readbacks),
             false => self.write_back(&readbacks),
         };
-        self.renderer.recycle_staging();
-        if let Some(target) = self.renderer.targets.get_mut(&self.target) {
-            target.rendered = true;
-        }
-        written
+        self.renderer.hand_staging_to(serial);
+        written.map(|()| serial)
     }
 
-    fn finish_direct(&mut self, drawn: &[Rect]) -> Result<(), RenderError> {
+    fn finish_direct(&mut self, drawn: &[Rect]) -> Result<u64, RenderError> {
         let shown = match self.converted_into {
             Some(view) => {
                 self.convert_into(view, drawn)?;
@@ -575,17 +572,13 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
             renderer.queue_family,
             (false, DRAWING),
         );
-        // SAFETY: the frame holds the renderer mutably from `begin_commands` until `finish_frame`
-        // ends the buffer, so `command_buffer` is recording and only this frame records into it,
-        // and every rendering it began has ended.
-        unsafe { renderer.device.end_command_buffer(renderer.command_buffer) }?;
-        renderer.submit_and_wait()?;
+        let serial = renderer.submit(true)?;
         renderer.retire_unused_blur_chains();
-        renderer.recycle_staging();
+        renderer.hand_staging_to(serial);
         if let Some(target) = renderer.targets.get_mut(&self.target) {
             target.rendered = true;
         }
-        Ok(())
+        Ok(serial)
     }
 
     fn convert_into(&mut self, shown: vk::ImageView, drawn: &[Rect]) -> Result<(), RenderError> {
@@ -665,6 +658,10 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
         drawn: &[Rect],
     ) -> Result<vk::Image, RenderError> {
         let key = (self.bounds.width, self.bounds.height, self.format);
+        let prior = match self.renderer.colour_scratch.contains_key(&key) {
+            true => TRANSFER_SOURCE,
+            false => blur::DISCARDED,
+        };
         if !self.renderer.colour_scratch.contains_key(&key) {
             let scratch = self.renderer.create_image(
                 self.bounds.width,
@@ -685,7 +682,7 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
         let device = &self.renderer.device;
         let commands = self.renderer.command_buffer;
         barrier(device, commands, self.image, ATTACHMENT, SAMPLED);
-        barrier(device, commands, scratch.0, blur::DISCARDED, blur::DRAWN);
+        barrier(device, commands, scratch.0, prior, blur::DRAWN);
         self.begin_rendering(scratch.1, self.bounds, vk::AttachmentLoadOp::DONT_CARE);
         let drawn_colours = self.draw_display_colour(&colour, drawn);
         let device = &self.renderer.device;
@@ -1132,8 +1129,8 @@ impl Frame for VulkanFrame<'_, '_> {
     }
 
     fn finish(mut self) -> Result<SyncPoint, RenderError> {
-        self.finish_frame()?;
-        Ok(SyncPoint::signaled())
+        let serial = self.finish_frame()?;
+        self.renderer.sync_point(serial)
     }
 }
 

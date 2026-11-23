@@ -2,6 +2,7 @@ mod formats;
 mod frame;
 mod import;
 mod rect;
+mod submit;
 
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
@@ -399,7 +400,10 @@ pub struct VulkanRenderer {
     reduced_effects: bool,
     command_pool: vk::CommandPool,
     command_buffer: vk::CommandBuffer,
-    fence: vk::Fence,
+    submissions: submit::Submissions,
+    garbage: RefCell<Vec<(u64, submit::Garbage)>>,
+    external_semaphore_fd: Option<ash::khr::external_semaphore_fd::Device>,
+    timestamp_period: Option<f32>,
     sampler: vk::Sampler,
     set_layout: vk::DescriptorSetLayout,
     descriptors: RefCell<Descriptors>,
@@ -477,6 +481,8 @@ struct Proven {
 struct Chosen {
     physical: vk::PhysicalDevice,
     family: u32,
+    sync_files: bool,
+    timestamp_period: Option<f32>,
     output_on_device: bool,
     modifiers: formats::Modifiers,
     extensions: Vec<&'static CStr>,
@@ -557,11 +563,29 @@ fn examine(
         ));
     }
     // SAFETY: `physical` was just enumerated from this live `instance`.
-    let family = unsafe { instance.get_physical_device_queue_family_properties(physical) }
+    let families = unsafe { instance.get_physical_device_queue_family_properties(physical) };
+    let (family, timed) = families
         .iter()
-        .position(|family| family.queue_flags.contains(vk::QueueFlags::GRAPHICS))
-        .and_then(|family| u32::try_from(family).ok())
+        .zip(0u32..)
+        .find(|(family, _)| family.queue_flags.contains(vk::QueueFlags::GRAPHICS))
+        .map(|(properties, family)| (family, properties.timestamp_valid_bits > 0))
         .ok_or_else(|| refuse("it has no graphics queue".to_owned()))?;
+    let sync_files = offers(ash::khr::external_semaphore_fd::NAME) && {
+        let mut external = vk::ExternalSemaphoreProperties::default();
+        // SAFETY: `physical` belongs to this Vulkan 1.1 or later `instance`, and `external`
+        // outlives the call.
+        unsafe {
+            instance.get_physical_device_external_semaphore_properties(
+                physical,
+                &vk::PhysicalDeviceExternalSemaphoreInfo::default()
+                    .handle_type(vk::ExternalSemaphoreHandleTypeFlags::SYNC_FD),
+                &mut external,
+            )
+        };
+        external
+            .external_semaphore_features
+            .contains(vk::ExternalSemaphoreFeatureFlags::EXPORTABLE)
+    };
     let mut driver = vk::PhysicalDeviceDriverProperties::default();
     let mut node = vk::PhysicalDeviceDrmPropertiesEXT::default();
     let mut properties2 = vk::PhysicalDeviceProperties2::default().push_next(&mut driver);
@@ -606,6 +630,7 @@ fn examine(
                 .into_iter()
                 .flatten(),
         )
+        .chain(sync_files.then_some(&ash::khr::external_semaphore_fd::NAME))
         .copied()
         .collect();
     Ok((
@@ -613,6 +638,8 @@ fn examine(
         Chosen {
             physical,
             family,
+            sync_files,
+            timestamp_period: timed.then_some(properties.limits.timestamp_period),
             output_on_device: on_real_gpu,
             modifiers: match modifiers {
                 true => formats::query(instance, physical),
@@ -799,7 +826,12 @@ impl VulkanRenderer {
             info,
             command_pool: vk::CommandPool::null(),
             command_buffer: vk::CommandBuffer::null(),
-            fence: vk::Fence::null(),
+            submissions: submit::Submissions::new(),
+            garbage: RefCell::default(),
+            external_semaphore_fd: chosen
+                .sync_files
+                .then(|| ash::khr::external_semaphore_fd::Device::new(&instance, &device)),
+            timestamp_period: chosen.timestamp_period,
             sampler: vk::Sampler::null(),
             set_layout: vk::DescriptorSetLayout::null(),
             descriptors: RefCell::default(),
@@ -856,22 +888,6 @@ impl VulkanRenderer {
                 None,
             )
         }?;
-        // SAFETY: `command_pool` was just created from this device; the buffer is freed together
-        // with the pool.
-        self.command_buffer = unsafe {
-            device.allocate_command_buffers(
-                &vk::CommandBufferAllocateInfo::default()
-                    .command_pool(self.command_pool)
-                    .level(vk::CommandBufferLevel::PRIMARY)
-                    .command_buffer_count(1),
-            )
-        }?
-        .into_iter()
-        .next()
-        .ok_or(RenderError::Vulkan(vk::Result::ERROR_UNKNOWN))?;
-        // SAFETY: the fence is created unsignalled and destroyed only in `Drop`, after the device
-        // is idle.
-        self.fence = unsafe { device.create_fence(&vk::FenceCreateInfo::default(), None) }?;
 
         // SAFETY: the sampler is destroyed only in `Drop`, after the pipeline layout and the
         // descriptor set layout that use it as an immutable sampler.
@@ -1376,9 +1392,6 @@ impl VulkanRenderer {
                     );
                 }
             }
-            // SAFETY: `begin_commands` started the buffer on this thread and only the hand-over
-            // barriers were recorded into it.
-            unsafe { self.device.end_command_buffer(self.command_buffer) }?;
             self.submit_and_wait()
         });
         if let Err(error) = handed {
@@ -1773,26 +1786,18 @@ impl VulkanRenderer {
     }
 
     fn destroy_image(&self, image: &Image) {
-        self.forget_sets_of(image.view);
-        // SAFETY: callers pass an image they no longer reach from the renderer's tables, after the
-        // synchronous `submit_and_wait` of every submission that used it; Vulkan ignores the null
-        // handles of a partly built image.
-        unsafe {
-            self.device.destroy_image_view(image.view, None);
-            self.device.destroy_image(image.image, None);
-            for &memory in &image.memory {
-                self.device.free_memory(memory, None);
-            }
-        }
+        self.discard(submit::Garbage::Image {
+            image: image.image,
+            view: image.view,
+            memory: image.memory.clone(),
+        });
     }
 
     fn destroy_imported(&self, imported: &Imported) {
-        // SAFETY: callers pass an import they no longer reach from the renderer's tables, after the
-        // synchronous `submit_and_wait` of every submission that used it.
-        unsafe {
-            self.device.destroy_buffer(imported.buffer, None);
-            self.device.free_memory(imported.memory, None);
-        }
+        self.discard(submit::Garbage::Buffer {
+            buffer: imported.buffer,
+            memory: imported.memory,
+        });
     }
 
     fn create_staging(&self, capacity: usize) -> Result<Staging, RenderError> {
@@ -1854,13 +1859,10 @@ impl VulkanRenderer {
     }
 
     fn destroy_staging(&self, staging: &Staging) {
-        // SAFETY: staging buffers are dropped only after `submit_and_wait` returned for every
-        // submission that read them, or before they were ever used; freeing the memory also unmaps
-        // it.
-        unsafe {
-            self.device.destroy_buffer(staging.buffer, None);
-            self.device.free_memory(staging.memory, None);
-        }
+        self.discard(submit::Garbage::Buffer {
+            buffer: staging.buffer,
+            memory: staging.memory,
+        });
     }
 
     fn reserve(&mut self, bytes: usize) -> Result<(usize, usize), RenderError> {
@@ -1869,7 +1871,10 @@ impl VulkanRenderer {
             .last()
             .is_some_and(|staging| staging.capacity - staging.used >= bytes);
         if !fits {
-            let staging = self.create_staging(bytes.max(MIN_STAGING_BYTES))?;
+            let staging = match self.take_spare_staging(bytes) {
+                Some(staging) => staging,
+                None => self.create_staging(bytes.max(MIN_STAGING_BYTES))?,
+            };
             self.staging.push(staging);
         }
         let index = self.staging.len() - 1;
@@ -1877,24 +1882,6 @@ impl VulkanRenderer {
         let offset = staging.used;
         staging.used += bytes;
         Ok((index, offset))
-    }
-
-    fn recycle_staging(&mut self) {
-        let Some(largest) = self
-            .staging
-            .iter()
-            .enumerate()
-            .max_by_key(|(_, staging)| staging.capacity)
-            .map(|(index, _)| index)
-        else {
-            return;
-        };
-        let mut kept = self.staging.swap_remove(largest);
-        kept.used = 0;
-        for staging in std::mem::take(&mut self.staging) {
-            self.destroy_staging(&staging);
-        }
-        self.staging.push(kept);
     }
 
     fn import_dmabuf_memory(
@@ -2324,56 +2311,23 @@ impl VulkanRenderer {
         }
     }
 
-    fn submit_and_wait(&self) -> Result<(), RenderError> {
-        let submit =
-            vk::SubmitInfo::default().command_buffers(slice::from_ref(&self.command_buffer));
-        // SAFETY: the renderer is neither `Send` nor `Sync`, so the queue and fence are used from
-        // one thread; the buffer has ended, and the fence is unsignalled because each submission
-        // waits for and resets it (a failed wait marks the renderer lost, and it is replaced).
-        unsafe {
-            self.device
-                .queue_submit(self.queue, slice::from_ref(&submit), self.fence)
-                .and_then(|()| {
-                    self.device
-                        .wait_for_fences(slice::from_ref(&self.fence), true, GPU_HANG_NANOS)
-                })
-                .and_then(|()| self.device.reset_fences(slice::from_ref(&self.fence)))
-        }
-        .inspect_err(|error| {
-            if matches!(*error, vk::Result::ERROR_DEVICE_LOST | vk::Result::TIMEOUT) {
-                self.lost.store(true, Ordering::Relaxed);
-            }
-        })?;
-        Ok(())
-    }
-
     pub fn finish_uploads(&mut self) -> Result<(), RenderError> {
         if self.copies.is_empty() {
             return Ok(());
         }
+        let from_clients = self.copies.iter().any(|copy| {
+            self.imports
+                .values()
+                .any(|imported| imported.buffer == copy.source)
+        });
         self.begin_commands()?;
         self.record_copies();
-        // SAFETY: `begin_commands` started the buffer on this thread and `record_copies` recorded
-        // into it.
-        unsafe { self.device.end_command_buffer(self.command_buffer) }?;
-        self.submit_and_wait()?;
-        self.recycle_staging();
-        Ok(())
-    }
-
-    fn begin_commands(&self) -> Result<(), RenderError> {
-        // SAFETY: the buffer is not pending, as every submission is waited for by
-        // `submit_and_wait`, and its pool was created with `RESET_COMMAND_BUFFER`.
-        unsafe {
-            self.device
-                .reset_command_buffer(self.command_buffer, vk::CommandBufferResetFlags::empty())?;
-            self.device.begin_command_buffer(
-                self.command_buffer,
-                &vk::CommandBufferBeginInfo::default()
-                    .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT),
-            )?;
+        let serial = self.submit(false)?;
+        self.hand_staging_to(serial);
+        match from_clients {
+            true => self.wait_for(serial),
+            false => Ok(()),
         }
-        Ok(())
     }
 
     fn record_copies(&mut self) {
@@ -2482,14 +2436,12 @@ impl VulkanRenderer {
     }
 
     fn copy_target_to(
-        &self,
+        &mut self,
         readback: &Staging,
         image: vk::Image,
         width: i32,
         height: i32,
     ) -> Result<(), RenderError> {
-        let device = &self.device;
-        let commands = self.command_buffer;
         let region = vk::BufferImageCopy::default()
             .image_subresource(COLOR_LAYERS)
             .image_extent(vk::Extent3D {
@@ -2498,6 +2450,8 @@ impl VulkanRenderer {
                 depth: 1,
             });
         self.begin_commands()?;
+        let device = &self.device;
+        let commands = self.command_buffer;
         barrier(device, commands, image, ATTACHMENT, TRANSFER_SOURCE);
         // SAFETY: recording since `begin_commands`; the barrier above moved the live target `image`
         // to `TRANSFER_SRC_OPTIMAL`, and `readback` holds `width * height` pixels.
@@ -2523,7 +2477,6 @@ impl VulkanRenderer {
                 commands,
                 &vk::DependencyInfo::default().memory_barriers(slice::from_ref(&host_read)),
             );
-            device.end_command_buffer(commands)?;
         }
         self.submit_and_wait()
     }
@@ -2716,9 +2669,10 @@ impl Drop for VulkanRenderer {
             return;
         }
         // SAFETY: `Drop` has the only access to the device, which is still alive.
-        unsafe {
-            let _ = self.device.device_wait_idle();
+        if let Err(error) = unsafe { self.device.device_wait_idle() } {
+            tracing::warn!("the GPU did not finish before the renderer stopped: {error}");
         }
+        self.retire();
         self.dmabuf_textures.clear();
         self.sampled_dmabufs.clear();
         for (_, texture) in std::mem::take(&mut self.textures) {
@@ -2742,6 +2696,7 @@ impl Drop for VulkanRenderer {
         for (_, imported) in std::mem::take(&mut self.imports) {
             self.destroy_imported(&imported);
         }
+        self.release_submissions();
         // SAFETY: the device is idle and every image, buffer and allocation was destroyed above;
         // these objects were created once by `create_objects`, and children go before the device
         // and the device before the instance.
@@ -2757,7 +2712,6 @@ impl Drop for VulkanRenderer {
             self.device
                 .destroy_descriptor_set_layout(self.set_layout, None);
             self.device.destroy_sampler(self.sampler, None);
-            self.device.destroy_fence(self.fence, None);
             self.device.destroy_command_pool(self.command_pool, None);
             self.device.destroy_device(None);
         }

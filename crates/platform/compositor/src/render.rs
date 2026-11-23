@@ -75,6 +75,11 @@ impl Renderer {
         self.vulkan.memory_use()
     }
 
+    pub fn gpu_frame_times(&mut self) -> Result<Vec<std::time::Duration>, RenderError> {
+        self.vulkan.wait_idle()?;
+        Ok(self.vulkan.take_gpu_frame_times())
+    }
+
     pub fn set_reduced_effects(&mut self, reduced: bool) {
         self.vulkan.set_reduced_effects(reduced);
     }
@@ -150,6 +155,12 @@ impl Renderer {
             });
         self.outputs.insert(name.to_owned(), output);
         self.vulkan.finish_uploads()?;
+        let submitted = self.vulkan.submitted();
+        compositor.keep_until_drawn(
+            elements,
+            (submitted, self.vulkan.completed()),
+            self.vulkan.fence_of(submitted),
+        );
         let counters = self.vulkan.take_counters();
         compositor.copy_captures(&mut self.vulkan, name);
         self.vulkan.take_counters();
@@ -187,6 +198,10 @@ impl FrameOutput for Renderer {
         }
         self.render_output(compositor, output)?;
         Ok(Submission::AtVblank)
+    }
+
+    fn gpu_time(&self) -> std::time::Duration {
+        self.vulkan.gpu_frame_time().unwrap_or_default()
     }
 
     fn renew_failed_renderer(&mut self) -> Result<bool, RenderError> {

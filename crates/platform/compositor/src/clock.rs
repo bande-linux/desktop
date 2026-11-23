@@ -254,6 +254,10 @@ pub trait FrameOutput {
         None
     }
 
+    fn gpu_time(&self) -> Duration {
+        Duration::ZERO
+    }
+
     fn flip_missed(&mut self, _output: &str) {}
 
     fn frames_on_screen(&mut self) -> Vec<ShownFrame> {
@@ -513,10 +517,11 @@ impl FrameScheduler {
                         self.phase = Phase::Backoff(started + FAILED_FRAME_RETRY);
                     })?;
                     now = clock();
+                    let done = now + output.gpu_time();
                     let rendered = Rendered {
                         vblank,
                         started,
-                        done: now,
+                        done,
                         refresh: self.clock.refresh(),
                     };
                     if let Some((cause, detail)) =
@@ -527,7 +532,7 @@ impl FrameScheduler {
                     self.clock.record_render(
                         deadline,
                         started,
-                        now,
+                        done,
                         submission != Submission::Unchanged,
                     );
                     self.committed = (submission == Submission::AwaitingFlip).then_some(Commit {

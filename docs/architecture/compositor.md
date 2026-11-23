@@ -38,9 +38,17 @@ when they reach the screen is Bande's own.
   cannot draw is left out of the frame with one warning; only a lost device fails it. On a DRM
   device the compositor logs the chosen Vulkan device, its driver (name, driver ID, driver info) and
   the device extensions it enabled. When the Vulkan loader offers `VK_EXT_debug_utils`, its messages
-  (and the validation layer's, when enabled with `VK_LOADER_LAYERS_ENABLE`) go to the log. Every
-  submission is waited for before the frame returns, so nothing the GPU does is pending when a
-  buffer goes back to a client or to the display; client fences are waited for before a commit
+  (and the validation layer's, when enabled with `VK_LOADER_LAYERS_ENABLE`) go to the log. Up to
+  three submissions are in flight (`render/src/submit.rs`), each with its own command buffer, fence,
+  staging memory and timestamps; the CPU waits only when all three are pending, or for work it reads
+  back itself (snapshots, captures, copies on the CPU, uploads from client dma-bufs that no frame
+  holds). An image, buffer or descriptor set dropped while a submission may use it is destroyed once
+  that submission finishes. A frame hands the display a sync file of its submission
+  (`VK_KHR_external_semaphore_fd`, the plane's `IN_FENCE_FD` on DRM); without that extension every
+  frame is waited for. The render elements of a frame, and with them the client buffers they hold,
+  are kept until its submission finishes (`drawing.rs`, woken by the sync file), so no buffer goes
+  back to a client while the GPU still reads it. The scheduler prices a frame at its CPU time plus
+  the longest GPU time of the last four frames. Client fences are waited for before a commit
   applies (`sync.rs`: the dma-buf's implicit fences, or the `linux-drm-syncobj-v1` acquire point).
 - **Window shape and depth.** Every window that is not full screen is clipped to its
   `xdg_surface` window geometry with 16 pt rounded corners (antialiased in the fragment shader)

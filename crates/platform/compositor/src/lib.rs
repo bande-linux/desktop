@@ -21,6 +21,7 @@ mod decoration;
 mod display_bus;
 mod displays;
 mod drag;
+mod drawing;
 mod drm;
 mod effect;
 mod element;

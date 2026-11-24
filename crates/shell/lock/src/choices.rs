@@ -4,14 +4,15 @@ use std::rc::Rc;
 use accesskit::{Action, ActionRequest, Node, Role};
 use bande_toolkit::ui::{Context, Event, Key, Size, Widget, WidgetId, focus_ring};
 use bande_toolkit::{
-    Image, Item, Paragraph, Point, Radius, Rect, Shape, TextAlign, TextRole, TextStyle,
+    Cut, Image, Item, Paragraph, Point, Radius, Rect, Shape, TextAlign, TextRole, TextStyle,
+    shortened,
 };
 
-const PEER_AVATAR: f32 = 48.0;
+pub const PEER_AVATAR: f32 = 48.0;
 const PEER_RADIUS: f32 = 12.0;
 const PEER_WIDTH: f32 = 96.0;
 const PEER_GAP: f32 = 8.0;
-const PEER_NAME_GAP: f32 = 6.0;
+pub const PEER_NAME_GAP: f32 = 6.0;
 const PEER_INITIAL: f32 = 20.0;
 const SOURCE_PADDING: f32 = 6.0;
 
@@ -60,7 +61,7 @@ impl Widget for PeerButton {
         self.id
     }
 
-    fn measure(&mut self, cx: &mut Context, _available: Size) -> Size {
+    fn measure(&mut self, cx: &mut Context, available: Size) -> Size {
         let ink = match self.selected {
             true => cx.palette.ink,
             false => cx.palette.ink2,
@@ -71,12 +72,17 @@ impl Widget for PeerButton {
             None,
             TextAlign::Start,
         ));
-        let name = cx.text.paragraph(
-            &self.peer.name,
-            TextStyle::role(TextRole::Callout, ink),
-            Some(PEER_WIDTH),
-            TextAlign::Center,
-        );
+        let style = TextStyle::role(TextRole::Callout, ink);
+        let mut lay_out = |name: &str| {
+            cx.text
+                .paragraph(name, style, Some(PEER_WIDTH), TextAlign::Center)
+        };
+        let room = available.height - PEER_AVATAR - PEER_NAME_GAP;
+        let shown = shortened(&self.peer.name, Cut::End, |candidate| {
+            let name = lay_out(candidate);
+            name.height() <= room && name.width() <= PEER_WIDTH
+        });
+        let name = lay_out(&shown);
         let height = PEER_AVATAR + PEER_NAME_GAP + name.height();
         self.name = Some(name);
         Size::new(PEER_WIDTH, height)
@@ -180,6 +186,8 @@ pub struct UserList {
     id: WidgetId,
     label: String,
     peers: Vec<Box<dyn Widget>>,
+    selected: usize,
+    shown: usize,
     frame: Rect,
 }
 
@@ -189,11 +197,14 @@ impl UserList {
             id: WidgetId::next(),
             label,
             peers: Vec::new(),
+            selected: 0,
+            shown: 0,
             frame: Rect::default(),
         }
     }
 
     pub fn show(&mut self, peers: Vec<Peer>, selected: usize, chosen: &Rc<Cell<Option<usize>>>) {
+        self.selected = selected;
         self.peers = peers
             .into_iter()
             .enumerate()
@@ -224,17 +235,30 @@ impl Widget for UserList {
         for peer in &mut self.peers {
             height = height.max(peer.measure(cx, available).height);
         }
-        let count = self.peers.len() as f32;
-        let width = (count * (PEER_WIDTH + PEER_GAP) - PEER_GAP).max(0.0);
+        let fitting = ((available.width + PEER_GAP) / (PEER_WIDTH + PEER_GAP)).floor() as usize;
+        self.shown = self.peers.len().min(fitting);
+        let width = (self.shown as f32 * (PEER_WIDTH + PEER_GAP) - PEER_GAP).max(0.0);
         Size::new(width, height)
     }
 
     fn place(&mut self, cx: &mut Context, frame: Rect) {
         self.frame = frame;
+        let centre = self
+            .peers
+            .iter()
+            .position(|peer| cx.is_focused(peer.id()))
+            .unwrap_or(self.selected);
+        let first = centre
+            .saturating_sub(self.shown.saturating_sub(1) / 2)
+            .min(self.peers.len() - self.shown);
         let mut left = frame.x;
-        for peer in &mut self.peers {
-            peer.place(cx, Rect::new(left, frame.y, PEER_WIDTH, frame.height));
-            left += PEER_WIDTH + PEER_GAP;
+        for (index, peer) in self.peers.iter_mut().enumerate() {
+            if (first..first + self.shown).contains(&index) {
+                peer.place(cx, Rect::new(left, frame.y, PEER_WIDTH, frame.height));
+                left += PEER_WIDTH + PEER_GAP;
+            } else {
+                peer.place(cx, Rect::new(left, frame.y, 0.0, 0.0));
+            }
         }
     }
 
@@ -243,7 +267,7 @@ impl Widget for UserList {
     }
 
     fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
-        for peer in &self.peers {
+        for peer in self.peers.iter().filter(|peer| peer.frame().width > 0.0) {
             peer.paint(cx, items);
         }
     }

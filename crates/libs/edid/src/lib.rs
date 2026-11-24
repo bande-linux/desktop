@@ -6,6 +6,20 @@ const SERIAL_TEXT: u8 = 0xff;
 const PNP_IDS: &str = "/usr/share/hwdata/pnp.ids";
 const INTERNAL_CONNECTORS: [&str; 3] = ["eDP", "LVDS", "DSI"];
 
+const BLOCK: usize = 128;
+const CTA: u8 = 0x02;
+const DISPLAY_ID: u8 = 0x70;
+const VENDOR_BLOCK: u8 = 3;
+const HDMI: [u8; 3] = [0x03, 0x0c, 0x00];
+const HDMI_FLAGS: usize = 5;
+const HDMI_CLOCK: usize = 6;
+const HDMI_FORUM: [u8; 3] = [0xd8, 0x5d, 0xc4];
+const HDMI_FORUM_CLOCK: usize = 4;
+const HDMI_FORUM_FIXED_RATE: usize = 6;
+const CLOCK_STEP_KHZ: u32 = 5_000;
+const DISPLAY_PARAMETERS: u8 = 0x21;
+const DISPLAY_PARAMETERS_DEPTH: usize = 27;
+
 const SRGB_DEFAULT: u8 = 1 << 2;
 const UNDEFINED_GAMMA: u8 = 0xff;
 
@@ -25,6 +39,16 @@ pub struct Edid {
     pub primaries: Primaries,
     pub default_is_srgb: bool,
     pub gamma: Option<u16>,
+    pub depth: Option<u8>,
+    pub hdmi: Option<Hdmi>,
+}
+
+/// What a display takes over HDMI: the bits per channel and, unless it has fixed-rate links or
+/// does not say, the highest character clock.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Hdmi {
+    pub depth: u8,
+    pub max_clock_khz: Option<u32>,
 }
 
 fn primaries(block: &[u8]) -> Primaries {
@@ -38,6 +62,77 @@ fn primaries(block: &[u8]) -> Primaries {
         blue: (coordinate(31, second, 6), coordinate(32, second, 4)),
         white: (coordinate(33, second, 2), coordinate(34, second, 0)),
     }
+}
+
+fn base_depth(block: &[u8]) -> Option<u8> {
+    let (version, revision, input) = (block[18], block[19], block[20]);
+    if version != 1 || revision < 4 || input & 0x80 == 0 {
+        return None;
+    }
+    match (input >> 4) & 7 {
+        code @ 1..=6 => Some(4 + 2 * code),
+        _ => None,
+    }
+}
+
+fn data_blocks(bytes: &[u8], header: usize) -> impl Iterator<Item = (u8, &[u8])> {
+    let mut left = bytes;
+    std::iter::from_fn(move || {
+        let (tag, length) = match header {
+            1 => (*left.first()? >> 5, usize::from(*left.first()? & 0x1f)),
+            _ => (*left.first()?, usize::from(*left.get(2)?)),
+        };
+        let data = left.get(header..header + length)?;
+        left = &left[header + length..];
+        Some((tag, data))
+    })
+}
+
+fn vendor_block<'a>(bytes: &'a [u8], vendor: &[u8; 3]) -> Option<&'a [u8]> {
+    let blocks = bytes.as_chunks::<BLOCK>().0.iter().skip(1);
+    blocks.filter(|block| block[0] == CTA).find_map(|block| {
+        let end = usize::from(block[2]).min(BLOCK - 1);
+        data_blocks(block.get(4..end)?, 1)
+            .find(|(tag, data)| *tag == VENDOR_BLOCK && data.starts_with(vendor))
+            .map(|(_, data)| data)
+    })
+}
+
+fn hdmi(bytes: &[u8]) -> Option<Hdmi> {
+    let block = vendor_block(bytes, &HDMI)?;
+    let byte = |data: &[u8], at: usize| data.get(at).copied().unwrap_or(0);
+    let flags = byte(block, HDMI_FLAGS);
+    let depth = [(6, 16), (5, 12), (4, 10)]
+        .into_iter()
+        .find_map(|(bit, depth)| (flags & (1 << bit) != 0).then_some(depth))
+        .unwrap_or(8);
+    let forum = vendor_block(bytes, &HDMI_FORUM).unwrap_or_default();
+    let clock = byte(block, HDMI_CLOCK).max(byte(forum, HDMI_FORUM_CLOCK));
+    let fixed_rate = byte(forum, HDMI_FORUM_FIXED_RATE) >> 4 != 0;
+    Some(Hdmi {
+        depth,
+        max_clock_khz: (clock != 0 && !fixed_rate).then_some(u32::from(clock) * CLOCK_STEP_KHZ),
+    })
+}
+
+fn display_id_depth(block: &[u8]) -> Option<u8> {
+    let end = (5 + usize::from(block[2])).min(BLOCK - 1);
+    let (_, data) =
+        data_blocks(block.get(5..end)?, 3).find(|(tag, _)| *tag == DISPLAY_PARAMETERS)?;
+    match *data.get(DISPLAY_PARAMETERS_DEPTH)? & 7 {
+        code @ 1..=4 => Some(4 + 2 * code),
+        5 => Some(16),
+        _ => None,
+    }
+}
+
+fn depth(bytes: &[u8]) -> Option<u8> {
+    let extensions = bytes.as_chunks::<BLOCK>().0.iter().skip(1);
+    extensions
+        .filter(|block| block[0] == DISPLAY_ID)
+        .filter_map(|block| display_id_depth(block))
+        .chain(base_depth(bytes))
+        .max()
 }
 
 fn descriptor_text(block: &[u8], kind: u8) -> Option<String> {
@@ -97,6 +192,8 @@ pub fn parse(block: &[u8]) -> Option<Edid> {
         primaries: primaries(block),
         default_is_srgb: block[24] & SRGB_DEFAULT != 0,
         gamma: (block[23] != UNDEFINED_GAMMA).then(|| u16::from(block[23]) + 100),
+        depth: depth(block),
+        hdmi: hdmi(block),
     })
 }
 

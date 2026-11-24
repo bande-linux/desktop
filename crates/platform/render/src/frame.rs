@@ -9,9 +9,9 @@ use smithay::utils::{Buffer as BufferCoords, Physical, Rectangle, Transform};
 use smithay::reexports::rustix::ioctl;
 
 use crate::{
-    ATTACHMENT, BYTES_PER_PIXEL, COLOR_LAYERS, DRAWING, DeviceExport, MappedExport, Program, Rect,
-    RenderError, SAMPLED, TRANSFER_SOURCE, VulkanFramebuffer, VulkanRenderer, VulkanTexture,
-    barrier, disjoint, hand_over, hand_over_buffers,
+    ATTACHMENT, BYTES_PER_PIXEL, COLOR_LAYERS, DRAWING, DeviceExport, MappedExport, OutputColour,
+    Program, Rect, RenderError, SAMPLED, TRANSFER_SOURCE, VulkanFramebuffer, VulkanRenderer,
+    VulkanTexture, barrier, disjoint, formats, hand_over, hand_over_buffers,
 };
 
 mod blur;
@@ -19,7 +19,7 @@ mod blur;
 pub use blur::{Backdrop, Blur};
 pub(crate) use blur::{BlurChain, KEEP_UNUSED};
 
-pub(crate) const QUAD_BYTES: u32 = 112;
+pub(crate) const QUAD_BYTES: u32 = 116;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
 pub struct RoundedRect {
@@ -41,6 +41,23 @@ impl RoundedRect {
             y: self.y + dy as f32,
             ..self
         }
+    }
+
+    fn covered(self) -> [Rect; 2] {
+        let radius = self.radius.max(0.0).min(self.width.min(self.height) / 2.0);
+        let inset = |across: f32, down: f32| {
+            let left = (self.x + across).ceil();
+            let top = (self.y + down).ceil();
+            let right = (self.x + self.width - across).floor();
+            let bottom = (self.y + self.height - down).floor();
+            Rect::new(
+                left as i32,
+                top as i32,
+                (right - left) as i32,
+                (bottom - top) as i32,
+            )
+        };
+        [inset(1.0, radius + 1.0), inset(radius + 1.0, 1.0)]
     }
 
     fn turned(self, turn: Transform, area: (i32, i32)) -> Self {
@@ -142,6 +159,7 @@ struct Quad {
     blur: f32,
     clip: RoundedRect,
     caster: RoundedRect,
+    dither: f32,
 }
 
 pub struct VulkanFrame<'frame, 'buffer> {
@@ -159,6 +177,7 @@ pub struct VulkanFrame<'frame, 'buffer> {
     drawn: Vec<Rect>,
     direct: bool,
     converted_into: Option<vk::ImageView>,
+    colour: Option<OutputColour>,
     acquired: Vec<vk::Image>,
     finished: bool,
     _framebuffer: PhantomData<&'frame mut VulkanFramebuffer<'buffer>>,
@@ -199,7 +218,8 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
             target.direct,
         );
         let bounds = Rect::new(0, 0, target.image.width, target.image.height);
-        let unconverted = renderer.unconverted_image(framebuffer.id);
+        let colour = framebuffer.colour.clone();
+        let unconverted = renderer.unconverted_image(framebuffer.id, colour.is_some())?;
         let area = turn
             .invert()
             .transform_size(smithay::utils::Size::<i32, Physical>::from((
@@ -232,10 +252,10 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
             (false, true) => barrier(device, commands, image, ATTACHMENT, drawing),
         }
         let (drawn_image, drawn_view, converted_into) = match unconverted {
-            Some((unconverted, unconverted_view, fresh)) => {
-                let before = match fresh {
-                    true => unwritten,
-                    false => SAMPLED,
+            Some((unconverted, unconverted_view, drawn)) => {
+                let before = match drawn {
+                    true => SAMPLED,
+                    false => unwritten,
                 };
                 barrier(device, commands, unconverted, before, drawing);
                 (unconverted, unconverted_view, Some(view))
@@ -257,6 +277,7 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
             drawn: Vec::new(),
             direct,
             converted_into,
+            colour,
             acquired: Vec::new(),
             finished: false,
             _framebuffer: PhantomData,
@@ -364,6 +385,15 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
             ..*shadow
         };
         let destination = shadow.bounds();
+        let mut rects = rects;
+        for covered in shadow.window.covered() {
+            if !covered.is_empty() {
+                rects = rects
+                    .iter()
+                    .flat_map(|rect| rect.without(&covered))
+                    .collect();
+            }
+        }
         if rects.is_empty() {
             return Ok(());
         }
@@ -376,6 +406,7 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
                 blur: shadow.blur,
                 clip: shadow.window,
                 caster: shadow.caster,
+                dither: self.smallest_step(),
                 ..Quad::default()
             },
             &rects,
@@ -404,6 +435,13 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
         }
         self.bound = Some(program);
         Ok(())
+    }
+
+    fn smallest_step(&self) -> f32 {
+        match crate::is_deep_target(self.format) {
+            true => 1.0 / 1023.0,
+            false => 1.0 / 255.0,
+        }
     }
 
     fn draw(&mut self, quad: &Quad, rects: &[Rect]) {
@@ -456,6 +494,7 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
             .chain(quad.caster.components())
             .chain([quad.clip.radius, quad.caster.radius])
             .chain(quad.sampling.down.map(|component| component as f32))
+            .chain([quad.dither])
             .flat_map(f32::to_ne_bytes)
             .collect();
         let device = &self.renderer.device;
@@ -521,7 +560,7 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
         let mut readbacks = Vec::new();
         let mut converted = None;
         if let Some((Some(device), _)) = export {
-            converted = self.record_output(&device, &drawn);
+            converted = self.record_output(&device, &drawn)?;
         }
         let verifying = matches!(export, Some((Some(_), false)));
         if matches!(export, Some((None, _))) || verifying {
@@ -541,9 +580,7 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
         }
         let serial = self.renderer.submit(self.renderer.measuring())?;
         self.renderer.retire_unused_blur_chains();
-        if let Some(target) = self.renderer.targets.get_mut(&self.target) {
-            target.rendered = true;
-        }
+        self.renderer.mark_rendered(self.target);
         if readbacks.is_empty() {
             self.renderer.hand_staging_to(serial);
             return Ok(serial);
@@ -580,9 +617,7 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
         let serial = renderer.submit(renderer.measuring())?;
         renderer.retire_unused_blur_chains();
         renderer.hand_staging_to(serial);
-        if let Some(target) = renderer.targets.get_mut(&self.target) {
-            target.rendered = true;
-        }
+        renderer.mark_rendered(self.target);
         Ok(serial)
     }
 
@@ -594,7 +629,7 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
             ATTACHMENT,
             SAMPLED,
         );
-        let Some(colour) = self.renderer.output_colour.clone() else {
+        let Some(colour) = self.colour.clone() else {
             return Ok(());
         };
         if drawn.is_empty() {
@@ -614,59 +649,43 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
         drawn_colours
     }
 
-    fn record_output(&mut self, export: &DeviceExport, drawn: &[Rect]) -> Option<vk::Image> {
+    fn record_output(
+        &mut self,
+        export: &DeviceExport,
+        drawn: &[Rect],
+    ) -> Result<Option<vk::Image>, RenderError> {
         if drawn.is_empty() {
-            return None;
+            return Ok(None);
         }
-        let Some(colour) = self.renderer.output_colour.clone() else {
-            self.record_output_copy(export, self.image, drawn);
-            barrier(
-                &self.renderer.device,
-                self.renderer.command_buffer,
-                self.image,
-                TRANSFER_SOURCE,
-                ATTACHMENT,
-            );
-            return None;
+        let converted = match self.colour.clone() {
+            Some(colour) => Some(self.convert_output(&colour, drawn)?),
+            None => None,
         };
-        match self.convert_output(colour, drawn) {
-            Ok(scratch) => {
-                self.record_output_copy(export, scratch, drawn);
-                barrier(
-                    &self.renderer.device,
-                    self.renderer.command_buffer,
-                    self.image,
-                    SAMPLED,
-                    ATTACHMENT,
-                );
-                Some(scratch)
-            }
-            Err(error) => {
-                tracing::warn!("showing colours unconverted: {error}");
-                self.renderer.output_colour = None;
-                self.record_output_copy(export, self.image, drawn);
-                barrier(
-                    &self.renderer.device,
-                    self.renderer.command_buffer,
-                    self.image,
-                    TRANSFER_SOURCE,
-                    ATTACHMENT,
-                );
-                None
-            }
-        }
+        self.record_output_copy(export, converted.unwrap_or(self.image), drawn);
+        barrier(
+            &self.renderer.device,
+            self.renderer.command_buffer,
+            self.image,
+            match converted {
+                Some(_) => SAMPLED,
+                None => TRANSFER_SOURCE,
+            },
+            ATTACHMENT,
+        );
+        Ok(converted)
     }
 
     fn convert_output(
         &mut self,
-        colour: crate::OutputColour,
+        colour: &OutputColour,
         drawn: &[Rect],
     ) -> Result<vk::Image, RenderError> {
         let key = (self.bounds.width, self.bounds.height, self.format);
-        let prior = match self.renderer.colour_scratch.contains_key(&key) {
-            true => TRANSFER_SOURCE,
-            false => blur::DISCARDED,
-        };
+        let rewritten = (
+            vk::ImageLayout::UNDEFINED,
+            vk::PipelineStageFlags2::COPY,
+            vk::AccessFlags2::NONE,
+        );
         if !self.renderer.colour_scratch.contains_key(&key) {
             let scratch = self.renderer.create_image(
                 self.bounds.width,
@@ -687,9 +706,9 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
         let device = &self.renderer.device;
         let commands = self.renderer.command_buffer;
         barrier(device, commands, self.image, ATTACHMENT, SAMPLED);
-        barrier(device, commands, scratch.0, prior, blur::DRAWN);
+        barrier(device, commands, scratch.0, rewritten, blur::DRAWN);
         self.begin_rendering(scratch.1, self.bounds, vk::AttachmentLoadOp::DONT_CARE);
-        let drawn_colours = self.draw_display_colour(&colour, drawn);
+        let drawn_colours = self.draw_display_colour(colour, drawn);
         let device = &self.renderer.device;
         // SAFETY: the frame holds the renderer mutably from `begin_commands` until `finish_frame`
         // ends the buffer, so `command_buffer` is recording and only this frame records into it,
@@ -701,17 +720,14 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
 
     fn draw_display_colour(
         &mut self,
-        colour: &crate::OutputColour,
+        colour: &OutputColour,
         drawn: &[Rect],
     ) -> Result<(), RenderError> {
         self.bind(Program::DisplayColour)?;
-        let table = self
-            .renderer
-            .encode_table
+        let table = colour
+            .encode
             .as_ref()
-            .filter(|_| colour.encode.is_some())
-            .and_then(|(_, texture)| self.renderer.textures.get(&texture.id))
-            .map(|table| table.image.view);
+            .and_then(|table| self.renderer.encode_table(table));
         self.sample(self.target_view, table.unwrap_or(self.target_view))?;
         let matrix = colour.matrix;
         let row = |values: [f32; 3]| RoundedRect {
@@ -727,6 +743,7 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
                 clip: row(matrix[1]),
                 caster: row(matrix[2]),
                 alpha: if table.is_some() { 1.0 } else { 0.0 },
+                dither: self.smallest_step(),
                 ..Quad::default()
             },
             drawn,
@@ -1115,6 +1132,12 @@ impl Frame for VulkanFrame<'_, '_> {
         self.draw(
             &Quad {
                 destination,
+                dither: match formats::is_deep(texture.format)
+                    && !crate::is_deep_target(self.format)
+                {
+                    true => self.smallest_step(),
+                    false => 0.0,
+                },
                 sampling: Sampling::oriented(src, src_transform, self.turn),
                 alpha,
                 clip: self.clip.unwrap_or_default(),

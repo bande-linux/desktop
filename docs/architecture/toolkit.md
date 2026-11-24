@@ -128,7 +128,8 @@ writes a hex value, a corner radius or a font name of its own.
   without feedback only a machine with a single GPU (lavapipe left out) draws on it, and a window never
   hands the compositor memory of another GPU. Modifiers come from the surface's feedback, its
   scan-out tranches first; when the feedback moves the surface to another GPU the window reopens
-  its device, and when it only changes the modifiers it replaces its buffers. Each frame takes
+  its device, and when it only changes the modifiers it replaces its buffers; either way it draws
+  itself again, as the compositor may be unable to show what it has. Each frame takes
   its buffer from the compositor's queue family (`QUEUE_FAMILY_FOREIGN_EXT`, in `GENERAL`) and
   gives it back after drawing, reuses a buffer only once the compositor has finished reading it (a third buffer instead of
   waiting; with three it waits),
@@ -137,11 +138,11 @@ writes a hex value, a corner radius or a font name of its own.
   dma-buf with a fence, then dma-buf with the window's thread waiting for each frame (no
   exportable fence, or the dma-buf takes none: logged once, for the rest of the process), then
   `wl_shm` drawn on the CPU (no shared GPU, no modifier both sides take, no dma-buf export or
-  foreign queue family, or a GPU error, for the rest of that window). Modifiers with an
-  auxiliary compression plane (Intel CCS on gen9–12, AMD DCC on GFX9–11) have more than one plane
-  and are left out, so those GPUs draw windows uncompressed; one-plane compressed modifiers (Intel
-  Xe2, AMD GFX12, NVIDIA) are used, safe because each frame passes through the foreign queue
-  family. Frames are paced by `wl_surface.frame`. Windows follow the output's fractional
+  foreign queue family, or a GPU error other than a lost device, for the rest of that window). Compressed
+  modifiers are used with every memory plane they have (Intel CCS and AMD DCC carry their
+  compression data in planes of the same dma-buf), safe because each frame passes through the
+  foreign queue family. A lost device is never shared again: the frame that meets it is drawn on
+  the CPU and the window opens the GPU again, at most once in ten seconds. Frames are paced by `wl_surface.frame`. Windows follow the output's fractional
   scale through `wp_viewporter`. All windows of a process share one Vulkan device, opened with
   the first and closed with the last, with wgpu's `MemoryUsage` allocation blocks of 8–64 MiB.
   Only the drivers of the machine's render nodes are loaded (`vulkan.rs`); lavapipe only when

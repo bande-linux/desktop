@@ -56,7 +56,23 @@ const MEMORY_PLANES: [vk::ImageAspectFlags; 4] = [
     vk::ImageAspectFlags::MEMORY_PLANE_2_EXT,
     vk::ImageAspectFlags::MEMORY_PLANE_3_EXT,
 ];
-const TARGET_FORMATS: [vk::Format; 2] = [vk::Format::B8G8R8A8_UNORM, vk::Format::R8G8B8A8_UNORM];
+const TARGET_FORMATS: [vk::Format; 4] = [
+    vk::Format::B8G8R8A8_UNORM,
+    vk::Format::R8G8B8A8_UNORM,
+    vk::Format::A2R10G10B10_UNORM_PACK32,
+    vk::Format::A2B10G10R10_UNORM_PACK32,
+];
+const PREPARED_FORMATS: [vk::Format; 2] = [vk::Format::B8G8R8A8_UNORM, vk::Format::R8G8B8A8_UNORM];
+const PROGRAMS: [Program; 8] = [
+    Program::Texture,
+    Program::Video,
+    Program::DisplayColour,
+    Program::Solid,
+    Program::Shadow,
+    Program::BlurDown,
+    Program::BlurUp,
+    Program::BlurTone,
+];
 const TEXTURE_FOURCCS: [Fourcc; 3] = [Fourcc::Argb8888, Fourcc::Xrgb8888, Fourcc::Abgr8888];
 const TARGET_FOURCCS: [Fourcc; 4] = [
     Fourcc::Argb8888,
@@ -251,6 +267,7 @@ pub struct VulkanFramebuffer<'buffer> {
     width: i32,
     height: i32,
     format: Fourcc,
+    colour: Option<OutputColour>,
     _target: PhantomData<&'buffer mut ()>,
 }
 
@@ -321,7 +338,12 @@ impl Drop for MappedExport {
 #[derive(Debug, Clone, PartialEq)]
 pub struct OutputColour {
     pub matrix: [[f32; 3]; 3],
-    pub encode: Option<Arc<[[u8; 3]]>>,
+    pub encode: Option<Arc<[[u16; 3]]>>,
+}
+
+struct Unconverted {
+    image: Image,
+    drawn: bool,
 }
 
 struct Target {
@@ -330,7 +352,7 @@ struct Target {
     rendered: bool,
     export: Option<Export>,
     direct: bool,
-    unconverted: Option<Image>,
+    unconverted: Option<Unconverted>,
 }
 
 #[derive(Default)]
@@ -395,7 +417,7 @@ pub struct VulkanRenderer {
     unproven: Vec<(vk::ImageUsageFlags, Format)>,
     proven: bool,
     output_colour: Option<OutputColour>,
-    encode_table: Option<(Arc<[[u8; 3]]>, VulkanTexture)>,
+    encode_tables: Vec<(Arc<[[u16; 3]]>, VulkanTexture)>,
     colour_scratch: HashMap<(i32, i32, vk::Format), Image>,
     memory: vk::PhysicalDeviceMemoryProperties,
     info: DeviceInfo,
@@ -677,13 +699,18 @@ fn target_format(format: Fourcc) -> Option<vk::Format> {
     match format {
         Fourcc::Argb8888 | Fourcc::Xrgb8888 => Some(vk::Format::B8G8R8A8_UNORM),
         Fourcc::Abgr8888 | Fourcc::Xbgr8888 => Some(vk::Format::R8G8B8A8_UNORM),
+        Fourcc::Abgr2101010 => Some(vk::Format::A2B10G10R10_UNORM_PACK32),
         _ => None,
     }
 }
 
+fn is_deep_target(format: vk::Format) -> bool {
+    !PREPARED_FORMATS.contains(&format)
+}
+
 fn is_opaque(format: Fourcc) -> Option<bool> {
     match format {
-        Fourcc::Argb8888 | Fourcc::Abgr8888 => Some(false),
+        Fourcc::Argb8888 | Fourcc::Abgr8888 | Fourcc::Abgr2101010 => Some(false),
         Fourcc::Xrgb8888 => Some(true),
         _ => None,
     }
@@ -823,7 +850,7 @@ impl VulkanRenderer {
             unproven: Vec::new(),
             proven: false,
             output_colour: None,
-            encode_table: None,
+            encode_tables: Vec::new(),
             colour_scratch: HashMap::new(),
             // SAFETY: `chosen.physical` belongs to the live `instance`.
             memory: unsafe { instance.get_physical_device_memory_properties(chosen.physical) },
@@ -948,17 +975,21 @@ impl VulkanRenderer {
                 None,
             )
         }?;
-        for format in TARGET_FORMATS {
-            for program in [
-                Program::Texture,
-                Program::Video,
-                Program::DisplayColour,
-                Program::Solid,
-                Program::Shadow,
-                Program::BlurDown,
-                Program::BlurUp,
-                Program::BlurTone,
-            ] {
+        for format in PREPARED_FORMATS {
+            self.prepare_pipelines(format)?;
+        }
+        Ok(())
+    }
+
+    /// Makes what drawing into `format` needs, ahead of the first frame.
+    pub fn prepare(&mut self, format: Fourcc) -> Result<(), RenderError> {
+        let texel = formats::texel(format).ok_or(RenderError::UnsupportedFormat)?;
+        self.prepare_pipelines(texel.format)
+    }
+
+    fn prepare_pipelines(&mut self, format: vk::Format) -> Result<(), RenderError> {
+        for program in PROGRAMS {
+            if !self.pipelines.contains_key(&(format, program)) {
                 let pipeline = self.create_pipeline(format, program)?;
                 self.pipelines.insert((format, program), pipeline);
             }
@@ -1072,33 +1103,48 @@ impl VulkanRenderer {
         self.blur_chains = kept;
     }
 
-    pub fn set_output_colour(&mut self, colour: Option<OutputColour>) {
-        let table = colour.as_ref().and_then(|colour| colour.encode.clone());
-        if let Some(table) = table
-            && self
-                .encode_table
-                .as_ref()
-                .is_none_or(|(loaded, _)| !Arc::ptr_eq(loaded, &table))
-        {
-            let pixels: Vec<u8> = table
-                .iter()
-                .flat_map(|[red, green, blue]| [*blue, *green, *red, u8::MAX])
-                .collect();
-            match self.import_memory(
-                &pixels,
-                Fourcc::Argb8888,
-                (table.len() as i32, 1).into(),
-                false,
-            ) {
-                Ok(texture) => self.encode_table = Some((table, texture)),
-                Err(error) => {
-                    tracing::warn!("showing colours unconverted: {error}");
-                    self.output_colour = None;
-                    return;
-                }
-            }
+    /// Draws with every dma-buf bound by `draw` shown in `colour`; other targets stay sRGB.
+    pub fn converting<T>(
+        &mut self,
+        colour: Option<&OutputColour>,
+        draw: impl FnOnce(&mut Self) -> T,
+    ) -> Result<T, RenderError> {
+        if let Some(colour) = colour {
+            self.load_encode_table(colour)?;
         }
-        self.output_colour = colour;
+        self.output_colour = colour.cloned();
+        let drawn = draw(self);
+        self.output_colour = None;
+        Ok(drawn)
+    }
+
+    fn load_encode_table(&mut self, colour: &OutputColour) -> Result<(), RenderError> {
+        let Some(table) = &colour.encode else {
+            return Ok(());
+        };
+        self.encode_tables
+            .retain(|(loaded, _)| Arc::strong_count(loaded) > 1);
+        if self.encode_table(table).is_some() {
+            return Ok(());
+        }
+        let ten = |value: u16| (u32::from(value) * 1023 + 32767) / 65535;
+        let pixels: Vec<u8> = table
+            .iter()
+            .map(|channels| channels.map(ten))
+            .flat_map(|[red, green, blue]| (3 << 30 | blue << 20 | green << 10 | red).to_le_bytes())
+            .collect();
+        let size = (table.len() as i32, 1).into();
+        let texture = self.import_memory(&pixels, Fourcc::Abgr2101010, size, false)?;
+        self.encode_tables.push((table.clone(), texture));
+        Ok(())
+    }
+
+    fn encode_table(&self, table: &Arc<[[u16; 3]]>) -> Option<vk::ImageView> {
+        self.encode_tables
+            .iter()
+            .find(|(loaded, _)| Arc::ptr_eq(loaded, table))
+            .and_then(|(_, texture)| self.textures.get(&texture.id))
+            .map(|texture| texture.image.view)
     }
 
     pub fn dmabuf_planes(&self) -> HashMap<Format, usize> {
@@ -1969,6 +2015,7 @@ impl VulkanRenderer {
         capability: formats::Capability,
     ) -> Result<u64, RenderError> {
         let texel = formats::texel(dmabuf.format().code).ok_or(RenderError::UnsupportedFormat)?;
+        self.prepare_pipelines(texel.format)?;
         let mut image = self.import_image(dmabuf, texel, (formats::RENDERED, capability))?;
         image.view =
             match self.create_view(image.image, texel.format, vk::ComponentSwizzle::IDENTITY) {
@@ -2045,45 +2092,56 @@ impl VulkanRenderer {
         Ok(id)
     }
 
-    fn unconverted_image(&mut self, id: u64) -> Option<(vk::Image, vk::ImageView, bool)> {
-        let target = self.targets.get_mut(&id)?;
-        if !target.direct || self.output_colour.is_none() {
-            if let Some(image) = target.unconverted.take() {
-                self.destroy_image(&image);
+    fn unconverted_image(
+        &mut self,
+        id: u64,
+        converts: bool,
+    ) -> Result<Option<(vk::Image, vk::ImageView, bool)>, RenderError> {
+        let target = self
+            .targets
+            .get_mut(&id)
+            .ok_or(RenderError::ForeignResource)?;
+        if !target.direct || !converts {
+            if let Some(unconverted) = target.unconverted.take() {
+                self.destroy_image(&unconverted.image);
             }
-            return None;
+            return Ok(None);
         }
-        if let Some(image) = &target.unconverted {
-            return Some((image.image, image.view, false));
+        if let Some(unconverted) = &target.unconverted {
+            let image = &unconverted.image;
+            return Ok(Some((image.image, image.view, unconverted.drawn)));
         }
         let (width, height, format) = (target.image.width, target.image.height, target.format);
-        let created = match self
+        if !self
             .pipelines
             .contains_key(&(format, Program::DisplayColour))
         {
-            true => self.create_image(
-                width,
-                height,
-                format,
-                vk::ImageUsageFlags::COLOR_ATTACHMENT
-                    | vk::ImageUsageFlags::SAMPLED
-                    | vk::ImageUsageFlags::TRANSFER_SRC,
-                vk::ComponentSwizzle::IDENTITY,
-            ),
-            false => Err(RenderError::UnsupportedFormat),
-        };
-        match created {
-            Ok(image) => {
-                let unconverted = (image.image, image.view, true);
-                if let Some(target) = self.targets.get_mut(&id) {
-                    target.unconverted = Some(image);
-                }
-                Some(unconverted)
-            }
-            Err(error) => {
-                tracing::warn!("showing colours unconverted: {error}");
-                self.output_colour = None;
-                None
+            return Err(RenderError::UnsupportedFormat);
+        }
+        let image = self.create_image(
+            width,
+            height,
+            format,
+            vk::ImageUsageFlags::COLOR_ATTACHMENT
+                | vk::ImageUsageFlags::SAMPLED
+                | vk::ImageUsageFlags::TRANSFER_SRC,
+            vk::ComponentSwizzle::IDENTITY,
+        )?;
+        let unconverted = (image.image, image.view, false);
+        if let Some(target) = self.targets.get_mut(&id) {
+            target.unconverted = Some(Unconverted {
+                image,
+                drawn: false,
+            });
+        }
+        Ok(Some(unconverted))
+    }
+
+    fn mark_rendered(&mut self, id: u64) {
+        if let Some(target) = self.targets.get_mut(&id) {
+            target.rendered = true;
+            if let Some(unconverted) = &mut target.unconverted {
+                unconverted.drawn = true;
             }
         }
     }
@@ -2119,7 +2177,7 @@ impl VulkanRenderer {
     fn destroy_target(&self, target: &Target) {
         self.destroy_image(&target.image);
         if let Some(unconverted) = &target.unconverted {
-            self.destroy_image(unconverted);
+            self.destroy_image(&unconverted.image);
         }
         if let Some(device) = target.export.as_ref().and_then(|export| export.device) {
             self.destroy_imported(&device.imported);
@@ -2706,6 +2764,7 @@ impl Bind<OffscreenTarget> for VulkanRenderer {
             width: target.width,
             height: target.height,
             format: target.format,
+            colour: None,
             _target: PhantomData,
         })
     }
@@ -2728,6 +2787,7 @@ impl Bind<Dmabuf> for VulkanRenderer {
             width: size.w,
             height: size.h,
             format,
+            colour: self.output_colour.clone(),
             _target: PhantomData,
         })
     }

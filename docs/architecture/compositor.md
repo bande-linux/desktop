@@ -139,7 +139,10 @@ when they reach the screen is Bande's own.
   the proven set unless the proof itself lost the device; on another device it proves again. The
   formats are ARGB, XRGB, ABGR and XBGR in 8 and 10 bits per channel, NV12 and P010 for video
   (BT.709 limited range, converted in the `video` shader), each with its tiled and compressed
-  modifiers; LINEAR ARGB8888, XRGB8888, ABGR8888 and NV12 always, also without the extension. On a
+  modifiers; LINEAR ARGB8888, XRGB8888, ABGR8888 and NV12 always, also without the extension. Frames
+  are drawn in the 8- and 10-bit formats (each format's pipelines are made with its first buffer);
+  shadows, blurred backdrops, converted colours and 10-bit content shown in 8 bits are dithered by
+  half a step with a pattern fixed to the pixel, and 8-bit content passes through unchanged. On a
   DRM device it is version 4 with feedback: the main device and tranches name the card's render node
   and a scanout tranche lists the primary plane's formats and modifiers that the GPU can also
   sample; headless it is version 3 with LINEAR only. A buffer is accepted with exactly the memory
@@ -196,9 +199,28 @@ when they reach the screen is Bande's own.
   the link bad and costs a second mode-set) moves nothing. A mode is tested with the driver before
   it is used. A refused mode falls back to the next that passes, nearest size first, without
   touching the saved settings; with none left the display waits for the next change event. The link
-  is set good again in the frame path, after any pending flip. Each connector's `max bpc` is set
-  to 8 before its output starts, as frames are 8 bits per channel; a display that offers more
-  would otherwise get a wider link format the frames never use. A display is named by its EDID
+  is set good again in the frame path, after any pending flip. A display gets 10-bit
+  tiled buffers when all of these hold (`output_format.rs`): the EDID states ten or more bits (base
+  block or DisplayID; over HDMI its deep colour flags, within its character clock at that mode), the
+  plane and the GPU share such a layout, a test commit in the mode takes the buffers, and
+  `deep-colour` is not off for it (Settings ▸ Displays ▸ Deep color). Otherwise it gets 8 bits;
+  the refresh rate is never lowered for depth. The choice is made again when the mode or the setting
+  changes or the session comes back, on the live surface, so the CRTC stays on. Buffers that fail
+  lose depth first, then tiling, then GPU rendering, for as long as the display is connected. A
+  flip the kernel refuses is committed once whole, with a mode-set allowed and nothing but the frame
+  on the planes; refused again, the display loses depth in that mode, or keeps the buffers it shows.
+  Refusals are forgotten when the setting is switched or the session comes back. Every such change
+  draws the display again by itself and counts as a stall until a frame shows. `max bpc` is what it
+  was found at, or the frames' bits when that is more, and 8 while deep colour is off. Smithay's
+  public commits carry no connector properties, so it is set by a blocking commit of its own, tested
+  first as it is committed and only when the value differs: a mode-set, shared with a new mode of the
+  same size and apart from one of another size; the value stays after the session, and a display
+  that then refuses the depth gets it back. One display's depth is not lowered for another's sake. Above eight bits the kernel may still send
+  fewer, which nothing but its debug files tells; frames are dithered to the buffer's depth, so a
+  link that cuts 10 bits to 8 shows coarser shadows than 8-bit frames would. On GPUs without
+  compressed 10-bit layouts (Intel gen9) scanout reads every pixel uncompressed, also when idle: at
+  2560×1440 and 144 Hz 2.1 GB/s. An interlaced mode is left out when a progressive one has its size.
+  A display is named by its EDID
   (maker from the PNP id, model and serial from the descriptors without control characters,
   falling back to the product code and
   serial number; two displays with the same name are told apart by their connector). A fullscreen
@@ -286,9 +308,13 @@ when they reach the screen is Bande's own.
   or the path of an ICC matrix-and-curve display profile. A profile that differs from sRGB
   converts frames: a shader decodes sRGB, applies the matrix to the display's primaries
   (relative, white kept, Bradford-adapted through D50) and encodes with the profile's own tone
-  curves through a 4096-entry table, on the drawn regions only, from the buffer's unconverted
-  image into the buffer, so no pixel is converted twice. While a display converts, nothing is
-  scanned out directly or put on a plane. A CPU renderer does not convert.
+  curves through a 4096-entry table of 10 bits, on the drawn regions only, from the buffer's unconverted
+  image into the buffer, so no pixel is converted twice. The conversion belongs to the buffers bound
+  while a display's frame is drawn (`VulkanRenderer::converting`), so captures, thumbnails and other
+  displays stay sRGB; a display whose conversion changes in any way draws its buffers anew, one whose
+  conversion fails shows colours as sent, and the first frame of a session on a converting display
+  does not fade in over what the screen showed, as that may be converted already. While a display
+  converts, nothing is scanned out directly or put on a plane. A CPU renderer does not convert.
 - **Frame pacing.** Each output has its own scheduler (`clock.rs`) and measured timing (`pacing.rs`); no rate is assumed beyond the mode's. The vblank grid is estimated from page-flip times alone: phase and period follow a slow filter, an error over an eighth of a refresh is an outlier, eight in a row or a long idle re-anchor it, and it owns the sequence number. A frame starts at its slot minus a budget and a commit lead. The budget is the 95th percentile of the last 64 renders or the longest of the last 4 if that is more (so a spike is forgotten in 4 frames while heavier content is priced at once), plus the 99th percentile of how late the timer woke us (1 ms until one is measured; a wake too late for its slot is measured too), plus a pad that grows when a commit comes too late for its slot and decays while none do. The commit lead is how long before its slot a commit must return, learned from which vblank each flip really landed on: it starts at 35 % of a refresh, again on the first real flip, comes down until the first miss, rises when a commit with time to spare still misses (some drivers move a commit that returns too close to the flip to the next refresh), and is lowered slowly afterwards to follow changes. A frame aims at the first slot its typical render and the lead still fit before, so renders longer than a refresh aim further ahead; a wake-up past the start time still goes if that holds, and otherwise takes the next such slot. When over 5 % of 128 frames miss, the pad rises. Without flips (headless) the lead stays at its start. If no frame can start within a second, the output falls back to classic timing and says so in the log. A timer wake dispatches every ready source first, so input right up to the latch counts, and no timer runs without a wanted frame or a frame callback. The default is still the classic rule (the longest of the last 16 frames plus 1 ms); the measured timing above runs only with `BANDE_FRAME_TIMING=learned` until it is measured again on real displays. Frame callbacks are taken when a frame is latched and go out once it is committed, so a client gets the time up to the next frame's start, not what is left after the flip. A client whose time from callback to commit is known (its 95th percentile over at least 8 frames, `frame_callbacks.rs`) gets its callback that long plus 0.5 ms before the next frame starts, so it reads the latest input and its frame is shown at once; a client that misses the latch this way goes back to the early callback for a second. No timer exists unless a callback is waiting. `wp_presentation` feedback (estimated vblank time, refresh, sequence, `vsync`, on DRM also `hw_completion`) is sent at the page-flip event, or the vblank on headless; a superseded commit's feedback is discarded, and a render that overruns its vblank is presented at the next one.
 - **Window motion.** Every window state change is animated by springs on x, y, width, height
   and opacity, sampled at the frame's vblank (`Compositor::animate_on`, called by each output's

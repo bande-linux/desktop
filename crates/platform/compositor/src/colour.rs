@@ -48,6 +48,10 @@ fn profile(choice: Option<&str>, display: Option<&Profile>) -> Option<Profile> {
     }
 }
 
+pub(crate) fn converts(choice: Option<&str>) -> bool {
+    !matches!(choice.unwrap_or(UNMANAGED), SRGB | UNMANAGED)
+}
+
 pub(crate) fn conversion(choice: Option<&str>, display: Option<&Profile>) -> Option<OutputColour> {
     let converted = convert(&profile(choice, display)?, NEUTRAL)?;
     Some(OutputColour {

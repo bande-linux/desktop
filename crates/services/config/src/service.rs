@@ -467,6 +467,9 @@ fn display_settings(settings: &HashMap<String, OwnedValue>) -> zbus::fdo::Result
             "variable-refresh" => {
                 display.variable_refresh = Some(bool::try_from(value).map_err(|_| mismatch())?)
             }
+            "deep-colour" => {
+                display.deep_colour = Some(bool::try_from(value).map_err(|_| mismatch())?)
+            }
             _ => return Err(InvalidArgs(format!("unknown display setting `{key}`"))),
         }
     }
@@ -1718,6 +1721,10 @@ impl ConfigInterface {
                     (
                         "variable-refresh",
                         display.variable_refresh.and_then(|on| owned(on.into())),
+                    ),
+                    (
+                        "deep-colour",
+                        display.deep_colour.and_then(|on| owned(on.into())),
                     ),
                 ]
                 .into_iter()

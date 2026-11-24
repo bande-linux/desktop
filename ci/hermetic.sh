@@ -28,7 +28,7 @@ kept=()
 while IFS= read -r name; do
     case $name in
         PATH | USER | LOGNAME | TERM | TZ | LD_LIBRARY_PATH | SOURCE_DATE_EPOCH | \
-            CARGO* | RUST* | VK_* | MESA_* | LP_*)
+            BANDE_EDID_CORPUS | CARGO* | RUST* | VK_* | MESA_* | LP_*)
             kept+=("$name=${!name}")
             ;;
     esac

@@ -10,6 +10,7 @@ pub(crate) struct Arranged {
     pub(crate) mirror: Option<String>,
     pub(crate) colour_profile: Option<String>,
     pub(crate) variable_refresh: bool,
+    pub(crate) deep_colour: bool,
 }
 
 pub(crate) fn identities(heads: &[OutputConfig]) -> Vec<String> {
@@ -115,6 +116,7 @@ pub(crate) fn arrange(
                 mirror: None,
                 colour_profile: display.colour_profile.clone(),
                 variable_refresh: display.variable_refresh.unwrap_or(true),
+                deep_colour: display.deep_colour.unwrap_or(true),
             })
         })
         .collect();

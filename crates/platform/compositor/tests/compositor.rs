@@ -424,7 +424,6 @@ fn drag_over_scanout_buffers(colour: Option<bande_render::OutputColour>) {
         println!("skipped: no hardware Vulkan device with a DRM render node");
         return;
     };
-    vulkan.set_output_colour(colour);
     let mut formats: Vec<_> = vulkan.render_formats().iter().copied().collect();
     formats.sort_by_key(|format| std::cmp::Reverse(u64::from(format.modifier)));
     let Some(format) = formats
@@ -462,11 +461,15 @@ fn drag_over_scanout_buffers(colour: Option<bande_render::OutputColour>) {
         let slot = *step % slots.len();
         let (_, dmabuf, used) = &mut slots[slot];
         let age = used.map_or(0, |used| *step - used);
-        let mut framebuffer = vulkan.bind(dmabuf).expect("bind the scanout buffer");
-        damage
-            .render_output(&mut vulkan, &mut framebuffer, age, &elements, background())
-            .expect("render into the scanout buffer")
-            .sync
+        vulkan
+            .converting(colour.as_ref(), |vulkan| {
+                let mut framebuffer = vulkan.bind(dmabuf).expect("bind the scanout buffer");
+                damage
+                    .render_output(vulkan, &mut framebuffer, age, &elements, background())
+                    .expect("render into the scanout buffer")
+                    .sync
+            })
+            .expect("the conversion table loads")
             .wait()
             .expect("the GPU finishes the frame");
         *used = Some(*step);
@@ -504,11 +507,15 @@ fn drag_over_scanout_buffers(colour: Option<bande_render::OutputColour>) {
         .expect("scanout buffer");
     let mut fresh = fresh.export().expect("scanout dma-buf");
     let elements = server.render_elements_on(&mut vulkan, &output);
-    let mut framebuffer = vulkan.bind(&mut fresh).expect("bind the fresh buffer");
-    OutputDamageTracker::new((640, 480), 1.0, Transform::Normal)
-        .render_output(&mut vulkan, &mut framebuffer, 0, &elements, background())
-        .expect("a full redraw")
-        .sync
+    vulkan
+        .converting(colour.as_ref(), |vulkan| {
+            let mut framebuffer = vulkan.bind(&mut fresh).expect("bind the fresh buffer");
+            OutputDamageTracker::new((640, 480), 1.0, Transform::Normal)
+                .render_output(vulkan, &mut framebuffer, 0, &elements, background())
+                .expect("a full redraw")
+                .sync
+        })
+        .expect("the conversion table loads")
         .wait()
         .expect("the GPU finishes the full redraw");
     let full = read_back(&gbm, &fresh, (width, height));

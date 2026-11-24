@@ -167,6 +167,7 @@ impl VulkanFrame<'_, '_> {
                 )),
                 alpha: blur.alpha,
                 clip: blur.region,
+                dither: self.smallest_step(),
                 ..Quad::default()
             },
             &rects,

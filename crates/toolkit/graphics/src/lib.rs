@@ -23,7 +23,7 @@ pub use bande_design::{
 pub use cpu::CpuRenderer;
 pub use damage::{Region, damage};
 #[cfg(feature = "gpu")]
-pub use dmabuf::{SHARED_FOURCC, SharedImage};
+pub use dmabuf::{SHARED_FOURCC, SharedImage, SharedPlane};
 #[cfg(feature = "gpu")]
 pub use gpu::{GpuDevice, GpuRenderer};
 pub use input::{

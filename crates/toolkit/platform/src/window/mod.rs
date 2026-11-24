@@ -55,7 +55,7 @@ use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::ZwlrL
 pub use self::error::{WindowError, report};
 use self::feedback::{Feedback, FeedbackData};
 pub use self::gpu::RENDERER_VARIABLE;
-use self::gpu::{Gpu, GpuTarget, start_gpu};
+use self::gpu::{Followed, Gpu, GpuTarget, start_gpu};
 pub use self::layer::{Edges, KeyboardFocus, LayerKind, LayerOptions};
 use self::layer::{anchor_of, keyboard_interactivity, layer_of};
 pub(crate) use self::shm::{ShmTarget, Target};
@@ -78,6 +78,7 @@ use crate::text_input::TextInput;
 
 pub const ACTIVATION_TOKEN_VARIABLE: &str = "XDG_ACTIVATION_TOKEN";
 const TITLE_BYTES_LIMIT: usize = 1024;
+const GPU_SETTLED: Duration = Duration::from_secs(10);
 const RELEASE_HIDDEN_AFTER: Duration = Duration::from_secs(30);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -434,6 +435,7 @@ fn for_role(role: &ShellSurface, appearance: Appearance) -> Appearance {
 
 pub struct Window {
     gpu: Gpu,
+    gpu_lost_at: Option<Instant>,
     dmabuf_feedback: Option<ZwpLinuxDmabufFeedbackV1>,
     pub(crate) cpu: CpuRenderer,
     shm_target: ShmTarget,
@@ -719,6 +721,7 @@ impl Window {
         state.events.push(WindowEvent::AppearanceChanged(current));
         Ok(Self {
             gpu,
+            gpu_lost_at: None,
             dmabuf_feedback,
             cpu: CpuRenderer::new(),
             shm_target: ShmTarget::default(),
@@ -1072,7 +1075,10 @@ impl Window {
     pub(crate) fn wants_frame(&self) -> bool {
         self.visible
             && !self.state.frame_pending
-            && (self.needs_redraw || self.resized() || self.scale() != self.drawn_scale)
+            && (self.needs_redraw
+                || self.resized()
+                || self.scale() != self.drawn_scale
+                || self.state.feedback_changed && matches!(self.gpu, Gpu::Ready(_)))
     }
 
     pub fn scale(&self) -> f64 {
@@ -1592,9 +1598,7 @@ impl Window {
         self.visible = true;
         self.hidden_at = None;
         if matches!(self.gpu, Gpu::Released) {
-            let size = self.geometry();
-            let scale = self.scale();
-            self.gpu = start_gpu(&self.state, (pixels(size.0, scale), pixels(size.1, scale)));
+            self.restart_gpu();
         }
         self.needs_redraw = true;
         Ok(())
@@ -1696,7 +1700,7 @@ impl Window {
             }
             Some(Err(error)) => {
                 tracing::warn!(%error, "drawing on the CPU after a GPU failure");
-                self.gpu = Gpu::Unavailable;
+                self.give_up_gpu();
                 self.draw_on_cpu(&scene, None)?;
                 FramePath::Cpu
             }
@@ -1721,12 +1725,34 @@ impl Window {
         let Gpu::Ready(gpu) = &mut self.gpu else {
             return;
         };
-        if !std::mem::take(&mut self.state.feedback_changed) || gpu.follow(&self.state) {
+        if !std::mem::take(&mut self.state.feedback_changed) {
             return;
         }
+        match gpu.follow(&self.state) {
+            Followed::Same => return,
+            Followed::OtherLayouts => {}
+            Followed::OtherGpu => self.restart_gpu(),
+        }
+        self.shown_scene = None;
+    }
+
+    fn restart_gpu(&mut self) {
         let size = self.geometry();
         let scale = self.scale();
         self.gpu = start_gpu(&self.state, (pixels(size.0, scale), pixels(size.1, scale)));
+    }
+
+    fn give_up_gpu(&mut self) {
+        let lost = matches!(&self.gpu, Gpu::Ready(gpu) if gpu.is_lost());
+        let now = Instant::now();
+        let settled = self
+            .gpu_lost_at
+            .is_none_or(|at| now.duration_since(at) >= GPU_SETTLED);
+        self.gpu = Gpu::Unavailable;
+        if lost && settled {
+            self.gpu_lost_at = Some(now);
+            self.restart_gpu();
+        }
     }
 
     fn poll_gpu(&mut self) {

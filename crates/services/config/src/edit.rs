@@ -643,6 +643,10 @@ fn set_display(document: &mut KdlDocument, identity: &str, display: &DisplaySett
             "variable-refresh",
             display.variable_refresh.map(|on| vec![KdlValue::Bool(on)]),
         ),
+        (
+            "deep-colour",
+            display.deep_colour.map(|on| vec![KdlValue::Bool(on)]),
+        ),
     ];
     let position = document.nodes().iter().position(|node| {
         node.name().value() == "display"

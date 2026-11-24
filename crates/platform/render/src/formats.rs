@@ -100,6 +100,13 @@ pub(crate) const RENDERED: vk::ImageUsageFlags = vk::ImageUsageFlags::from_raw(
         | vk::ImageUsageFlags::TRANSFER_DST.as_raw(),
 );
 
+pub(crate) fn is_deep(code: Fourcc) -> bool {
+    texel(code).is_some_and(|texel| match texel.kind {
+        Kind::Colour { .. } => crate::is_deep_target(texel.format),
+        Kind::Video { luma, .. } => luma == vk::Format::R16_UNORM,
+    })
+}
+
 pub(crate) fn texel(code: Fourcc) -> Option<Texel> {
     TEXELS.into_iter().find(|texel| texel.code == code)
 }

@@ -10,7 +10,7 @@ use smithay::backend::allocator::dumb::DumbAllocator;
 use smithay::backend::allocator::format::FormatSet;
 use smithay::backend::allocator::gbm::{GbmAllocator, GbmBufferFlags, GbmDevice};
 use smithay::backend::drm::compositor::{
-    DrmCompositor, FrameError, FrameFlags, PrimaryPlaneElement, RenderFrameError,
+    DrmCompositor, FrameError, FrameFlags, PrimaryPlaneElement, PrimarySwapchainElement, RenderFrameError,
 };
 use smithay::backend::drm::{
     DrmDevice, DrmDeviceFd, DrmDeviceNotifier, DrmError, DrmEventMetadata, DrmEventTime, DrmNode, NodeType,
@@ -26,7 +26,7 @@ use smithay::reexports::calloop::generic::Generic;
 use smithay::reexports::calloop::{EventLoop, Interest, Mode as Trigger, PostAction};
 use smithay::reexports::drm::control::atomic::AtomicModeReq;
 use smithay::reexports::drm::control::{
-    AtomicCommitFlags, Device as ControlDevice, Mode, ModeTypeFlags, connector, crtc, framebuffer, property,
+    AtomicCommitFlags, Device as ControlDevice, Mode, ResourceHandle, ModeFlags, ModeTypeFlags, connector, crtc, framebuffer, property,
 };
 use smithay::reexports::input::Libinput;
 use smithay::reexports::rustix::fs::OFlags;
@@ -39,9 +39,10 @@ use bande_render::{RenderError, VulkanRenderer};
 use crate::boot_screen::boot_screen_shown;
 use crate::clock::{FrameOutput, Submission, Vblank};
 use crate::element::drawing_everything;
+use crate::output_format::{self, Buffers, Failure, LinkDepth, OutputFormat, Shape, Sink, Step};
 use crate::render::{Snapshot, background};
 use crate::reveal::ShownFrame;
-use crate::scanout::{ScanoutAllocator, ScanoutExporter};
+use crate::scanout::{ScanoutAllocator, ScanoutBuffer, ScanoutExporter, ScanoutFramebuffer};
 use crate::screen::{OutputConfig, OutputMode};
 use crate::state::{Compositor, REFRESH, ScanoutDevice};
 use bande_colour::Profile;
@@ -49,19 +50,22 @@ use bande_render::OutputColour;
 
 pub type DrmBackendError = Box<dyn Error>;
 
+type OnPlane = PrimarySwapchainElement<ScanoutBuffer, ScanoutFramebuffer>;
 type OutputCompositor = DrmCompositor<ScanoutAllocator, ScanoutExporter, (), DrmDeviceFd>;
 
 const DRM_IOCTL_MODE_CLOSEFB: libc::c_ulong = 0xC008_64D0;
 const DRM_IOCTL_MODE_MAP_DUMB: libc::c_ulong = 0xC010_64B3;
 const CURSOR_SIZE: (u32, u32) = (64, 64);
-const COLOR_FORMATS: [Fourcc; 2] = [Fourcc::Xrgb8888, Fourcc::Argb8888];
 
 struct Head {
     connector: connector::Handle,
     config: OutputConfig,
     modes: Vec<Mode>,
     compositor: OutputCompositor,
-    buffers: Buffers,
+    shape: Shape,
+    formats: OutputFormat<Mode>,
+    link: Option<LinkDepth>,
+    on_screen: Option<OnPlane>,
     variable_refresh: bool,
     scanned_out: bool,
     dark: bool,
@@ -75,7 +79,7 @@ struct Head {
     kept_mode: Option<Mode>,
     display_profile: Option<Profile>,
     output_colour: Option<(Option<String>, Option<OutputColour>)>,
-    converting: bool,
+    shown_colour: Option<OutputColour>,
 }
 
 impl Head {
@@ -86,33 +90,6 @@ impl Head {
             self.flip_pending = false;
         }
         Ok(())
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Buffers {
-    Tiled,
-    Linear,
-    Dumb,
-}
-
-impl Buffers {
-    fn next(self) -> Option<Self> {
-        match self {
-            Self::Tiled => Some(Self::Linear),
-            Self::Linear => Some(Self::Dumb),
-            Self::Dumb => None,
-        }
-    }
-}
-
-impl std::fmt::Display for Buffers {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(match self {
-            Self::Tiled => "tiled GBM buffers",
-            Self::Linear => "linear GBM buffers",
-            Self::Dumb => "dumb buffers",
-        })
     }
 }
 
@@ -159,9 +136,8 @@ pub struct HeadChanges {
     pub look_again_in: Option<Duration>,
 }
 
-const LINK_STATUS: &[u8] = b"link-status";
 const MAX_BPC: &[u8] = b"max bpc";
-const BITS_PER_CHANNEL: u64 = 8;
+const LINK_STATUS: &[u8] = b"link-status";
 const LINK_GOOD: u64 = 0;
 const LINK_BAD: u64 = 1;
 const DISPLAY_GRACE: Duration = Duration::from_secs(3);
@@ -198,25 +174,69 @@ fn link_status(device: &DrmDevice, handle: connector::Handle) -> Option<(propert
     connector_property(device, handle, LINK_STATUS).map(|(property, value, _)| (property, value))
 }
 
-fn limit_bits_per_channel(device: &DrmDevice, handle: connector::Handle, name: &str) {
-    let Some((property, value, info)) = connector_property(device, handle, MAX_BPC) else {
-        return;
+fn link_depth(device: &DrmDevice, handle: connector::Handle) -> Option<LinkDepth> {
+    let (_, current, info) = connector_property(device, handle, MAX_BPC)?;
+    let property::ValueType::UnsignedRange(lowest, highest) = info.value_type() else {
+        return None;
     };
-    let property::ValueType::UnsignedRange(min, max) = info.value_type() else {
-        return;
-    };
-    let wanted = BITS_PER_CHANNEL.clamp(min, max);
-    if value == wanted {
-        return;
-    }
-    let mut request = AtomicModeReq::new();
-    request.add_property(handle, property, property::Value::UnsignedRange(wanted));
-    match device.atomic_commit(AtomicCommitFlags::ALLOW_MODESET, request) {
-        Ok(()) => tracing::info!("{name} sends {wanted} bits per channel, as its frames hold"),
-        Err(error) => {
-            tracing::warn!("{name} keeps sending up to {value} bits per channel: {error}")
+    Some(LinkDepth {
+        found: current,
+        current,
+        range: (lowest, highest),
+    })
+}
+
+fn property_of(
+    device: &DrmDevice,
+    handle: impl ResourceHandle,
+    name: &[u8],
+) -> io::Result<property::Handle> {
+    let properties = device.get_properties(handle)?;
+    for (property, _) in properties.iter() {
+        if device.get_property(*property)?.name().to_bytes() == name {
+            return Ok(*property);
         }
     }
+    Err(io::Error::other(format!(
+        "no property {}",
+        String::from_utf8_lossy(name)
+    )))
+}
+
+fn set_link_depth(device: &DrmDevice, head: &Head, value: u64) -> io::Result<()> {
+    if !device.is_atomic() {
+        return Err(io::Error::other("the display has no atomic modesetting"));
+    }
+    let (connector, crtc) = (head.connector, head.compositor.crtc());
+    let max_bpc = property_of(device, connector, MAX_BPC)?;
+    let value = property::Value::UnsignedRange(value);
+    let commit = |mode: Option<property::Value<'static>>| {
+        let request = || -> io::Result<AtomicModeReq> {
+            let mut request = AtomicModeReq::new();
+            request.add_property(connector, max_bpc, value);
+            if let Some(mode) = mode {
+                request.add_property(crtc, property_of(device, crtc, b"MODE_ID")?, mode);
+            }
+            Ok(request)
+        };
+        let flags = AtomicCommitFlags::ALLOW_MODESET;
+        device.atomic_commit(flags | AtomicCommitFlags::TEST_ONLY, request()?)?;
+        device.atomic_commit(flags, request()?)
+    };
+    let (pending, current) = (
+        head.compositor.pending_mode(),
+        head.compositor.current_mode(),
+    );
+    if pending == current || pending.size() != current.size() {
+        return commit(None);
+    }
+    let mode = device.create_property_blob(&pending)?;
+    let together = commit(Some(mode));
+    device.destroy_property_blob(mode.into())?;
+    together.or_else(|error| {
+        tracing::debug!("setting the link and the mode apart: {error}");
+        commit(None)
+    })
 }
 
 fn relink(device: &DrmDevice, head: &mut Head) {
@@ -244,7 +264,13 @@ pub fn refresh_of(mode: &Mode) -> Duration {
     if pixels_per_frame == 0 || kilohertz == 0 {
         return REFRESH;
     }
-    Duration::from_nanos(pixels_per_frame * 1_000_000 / kilohertz)
+    let frame = pixels_per_frame * 1_000_000 / kilohertz;
+    let frame = frame * u64::from(mode.vscan()).max(1);
+    Duration::from_nanos(match mode.flags() {
+        flags if flags.contains(ModeFlags::INTERLACE) => frame / 2,
+        flags if flags.contains(ModeFlags::DBLSCAN) => frame * 2,
+        _ => frame,
+    })
 }
 
 fn output_mode(mode: &Mode) -> OutputMode {
@@ -261,6 +287,14 @@ fn connector_name(info: &connector::Info) -> String {
 
 pub fn sorted_modes(modes: &[Mode]) -> Vec<Mode> {
     let mut modes = modes.to_vec();
+    let whole: Vec<(u16, u16)> = modes
+        .iter()
+        .filter(|mode| !mode.flags().contains(ModeFlags::INTERLACE))
+        .map(Mode::size)
+        .collect();
+    modes.retain(|mode| {
+        !mode.flags().contains(ModeFlags::INTERLACE) || !whole.contains(&mode.size())
+    });
     let preferred = modes
         .iter()
         .find(|mode| mode.mode_type().contains(ModeTypeFlags::PREFERRED))
@@ -592,6 +626,27 @@ impl DrmBackend {
             .or(free.first().copied()))
     }
 
+    fn allocator(&self, buffers: Buffers) -> ScanoutAllocator {
+        match (&self.gbm, buffers) {
+            (Some(gbm), Buffers::Tiled | Buffers::Linear) => {
+                ScanoutAllocator::Rendered(GbmAllocator::new(
+                    gbm.clone(),
+                    GbmBufferFlags::RENDERING | GbmBufferFlags::SCANOUT,
+                ))
+            }
+            _ => ScanoutAllocator::Copied(DumbAllocator::new(self.device.device_fd().clone())),
+        }
+    }
+
+    fn frame_formats(&self, buffers: Buffers) -> FormatSet {
+        self.renderer
+            .render_formats()
+            .iter()
+            .filter(|format| buffers != Buffers::Linear || format.modifier == Modifier::Linear)
+            .copied()
+            .collect()
+    }
+
     fn output_compositor(
         &mut self,
         crtc: crtc::Handle,
@@ -600,23 +655,8 @@ impl DrmBackend {
         buffers: Buffers,
     ) -> Result<OutputCompositor, DrmBackendError> {
         let surface = self.device.create_surface(crtc, mode, &[connector])?;
-        let allocator = match (&self.gbm, buffers) {
-            (Some(gbm), Buffers::Tiled | Buffers::Linear) => {
-                ScanoutAllocator::Rendered(GbmAllocator::new(
-                    gbm.clone(),
-                    GbmBufferFlags::RENDERING | GbmBufferFlags::SCANOUT,
-                ))
-            }
-            _ => ScanoutAllocator::Copied(DumbAllocator::new(self.device.device_fd().clone())),
-        };
-        let mut render_formats = self.renderer.render_formats();
-        if buffers == Buffers::Linear {
-            render_formats = render_formats
-                .iter()
-                .filter(|format| format.modifier == Modifier::Linear)
-                .copied()
-                .collect();
-        }
+        let allocator = self.allocator(buffers);
+        let render_formats = self.frame_formats(buffers);
         let (width, height) = mode.size();
         Ok(DrmCompositor::new(
             OutputModeSource::Static {
@@ -628,7 +668,7 @@ impl DrmBackend {
             None,
             allocator,
             ScanoutExporter::new(self.gbm.clone(), self.node),
-            COLOR_FORMATS,
+            output_format::plain_formats(),
             render_formats,
             Size::from(CURSOR_SIZE),
             self.gbm.clone(),
@@ -656,7 +696,7 @@ impl DrmBackend {
         loop {
             match (
                 self.output_compositor(crtc, mode, connector, buffers),
-                buffers.next(),
+                output_format::fallback(buffers),
             ) {
                 (Ok(compositor), _) => return Ok((compositor, buffers)),
                 (Err(error), Some(next)) => {
@@ -699,12 +739,25 @@ impl DrmBackend {
         ) else {
             return Ok(None);
         };
-        limit_bits_per_channel(&self.device, info.handle(), &connector_name(info));
+        let edid = edid_of(&self.device, info.handle());
+        let over_hdmi = matches!(
+            info.interface(),
+            connector::Interface::HDMIA | connector::Interface::HDMIB
+        );
+        let sink = match self.renderer.device_info().software {
+            true => Sink::default(),
+            false => Sink::new(edid.as_ref(), over_hdmi),
+        };
         let (compositor, buffers) = self.buffered_compositor(
             (crtc, mode, info.handle()),
             self.first_buffers(),
             &connector_name(info),
         )?;
+        let shape = Shape {
+            buffers,
+            format: compositor.format(),
+        };
+        let formats = OutputFormat::new(sink, buffers);
         let scanout_formats = compositor.surface().plane_info().formats.clone();
         let variable_refresh = matches!(
             compositor.vrr_supported(info.handle()),
@@ -718,7 +771,10 @@ impl DrmBackend {
             config: head_config(&self.device, info, &modes),
             modes,
             compositor,
-            buffers,
+            shape,
+            formats,
+            link: link_depth(&self.device, info.handle()),
+            on_screen: None,
             variable_refresh,
             scanned_out: false,
             dark: false,
@@ -730,11 +786,9 @@ impl DrmBackend {
             shows_content: false,
             refused: false,
             kept_mode,
-            display_profile: edid_of(&self.device, info.handle())
-                .as_ref()
-                .and_then(crate::colour::edid_profile),
+            display_profile: edid.as_ref().and_then(crate::colour::edid_profile),
             output_colour: None,
-            converting: false,
+            shown_colour: None,
         }))
     }
 
@@ -924,6 +978,9 @@ impl DrmBackend {
         };
         head.flip_pending = false;
         head.compositor.frame_submitted()?;
+        head.on_screen = None;
+        head.formats
+            .flipped(head.compositor.current_mode(), head.shape);
         if let Some(kelvin) = self.kelvin {
             tint(&self.device, head, kelvin);
         }
@@ -982,6 +1039,12 @@ impl DrmBackend {
             head.tone = None;
             head.dark = false;
             head.flip_pending = false;
+            head.formats.forget_refusals();
+            if let (Some(link), Some(read)) =
+                (&mut head.link, link_depth(&self.device, head.connector))
+            {
+                link.current = read.current;
+            }
         }
         if let Some(libinput) = self.libinput.as_mut() {
             libinput
@@ -1378,6 +1441,43 @@ fn prove_with_gbm(renderer: &mut VulkanRenderer, gbm: Option<&GbmDevice<DrmDevic
     });
 }
 
+fn kernel_refused(error: &DrmError) -> bool {
+    match error {
+        DrmError::TestFailed(_) => true,
+        DrmError::Access(access) => matches!(
+            access.source.kind(),
+            io::ErrorKind::InvalidInput | io::ErrorKind::StorageFull
+        ),
+        _ => false,
+    }
+}
+
+fn refused<A, B, F>(error: &FrameError<A, B, F>) -> bool
+where
+    A: Error + Send + Sync + 'static,
+    B: Error + Send + Sync + 'static,
+    F: Error + Send + Sync + 'static,
+{
+    matches!(error, FrameError::DrmError(error) if kernel_refused(error))
+}
+
+fn shape_refused<B, F>(error: &FrameError<io::Error, B, F>) -> bool
+where
+    B: Error + Send + Sync + 'static,
+    F: Error + Send + Sync + 'static,
+{
+    match error {
+        FrameError::DrmError(error) => kernel_refused(error),
+        FrameError::Allocator(error) => error.kind() != io::ErrorKind::OutOfMemory,
+        FrameError::NoSupportedPlaneFormat
+        | FrameError::NoSupportedRendererFormat
+        | FrameError::NoFramebuffer
+        | FrameError::AsDmabufError(_)
+        | FrameError::FramebufferExport(_) => true,
+        _ => false,
+    }
+}
+
 fn buffers_at_fault<A, B, F>(error: &RenderFrameError<A, B, F, RenderError>) -> bool
 where
     A: Error + Send + Sync + 'static,
@@ -1400,33 +1500,110 @@ where
 }
 
 impl DrmBackend {
-    fn fall_back(&mut self, index: usize, next: Buffers) -> Result<(), DrmBackendError> {
-        let head = self.heads.remove(index);
-        let (crtc, mode) = (head.compositor.crtc(), head.compositor.pending_mode());
-        let restore = head.buffers;
-        drop(head.compositor);
-        let target = (crtc, mode, head.connector);
-        let (compositor, buffers) = match self.buffered_compositor(target, next, &head.config.name)
+    fn try_shape(&mut self, index: usize, shape: Shape) -> Result<bool, DrmBackendError> {
+        if self.heads[index].shape == shape {
+            return Ok(true);
+        }
+        if shape.is_deep()
+            && let Err(error) = self.renderer.prepare(shape.format)
         {
-            Ok(found) => found,
-            Err(error) => {
-                tracing::warn!("{} cannot fall back: {error}", head.config.name);
-                (
-                    self.output_compositor(crtc, mode, head.connector, restore)?,
-                    restore,
-                )
+            return match error.is_transient() {
+                true => Err(error.into()),
+                false => Ok(false),
+            };
+        }
+        let allocator = self.allocator(shape.buffers);
+        let modifiers: Vec<Modifier> = self
+            .frame_formats(shape.buffers)
+            .iter()
+            .filter(|format| format.code == shape.format)
+            .map(|format| format.modifier)
+            .collect();
+        let head = &mut self.heads[index];
+        match head
+            .compositor
+            .set_format(allocator, shape.format, modifiers)
+        {
+            Ok(()) => {
+                head.shape = shape;
+                Ok(true)
             }
+            Err(error) if shape_refused(&error) => {
+                tracing::warn!("{} cannot show {shape}: {error}", head.config.name);
+                Ok(false)
+            }
+            Err(error) => Err(error.into()),
+        }
+    }
+
+    fn try_link(&mut self, index: usize, shape: Shape, deep: bool) -> io::Result<()> {
+        let head = &mut self.heads[index];
+        let Some(link) = head.link else {
+            return Ok(());
         };
-        self.heads.insert(
-            index,
-            Head {
-                compositor,
-                buffers,
-                flip_pending: false,
-                tone: None,
-                ..head
-            },
+        let Some(value) = link.change(shape.bits(), deep || shape.is_deep()) else {
+            return Ok(());
+        };
+        set_link_depth(&self.device, head, value)?;
+        tracing::info!(
+            "{} may get up to {value} bits per channel",
+            head.config.name
         );
+        head.link = Some(LinkDepth {
+            current: value,
+            ..link
+        });
+        Ok(())
+    }
+
+    fn after_refusal(
+        &mut self,
+        index: usize,
+        compositor: &mut Compositor,
+        error: &dyn Error,
+    ) -> Submission {
+        let head = &mut self.heads[index];
+        let mode = head.compositor.pending_mode();
+        let step = head
+            .formats
+            .after(Failure::Refused, (mode, head.shape), false);
+        tracing::warn!("{} refuses {}: {error}", head.config.name, head.shape);
+        if step == Step::CommitWhole {
+            head.compositor.reset_buffers();
+        }
+        step.submission().unwrap_or_else(|| {
+            refuse_mode(head, mode, compositor);
+            after_refusal(head)
+        })
+    }
+
+    fn choose_shape(&mut self, index: usize, deep: bool) -> Result<(), DrmBackendError> {
+        let mode = self.heads[index].compositor.pending_mode();
+        let name = self.heads[index].config.name.clone();
+        self.heads[index].formats.ask(deep);
+        for shape in self.heads[index]
+            .formats
+            .candidates((mode, mode.clock()), deep)
+        {
+            if !self.try_shape(index, shape)? {
+                self.heads[index].formats.refuse(mode, shape);
+                continue;
+            }
+            if let Err(error) = self.try_link(index, shape, deep) {
+                tracing::warn!("{name} keeps its bits per channel: {error}");
+                if shape.is_deep() {
+                    self.heads[index].formats.refuse_depth(mode, shape);
+                    continue;
+                }
+            }
+            tracing::info!("{name} shows {shape}");
+            self.heads[index].formats.chosen(mode, deep);
+            return Ok(());
+        }
+        let head = &mut self.heads[index];
+        tracing::warn!("{name} stays with {}", head.shape);
+        head.formats.keep(mode, deep, head.shape);
+        head.formats.chosen(mode, deep);
         Ok(())
     }
 
@@ -1487,7 +1664,7 @@ impl DrmBackend {
         head.dark = false;
         if head.relink_wanted {
             if head.flip_pending {
-                return Ok(Submission::AwaitingFlip);
+                return Ok(Submission::Retry);
             }
             relink(&self.device, head);
         }
@@ -1502,6 +1679,17 @@ impl DrmBackend {
             refuse_mode(head, mode, compositor);
             return Ok(after_refusal(head));
         }
+        let deep = compositor.deep_colour(output);
+        if head
+            .formats
+            .needs_choice(head.compositor.pending_mode(), deep)
+        {
+            if head.flip_pending {
+                return Ok(Submission::Retry);
+            }
+            self.choose_shape(index, deep)?;
+        }
+        let head = &mut self.heads[index];
         head.compositor
             .set_output_mode_source(OutputModeSource::Static {
                 size: settings.mode.size,
@@ -1536,33 +1724,52 @@ impl DrmBackend {
             .output_colour
             .as_ref()
             .and_then(|(_, conversion)| conversion.clone());
-        if conversion.is_some() != head.converting {
-            head.converting = conversion.is_some();
+        if conversion != head.shown_colour {
+            head.shown_colour.clone_from(&conversion);
             head.compositor.reset_buffers();
         }
-        self.renderer.set_output_colour(conversion.clone());
+        let mode = head.compositor.pending_mode();
+        let whole = head.formats.commits_whole(mode, head.shape);
         let flags = match conversion {
             Some(_) => FrameFlags::empty(),
+            None if whole => FrameFlags::empty(),
             None => FrameFlags::DEFAULT | FrameFlags::ALLOW_PRIMARY_PLANE_SCANOUT_ANY,
         };
         let elements = compositor.render_elements_on(&mut self.renderer, output);
         self.renderer.measure_frames_of(Some(output));
         let (rendered, drew_everything) = drawing_everything(|| {
-            head.compositor
-                .render_frame(&mut self.renderer, &elements, background(), flags)
+            self.renderer
+                .converting(conversion.as_ref(), |renderer| {
+                    head.compositor
+                        .render_frame(renderer, &elements, background(), flags)
+                })
+                .unwrap_or_else(|error| {
+                    Err(RenderFrameError::RenderFrame(DamageError::Rendering(error)))
+                })
         });
         self.renderer.measure_frames_of(None);
         let frame = match rendered {
             Ok(frame) => frame,
-            Err(error)
-                if !self.renderer.is_lost()
-                    && !self.renderer.out_of_memory()
-                    && buffers_at_fault(&error)
-                    && let Some(next) = head.buffers.next() =>
-            {
-                tracing::warn!("{output} uses {next} from now on: {error}");
-                self.fall_back(index, next)?;
-                return Ok(Submission::Unchanged);
+            Err(error) if !self.renderer.is_lost() && !self.renderer.out_of_memory() => {
+                let failure = match buffers_at_fault(&error) {
+                    true => Failure::Buffers,
+                    false => Failure::Other,
+                };
+                let mode = head.compositor.pending_mode();
+                let step = head
+                    .formats
+                    .after(failure, (mode, head.shape), conversion.is_some());
+                match step {
+                    Step::ShowUnconverted => {
+                        tracing::warn!("{output} shows colours unconverted: {error}");
+                        if let Some((_, conversion)) = &mut head.output_colour {
+                            *conversion = None;
+                        }
+                    }
+                    Step::ChangeShape => tracing::warn!("{output} leaves {}: {error}", head.shape),
+                    Step::CommitWhole | Step::LeaveMode | Step::Fail => {}
+                }
+                return step.submission().ok_or_else(|| error.into());
             }
             Err(error) => return Err(error.into()),
         };
@@ -1572,6 +1779,10 @@ impl DrmBackend {
         }
         head.scanned_out = matches!(frame.primary_element, PrimaryPlaneElement::Element(_));
         let empty = frame.is_empty;
+        let on_screen = match frame.primary_element {
+            PrimaryPlaneElement::Swapchain(element) => Some(element),
+            PrimaryPlaneElement::Element(_) => None,
+        };
         let submitted = self.renderer.submitted();
         let fence = self.renderer.fence_of(submitted)?;
         compositor.keep_until_drawn(elements, (submitted, self.renderer.completed()), fence);
@@ -1580,16 +1791,26 @@ impl DrmBackend {
             return Ok(Submission::Unchanged);
         }
         head.shows_content = compositor.awaited_shown(&self.renderer, drew_everything);
+        if whole {
+            match head.compositor.commit_frame() {
+                Ok(()) => {
+                    head.on_screen = on_screen;
+                    head.formats.committed_whole(mode, head.shape);
+                    head.compositor.reset_state()?;
+                    return Ok(Submission::Retry);
+                }
+                Err(error) if refused(&error) => {
+                    return Ok(self.after_refusal(index, compositor, &error));
+                }
+                Err(error) => return Err(error.into()),
+            }
+        }
         match head.compositor.queue_frame(()) {
             Ok(()) => {
                 head.flip_pending = true;
                 Ok(Submission::AwaitingFlip)
             }
-            Err(FrameError::DrmError(DrmError::TestFailed(_))) => {
-                let refused = head.compositor.pending_mode();
-                refuse_mode(head, refused, compositor);
-                Ok(after_refusal(head))
-            }
+            Err(error) if refused(&error) => Ok(self.after_refusal(index, compositor, &error)),
             Err(error) => Err(error.into()),
         }
     }
@@ -1601,21 +1822,21 @@ mod tests {
 
     use super::*;
 
-    type Failure = RenderFrameError<io::Error, io::Error, io::Error, RenderError>;
+    type FrameFailure = RenderFrameError<io::Error, io::Error, io::Error, RenderError>;
 
     #[test]
     fn only_errors_of_the_buffers_change_the_buffers_of_a_display() {
-        let rendering = |error| Failure::RenderFrame(DamageError::Rendering(error));
+        let rendering = |error| FrameFailure::RenderFrame(DamageError::Rendering(error));
         for kept in [
-            Failure::PrepareFrame(FrameError::DrmError(DrmError::DeviceInactive)),
-            Failure::PrepareFrame(FrameError::NoFreeSlotsError),
+            FrameFailure::PrepareFrame(FrameError::DrmError(DrmError::DeviceInactive)),
+            FrameFailure::PrepareFrame(FrameError::NoFreeSlotsError),
             rendering(RenderError::Interrupted),
             rendering(RenderError::Io(io::Error::other("no size"))),
         ] {
             assert!(!buffers_at_fault(&kept), "{kept}");
         }
         for changed in [
-            Failure::PrepareFrame(FrameError::FramebufferExport(io::Error::other("refused"))),
+            FrameFailure::PrepareFrame(FrameError::FramebufferExport(io::Error::other("refused"))),
             rendering(RenderError::UnsupportedFormat),
         ] {
             assert!(buffers_at_fault(&changed), "{changed}");

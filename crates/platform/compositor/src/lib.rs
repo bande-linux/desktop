@@ -49,6 +49,7 @@ mod material;
 mod menu_button;
 mod motion;
 mod night;
+mod output_format;
 mod output_power;
 mod overview;
 mod pacing;

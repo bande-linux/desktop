@@ -655,8 +655,9 @@ the login window keeps the count per name across switching people, and `bande-lo
 own for each account, under the account's own name (`bande_pam::Backoff`), which also counts an
 answer whose conversation was cancelled, cut off or crashed and refuses answers until the wait is
 over, so a login window that does not wait guesses no faster. A typed name is logged only when it
-is an account's. While a session is starting,
-the field holds text or a power confirmation is open, Up and Down do not switch people. At login
+is an account's. While a session is starting
+the login window takes no input; while the field holds text or a power confirmation is open, Up
+and Down do not switch people. At login
 `bande-login` changes an expired password with `pam_chauthtok` through the same conversation (the
 `password` stack of `bande-greeter`). The lock screen cannot change one, as it runs as the user
 with no `password` stack: when `account` answers that the password has expired it unlocks the

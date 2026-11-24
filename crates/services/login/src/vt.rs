@@ -223,12 +223,12 @@ impl Terminal {
     }
 
     /// Gives the terminal back to the kernel's console whoever left it in graphics mode or with
-    /// its keyboard off, resets it and brings it to the front, so a login prompt there can be
-    /// seen and typed into.
+    /// its keyboard off, resets it and its colours and brings it to the front, so a login prompt
+    /// there can be seen and typed into.
     pub fn give_to_console(&self) -> io::Result<()> {
         self.restore()?;
         self.ioctl(KDSKBMODE, K_UNICODE)?;
-        (&self.file).write_all(b"\x1bc")?;
+        (&self.file).write_all(b"\x1b]R\x1bc")?;
         switch_to(self.number)
     }
 

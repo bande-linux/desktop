@@ -1346,6 +1346,7 @@ impl LockScreen {
         if self.model.borrow().asking.is_some() {
             self.ask_power(None);
         }
+        self.focus(self.field);
         self.clear_field();
         true
     }
@@ -1510,21 +1511,25 @@ mod tests {
     use super::*;
     use bande_toolkit::ui::{Modifiers, Pointer};
 
-    #[test]
-    fn a_click_on_the_input_source_keeps_typing_in_the_password_field() {
+    fn screen(purpose: Purpose) -> LockScreen {
         let user = User {
             uid: 1000,
             login: "ada".to_owned(),
             full_name: "Ada Lovelace".to_owned(),
         };
-        let mut screen = LockScreen::new(
+        LockScreen::new(
             &user,
             DateFormats::for_locale(&bande_datetime::posix_locale("en_GB.UTF-8")),
             &"2026-10-28T09:41:00[UTC]".parse().unwrap_or_default(),
             Appearance::default(),
             TextSystem::new(),
-            Purpose::Lock,
-        );
+            purpose,
+        )
+    }
+
+    #[test]
+    fn a_click_on_the_input_source_keeps_typing_in_the_password_field() {
+        let mut screen = screen(Purpose::Lock);
         screen.set_input_source(Some("Svenska".to_owned()));
         screen.wake(Instant::now());
         screen.scene(480, 360);
@@ -1551,19 +1556,7 @@ mod tests {
 
     #[test]
     fn a_power_question_no_one_answered_is_gone_after_the_screen_rested() {
-        let user = User {
-            uid: 1000,
-            login: "ada".to_owned(),
-            full_name: "Ada Lovelace".to_owned(),
-        };
-        let mut screen = LockScreen::new(
-            &user,
-            DateFormats::for_locale(&bande_datetime::posix_locale("en_GB.UTF-8")),
-            &"2026-10-28T09:41:00[UTC]".parse().unwrap_or_default(),
-            Appearance::default(),
-            TextSystem::new(),
-            Purpose::Login,
-        );
+        let mut screen = screen(Purpose::Login);
         let enter = Event::Key {
             key: Key::Enter,
             modifiers: Modifiers::default(),
@@ -1583,5 +1576,31 @@ mod tests {
         );
         screen.handle(&enter);
         assert_eq!(screen.take_power(), None);
+    }
+
+    #[test]
+    fn what_wakes_a_rested_screen_is_typed_into_the_field_wherever_the_focus_was() {
+        let press = |key| Event::Key {
+            key,
+            modifiers: Modifiers::default(),
+        };
+        let mut screen = screen(Purpose::Login);
+        let start = Instant::now();
+        screen.offer_power(&[PowerAction::ShutDown]);
+        screen.wake(start);
+        screen.scene(1280, 800);
+        screen.handle(&press(Key::Tab));
+        assert_ne!(screen.ui.focus(), Some(screen.field));
+        let rested = start + RESTS_AFTER;
+        assert!(screen.tick(rested) && screen.is_resting());
+        assert!(screen.wake_on(&press(Key::Character('a')), rested));
+        for key in [Key::Character('a'), Key::Space, Key::Enter] {
+            screen.handle(&press(key));
+        }
+        assert_eq!(screen.take_power(), None);
+        assert_eq!(
+            screen.take_answer().as_deref().map(String::as_str),
+            Some("a ")
+        );
     }
 }

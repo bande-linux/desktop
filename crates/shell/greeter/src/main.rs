@@ -324,6 +324,9 @@ impl Greeter {
             backdrop.loading = None;
             backdrop.size = None;
         }
+        for window in self.windows.iter_mut().skip(1) {
+            window.request_redraw();
+        }
     }
 
     fn is_starting(&self) -> bool {
@@ -331,7 +334,7 @@ impl Greeter {
     }
 
     fn switch_to(&mut self, index: usize) {
-        if self.is_starting() || index > self.users.len() {
+        if index > self.users.len() {
             return;
         }
         self.shown = index;
@@ -605,7 +608,7 @@ impl Greeter {
             self.switch_to(index.unwrap_or(self.users.len()));
             return;
         }
-        if self.screen.take_cancel() && !self.is_starting() {
+        if self.screen.take_cancel() {
             self.pending = None;
             if self.shown >= self.users.len() && self.other.is_some() {
                 self.other = None;
@@ -750,6 +753,10 @@ impl Greeter {
     fn main_event(&mut self, event: WindowEvent) {
         let now = Instant::now();
         match &event {
+            WindowEvent::Input(_) | WindowEvent::Accessibility(_) if self.is_starting() => {
+                self.noticed(now);
+                return;
+            }
             WindowEvent::Input(input) => {
                 self.noticed(now);
                 if !self.screen.wake_on(input, now) && is_deliberate(input) {
@@ -767,7 +774,7 @@ impl Greeter {
             WindowEvent::Input(Event::Key {
                 key: key @ (Key::Up | Key::Down),
                 ..
-            }) if !self.is_starting() && self.screen.can_switch_person() => {
+            }) if self.screen.can_switch_person() => {
                 self.step_user(key == Key::Down);
                 true
             }

@@ -63,11 +63,16 @@ pub fn boot_screen_shown() -> bool {
     Path::new(PLYMOUTH_PID).exists()
 }
 
+/// Whether Plymouth still has the display and draws on it.
+pub fn boot_screen_has_display() -> bool {
+    boot_screen_shown() && !Path::new(HANDED_OVER).exists()
+}
+
 /// Takes the display over from Plymouth while the boot screen still shows: keeps the kernel's
 /// console from drawing, then has the root `bande-greeter-handover.path` run `plymouth
 /// deactivate`, waiting at most a few seconds for it.
 pub fn take_display_from_boot_screen() {
-    if !boot_screen_shown() || Path::new(HANDED_OVER).exists() {
+    if !boot_screen_has_display() {
         return;
     }
     if let Err(error) = hide_console_text() {

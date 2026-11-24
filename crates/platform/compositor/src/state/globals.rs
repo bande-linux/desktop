@@ -61,7 +61,7 @@ pub(crate) struct Globals {
     pub(crate) primary_selection_state: PrimarySelectionState,
     pub(crate) data_control_state: DataControlState,
     pub(crate) dmabuf_state: DmabufState,
-    _dmabuf_global: DmabufGlobal,
+    pub(crate) dmabuf_global: DmabufGlobal,
     pub(crate) dmabuf_planes: HashMap<DmabufFormat, usize>,
     pub(crate) compositor_state: CompositorState,
     pub(crate) xdg_shell_state: XdgShellState,
@@ -134,7 +134,7 @@ impl Globals {
             primary_selection_state,
             data_control_state,
             dmabuf_state,
-            _dmabuf_global: dmabuf_global,
+            dmabuf_global,
             dmabuf_planes,
             compositor_state: CompositorState::new::<State>(handle),
             xdg_shell_state: XdgShellState::new_with_capabilities::<State>(

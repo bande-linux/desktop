@@ -263,6 +263,11 @@ impl Compositor {
         matches!(self.state.reveal, Reveal::Holding { .. })
     }
 
+    /// Whether everything the held frames wait for can be drawn.
+    pub fn awaited_drawable(&self) -> bool {
+        matches!(self.state.reveal, Reveal::Holding { drawable: true, .. })
+    }
+
     pub fn reveal_wake(&mut self, now: Duration) -> Option<Duration> {
         let Reveal::Holding {
             since,

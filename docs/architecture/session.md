@@ -746,8 +746,14 @@ Show a boot screen turns off and on. It keeps playing until the login window is 
 hands over without a blank frame or console text. `bande-greeter.service` starts after
 `plymouth-start.service` and conflicts with `plymouth-quit.service`, so the end of boot does not
 quit it. The login window runs on VT 1, Plymouth's terminal, so nothing switches VT, and
-`bande-login` leaves the mode of a terminal already on screen alone. While Plymouth runs (`/run/plymouth/pid`), the login window's compositor sets its
-terminal to graphics mode, so the kernel's console cannot draw once Plymouth lets go, and asks
+`bande-login` leaves the mode of a terminal already on screen alone. While Plymouth runs
+(`/run/plymouth/pid`) the login window is drawn behind it, so the indicator keeps moving through
+the start of the compositor and the login window: the compositor opens the card without becoming
+its master, only to read which displays there are, their modes and what is on them, closes it,
+starts Vulkan on the same device, starts `bande-greeter` and imports its first buffer
+(`BehindBootScreen`). When the login window ends, fails, or draws nothing within 10 s, or the
+card cannot be read, the compositor goes on as without this and takes the display. Then it sets
+its terminal to graphics mode, so the kernel's console cannot draw once Plymouth lets go, and asks
 for the display: only root may talk to Plymouth, so it creates `handover` in
 `/run/bande-greeter` (a `_bande-greeter` folder from `debian/bande-greeter.tmpfiles`) and the root
 `bande-greeter-handover.path` runs `plymouth deactivate`, which stops Plymouth drawing and gives

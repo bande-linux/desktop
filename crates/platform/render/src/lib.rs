@@ -2154,10 +2154,10 @@ impl VulkanRenderer {
             .unconverted
             .as_ref()
             .is_some_and(|unconverted| unconverted.format != format);
-        if !target.direct || colour.is_none() || stale {
-            if let Some(unconverted) = target.unconverted.take() {
-                self.destroy_image(&unconverted.image);
-            }
+        if (!target.direct || colour.is_none() || stale)
+            && let Some(unconverted) = target.unconverted.take()
+        {
+            self.destroy_image(&unconverted.image);
         }
         let target = self
             .targets

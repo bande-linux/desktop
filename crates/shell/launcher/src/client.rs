@@ -613,6 +613,9 @@ fn settings_panes(sleeps: bool, hardware: Hardware) -> Vec<PaneInfo> {
     if !sleeps {
         bande_settings_panes::without_sleep(&mut panes);
     }
+    if !hardware.battery {
+        bande_settings_panes::without_battery(&mut panes);
+    }
     panes.retain(|pane| match pane.id {
         PaneId::Wifi => hardware.wifi,
         PaneId::Bluetooth => hardware.bluetooth,

@@ -163,8 +163,8 @@ msgstr "Lägg till skrivare, välj standard, se vad som skrivs ut och skanna"
 msgid "Share folders and the screen with other computers and allow remote login"
 msgstr "Dela mappar och skärmen med andra datorer och tillåt fjärrinloggning"
 
-msgid "Battery, power mode, display off, sleep and the lid"
-msgstr "Batteri, strömläge, skärm av, vila och locket"
+msgid "Power mode, display off and sleep"
+msgstr "Energiläge, avstängning av skärmen och vila"
 
 msgid "Your account and the others on this computer"
 msgstr "Ditt konto och de andra på den här datorn"
@@ -1411,11 +1411,11 @@ msgstr "Använd strömsparläge på batteri"
 msgid "low power mode, automatic, unplugged, longer battery life"
 msgstr "strömsparläge, automatiskt, urkopplad, längre batteritid"
 
-msgid "Power source"
-msgstr "Strömkälla"
+msgid "Power modes"
+msgstr "Energilägen"
 
-msgid "power adapter, mains, plugged in, energy, sleep, power profiles"
-msgstr "strömadapter, nätström, ansluten, energi, vila, strömprofiler"
+msgid "power profile, power profiles service"
+msgstr "energiprofil, tjänsten för energiprofiler"
 
 msgid "When inactive"
 msgstr "Vid inaktivitet"
@@ -1465,8 +1465,8 @@ msgstr "Vila"
 msgid "Keep running"
 msgstr "Fortsätt köra"
 
-msgid "Battery, power mode, display off and the lid"
-msgstr "Batteri, strömläge, skärm av och locket"
+msgid "Power mode and display off"
+msgstr "Energiläge och avstängning av skärmen"
 
 msgid "Language"
 msgstr "Språk"

@@ -75,6 +75,20 @@ fn moved_settings_are_found_in_their_pane() {
             "{first:?} comes right before {next:?}"
         );
     }
+    let mut desktop = bande_settings_panes::panes();
+    bande_settings_panes::without_battery(&mut desktop);
+    for (query, setting) in [
+        ("sleep on battery", SettingId::BatterySleepAfter),
+        ("lid is closed", SettingId::LidOnPower),
+        ("battery level", SettingId::BatteryLevel),
+    ] {
+        assert!(
+            bande_settings_panes::search(&desktop, query)
+                .iter()
+                .all(|hit| hit.setting(setting).is_none()),
+            "{query}"
+        );
+    }
     assert_eq!(
         PaneId::from_keyword("software-update"),
         Some(PaneId::SoftwareUpdate)

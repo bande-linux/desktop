@@ -128,6 +128,7 @@ pub fn powers(system: &Connection) -> zbus::Result<Vec<PowerAction>> {
 pub struct Hardware {
     pub wifi: bool,
     pub bluetooth: bool,
+    pub battery: bool,
 }
 
 impl Hardware {
@@ -135,6 +136,7 @@ impl Hardware {
         Self {
             wifi: wifi_in_kernel(),
             bluetooth: adapter_in_kernel(),
+            battery: battery_in_kernel(),
         }
     }
 }

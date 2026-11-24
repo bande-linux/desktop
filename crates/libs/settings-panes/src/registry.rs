@@ -224,7 +224,7 @@ impl PaneId {
             Self::Sharing => {
                 tr!("Share folders and the screen with other computers and allow remote login")
             }
-            Self::Power => tr!("Battery, power mode, display off, sleep and the lid"),
+            Self::Power => tr!("Power mode, display off and sleep"),
             Self::Users => tr!("Your account and the others on this computer"),
             Self::Passwords => tr!("The passwords apps and networks keep in your keyring"),
             Self::PrivacySecurity => {
@@ -1155,7 +1155,7 @@ fn desktop_panes() -> Vec<Pane> {
                         tr!("gap, margin, space, distance, edge, floating, maximized"),
                         Kind::Range {
                             range: BAR_GAPS,
-                            step: 2,
+                            step: 1,
                             low: tr!(context = "gap", "None"),
                             high: tr!("Wide"),
                         },
@@ -2231,8 +2231,8 @@ fn power_pane() -> Pane {
                     ),
                     list(
                         SettingId::PowerStatus,
-                        tr!("Power source"),
-                        tr!("power adapter, mains, plugged in, energy, sleep, power profiles"),
+                        tr!("Power modes"),
+                        tr!("power profile, power profiles service"),
                         List::PowerStatus,
                     ),
                 ],
@@ -2292,6 +2292,23 @@ fn power_pane() -> Pane {
     )
 }
 
+pub fn without_battery(panes: &mut [Pane]) {
+    for pane in panes {
+        for section in &mut pane.sections {
+            section.settings.retain(|setting| {
+                !matches!(
+                    setting.id,
+                    SettingId::BatteryLevel
+                        | SettingId::LowPowerOnBattery
+                        | SettingId::BatteryDisplayOffAfter
+                        | SettingId::BatterySleepAfter
+                        | SettingId::LidOnPower
+                )
+            });
+        }
+    }
+}
+
 pub fn without_sleep(panes: &mut [Pane]) {
     for pane in panes {
         for section in &mut pane.sections {
@@ -2303,7 +2320,7 @@ pub fn without_sleep(panes: &mut [Pane]) {
             });
         }
         if pane.id == PaneId::Power {
-            pane.summary = tr!("Battery, power mode, display off and the lid");
+            pane.summary = tr!("Power mode and display off");
         }
     }
 }

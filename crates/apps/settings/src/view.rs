@@ -14,7 +14,7 @@ use bande_l10n::tr;
 use bande_settings_panes::{
     AUTOMATIC, Kind, Pane, PaneId, Permission, Setting, SettingId, Value, panes,
 };
-use bande_settings_panes::{PaneHit, search};
+use bande_settings_panes::{PaneHit, search, without_battery};
 use bande_status::brightness::{DisplayLevel, LevelRequest};
 use bande_toolkit::ui::{
     Alert, Context, Event, Key, Modifiers, PointerButton, ScrollState, SearchField, Size, Ui,
@@ -2261,8 +2261,15 @@ impl SettingsView {
     }
 
     fn search_hits(&self, query: &str) -> Vec<PaneHit> {
-        search(&self.panes, query)
-            .into_iter()
+        let hits = match &self.power {
+            Some(power) if power.battery.is_none() => {
+                let mut panes = self.panes.clone();
+                without_battery(&mut panes);
+                search(&panes, query)
+            }
+            _ => search(&self.panes, query),
+        };
+        hits.into_iter()
             .filter(|hit| self.available(hit.pane))
             .collect()
     }

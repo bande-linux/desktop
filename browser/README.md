@@ -48,6 +48,7 @@ This directory holds no browser source. It holds what we change in Debian's:
 - **App menu:** the ⋮ button beside the well on either side, drawn as the compositor draws it for Bande's own apps; rows light up in the accent as in Bande's menus.
 - **Bookmarks Toolbar:** the favorites bar, shown in every window.
 - **Updates:** from apt only; the browser's own updater is off.
+- **Build ID:** `prepare.sh` sets it from the build's own changelog date, not from the ESR's: a profile keeps its startup cache, which holds the window's markup and styles, for as long as the build ID stays the same.
 - **Languages:** English is built in. Each language in `l10n/languages` (Swedish and German) is a package, `bande-browser-l10n-<lang>`, which Settings installs for the person's language. The browser follows the system language. Debian's `firefox-esr-l10n-<lang>` packages aren't used: they depend on `firefox-esr` itself, say Firefox and lack Bande's strings.
 
 ## Build

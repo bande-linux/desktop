@@ -25,8 +25,8 @@ when they reach the screen is Bande's own.
   hasvk's Haswell and Broadwell GPUs qualify); every device left out is logged with the reason. Each
   sampled image view (with its chroma plane or colour table) gets one descriptor set, made at its
   first draw and freed with the image; sets come from pools of 64, any pool with room, and a pool
-  is destroyed once its last set is freed (push descriptors made blurs sample the wrong image on Intel
-  Gen9 with anv; the cause is not traced). It implements Smithay's `Renderer`, `Frame`,
+  is destroyed once its last set is freed (with push descriptors, blurs and textures drawn after a
+  blur sampled the wrong image on Intel Gen9 with anv; the cause is not traced). It implements Smithay's `Renderer`, `Frame`,
   `ImportMemWl`, `ImportDmaWl`, `Offscreen` and `Bind<Dmabuf>`. Both outputs compose the same Wayland surface
   elements through Smithay: the headless output with `OutputDamageTracker` into a persistent
   offscreen image (read back only for tests), the DRM output with `DrmCompositor`. Each surface
@@ -51,8 +51,9 @@ when they reach the screen is Bande's own.
   whenever the plane cannot take the fence (`needs_sync`: no `IN_FENCE_FD`, older NVIDIA drivers,
   virtio-gpu without syncobj), so a buffer is never scanned out while it is drawn. Completion is
   taken to follow submission order on the one queue, as every driver's ring does. A submission the
-  driver refuses drops every kept blur and has the renderer made again (at most every ten seconds
-  when memory ran out), as its uploads are lost; a wait that fails counts as a lost device.
+  driver refuses drops every kept blur and has the renderer made again (not in its first ten
+  seconds when memory ran out; a renewal that fails keeps the working renderer and is tried again
+  ten seconds later), as its uploads are lost; a wait that fails counts as a lost device.
   Staging memory unused for two seconds is freed. The render elements of a frame, and with them the
   client buffers they hold, are kept until its submission finishes (`drawing.rs`, woken by the sync file), so no buffer goes
   back to a client while the GPU still reads it. The scheduler prices a frame at its CPU time plus

@@ -1315,11 +1315,15 @@ impl FrameOutput for DrmBackend {
     }
 
     fn renew_failed_renderer(&mut self) -> Result<bool, DrmBackendError> {
-        if !self.renderer.needs_renewal() {
+        let Some(renewed) = self.renderer.renewed_if_failed()? else {
             return Ok(false);
-        }
-        self.renew_renderer()?;
+        };
+        self.use_renewed(renewed);
         Ok(true)
+    }
+
+    fn renewal_wait(&self) -> Option<Duration> {
+        self.renderer.renewal_wait()
     }
 
     fn gpu_time(&self, output: &str) -> Duration {
@@ -1348,7 +1352,8 @@ impl FrameOutput for DrmBackend {
     }
 
     fn restart_display(&mut self) -> Result<(), DrmBackendError> {
-        self.renew_renderer()?;
+        let renewed = self.renderer.renew()?;
+        self.use_renewed(renewed);
         for head in &mut self.heads {
             if let Err(error) = head.compositor.reset_state() {
                 tracing::warn!("cannot reset {}: {error}", head.config.name);
@@ -1425,13 +1430,12 @@ impl DrmBackend {
         Ok(())
     }
 
-    fn renew_renderer(&mut self) -> Result<(), DrmBackendError> {
+    fn use_renewed(&mut self, mut renewed: VulkanRenderer) {
         tracing::error!(
-            "starting the renderer again (lost: {}, holding {})",
+            "started the renderer again (lost: {}, held {})",
             self.renderer.is_lost(),
             self.renderer.memory_use()
         );
-        let mut renewed = self.renderer.renew()?;
         prove_with_gbm(&mut renewed, self.gbm.as_ref());
         if renewed.dmabuf_planes() != self.renderer.dmabuf_planes() {
             tracing::warn!(
@@ -1443,7 +1447,6 @@ impl DrmBackend {
         for head in &mut self.heads {
             head.compositor.reset_buffers();
         }
-        Ok(())
     }
 
     fn present(
@@ -1570,11 +1573,8 @@ impl DrmBackend {
         head.scanned_out = matches!(frame.primary_element, PrimaryPlaneElement::Element(_));
         let empty = frame.is_empty;
         let submitted = self.renderer.submitted();
-        compositor.keep_until_drawn(
-            elements,
-            (submitted, self.renderer.completed()),
-            self.renderer.fence_of(submitted),
-        );
+        let fence = self.renderer.fence_of(submitted)?;
+        compositor.keep_until_drawn(elements, (submitted, self.renderer.completed()), fence);
         compositor.copy_captures(&mut self.renderer, output);
         if empty {
             return Ok(Submission::Unchanged);

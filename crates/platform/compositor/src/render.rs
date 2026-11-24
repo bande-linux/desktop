@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::io;
+use std::time::Duration;
 
 use bande_render::{DeviceInfo, MemoryUse, OffscreenTarget, RenderError, VulkanRenderer};
 use bande_splash::splash_background;
@@ -75,7 +76,7 @@ impl Renderer {
         self.vulkan.memory_use()
     }
 
-    pub fn gpu_frame_times(&mut self) -> Result<Vec<std::time::Duration>, RenderError> {
+    pub fn gpu_frame_times(&mut self) -> Result<Vec<Duration>, RenderError> {
         self.vulkan.wait_idle()?;
         Ok(self.vulkan.take_gpu_frame_times())
     }
@@ -158,11 +159,8 @@ impl Renderer {
         self.outputs.insert(name.to_owned(), output);
         self.vulkan.finish_uploads()?;
         let submitted = self.vulkan.submitted();
-        compositor.keep_until_drawn(
-            elements,
-            (submitted, self.vulkan.completed()),
-            self.vulkan.fence_of(submitted),
-        );
+        let fence = self.vulkan.fence_of(submitted)?;
+        compositor.keep_until_drawn(elements, (submitted, self.vulkan.completed()), fence);
         let counters = self.vulkan.take_counters();
         compositor.copy_captures(&mut self.vulkan, name);
         self.vulkan.take_counters();
@@ -202,21 +200,33 @@ impl FrameOutput for Renderer {
         Ok(Submission::AtVblank)
     }
 
-    fn gpu_time(&self, output: &str) -> std::time::Duration {
+    fn gpu_time(&self, output: &str) -> Duration {
         self.vulkan.gpu_frame_time(output).unwrap_or_default()
     }
 
     fn renew_failed_renderer(&mut self) -> Result<bool, RenderError> {
-        if !self.vulkan.needs_renewal() {
+        let Some(renewed) = self.vulkan.renewed_if_failed()? else {
             return Ok(false);
-        }
-        self.restart_display()?;
+        };
+        self.use_renewed(renewed);
         Ok(true)
     }
 
+    fn renewal_wait(&self) -> Option<Duration> {
+        self.vulkan.renewal_wait()
+    }
+
     fn restart_display(&mut self) -> Result<(), RenderError> {
+        let renewed = self.vulkan.renew()?;
+        self.use_renewed(renewed);
+        Ok(())
+    }
+}
+
+impl Renderer {
+    fn use_renewed(&mut self, renewed: VulkanRenderer) {
         tracing::error!(
-            "starting the renderer again (lost: {}, holding {})",
+            "started the renderer again (lost: {}, held {})",
             self.vulkan.is_lost(),
             self.vulkan.memory_use()
         );
@@ -229,8 +239,7 @@ impl FrameOutput for Renderer {
             },
         );
         self.outputs.clear();
-        self.vulkan = self.vulkan.renew()?;
+        self.vulkan = renewed;
         self.vulkan.prove_unexported(|_| None);
-        Ok(())
     }
 }

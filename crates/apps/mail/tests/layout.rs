@@ -7,7 +7,7 @@ use accesskit::{Action, ActionRequest, Node, Role, TreeId};
 use bande_mail::imap::{Fetched, Flag, Folder, Role as Kind};
 use bande_mail::net::{Security, Server};
 use bande_mail::settings::MailSettings;
-use bande_mail::store::{Account, Store};
+use bande_mail::store::{Account, Action as Change, Store};
 use bande_mail::ui::{MailView, Panes, Request};
 use bande_toolkit::ui::{Event, Key, Modifiers, Pointer, Scroll, ScrollPhase, ScrollSource};
 use bande_toolkit::{Appearance, HeaderInsets, Palette, Point, Scheme, TextSystem, WindowButtons};
@@ -82,7 +82,14 @@ fn every_pane_keeps_clear_of_the_window_buttons_and_the_list_acts_by_swipe_and_k
     let mut view = MailView::new(store_path, settings, palette, TextSystem::new()).unwrap();
     view.reload();
 
-    for (width, panes) in [(1280, Panes::Three), (900, Panes::Two), (600, Panes::One)] {
+    let widths = [
+        (1280, Panes::Three),
+        (1040, Panes::Three),
+        (900, Panes::Two),
+        (720, Panes::Two),
+        (600, Panes::One),
+    ];
+    for (width, panes) in widths {
         for buttons in [WindowButtons::Right, WindowButtons::Left] {
             view.set_appearance(Appearance {
                 window_buttons: buttons,
@@ -146,25 +153,39 @@ fn every_pane_keeps_clear_of_the_window_buttons_and_the_list_acts_by_swipe_and_k
         "the list edge drags: {kept}"
     );
 
-    let mailboxes = store.mailboxes(id).unwrap();
-    let inbox = mailboxes
-        .iter()
-        .find(|mailbox| mailbox.role == Some(Kind::Inbox));
-    let fetched = [7, 8].map(|uid| Fetched {
+    let [inbox, archive] = [Kind::Inbox, Kind::Archive].map(|role| {
+        let mailbox = store.mailbox_with_role(id, role).unwrap().unwrap();
+        store.set_mailbox_state(mailbox.id, 1, Some(1)).unwrap();
+        mailbox.id
+    });
+    let plan = |uid: u32, plan: u32| Fetched {
         uid,
         flags: None,
         size: Some(10),
         internal_date: Some(1),
         header: Some(
             format!(
-                "From: <ada@example.org>\r\nMessage-ID: <{uid}@x>\r\nSubject: Plan {uid}\r\n\r\n"
+                "From: <ada@example.org>\r\nMessage-ID: <{plan}@x>\r\nSubject: Plan {plan}\r\n\r\n"
             )
             .into_bytes(),
         ),
         body: None,
-    });
-    store.insert_headers(inbox.unwrap().id, &fetched).unwrap();
+    };
+    let plans = [plan(7, 7), plan(8, 8)];
+    store.insert_headers(inbox, &plans).unwrap();
     view.reload();
+    let asked = |store: &Store| {
+        let asked = store.pending(id).unwrap();
+        for change in &asked {
+            store.finish_pending(change.id).unwrap();
+        }
+        let asked = asked.into_iter().filter_map(|change| match change.action {
+            Change::Move(target) => Some((change.mailbox, change.uids, target)),
+            _ => None,
+        });
+        asked.collect::<Vec<_>>()
+    };
+    let moved = |from: &str, uid: u32, to: &str| (from.to_owned(), vec![uid], to.to_owned());
     let panel = |view: &mut MailView| {
         view.scene(1280, 800);
         named(view, "Mark as Read")
@@ -201,14 +222,50 @@ fn every_pane_keeps_clear_of_the_window_buttons_and_the_list_acts_by_swipe_and_k
     view.tick(Instant::now());
     assert_eq!(view.messages().len(), 1, "a swipe to the right archives");
     assert_eq!(view.selected(), None, "and opens no other message");
+    assert_eq!(asked(&store), [moved("INBOX", 7, "Archive")]);
+    store.insert_headers(archive, &[plan(1, 7)]).unwrap();
     press(&mut view, Key::Character('z'), true);
-    assert_eq!(view.messages().len(), 2, "Ctrl+Z brings it back");
+    assert_eq!(
+        asked(&store),
+        [moved("Archive", 1, "INBOX")],
+        "Ctrl+Z moves it back"
+    );
+    store.insert_headers(inbox, &[plan(9, 7)]).unwrap();
+    view.reload();
+    assert_eq!(view.messages().len(), 2, "and it is in the list again");
+
+    press(&mut view, Key::Character('a'), true);
     swipe(&mut view, "Plan 8");
     swipe(&mut view, "Plan 7");
     view.tick(Instant::now());
     assert!(view.messages().is_empty(), "swipes in a row all count");
+    let both = [moved("INBOX", 8, "Archive"), moved("INBOX", 9, "Archive")];
+    assert_eq!(asked(&store), both);
+    let arrived = [plan(2, 8), plan(3, 7)];
+    store.insert_headers(archive, &arrived).unwrap();
     press(&mut view, Key::Character('z'), true);
     press(&mut view, Key::Character('z'), true);
+    let back = [moved("Archive", 3, "INBOX"), moved("Archive", 2, "INBOX")];
+    assert_eq!(
+        asked(&store),
+        back,
+        "each Ctrl+Z undoes one, the last first"
+    );
+    let returned = [plan(10, 8), plan(11, 7)];
+    store.insert_headers(inbox, &returned).unwrap();
+    view.reload();
+
+    press(&mut view, Key::Character('a'), true);
+    store.remove_uids(inbox, &[10]).unwrap();
+    view.reload();
+    let reader = find(&view, |node| node.role() == Role::Document).unwrap();
+    assert!(
+        !reader.children().is_empty(),
+        "the one left of several chosen messages opens"
+    );
+    store.insert_headers(inbox, &[plan(10, 8)]).unwrap();
+    press(&mut view, Key::Character('2'), true);
+    press(&mut view, Key::Character('1'), true);
 
     let ids = view.messages().iter().map(|summary| summary.id);
     let ids = ids.collect::<Vec<_>>();

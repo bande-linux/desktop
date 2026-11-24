@@ -178,6 +178,8 @@ const ACTIONS: [(Symbol, Text, Signal); 8] = [
     (Symbol::More, text!("More"), Signal::More),
 ];
 const GROUP_ENDS: [usize; 2] = [3, 6];
+pub const ACTIONS_WIDTH: f32 =
+    COLUMN_INSET + ACTIONS.len() as f32 * BUTTON_HEIGHT + GROUP_ENDS.len() as f32 * GROUP_GAP;
 const SELECTION: [(Text, Signal); 5] = [
     (text!(context = "action", "Archive"), Signal::Archive),
     (text!("Delete"), Signal::Delete),

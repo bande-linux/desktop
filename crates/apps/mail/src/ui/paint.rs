@@ -11,7 +11,9 @@ use crate::ui::symbols::Symbol;
 use crate::ui::toolbar::{
     LIST_HEADER_HEIGHT, LIST_TITLE_HEIGHT, QUICK_REPLY_BAR, SIDEBAR_FOOT_HEIGHT,
 };
-use crate::ui::view::{Hit, MailView, Pane, Panes, Quick, READER_MAX_WIDTH, TOOLBAR_HEIGHT};
+use crate::ui::view::{
+    Hit, MailView, PANE_DIVIDER, Pane, Panes, Quick, READER_MAX_WIDTH, TOOLBAR_HEIGHT,
+};
 use bande_toolkit::Color;
 use bande_toolkit::ui::{BUTTON_HEIGHT, Key, Scroll, ScrollPhase, ScrollSource, Size, chevron};
 use bande_toolkit::{
@@ -166,7 +168,7 @@ impl MailView {
         let sheet = self.sheet_frame();
         let list = self.list_header_frame();
         let divider = match list.width > 0.0 {
-            true => 1.0,
+            true => PANE_DIVIDER,
             false => 0.0,
         };
         let width = match (self.panes(), self.single_reader) {
@@ -754,7 +756,12 @@ impl MailView {
         });
         let sheet = self.sheet_frame();
         items.push(Item::Fill {
-            shape: Shape::rect(Rect::new(frame.x + frame.width, sheet.y, 1.0, sheet.height)),
+            shape: Shape::rect(Rect::new(
+                frame.x + frame.width,
+                sheet.y,
+                PANE_DIVIDER,
+                sheet.height,
+            )),
             paint: palette.hairline.into(),
         });
         let scroll = &self.scrolls[1];

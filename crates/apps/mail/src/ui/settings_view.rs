@@ -293,6 +293,7 @@ pub struct SettingsView {
     accounts: Vec<Account>,
     status: Option<(String, bool)>,
     checking: Option<AccountId>,
+    keys_for: Page,
     store_path: Option<PathBuf>,
     mailroom: Option<Mailroom>,
     network: Network,
@@ -375,6 +376,7 @@ impl SettingsView {
             store,
             status: None,
             checking: None,
+            keys_for: Page::General,
             store_path,
             mailroom: Mailroom::new()
                 .inspect_err(|error| tracing::warn!("cannot check servers: {error}"))
@@ -568,6 +570,7 @@ impl SettingsView {
             return;
         };
         let (gnupg, notifier) = (self.gnupg.clone(), mailroom.notifier());
+        self.keys_for = self.page;
         self.status = Some((tr!("Waiting for GnuPG…"), false));
         let spawned = std::thread::Builder::new()
             .name("keys".to_owned())
@@ -587,6 +590,9 @@ impl SettingsView {
             .map(|key| key.fingerprint.clone())
             .collect::<Vec<_>>();
         self.refresh_keys();
+        if self.page != self.keys_for {
+            return;
+        }
         if self.identity.openpgp.is_empty()
             && let Some(new) = self
                 .own_keys

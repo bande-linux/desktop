@@ -109,6 +109,9 @@ impl MailView {
     }
 
     pub(crate) fn describe_panes(&self, tree: &mut TreeUpdate) {
+        if self.welcoming() {
+            return;
+        }
         let panes = [
             self.describe_sidebar(tree),
             self.describe_list(tree),

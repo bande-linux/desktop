@@ -207,6 +207,10 @@ impl<M: Copy + PartialEq> OutputFormat<M> {
             .collect()
     }
 
+    pub(crate) fn keep(&mut self, mode: M, deep: bool, shape: Shape) {
+        self.kept = Some((mode, deep, shape));
+    }
+
     pub(crate) fn refuse_depth(&mut self, mode: M, shape: Shape) {
         for format in DEEP {
             self.refuse(mode, Shape { format, ..shape });
@@ -267,6 +271,11 @@ impl<M: Copy + PartialEq> OutputFormat<M> {
             return Step::CommitWhole;
         }
         let deep = self.chosen_for.is_none_or(|(_, deep)| deep);
+        if self.kept == Some((mode, deep, shape)) {
+            self.kept = None;
+            self.refuse(mode, shape);
+            return Step::LeaveMode;
+        }
         if shape.is_deep() {
             self.refuse_depth(mode, shape);
             return Step::ChangeShape;
@@ -277,7 +286,7 @@ impl<M: Copy + PartialEq> OutputFormat<M> {
             .filter(|shown| shown.0 == mode && shown.1 != shape)
         {
             Some((_, working)) => {
-                self.kept = Some((mode, deep, working));
+                self.keep(mode, deep, working);
                 Step::ChangeShape
             }
             None => Step::LeaveMode,
@@ -392,6 +401,11 @@ mod tests {
         assert!(!formats.needs_choice(FAST.0, false));
         assert_eq!(formats.candidates(FAST, true)[0], deepest);
         assert_eq!(formats.candidates(SLOW, false)[0], plain);
+        assert_eq!(
+            refuse(&mut formats, FAST, deepest),
+            Step::LeaveMode,
+            "nothing is left when the kept shape is refused too"
+        );
     }
 
     #[test]

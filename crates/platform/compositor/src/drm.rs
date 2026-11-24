@@ -1541,7 +1541,7 @@ impl DrmBackend {
         let Some(link) = head.link else {
             return Ok(());
         };
-        let Some(value) = link.change(shape.bits(), deep) else {
+        let Some(value) = link.change(shape.bits(), deep || shape.is_deep()) else {
             return Ok(());
         };
         set_link_depth(&self.device, head, value)?;
@@ -1599,8 +1599,11 @@ impl DrmBackend {
             self.heads[index].formats.chosen(mode, deep);
             return Ok(());
         }
-        self.heads[index].formats.forget_refusals();
-        Err(format!("{name} shows no kind of buffer").into())
+        let head = &mut self.heads[index];
+        tracing::warn!("{name} stays with {}", head.shape);
+        head.formats.keep(mode, deep, head.shape);
+        head.formats.chosen(mode, deep);
+        Ok(())
     }
 
     fn use_renewed(&mut self, mut renewed: VulkanRenderer) {

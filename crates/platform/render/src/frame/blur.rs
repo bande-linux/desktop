@@ -22,20 +22,15 @@ pub struct Blur {
     pub offset: f32,
     pub alpha: f32,
     pub tone: Option<[f32; 4]>,
-    pub backdrop: Option<Backdrop>,
 }
 
+/// What a blur samples, from [`VulkanRenderer::backdrop`]. While `drawing` is the same, what was
+/// drawn for it is kept and any part may be redrawn; a new `drawing` is redrawn whole.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Backdrop {
     owner: u64,
     below: u64,
     pub drawing: u64,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(crate) enum BlurKey {
-    Kept(u64),
-    Shared((i32, i32), vk::Format, u32),
 }
 
 pub(crate) struct BlurChain {
@@ -50,13 +45,10 @@ pub(crate) struct BlurChain {
 impl VulkanRenderer {
     pub fn backdrop(&mut self, owner: u64, below: u64) -> Backdrop {
         let drawing = self.next_id();
-        let kept = self
-            .blur_chains
-            .get_mut(&BlurKey::Kept(owner))
-            .and_then(|chain| {
-                chain.last_used = Instant::now();
-                chain.backdrop.filter(|kept| kept.below == below)
-            });
+        let kept = self.blur_chains.get_mut(&owner).and_then(|chain| {
+            chain.last_used = Instant::now();
+            chain.backdrop.filter(|kept| kept.below == below)
+        });
         kept.unwrap_or(Backdrop {
             owner,
             below,
@@ -106,6 +98,7 @@ impl VulkanFrame<'_, '_> {
     pub fn draw_blur(
         &mut self,
         blur: &Blur,
+        backdrop: Backdrop,
         damage: &[Rectangle<i32, Physical>],
     ) -> Result<(), RenderError> {
         let blur = &Blur {
@@ -126,11 +119,8 @@ impl VulkanFrame<'_, '_> {
             return Ok(());
         }
         let passes = blur.passes();
-        let key = match blur.backdrop {
-            Some(backdrop) => BlurKey::Kept(backdrop.owner),
-            None => BlurKey::Shared((source.width, source.height), self.format, passes),
-        };
-        let (levels, prior, kept) = self.blur_levels(key, source, (passes, blur.backdrop))?;
+        let key = backdrop.owner;
+        let (levels, prior, kept) = self.blur_levels(backdrop, source, passes)?;
         if !kept {
             for program in [Program::BlurDown, Program::BlurUp] {
                 self.bind(program)?;
@@ -160,7 +150,7 @@ impl VulkanFrame<'_, '_> {
             if let Some(chain) = self.renderer.blur_chains.get_mut(&key) {
                 chain.drawn = true;
                 chain.source = source;
-                chain.backdrop = blur.backdrop;
+                chain.backdrop = Some(backdrop);
             }
         }
         self.bind(match blur.tone {
@@ -186,10 +176,11 @@ impl VulkanFrame<'_, '_> {
 
     fn blur_levels(
         &mut self,
-        key: BlurKey,
+        backdrop: Backdrop,
         source: Rect,
-        (passes, backdrop): (u32, Option<Backdrop>),
+        passes: u32,
     ) -> Result<(Vec<Level>, Usage, bool), RenderError> {
+        let key = backdrop.owner;
         let fits = self.renderer.blur_chains.get(&key).is_some_and(|chain| {
             (chain.source.width, chain.source.height) == (source.width, source.height)
                 && chain.format == self.format
@@ -241,7 +232,7 @@ impl VulkanFrame<'_, '_> {
             .get_mut(&key)
             .ok_or(RenderError::ForeignResource)?;
         chain.last_used = Instant::now();
-        let kept = backdrop.is_some() && chain.backdrop == backdrop && chain.source == source;
+        let kept = chain.backdrop == Some(backdrop) && chain.source == source;
         let prior = match chain.drawn {
             true => SAMPLED,
             false => DISCARDED,
@@ -320,7 +311,7 @@ impl VulkanFrame<'_, '_> {
             prior,
             DRAWN,
         );
-        self.begin_rendering(to.1, bounds, vk::AttachmentLoadOp::CLEAR);
+        self.begin_rendering(to.1, bounds, vk::AttachmentLoadOp::DONT_CARE);
         self.bound = None;
         self.bind(program)?;
         self.sample(from.1, from.1)?;
@@ -367,9 +358,6 @@ impl VulkanFrame<'_, '_> {
             .image_view(view)
             .image_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
             .load_op(load)
-            .clear_value(vk::ClearValue {
-                color: vk::ClearColorValue { float32: [0.0; 4] },
-            })
             .store_op(vk::AttachmentStoreOp::STORE);
         let device = &self.renderer.device;
         let commands = self.renderer.command_buffer;

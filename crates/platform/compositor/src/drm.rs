@@ -34,7 +34,7 @@ use smithay::reexports::udev::MonitorBuilder;
 use smithay::reexports::wayland_protocols::wp::linux_dmabuf::zv1::server::zwp_linux_dmabuf_feedback_v1::TrancheFlags;
 use smithay::utils::{Clock, DeviceFd, Monotonic, Size};
 use smithay::wayland::dmabuf::{DmabufFeedback, DmabufFeedbackBuilder};
-use bande_render::VulkanRenderer;
+use bande_render::{RenderError, VulkanRenderer};
 
 use crate::boot_screen::boot_screen_shown;
 use crate::clock::{FrameOutput, Submission, Vblank};
@@ -1323,15 +1323,7 @@ impl FrameOutput for DrmBackend {
     }
 
     fn gpu_time(&self, output: &str) -> Duration {
-        self.heads
-            .iter()
-            .find(|head| head.config.name == output)
-            .map(|head| head.compositor.pending_mode().size())
-            .and_then(|(width, height)| {
-                self.renderer
-                    .gpu_frame_time((i32::from(width), i32::from(height)))
-            })
-            .unwrap_or_default()
+        self.renderer.gpu_frame_time(output).unwrap_or_default()
     }
 
     fn refresh(&self, output: &str) -> Option<Duration> {
@@ -1379,6 +1371,27 @@ fn prove_with_gbm(renderer: &mut VulkanRenderer, gbm: Option<&GbmDevice<DrmDevic
             .then(|| buffer.export().ok())
             .flatten()
     });
+}
+
+fn buffers_at_fault<A, B, F>(error: &RenderFrameError<A, B, F, RenderError>) -> bool
+where
+    A: Error + Send + Sync + 'static,
+    B: Error + Send + Sync + 'static,
+    F: Error + Send + Sync + 'static,
+{
+    match error {
+        RenderFrameError::RenderFrame(DamageError::Rendering(error)) => !error.is_transient(),
+        RenderFrameError::PrepareFrame(error) => matches!(
+            error,
+            FrameError::Allocator(_)
+                | FrameError::AsDmabufError(_)
+                | FrameError::FramebufferExport(_)
+                | FrameError::NoSupportedPlaneFormat
+                | FrameError::NoSupportedRendererFormat
+                | FrameError::DrmError(DrmError::TestFailed(_))
+        ),
+        RenderFrameError::RenderFrame(DamageError::OutputNoMode(_)) => false,
+    }
 }
 
 impl DrmBackend {
@@ -1529,6 +1542,7 @@ impl DrmBackend {
             None => FrameFlags::DEFAULT | FrameFlags::ALLOW_PRIMARY_PLANE_SCANOUT_ANY,
         };
         let elements = compositor.render_elements_on(&mut self.renderer, output);
+        self.renderer.measure_frames_of(Some(output));
         let (rendered, drew_everything) = drawing_everything(|| {
             self.renderer
                 .converting(conversion.as_ref(), |renderer| {
@@ -1539,6 +1553,7 @@ impl DrmBackend {
                     Err(RenderFrameError::RenderFrame(DamageError::Rendering(error)))
                 })
         });
+        self.renderer.measure_frames_of(None);
         let frame = match rendered {
             Ok(frame) => frame,
             Err(error)
@@ -1555,6 +1570,7 @@ impl DrmBackend {
             Err(error)
                 if !self.renderer.is_lost()
                     && !self.renderer.out_of_memory()
+                    && buffers_at_fault(&error)
                     && let Some(next) = head.buffers.next() =>
             {
                 tracing::warn!("{output} uses {next} from now on: {error}");
@@ -1591,6 +1607,34 @@ impl DrmBackend {
                 Ok(after_refusal(head))
             }
             Err(error) => Err(error.into()),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io;
+
+    use super::*;
+
+    type Failure = RenderFrameError<io::Error, io::Error, io::Error, RenderError>;
+
+    #[test]
+    fn only_errors_of_the_buffers_change_the_buffers_of_a_display() {
+        let rendering = |error| Failure::RenderFrame(DamageError::Rendering(error));
+        for kept in [
+            Failure::PrepareFrame(FrameError::DrmError(DrmError::DeviceInactive)),
+            Failure::PrepareFrame(FrameError::NoFreeSlotsError),
+            rendering(RenderError::Interrupted),
+            rendering(RenderError::Io(io::Error::other("no size"))),
+        ] {
+            assert!(!buffers_at_fault(&kept), "{kept}");
+        }
+        for changed in [
+            Failure::PrepareFrame(FrameError::FramebufferExport(io::Error::other("refused"))),
+            rendering(RenderError::UnsupportedFormat),
+        ] {
+            assert!(buffers_at_fault(&changed), "{changed}");
         }
     }
 }

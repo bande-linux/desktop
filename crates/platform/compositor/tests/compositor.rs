@@ -818,7 +818,6 @@ fn moving_the_pointer_redraws_only_the_display_it_is_on() {
 struct DrawnOutput {
     vulkan: VulkanRenderer,
     name: String,
-    size: (i32, i32),
     target: OffscreenTarget,
     damage: OutputDamageTracker,
     frames: usize,
@@ -838,7 +837,6 @@ impl DrawnOutput {
         Some(Self {
             vulkan,
             name,
-            size: (size.w, size.h),
             target,
             damage: OutputDamageTracker::new(size, settings.scale, Transform::Normal),
             frames: 0,
@@ -848,12 +846,14 @@ impl DrawnOutput {
     fn draw(&mut self, server: &mut Compositor) {
         server.dispatch().expect("server dispatch");
         let age = usize::from(self.frames > 0);
+        self.vulkan.measure_frames_of(Some(&self.name));
         draw_output(
             &mut self.vulkan,
             (&mut self.target, &mut self.damage, age),
             server,
             &self.name,
         );
+        self.vulkan.measure_frames_of(None);
         self.frames += 1;
     }
 
@@ -1144,4 +1144,60 @@ fn a_full_screen_window_stays_opaque_above_a_blurred_panel() {
         opaque.contains(&Rectangle::from_size((800, 600).into())),
         "the full-screen window is opaque only in {opaque:?}"
     );
+}
+
+#[test]
+fn memory_of_large_uploads_is_freed_once_they_stop() {
+    let mut server = headless(2000, 1500);
+    let Some(mut output) = DrawnOutput::new(&server) else {
+        println!("skipped: no hardware Vulkan device with a DRM render node");
+        return;
+    };
+    let mut large = PatternWindow::show(&mut server, "org.bande.Large", (1900, 1400), u8::MAX);
+    for _ in 0..6 {
+        large.commit(&mut server, (0, 0, 1900, 1400));
+        output.draw(&mut server);
+    }
+    let held = output.vulkan.memory_use().staging.1;
+    assert!(held >= 1900 * 1400 * 4, "uploads held only {held} bytes");
+    thread::sleep(Duration::from_millis(2500));
+    server.move_pointer_to((20.0, 20.0).into(), 0);
+    output.draw(&mut server);
+    server.move_pointer_to((40.0, 40.0).into(), 10);
+    output.draw(&mut server);
+    output.vulkan.wait_idle().expect("the GPU finishes");
+    let held = output.vulkan.memory_use().staging.1;
+    assert!(held < 1900 * 1400 * 4, "{held} bytes are still held");
+}
+
+#[test]
+fn only_frames_of_a_display_count_towards_its_gpu_time() {
+    let mut server = headless(1300, 900);
+    let Some(mut output) = DrawnOutput::new(&server) else {
+        println!("skipped: no hardware Vulkan device with a DRM render node");
+        return;
+    };
+    let mut window = PatternWindow::show(&mut server, "org.bande.Drawn", (800, 600), u8::MAX);
+    for _ in 0..6 {
+        window.commit(&mut server, (0, 0, 10, 10));
+        output.draw(&mut server);
+    }
+    output.vulkan.wait_idle().expect("the GPU finishes");
+    let display = output.vulkan.gpu_frame_time(&output.name);
+    assert!(display.is_some(), "the display has no GPU time");
+    let mut capture: OffscreenTarget =
+        Offscreen::create_buffer(&mut output.vulkan, Fourcc::Abgr8888, (1300, 900).into())
+            .expect("a target");
+    for _ in 0..6 {
+        let mut whole = OutputDamageTracker::new((1300, 900), 1.0, Transform::Normal);
+        let name = output.name.clone();
+        draw_output(
+            &mut output.vulkan,
+            (&mut capture, &mut whole, 0),
+            &mut server,
+            &name,
+        );
+    }
+    output.vulkan.wait_idle().expect("the GPU finishes");
+    assert_eq!(output.vulkan.gpu_frame_time(&output.name), display);
 }

@@ -25,8 +25,9 @@ when they reach the screen is Bande's own.
   hasvk's Haswell and Broadwell GPUs qualify); every device left out is logged with the reason. Each
   sampled image view (with its chroma plane or colour table) gets one descriptor set, made at its
   first draw and freed with the image; sets come from pools of 64, any pool with room, and a pool
-  is destroyed once its last set is freed. It implements Smithay's `Renderer`, `Frame`, `ImportMemWl`,
-  `ImportDmaWl`, `Offscreen` and `Bind<Dmabuf>`. Both outputs compose the same Wayland surface
+  is destroyed once its last set is freed (push descriptors made blurs sample the wrong image on Intel
+  Gen9 with anv; the cause is not traced). It implements Smithay's `Renderer`, `Frame`,
+  `ImportMemWl`, `ImportDmaWl`, `Offscreen` and `Bind<Dmabuf>`. Both outputs compose the same Wayland surface
   elements through Smithay: the headless output with `OutputDamageTracker` into a persistent
   offscreen image (read back only for tests), the DRM output with `DrmCompositor`. Each surface
   keeps a texture for its lifetime and an import uploads only the buffer's damaged rows; the damage
@@ -46,15 +47,18 @@ when they reach the screen is Bande's own.
   that submission finishes. A frame hands the display a sync file of its submission
   (`VK_KHR_external_semaphore_fd`, the plane's `IN_FENCE_FD` on DRM); when the extension is missing,
   a sync file cannot be exported (the slot then gets a new semaphore), or no GPU time is known yet
-  for frames of that size, the frame is waited for, and on DRM the CPU waits before queueing
+  for that display, the frame is waited for, and on DRM the CPU waits before queueing
   whenever the plane cannot take the fence (`needs_sync`: no `IN_FENCE_FD`, older NVIDIA drivers,
   virtio-gpu without syncobj), so a buffer is never scanned out while it is drawn. Completion is
-  taken to follow submission order on the one queue, as every driver's ring does. The render elements of a frame, and with them the client buffers they hold,
-  are kept until its submission finishes (`drawing.rs`, woken by the sync file), so no buffer goes
+  taken to follow submission order on the one queue, as every driver's ring does. A submission the
+  driver refuses drops every kept blur and has the renderer made again (at most every ten seconds
+  when memory ran out), as its uploads are lost; a wait that fails counts as a lost device.
+  Staging memory unused for two seconds is freed. The render elements of a frame, and with them the
+  client buffers they hold, are kept until its submission finishes (`drawing.rs`, woken by the sync file), so no buffer goes
   back to a client while the GPU still reads it. The scheduler prices a frame at its CPU time plus
-  the longest GPU time of the last four frames of that size (each display, not captures, which have
-  their own sizes), measured with timestamps masked to the queue's valid bits. Client fences are waited for before a commit
-  applies (`sync.rs`: the dma-buf's implicit fences, or the `linux-drm-syncobj-v1` acquire point).
+  the longest GPU time of the last four frames of its display (captures do not count), plus that of
+  the frames of other displays the GPU has yet to finish, measured with timestamps masked to the
+  queue's valid bits. Client fences are waited for before a commit applies (`sync.rs`: the dma-buf's implicit fences, or the `linux-drm-syncobj-v1` acquire point).
 - **Window shape and depth.** Every window that is not full screen is clipped to its
   `xdg_surface` window geometry with 16 pt rounded corners (antialiased in the fragment shader)
   and casts a soft shadow drawn analytically (a Gaussian-blurred rounded box): the focused window's
@@ -174,7 +178,8 @@ when they reach the screen is Bande's own.
   the display through the foreign queue (a buffer's first frame starts from `UNDEFINED`, as it is
   drawn whole); with a colour profile each buffer has its own unconverted image that the frame is
   drawn into, and only the drawn regions are converted into the buffer. When such a buffer
-  fails to render for a reason other than a lost device or exhausted memory, that output steps down
+  fails to be allocated, imported or drawn into (not for a lost device, exhausted memory, an
+  interrupted wait, an inactive display or a swapchain without a free buffer), that output steps down
   for as long as it is connected: first to LINEAR GBM buffers, then to dumb buffers; another display
   starts again from tiled buffers. With LINEAR GBM or dumb buffers, or without a tiled modifier, the
   renderer binds the buffer as a dma-buf: each frame is rendered into its own image and its drawn
@@ -581,4 +586,4 @@ Status is what `crates/platform/compositor` serves on `main`.
 | `zwlr_output_power_management_v1` | Display power for idle and lock | implemented |
 | `bande_shell_v1` (own) | Launcher, screenshots, active app, volume keys, Quick Settings, taskbar icon rectangles, apps that stopped responding; for the taskbar: hide, quit and force quit an app, activate one window by its foreign-toplevel identifier, minimized windows, attention requests, rounded blur for shell surfaces, `show_app_menu` to open an app's menus below a window's menu button, `active_menus` (version 4) with the focused window's menu address, `open_terminal` (version 5) for `Ctrl+Alt+T`, `dismiss_on_press_outside` and `move_layer` (version 7, places remembered per display in `$XDG_STATE_HOME/bande/layer-places`) for the launcher; workspaces, the workspace of each window and `show_windows` for the overview and an app's windows | implemented, shell clients only |
 | `bande_app_v1` (own, in `bande-shell-v1.xml`) | App-level requests: `quit_requested` on the bar's or the taskbar's Quit instead of closing every window; `place_window` and `move_to_workspace` for the window menu; `offer_placements` (version 8) for the Tile menu on a toolkit window's maximize control; `keep_running` (version 2) so an app outlives its last window; `end_session` (version 3) opens the Bande menu's Log Out / Restart confirmation for Software Update; `set_menu_button`, `show_menus` and `menus_open` (version 4) for a window's menu button; `kept_on_top` (version 11) when the compositor's window menu changes Keep on Top | implemented, every client |
-| `ext-background-effect-v1` | The backdrop of window frames, the Taskbar and menus: the [style](../design/datum.md#styles) decides what fills it (`material.rs` for the wallpaper copy) | implemented: dual-filter Kawase blur (3 passes) clipped to the window's rounded shape, below the window's own shadow, redrawn when anything beneath it changes; a blur whose whole shape lies under opaque content is left out; opaque regions above any other blur give up a border as wide as the blur's reach (except along the display's edges), so the damage tracker draws what a visible blurred pixel samples; each blur keeps one chain of levels per display, freed after two seconds without being composed, and while what lies beneath and covers it is unchanged (a hash) the kept result is composited again; a blur without such a result gets a new commit, so all of it is redrawn and it never samples pixels of a finished frame; captures keep none; a flat scrim on a CPU renderer |
+| `ext-background-effect-v1` | The backdrop of window frames, the Taskbar and menus: the [style](../design/datum.md#styles) decides what fills it (`material.rs` for the wallpaper copy) | implemented: dual-filter Kawase blur (3 passes) clipped to the window's rounded shape, below the window's own shadow, redrawn when anything beneath it changes; a blur whose whole shape lies under opaque content is left out; opaque regions above any other blur give up a border as wide as the blur's reach (except along the display's edges), so the damage tracker draws what a visible blurred pixel samples; each blur keeps one chain of levels per display (and one for its captures), freed after two seconds without being composed, and while what lies beneath and covers it is unchanged (a hash) the kept result is composited again; a blur without such a result gets a new commit, so all of it is redrawn and it never samples pixels of a finished frame; a flat scrim on a CPU renderer |

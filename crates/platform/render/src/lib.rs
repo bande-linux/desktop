@@ -117,10 +117,11 @@ impl fmt::Display for RenderError {
 impl std::error::Error for RenderError {}
 
 impl RenderError {
-    pub(crate) fn is_transient(&self) -> bool {
+    pub fn is_transient(&self) -> bool {
         matches!(
             self,
             Self::Io(_)
+                | Self::Interrupted
                 | Self::Vulkan(
                     vk::Result::ERROR_OUT_OF_DEVICE_MEMORY
                         | vk::Result::ERROR_OUT_OF_HOST_MEMORY
@@ -345,6 +346,7 @@ struct Descriptors {
 }
 
 struct Staging {
+    last_used: Instant,
     buffer: vk::Buffer,
     memory: vk::DeviceMemory,
     mapped: *mut u8,
@@ -433,7 +435,7 @@ pub struct VulkanRenderer {
     staging: Vec<Staging>,
     copies: Vec<PendingCopy>,
     counters: Counters,
-    blur_chains: HashMap<frame::BlurKey, frame::BlurChain>,
+    blur_chains: HashMap<u64, frame::BlurChain>,
     lost: AtomicBool,
     exhausted: AtomicBool,
     created: Instant,
@@ -1010,7 +1012,7 @@ impl VulkanRenderer {
         let multisample = vk::PipelineMultisampleStateCreateInfo::default()
             .rasterization_samples(vk::SampleCountFlags::TYPE_1);
         let premultiplied = vk::PipelineColorBlendAttachmentState::default()
-            .blend_enable(true)
+            .blend_enable(!matches!(program, Program::BlurDown | Program::BlurUp))
             .src_color_blend_factor(vk::BlendFactor::ONE)
             .dst_color_blend_factor(vk::BlendFactor::ONE_MINUS_SRC_ALPHA)
             .color_blend_op(vk::BlendOp::ADD)
@@ -1052,6 +1054,15 @@ impl VulkanRenderer {
             .into_iter()
             .next()
             .ok_or(RenderError::Vulkan(vk::Result::ERROR_UNKNOWN))
+    }
+
+    fn forget_blurs(&mut self) {
+        for chain in std::mem::take(&mut self.blur_chains).into_values() {
+            chain
+                .levels
+                .iter()
+                .for_each(|image| self.destroy_image(image));
+        }
     }
 
     fn retire_unused_blur_chains(&mut self) {
@@ -1832,6 +1843,7 @@ impl VulkanRenderer {
             )
         }?;
         let mut staging = Staging {
+            last_used: Instant::now(),
             buffer,
             memory: vk::DeviceMemory::null(),
             mapped: std::ptr::null_mut(),
@@ -1901,6 +1913,7 @@ impl VulkanRenderer {
         let staging = &mut self.staging[index];
         let offset = staging.used;
         staging.used += bytes;
+        staging.last_used = Instant::now();
         Ok((index, offset))
     }
 
@@ -2205,6 +2218,7 @@ impl VulkanRenderer {
             .blur_chains
             .values()
             .flat_map(|chain| chain.levels.iter());
+        let staging = self.staging.iter().chain(self.reserved_staging());
         MemoryUse {
             textures: (
                 self.textures.len(),
@@ -2226,11 +2240,8 @@ impl VulkanRenderer {
                 self.imports.values().map(|imported| imported.size).sum(),
             ),
             staging: (
-                self.staging.len(),
-                self.staging
-                    .iter()
-                    .map(|staging| staging.capacity as u64)
-                    .sum(),
+                staging.clone().count(),
+                staging.map(|staging| staging.capacity as u64).sum(),
             ),
             blur_levels: (levels.clone().count(), levels.map(image_bytes).sum()),
             heap_size: self.memory.memory_heaps[..self.memory.memory_heap_count as usize]
@@ -2753,12 +2764,7 @@ impl Drop for VulkanRenderer {
         for staging in std::mem::take(&mut self.staging) {
             self.destroy_staging(&staging);
         }
-        for (_, chain) in std::mem::take(&mut self.blur_chains) {
-            chain
-                .levels
-                .iter()
-                .for_each(|image| self.destroy_image(image));
-        }
+        self.forget_blurs();
         for (_, imported) in std::mem::take(&mut self.imports) {
             self.destroy_imported(&imported);
         }

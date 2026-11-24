@@ -293,7 +293,6 @@ pub struct SettingsView {
     accounts: Vec<Account>,
     status: Option<(String, bool)>,
     checking: Option<AccountId>,
-    keys_for: Page,
     store_path: Option<PathBuf>,
     mailroom: Option<Mailroom>,
     network: Network,
@@ -376,7 +375,6 @@ impl SettingsView {
             store,
             status: None,
             checking: None,
-            keys_for: Page::General,
             store_path,
             mailroom: Mailroom::new()
                 .inspect_err(|error| tracing::warn!("cannot check servers: {error}"))
@@ -566,31 +564,32 @@ impl SettingsView {
         &mut self,
         task: impl FnOnce(&GnuPg) -> crate::error::Result<String> + Send + 'static,
     ) {
-        let Some(mailroom) = &self.mailroom else {
+        let (Some(account), Some(mailroom)) =
+            (self.current().map(|account| account.id), &self.mailroom)
+        else {
             return;
         };
         let (gnupg, notifier) = (self.gnupg.clone(), mailroom.notifier());
-        self.keys_for = self.page;
         self.status = Some((tr!("Waiting for GnuPG…"), false));
         let spawned = std::thread::Builder::new()
             .name("keys".to_owned())
             .spawn(move || {
                 let outcome = task(&gnupg).map_err(|error| error.to_string());
-                notifier.send(MailEvent::KeysChanged(outcome));
+                notifier.send(MailEvent::KeysChanged(account, outcome));
             });
         if let Err(error) = spawned {
             self.status = Some((error.to_string(), true));
         }
     }
 
-    fn keys_changed(&mut self, outcome: Result<String, String>) {
+    fn keys_changed(&mut self, account: AccountId, outcome: Result<String, String>) {
         let before = self
             .own_keys
             .iter()
             .map(|key| key.fingerprint.clone())
             .collect::<Vec<_>>();
         self.refresh_keys();
-        if self.page != self.keys_for {
+        if self.page != Page::Account(account) {
             return;
         }
         if self.identity.openpgp.is_empty()
@@ -1765,7 +1764,7 @@ impl View for SettingsView {
         for event in events {
             match event {
                 MailEvent::Setup(outcome) => self.checked(*outcome),
-                MailEvent::KeysChanged(outcome) => self.keys_changed(outcome),
+                MailEvent::KeysChanged(account, outcome) => self.keys_changed(account, outcome),
                 _ => {}
             }
         }

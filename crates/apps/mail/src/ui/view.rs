@@ -515,6 +515,19 @@ impl MailView {
             true => self.refresh_sidebar(),
             false => self.reload(),
         }
+        self.leave_welcome();
+    }
+
+    fn leave_welcome(&mut self) {
+        let added = self
+            .setup
+            .as_ref()
+            .is_some_and(|guide| matches!(guide.mode(), Mode::Added(_)));
+        if self.welcoming() && !added && self.has_accounts() {
+            self.close_setup();
+            self.refresh_toolbar();
+            self.compose_waiting();
+        }
     }
 
     pub fn has_accounts(&self) -> bool {
@@ -1148,6 +1161,7 @@ impl MailView {
     }
 
     pub fn search_for(&mut self, text: &str) {
+        self.finish_release();
         if text.trim().is_empty() {
             self.everywhere = false;
         }
@@ -1731,6 +1745,7 @@ impl MailView {
     }
 
     pub fn undo(&mut self) {
+        self.finish_release();
         let moves = self.undo.pop().unwrap_or_default();
         self.put_back(moves);
     }
@@ -2321,7 +2336,7 @@ impl MailView {
                 MailEvent::Guide(report) => self.guide_reported(*report),
                 MailEvent::Opened(id, content) => self.opened(id, *content),
                 MailEvent::LookedUp(id, result) => self.looked_up(id, result),
-                MailEvent::Setup(_) | MailEvent::KeysChanged(_) => {}
+                MailEvent::Setup(_) | MailEvent::KeysChanged(..) => {}
                 MailEvent::Chosen(path) => self.requests.push(Request::OpenMessage(path)),
                 MailEvent::Pictures(id, pictures) => self.reader.add_pictures(id, pictures),
             }
@@ -2537,6 +2552,12 @@ impl MailView {
         }
     }
 
+    fn compose_waiting(&mut self) {
+        for draft in std::mem::take(&mut self.waiting) {
+            self.compose(draft);
+        }
+    }
+
     fn guide_acted(&mut self) {
         if let Some(done) = self
             .setup
@@ -2589,9 +2610,7 @@ impl MailView {
                     }
                 }
                 self.reload();
-                for draft in std::mem::take(&mut self.waiting) {
-                    self.compose(draft);
-                }
+                self.compose_waiting();
             }
             Done::Renewed { email, password } => self.renew_password(&email, password),
             Done::ServerSettings => {
@@ -2746,6 +2765,7 @@ impl MailView {
                 Signal::Flag => self.toggle_flag(),
                 Signal::Search(text) => self.search_for(&text),
                 Signal::Filter(filter) => {
+                    self.finish_release();
                     self.filter = filter;
                     self.list(None);
                 }
@@ -3173,6 +3193,7 @@ impl MailView {
             Key::Up if plain && modifiers.shift => self.extend(-1),
             Key::Down if plain && modifiers.shift => self.extend(1),
             Key::Enter if plain && self.focus == Pane::Sidebar => {
+                self.leave_reader();
                 self.focus = Pane::List;
                 self.set_overlay(false);
                 true

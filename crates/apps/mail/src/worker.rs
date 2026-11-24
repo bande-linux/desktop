@@ -73,7 +73,7 @@ pub enum Event {
     MailboxRefused(String),
     Opened(MessageId, Box<crate::message::Content>),
     LookedUp(MessageId, std::result::Result<(), String>),
-    KeysChanged(std::result::Result<String, String>),
+    KeysChanged(AccountId, std::result::Result<String, String>),
     Chosen(PathBuf),
 }
 

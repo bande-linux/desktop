@@ -79,7 +79,7 @@ fn every_pane_keeps_clear_of_the_window_buttons_and_the_list_acts_by_swipe_and_k
     store.replace_mailboxes(id, &folders).unwrap();
     let palette = Palette::for_scheme(Scheme::Light);
     let settings = MailSettings::default();
-    let mut view = MailView::new(store_path, settings, palette, TextSystem::new()).unwrap();
+    let mut view = MailView::new(store_path.clone(), settings, palette, TextSystem::new()).unwrap();
     view.reload();
 
     let widths = [
@@ -308,4 +308,21 @@ fn every_pane_keeps_clear_of_the_window_buttons_and_the_list_acts_by_swipe_and_k
     assert!(named(&view, "Sort by").is_some(), "Ctrl+2 shows the list");
     press(&mut view, Key::Character('?'), false);
     assert!(view.has_sheet(), "? lists the shortcuts");
+
+    let mut account = store.account(id).unwrap().unwrap();
+    account.enabled = false;
+    store.update_account(&account).unwrap();
+    let settings = MailSettings::default();
+    let mut view = MailView::new(store_path, settings, palette, TextSystem::new()).unwrap();
+    view.start();
+    view.scene(1280, 800);
+    assert!(named(&view, "Sort by").is_none(), "the setup guide shows");
+    account.enabled = true;
+    store.update_account(&account).unwrap();
+    view.accounts_changed();
+    view.scene(1280, 800);
+    assert!(
+        named(&view, "Sort by").is_some(),
+        "an account turned on in Settings ends the setup guide"
+    );
 }

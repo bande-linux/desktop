@@ -39,12 +39,12 @@ bande-spring.workspace = true
 bande-wallpaper.workspace = true
 bande-widgets.workspace = true
 bande-xdg.workspace = true
+drm-ffi.workspace = true
 zbus.workspace = true
 
 [dev-dependencies]
 bande-test-bus.workspace = true
 bande-test-wayland.workspace = true
-drm-ffi.workspace = true
 wayland-client.workspace = true
 
 [lints]

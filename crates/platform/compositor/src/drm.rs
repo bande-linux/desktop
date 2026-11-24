@@ -42,6 +42,7 @@ use bande_render::{RenderError, VulkanRenderer};
 use crate::boot_screen::boot_screen_shown;
 use crate::clock::{FrameOutput, Submission, Vblank};
 use crate::element::drawing_everything;
+use crate::gamma::Tint;
 use crate::output_format::{
     self, Buffers, Failure, LinkDepth, OutputFormat, Shape, Sink, Step, Wanted,
 };
@@ -77,7 +78,7 @@ struct Head {
     variable_refresh: bool,
     scanned_out: bool,
     dark: bool,
-    colour: Colour,
+    tint: Option<Tint>,
     tone: Option<f64>,
     lost_at: Option<Instant>,
     relink_wanted: bool,
@@ -99,14 +100,6 @@ impl Head {
         }
         Ok(())
     }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-enum Colour {
-    Unknown,
-    Ramp(usize),
-    Matrix(property::Handle),
-    Fixed,
 }
 
 pub struct DrmBackend {
@@ -1039,7 +1032,7 @@ impl DrmBackend {
             variable_refresh,
             scanned_out: false,
             dark: false,
-            colour: Colour::Unknown,
+            tint: None,
             tone: None,
             lost_at: None,
             relink_wanted: false,
@@ -1511,43 +1504,6 @@ fn read_buffer(
     }))
 }
 
-fn colour_of(device: &DrmDevice, crtc: crtc::Handle) -> Colour {
-    let size = device
-        .get_crtc(crtc)
-        .map_or(0, |info| info.gamma_length() as usize);
-    if size > 0 {
-        return Colour::Ramp(size);
-    }
-    device
-        .get_properties(crtc)
-        .ok()
-        .and_then(|properties| {
-            properties
-                .as_props_and_values()
-                .0
-                .iter()
-                .copied()
-                .find(|handle| {
-                    device
-                        .get_property(*handle)
-                        .is_ok_and(|info| info.name().to_bytes() == b"CTM")
-                })
-        })
-        .map_or(Colour::Fixed, Colour::Matrix)
-}
-
-fn set_matrix(
-    device: &DrmDevice,
-    crtc: crtc::Handle,
-    property: property::Handle,
-    kelvin: f64,
-) -> std::io::Result<()> {
-    let blob = device.create_property_blob(&crate::night::matrix(kelvin))?;
-    let applied = device.set_property(crtc, property, blob.into());
-    device.destroy_property_blob(blob.into())?;
-    applied
-}
-
 fn tint(device: &DrmDevice, head: &mut Head, kelvin: f64) {
     let kelvin = match head.shape.hdr {
         true => crate::night::NEUTRAL,
@@ -1557,24 +1513,23 @@ fn tint(device: &DrmDevice, head: &mut Head, kelvin: f64) {
         return;
     }
     let crtc = head.compositor.crtc();
-    if head.colour == Colour::Unknown {
-        head.colour = colour_of(device, crtc);
-        tracing::info!("{} tints through {:?}", head.config.name, head.colour);
+    let mut tint = head.tint.take().unwrap_or_else(|| Tint::of(device, crtc));
+    let mut shown = tint.show(device, crtc, kelvin);
+    while let Err(error) = &shown
+        && matches!(
+            error.kind(),
+            io::ErrorKind::InvalidInput | io::ErrorKind::Unsupported
+        )
+        && let Some(next) = tint.instead(device, crtc)
+    {
+        tracing::warn!("cannot tint {} with {tint}: {error}", head.config.name);
+        tint = next;
+        shown = tint.show(device, crtc, kelvin);
     }
-    let applied = match head.colour {
-        Colour::Ramp(size) => {
-            let [red, green, blue] = crate::night::ramp(size, kelvin);
-            device.set_gamma(crtc, &red, &green, &blue)
-        }
-        Colour::Matrix(property) => set_matrix(device, crtc, property, kelvin),
-        Colour::Unknown | Colour::Fixed => return,
-    };
-    match applied {
+    head.tint = Some(tint);
+    match shown {
         Ok(()) => head.tone = Some(kelvin),
-        Err(error) => {
-            tracing::warn!("cannot tint {}: {error}", head.config.name);
-            head.colour = Colour::Fixed;
-        }
+        Err(error) => tracing::debug!("{} is tinted later: {error}", head.config.name),
     }
 }
 

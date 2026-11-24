@@ -1127,9 +1127,7 @@ impl SettingsView {
             PaneId::Network => self.network.is_some(),
             PaneId::Notifications => self.values.contains_key(&SettingId::DoNotDisturb),
             PaneId::Sound => self.audio.is_some(),
-            PaneId::Displays | PaneId::DisplaysAdvanced | PaneId::NightLight => {
-                !self.displays.is_empty()
-            }
+            PaneId::Displays => !self.displays.is_empty(),
             PaneId::BarMore => self.values.get(&SettingId::BarFloating) == Some(&Value::Flag(true)),
             PaneId::About => self.about.is_some(),
             PaneId::Appearance
@@ -1526,7 +1524,7 @@ impl SettingsView {
 
     fn focus_best_match(&mut self) {
         if let Some(best) = self.hit(self.pane).and_then(PaneHit::best) {
-            self.focus_next = Some(Anchor::Setting(best.setting, None));
+            self.focus_next = Some(Anchor::Setting(self.night_revealed(best.setting), None));
             self.invalidate();
         }
     }

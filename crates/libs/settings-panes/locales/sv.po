@@ -50,13 +50,6 @@ msgstr "Hjälpmedel"
 msgid "Displays"
 msgstr "Skärmar"
 
-msgctxt "displays"
-msgid "Advanced"
-msgstr "Avancerat"
-
-msgid "Night Light"
-msgstr "Nattljus"
-
 msgid "Sound"
 msgstr "Ljud"
 
@@ -153,12 +146,6 @@ msgstr "Gör skärmen, ljudet, tangentbordet och pekaren enklare att använda"
 msgid "Arrangement, resolution and size of each display"
 msgstr "Placering, upplösning och storlek för varje skärm"
 
-msgid "Refresh rate and variable refresh rate of each display"
-msgstr "Uppdateringsfrekvens och variabel uppdateringsfrekvens för varje skärm"
-
-msgid "Warmer colors after dark"
-msgstr "Varmare färger efter mörkrets inbrott"
-
 msgid "Output, input and sound effects"
 msgstr "Utgång, ingång och ljudeffekter"
 
@@ -254,12 +241,6 @@ msgstr "a11y, funktionsnedsättning, hjälpmedel, syn, hörsel, motorik"
 
 msgid "monitor, screen, resolution, brightness, night light"
 msgstr "bildskärm, skärm, upplösning, ljusstyrka, nattljus"
-
-msgid "advanced, monitor, refresh rate, hertz, hz, variable refresh, vrr"
-msgstr "avancerat, bildskärm, uppdateringsfrekvens, hertz, hz, variabel uppdatering, vrr"
-
-msgid "night shift, blue light, warm, redshift, colour temperature, color temperature, eye strain"
-msgstr "night shift, blått ljus, varm, redshift, färgtemperatur, ansträngda ögon"
 
 msgid "audio, speakers, headphones, microphone"
 msgstr "audio, högtalare, hörlurar, mikrofon"
@@ -848,26 +829,32 @@ msgstr "Upplösning"
 msgid "pixels, size, mode, sharp, all resolutions, modes, native"
 msgstr "pixlar, storlek, läge, skarp, alla upplösningar, lägen, inbyggd"
 
-msgid "Rotation"
-msgstr "Rotation"
-
-msgid "rotate, portrait, landscape, orientation, turn"
-msgstr "rotera, stående, liggande, orientering, vrid"
-
 msgid "Refresh rate"
 msgstr "Uppdateringsfrekvens"
 
 msgid "hertz, hz, smooth, frame rate"
 msgstr "hertz, hz, jämn, bildfrekvens"
 
-msgid "Variable refresh rate in full screen"
-msgstr "Variabel uppdateringsfrekvens i helskärm"
+msgid "Rotation"
+msgstr "Rotation"
+
+msgid "rotate, portrait, landscape, orientation, turn"
+msgstr "rotera, stående, liggande, orientering, vrid"
+
+msgid "Variable refresh rate"
+msgstr "Variabel uppdateringsfrekvens"
 
 msgid "vrr, adaptive sync, freesync, games, video, smooth"
 msgstr "vrr, adaptiv synk, freesync, spel, video, jämn"
 
-msgid "on, off, night shift, blue light"
-msgstr "på, av, night shift, blått ljus"
+msgid "In full-screen games and videos"
+msgstr "I spel och video i helskärm"
+
+msgid "Night Light"
+msgstr "Nattljus"
+
+msgid "on, off, night shift, blue light, warm, redshift, colour temperature, color temperature, eye strain"
+msgstr "på, av, night shift, blått ljus, varm, redshift, färgtemperatur, ansträngda ögon"
 
 msgid "Schedule"
 msgstr "Schema"

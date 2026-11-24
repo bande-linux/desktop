@@ -251,13 +251,11 @@ impl SettingsView {
             PaneId::Storage | PaneId::SoftwareUpdate | PaneId::Diagnostics => {
                 self.pane_summary(pane.id)
             }
-            PaneId::NightLight => self.night_light_summary(),
             PaneId::Appearance
             | PaneId::Bar
             | PaneId::Search
             | PaneId::Accessibility
             | PaneId::BarMore
-            | PaneId::DisplaysAdvanced
             | PaneId::KeyboardShortcuts
             | PaneId::Pointing
             | PaneId::Apps
@@ -338,9 +336,6 @@ impl SettingsView {
                     PaneId::Wifi => tr!("Turn on Wi-Fi to see networks nearby."),
                     PaneId::Bluetooth => {
                         tr!("Turn on Bluetooth to connect headphones, keyboards and more.")
-                    }
-                    PaneId::NightLight => {
-                        tr!("Turn on Night Light to make the colors warmer at night.")
                     }
                     _ => String::new(),
                 },

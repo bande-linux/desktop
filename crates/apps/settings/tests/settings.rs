@@ -5,7 +5,7 @@ use std::sync::Arc;
 use bande_config::SoftwareUpdates;
 use bande_config::{Config, ConfigService, ConfigStore};
 use bande_settings::{
-    Command, PaneId, PointingDevices, Problem, ScreenSharing, SettingId, SettingsClient,
+    Command, Display, PaneId, PointingDevices, Problem, ScreenSharing, SettingId, SettingsClient,
     SettingsView, SharingCommand, SharingState, Update, Value,
 };
 use bande_test_bus::SessionBus;
@@ -28,7 +28,9 @@ fn search(query: &str) -> SettingsView {
         mouse: true,
         trackpad: false,
     });
+    view.set_displays(vec![Display::default()]);
     view.set_value(SettingId::BarFloating, Value::Flag(true));
+    view.set_value(SettingId::NightLight, Value::Flag(false));
     view.scene(SIZE.0, SIZE.1);
     for character in query.chars() {
         press(&mut view, Key::Character(character));
@@ -47,6 +49,8 @@ fn moved_settings_are_found_in_their_pane_and_absent_devices_are_not() {
         ("automatic updates", PaneId::SoftwareUpdate),
         ("primary button", PaneId::Pointing),
         ("spacing", PaneId::BarMore),
+        ("variable refresh", PaneId::Displays),
+        ("warmth", PaneId::Displays),
     ] {
         assert_eq!(
             search(query).visible_panes().first(),
@@ -54,6 +58,9 @@ fn moved_settings_are_found_in_their_pane_and_absent_devices_are_not() {
             "{query}"
         );
     }
+    let mut warmth = search("warmth");
+    press(&mut warmth, Key::Enter);
+    assert_eq!(warmth.focused_setting(), Some(SettingId::NightLight));
     let mut panes = bande_settings_panes::panes();
     bande_settings_panes::with_pointers(&mut panes, true, false);
     assert!(

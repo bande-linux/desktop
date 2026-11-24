@@ -770,9 +770,6 @@ msgstr "Slå på Wi-Fi för att se nätverk i närheten."
 msgid "Turn on Bluetooth to connect headphones, keyboards and more."
 msgstr "Slå på Bluetooth för att ansluta hörlurar, tangentbord med mera."
 
-msgid "Turn on Night Light to make the colors warmer at night."
-msgstr "Slå på Nattljus för att göra färgerna varmare på natten."
-
 msgid "Search languages and countries"
 msgstr "Sök språk och länder"
 

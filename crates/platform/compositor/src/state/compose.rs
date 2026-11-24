@@ -125,7 +125,7 @@ impl Compositor {
         self.state.prepare_switcher(screen);
         self.state.prepare_window_menu(screen);
         self.state.prepare_force_quit(screen);
-        let (elements, drawn, icon) = self.compose(renderer, screen, true);
+        let (elements, drawn, icon) = self.compose(renderer, screen, true, true);
         self.state.remember_lock_frame(renderer, screen);
         if self.state.pointer_screen() == screen {
             self.state.remember_drag_icon(icon);
@@ -149,10 +149,39 @@ impl Compositor {
         screen: usize,
         with_cursor: bool,
     ) -> Vec<ScreenElement> {
-        self.compose(renderer, screen, with_cursor).0
+        self.compose(renderer, screen, with_cursor, false).0
     }
 
-    fn compose(&self, renderer: &mut VulkanRenderer, screen: usize, with_cursor: bool) -> Composed {
+    fn compose(
+        &self,
+        renderer: &mut VulkanRenderer,
+        screen: usize,
+        with_cursor: bool,
+        keep_backdrops: bool,
+    ) -> Composed {
+        let (mut elements, drawn, icon) = self.compose_view(renderer, screen, with_cursor);
+        let shown = &self.state.screens[screen];
+        let area = shown.settings.transform.transform_size(shown.mode_size());
+        let scale = match shown.mirror {
+            Some(_) => shown.scale(),
+            None => self.state.render_scale(screen),
+        };
+        let name = shown.name();
+        keep_backdrops_whole(
+            &mut elements,
+            scale,
+            Rectangle::from_size(area),
+            keep_backdrops.then_some((renderer, name.as_str())),
+        );
+        (elements, drawn, icon)
+    }
+
+    fn compose_view(
+        &self,
+        renderer: &mut VulkanRenderer,
+        screen: usize,
+        with_cursor: bool,
+    ) -> Composed {
         if let Some(source) = self.state.screens[screen]
             .mirror
             .as_deref()
@@ -163,11 +192,7 @@ impl Compositor {
         let scale = self.state.render_scale(screen);
         let (elements, drawn, icon) = self.compose_at(renderer, screen, scale, with_cursor);
         let origin = self.state.view_origin_in_pixels(screen, scale);
-        let mut elements = relocated(elements, Point::default() - origin);
-        let shown = &self.state.screens[screen];
-        let area = shown.settings.transform.transform_size(shown.mode_size());
-        keep_backdrops_whole(&mut elements, scale, Rectangle::from_size(area));
-        (elements, drawn, icon)
+        (relocated(elements, Point::default() - origin), drawn, icon)
     }
 
     fn compose_mirror(
@@ -191,9 +216,7 @@ impl Compositor {
             Point::<i32, Physical>::from(((frame.w - shown.w) / 2, (frame.h - shown.h) / 2));
         let (elements, _, _) = self.compose_at(renderer, source, scale, with_cursor);
         let origin = self.state.screens[source].origin_in_pixels(scale);
-        let mut elements = relocated(elements, inset - origin);
-        keep_backdrops_whole(&mut elements, scale, Rectangle::from_size(frame));
-        (elements, Vec::new(), None)
+        (relocated(elements, inset - origin), Vec::new(), None)
     }
 
     fn compose_at(

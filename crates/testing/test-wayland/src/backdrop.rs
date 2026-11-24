@@ -1,4 +1,5 @@
 use wayland_client::protocol::wl_region::WlRegion;
+use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_client::{Connection, Dispatch, QueueHandle, delegate_noop};
 use wayland_protocols::ext::background_effect::v1::client::ext_background_effect_manager_v1::{
     self, ExtBackgroundEffectManagerV1,
@@ -14,18 +15,22 @@ impl TestClient {
         index: usize,
         (width, height): (i32, i32),
     ) {
+        let surface = self.windows[index].0.clone();
+        self.blur_surface(&surface, (width, height));
+        surface.commit();
+        self.exchange(server);
+    }
+
+    pub(crate) fn blur_surface(&self, surface: &WlSurface, (width, height): (i32, i32)) {
         let qh = self.queue.handle();
         let manager: ExtBackgroundEffectManagerV1 =
             self.bind("ext_background_effect_manager_v1", 1);
-        let surface = self.windows[index].0.clone();
-        let effect = manager.get_background_effect(&surface, &qh, ());
+        let effect = manager.get_background_effect(surface, &qh, ());
         let compositor = self.globals.compositor.as_ref().expect("wl_compositor");
         let region = compositor.create_region(&qh, ());
         region.add(0, 0, width, height);
         effect.set_blur_region(Some(&region));
         region.destroy();
-        surface.commit();
-        self.exchange(server);
     }
 }
 

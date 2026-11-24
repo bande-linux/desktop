@@ -11,6 +11,7 @@ mod frames;
 mod ime;
 pub mod keys;
 mod lock;
+mod panel;
 mod remote;
 mod seat;
 mod separate;

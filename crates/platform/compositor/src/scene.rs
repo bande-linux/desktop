@@ -29,7 +29,7 @@ use bande_graphics::{
     BackdropTone, Color, Elevation, Palette, Radius, Scheme, window_edge_opacity,
 };
 use bande_render::{
-    Backdrop, Blur, RenderError, RoundedRect, Shadow, VulkanFrame, VulkanRenderer, VulkanTexture,
+    Blur, RenderError, RoundedRect, Shadow, VulkanFrame, VulkanRenderer, VulkanTexture,
 };
 
 pub(crate) const CORNER_RADIUS: f64 = Radius::XL as f64;
@@ -534,25 +534,39 @@ impl BlurElement {
 
     pub(crate) fn depend_on(&mut self, below: u64) {
         self.below = below;
-        self.cover(0, u64::MAX);
+        self.commit = CommitCounter::from((self.params ^ below) as usize);
     }
 
     pub(crate) fn reach(&self) -> i32 {
         self.blur.reach()
     }
 
-    pub(crate) fn cover(&mut self, occluders: u64, uncovered: u64) {
-        let below = self.below ^ occluders;
-        self.commit = CommitCounter::from((self.params ^ below) as usize);
+    pub(crate) fn shape(&self) -> Rectangle<i32, Physical> {
+        let region = self.blur.region;
+        let from = (region.x.floor() as i32, region.y.floor() as i32);
+        let until = (
+            (region.x + region.width).ceil() as i32,
+            (region.y + region.height).ceil() as i32,
+        );
+        Rectangle::new(from.into(), (until.0 - from.0, until.1 - from.1).into())
+    }
+
+    pub(crate) fn keep(
+        &mut self,
+        renderer: &mut VulkanRenderer,
+        view: &str,
+        covered: &[Rectangle<i32, Physical>],
+    ) {
         let mut owner = DefaultHasher::new();
-        self.id.hash(&mut owner);
-        let mut backdrop = DefaultHasher::new();
-        (below, self.blur.offset.to_bits(), self.blur.passes).hash(&mut backdrop);
-        self.blur.backdrop = Some(Backdrop {
-            owner: owner.finish(),
-            below: backdrop.finish(),
-            uncovered,
-        });
+        (view, &self.id).hash(&mut owner);
+        let mut below = DefaultHasher::new();
+        (self.below, self.blur.offset.to_bits(), self.blur.passes).hash(&mut below);
+        for rect in covered {
+            (rect.loc.x, rect.loc.y, rect.size.w, rect.size.h).hash(&mut below);
+        }
+        let backdrop = renderer.backdrop(owner.finish(), below.finish());
+        self.commit = CommitCounter::from((self.params ^ backdrop.drawing) as usize);
+        self.blur.backdrop = Some(backdrop);
     }
 }
 

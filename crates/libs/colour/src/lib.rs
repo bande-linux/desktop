@@ -347,7 +347,7 @@ fn parse_curve(data: &[u8]) -> Result<Curve, IccError> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Conversion {
     pub matrix: [[f32; 3]; 3],
-    pub encode: Vec<[u8; 3]>,
+    pub encode: Vec<[u16; 3]>,
 }
 
 pub fn conversion(display: &Profile, gains: [f64; 3]) -> Option<Conversion> {
@@ -362,7 +362,7 @@ pub fn conversion(display: &Profile, gains: [f64; 3]) -> Option<Conversion> {
             let position = index as f64 / (ENCODE_ENTRIES - 1) as f64;
             let linear = position * position;
             std::array::from_fn(|channel| {
-                (display.curves[channel].to_encoded(linear) * 255.0).round() as u8
+                (display.curves[channel].to_encoded(linear) * f64::from(u16::MAX)).round() as u16
             })
         })
         .collect();

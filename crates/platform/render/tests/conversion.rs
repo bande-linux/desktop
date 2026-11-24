@@ -109,10 +109,10 @@ fn paint(renderer: &mut VulkanRenderer, dmabuf: &mut Dmabuf, turn: i32, tiles: &
 }
 
 fn profile(matrix: [[f32; 3]; 3]) -> OutputColour {
-    let encode: Vec<[u8; 3]> = (0..ENTRIES)
+    let encode: Vec<[u16; 3]> = (0..ENTRIES)
         .map(|entry| {
             let root = entry as f64 / (ENTRIES - 1) as f64;
-            [((root * root).powf(1.0 / GAMMA) * 255.0).round() as u8; 3]
+            [((root * root).powf(1.0 / GAMMA) * 65535.0).round() as u16; 3]
         })
         .collect();
     OutputColour {

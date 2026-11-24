@@ -43,6 +43,23 @@ impl RoundedRect {
         }
     }
 
+    fn covered(self) -> [Rect; 2] {
+        let radius = self.radius.max(0.0).min(self.width.min(self.height) / 2.0);
+        let inset = |across: f32, down: f32| {
+            let left = (self.x + across).ceil();
+            let top = (self.y + down).ceil();
+            let right = (self.x + self.width - across).floor();
+            let bottom = (self.y + self.height - down).floor();
+            Rect::new(
+                left as i32,
+                top as i32,
+                (right - left) as i32,
+                (bottom - top) as i32,
+            )
+        };
+        [inset(1.0, radius + 1.0), inset(radius + 1.0, 1.0)]
+    }
+
     fn turned(self, turn: Transform, area: (i32, i32)) -> Self {
         if turn == Transform::Normal {
             return self;
@@ -368,6 +385,15 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
             ..*shadow
         };
         let destination = shadow.bounds();
+        let mut rects = rects;
+        for covered in shadow.window.covered() {
+            if !covered.is_empty() {
+                rects = rects
+                    .iter()
+                    .flat_map(|rect| rect.without(&covered))
+                    .collect();
+            }
+        }
         if rects.is_empty() {
             return Ok(());
         }

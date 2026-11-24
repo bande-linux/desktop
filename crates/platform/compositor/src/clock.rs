@@ -231,6 +231,7 @@ pub enum Submission {
     Unchanged,
     AwaitingFlip,
     Paused,
+    Retry,
 }
 
 pub trait FrameOutput {
@@ -522,7 +523,7 @@ impl FrameScheduler {
                     })?;
                     now = clock();
                     let done = match submission {
-                        Submission::Unchanged => now,
+                        Submission::Unchanged | Submission::Retry => now,
                         _ => now + output.gpu_time(&name),
                     };
                     let rendered = Rendered {
@@ -540,7 +541,7 @@ impl FrameScheduler {
                         deadline,
                         started,
                         done,
-                        submission != Submission::Unchanged,
+                        !matches!(submission, Submission::Unchanged | Submission::Retry),
                     );
                     self.committed = (submission == Submission::AwaitingFlip).then_some(Commit {
                         sequence: vblank.sequence,
@@ -575,6 +576,11 @@ impl FrameScheduler {
                             Phase::Rendered(next_vblank)
                         }
                         Submission::Unchanged => Phase::Rendered(next_vblank),
+                        Submission::Retry => {
+                            self.wanted = true;
+                            self.stalled_since.get_or_insert(started);
+                            Phase::Rendered(next_vblank)
+                        }
                     };
                 }
                 Phase::Held => {
@@ -663,6 +669,7 @@ impl FrameScheduler {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::output_format::{Buffers, Failure, OutputFormat, Shape, Sink};
 
     struct Counted(u32);
 
@@ -701,6 +708,91 @@ mod tests {
             ] {
                 assert_eq!(frames_after_late_wakes(clock, late)?, 1, "{late:?}");
             }
+        }
+        Ok(())
+    }
+
+    struct Failing {
+        formats: OutputFormat<u8>,
+        shape: Shape,
+        converting: bool,
+        failures: Vec<Failure>,
+        shown: Vec<Shape>,
+    }
+
+    const MODE: (u8, u32) = (144, 575_030);
+
+    impl FrameOutput for Failing {
+        type Error = io::Error;
+
+        fn submit(&mut self, _: &mut Compositor, _: &str) -> io::Result<Submission> {
+            if self.formats.needs_choice(MODE.0, true) {
+                self.shape = self.formats.candidates(MODE, true)[0];
+                self.formats.chosen(MODE.0, true);
+            }
+            let Some(failure) = self.failures.pop() else {
+                self.shown.push(self.shape);
+                return Ok(Submission::AwaitingFlip);
+            };
+            let step = self
+                .formats
+                .after(failure, (MODE.0, self.shape), self.converting);
+            self.converting = false;
+            step.submission()
+                .ok_or_else(|| io::Error::other("nothing left to try"))
+        }
+    }
+
+    #[test]
+    fn a_display_that_changes_its_buffers_draws_again_without_anything_else_happening()
+    -> io::Result<()> {
+        let refresh = Duration::from_secs_f64(1.0 / 60.0);
+        let plain = |buffers| Shape::plain(buffers)[0];
+        let deep = OutputFormat::<u8>::new(Sink::of_depth(10), true).candidates(MODE, true)[0];
+        for (start, converting, failure, wanted) in [
+            (deep, true, Failure::Buffers, deep),
+            (deep, false, Failure::Refused, plain(Buffers::Tiled)),
+            (
+                plain(Buffers::Tiled),
+                false,
+                Failure::Buffers,
+                plain(Buffers::Linear),
+            ),
+            (
+                plain(Buffers::Linear),
+                false,
+                Failure::Buffers,
+                plain(Buffers::Dumb),
+            ),
+        ] {
+            let mut formats = OutputFormat::new(Sink::of_depth(10), true);
+            while formats.candidates(MODE, true)[0] != start {
+                let shape = formats.candidates(MODE, true)[0];
+                formats.after(Failure::Buffers, (MODE.0, shape), false);
+            }
+            let mut output = Failing {
+                formats,
+                shape: start,
+                converting,
+                failures: vec![failure],
+                shown: Vec::new(),
+            };
+            let mut compositor = Compositor::new(smithay::utils::Size::from((640, 480)))?;
+            let mut now = Duration::from_secs(1);
+            let mut scheduler = FrameScheduler::new(FrameClock::measured(now, refresh));
+            for _ in 0..16 {
+                let poll = scheduler.poll(|| now, &mut compositor, &mut output)?;
+                if !output.shown.is_empty() {
+                    break;
+                }
+                assert!(
+                    scheduler.stalled_since().is_some() || !output.failures.is_empty(),
+                    "a display without a picture is not counted as stalled"
+                );
+                let Some(wake_at) = poll.wake_at else { break };
+                now = wake_at.max(now);
+            }
+            assert_eq!(output.shown, [wanted], "after {start}");
         }
         Ok(())
     }

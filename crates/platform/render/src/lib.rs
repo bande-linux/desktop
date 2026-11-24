@@ -338,7 +338,7 @@ impl Drop for MappedExport {
 #[derive(Debug, Clone, PartialEq)]
 pub struct OutputColour {
     pub matrix: [[f32; 3]; 3],
-    pub encode: Option<Arc<[[u8; 3]]>>,
+    pub encode: Option<Arc<[[u16; 3]]>>,
 }
 
 struct Unconverted {
@@ -417,7 +417,7 @@ pub struct VulkanRenderer {
     unproven: Vec<(vk::ImageUsageFlags, Format)>,
     proven: bool,
     output_colour: Option<OutputColour>,
-    encode_tables: Vec<(Arc<[[u8; 3]]>, VulkanTexture)>,
+    encode_tables: Vec<(Arc<[[u16; 3]]>, VulkanTexture)>,
     colour_scratch: HashMap<(i32, i32, vk::Format), Image>,
     memory: vk::PhysicalDeviceMemoryProperties,
     info: DeviceInfo,
@@ -699,6 +699,7 @@ fn target_format(format: Fourcc) -> Option<vk::Format> {
     match format {
         Fourcc::Argb8888 | Fourcc::Xrgb8888 => Some(vk::Format::B8G8R8A8_UNORM),
         Fourcc::Abgr8888 | Fourcc::Xbgr8888 => Some(vk::Format::R8G8B8A8_UNORM),
+        Fourcc::Abgr2101010 => Some(vk::Format::A2B10G10R10_UNORM_PACK32),
         _ => None,
     }
 }
@@ -709,7 +710,7 @@ fn is_deep_target(format: vk::Format) -> bool {
 
 fn is_opaque(format: Fourcc) -> Option<bool> {
     match format {
-        Fourcc::Argb8888 | Fourcc::Abgr8888 => Some(false),
+        Fourcc::Argb8888 | Fourcc::Abgr8888 | Fourcc::Abgr2101010 => Some(false),
         Fourcc::Xrgb8888 => Some(true),
         _ => None,
     }
@@ -980,6 +981,12 @@ impl VulkanRenderer {
         Ok(())
     }
 
+    /// Makes what drawing into `format` needs, ahead of the first frame.
+    pub fn prepare(&mut self, format: Fourcc) -> Result<(), RenderError> {
+        let texel = formats::texel(format).ok_or(RenderError::UnsupportedFormat)?;
+        self.prepare_pipelines(texel.format)
+    }
+
     fn prepare_pipelines(&mut self, format: vk::Format) -> Result<(), RenderError> {
         for program in PROGRAMS {
             if !self.pipelines.contains_key(&(format, program)) {
@@ -1120,17 +1127,19 @@ impl VulkanRenderer {
         if self.encode_table(table).is_some() {
             return Ok(());
         }
+        let ten = |value: u16| (u32::from(value) * 1023 + 32767) / 65535;
         let pixels: Vec<u8> = table
             .iter()
-            .flat_map(|[red, green, blue]| [*blue, *green, *red, u8::MAX])
+            .map(|channels| channels.map(ten))
+            .flat_map(|[red, green, blue]| (3 << 30 | blue << 20 | green << 10 | red).to_le_bytes())
             .collect();
         let size = (table.len() as i32, 1).into();
-        let texture = self.import_memory(&pixels, Fourcc::Argb8888, size, false)?;
+        let texture = self.import_memory(&pixels, Fourcc::Abgr2101010, size, false)?;
         self.encode_tables.push((table.clone(), texture));
         Ok(())
     }
 
-    fn encode_table(&self, table: &Arc<[[u8; 3]]>) -> Option<vk::ImageView> {
+    fn encode_table(&self, table: &Arc<[[u16; 3]]>) -> Option<vk::ImageView> {
         self.encode_tables
             .iter()
             .find(|(loaded, _)| Arc::ptr_eq(loaded, table))

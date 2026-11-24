@@ -199,14 +199,25 @@ when they reach the screen is Bande's own.
   the link bad and costs a second mode-set) moves nothing. A mode is tested with the driver before
   it is used. A refused mode falls back to the next that passes, nearest size first, without
   touching the saved settings; with none left the display waits for the next change event. The link
-  is set good again in the frame path, after any pending flip. A display whose EDID states ten or
-  more bits per channel (base block, HDMI block or DisplayID parameters) is given 10-bit tiled
-  buffers when the plane and the GPU share them and a test commit in the chosen mode takes them,
-  8-bit ones otherwise (`output_format.rs`); a mode that refuses them later keeps its refresh and
-  shows 8 bits until the mode changes. `max bpc` is only raised, to the bits of the buffers, as
-  some drivers start at 8 and the kernel lowers the link by itself when it cannot carry the mode;
-  what the link ends up sending cannot be read back. Interlaced modes are left out when the display
-  has others. A display is named by its EDID
+  is set good again in the frame path, after any pending flip. A display gets 10-bit
+  tiled buffers when all of these hold (`output_format.rs`): the EDID states ten or more bits (base
+  block or DisplayID; over HDMI its deep colour flags, within its character clock at that mode), the
+  plane and the GPU share such a layout, a test commit in the mode takes the buffers, and
+  `deep-colour` is not off for it (Settings ▸ Displays ▸ Deep color). Otherwise it gets 8 bits;
+  the refresh rate is never lowered for depth. The choice is made again when the mode or the setting
+  changes or the session comes back, on the live surface, so the CRTC stays on. Buffers that fail
+  lose depth first, then tiling, then GPU rendering, for as long as the display is connected; a
+  display whose commit refuses 10 bits keeps the mode with 8. Every such change draws the display
+  again by itself and counts as a stall until a frame shows. `max bpc` is what it was found at, or
+  the frames' bits when that is more, and 8 while deep colour is off. Smithay's public commits carry
+  no connector properties, so it is set by a commit of its own, only when it differs, after a test
+  together with the mode; that is one extra mode-set, and the value stays after the session. When
+  the display then refuses the depth it goes back. Above eight bits the kernel may still send
+  fewer, which nothing but its debug files tells; frames are dithered to the buffer's depth, so a
+  link that cuts 10 bits to 8 shows coarser shadows than 8-bit frames would. On GPUs without
+  compressed 10-bit layouts (Intel gen9) scanout reads every pixel uncompressed, also when idle: at
+  2560×1440 and 144 Hz 2.1 GB/s. An interlaced mode is left out when a progressive one has its size.
+  A display is named by its EDID
   (maker from the PNP id, model and serial from the descriptors without control characters,
   falling back to the product code and
   serial number; two displays with the same name are told apart by their connector). A fullscreen
@@ -294,7 +305,7 @@ when they reach the screen is Bande's own.
   or the path of an ICC matrix-and-curve display profile. A profile that differs from sRGB
   converts frames: a shader decodes sRGB, applies the matrix to the display's primaries
   (relative, white kept, Bradford-adapted through D50) and encodes with the profile's own tone
-  curves through a 4096-entry table, on the drawn regions only, from the buffer's unconverted
+  curves through a 4096-entry table of 10 bits, on the drawn regions only, from the buffer's unconverted
   image into the buffer, so no pixel is converted twice. The conversion belongs to the buffers bound
   while a display's frame is drawn (`VulkanRenderer::converting`), so captures, thumbnails and other
   displays stay sRGB; a display whose conversion changes in any way draws its buffers anew, one whose

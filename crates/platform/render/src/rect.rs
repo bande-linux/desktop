@@ -48,6 +48,24 @@ impl Rect {
             && other.y + other.height <= self.y + self.height
     }
 
+    /// The parts of this rectangle outside `hole`.
+    pub fn without(&self, hole: &Self) -> Vec<Self> {
+        let Some(hole) = self.intersection(hole) else {
+            return vec![*self];
+        };
+        let (right, bottom) = (self.x + self.width, self.y + self.height);
+        let (hole_right, hole_bottom) = (hole.x + hole.width, hole.y + hole.height);
+        [
+            Self::new(self.x, self.y, self.width, hole.y - self.y),
+            Self::new(self.x, hole_bottom, self.width, bottom - hole_bottom),
+            Self::new(self.x, hole.y, hole.x - self.x, hole.height),
+            Self::new(hole_right, hole.y, right - hole_right, hole.height),
+        ]
+        .into_iter()
+        .filter(|part| !part.is_empty())
+        .collect()
+    }
+
     fn bounding(&self, other: &Self) -> Self {
         let left = self.x.min(other.x);
         let top = self.y.min(other.y);

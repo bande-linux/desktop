@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use bande_colour::{Profile, conversion, inverse};
 use bande_compositor::{edid_profile, refresh_of, sorted_modes};
-use bande_edid::{Edid, Primaries, display_name, identity, parse};
+use bande_edid::{Edid, Hdmi, Primaries, display_name, identity, parse};
 use drm_ffi::{DRM_MODE_FLAG_INTERLACE, DRM_MODE_TYPE_DRIVER, DRM_MODE_TYPE_PREFERRED};
 use smithay::reexports::drm::control::{Mode, ModeFlags};
 
@@ -257,7 +257,7 @@ fn check_profile(edid: &Edid, profile: &Profile) -> Result<(), String> {
     });
     if !rising
         || converted.encode.first() != Some(&[0; 3])
-        || converted.encode.last() != Some(&[255; 3])
+        || converted.encode.last() != Some(&[u16::MAX; 3])
     {
         return Err(format!(
             "encoding curve for gamma {:?} is not 0..=255 rising",
@@ -268,15 +268,11 @@ fn check_profile(edid: &Edid, profile: &Profile) -> Result<(), String> {
 }
 
 fn check_modes(bytes: &[u8]) -> Result<bool, String> {
-    let mut modes = detailed_modes(bytes);
-    let whole = |mode: &Mode| !mode.flags().contains(ModeFlags::INTERLACE);
-    if modes.iter().any(whole) {
-        modes.retain(whole);
-    }
+    let modes = detailed_modes(bytes);
     let Some(preferred) = modes.first() else {
         return Ok(false);
     };
-    let sorted = sorted_modes(&detailed_modes(bytes));
+    let sorted = sorted_modes(&modes);
     let chosen = sorted.first().ok_or("no mode left")?;
     if chosen.size() != preferred.size() {
         return Err(format!(
@@ -293,8 +289,16 @@ fn check_modes(bytes: &[u8]) -> Result<bool, String> {
         ));
     }
     let shown = |mode: &Mode| (mode.size(), refresh_of(mode));
+    let whole = |mode: &Mode| !mode.flags().contains(ModeFlags::INTERLACE);
+    let replaced = |mode: &&Mode| {
+        !whole(mode)
+            && modes
+                .iter()
+                .any(|other| whole(other) && other.size() == mode.size())
+    };
     match modes
         .iter()
+        .filter(|mode| !replaced(mode))
         .find(|mode| !sorted.iter().any(|kept| shown(kept) == shown(mode)))
     {
         Some(lost) => Err(format!("lost the mode {:?}", shown(lost))),
@@ -421,16 +425,29 @@ fn the_bits_a_display_takes_come_from_every_block_that_states_them() {
     let mut hdmi = display.clone();
     hdmi[BLOCK..].fill(0);
     hdmi[BLOCK..BLOCK + 11].copy_from_slice(&[CTA, 3, 12, 0, 0x67, 0x03, 0x0c, 0, 0x10, 0, 0]);
-    for (flags, bits) in [
-        (0, None),
-        (0x10, Some(10)),
-        (0x30, Some(12)),
-        (0x70, Some(16)),
-    ] {
+    hdmi[BLOCK + 2] = 20;
+    hdmi[BLOCK + 4] = 0x67;
+    hdmi[BLOCK + 11] = 60;
+    hdmi[BLOCK + 12..BLOCK + 20].copy_from_slice(&[0x67, 0xd8, 0x5d, 0xc4, 1, 0, 0, 0]);
+    let over_hdmi = |bytes: &[u8]| parse(bytes).and_then(|edid| edid.hdmi);
+    for (flags, depth) in [(0, 8), (0x10, 10), (0x30, 12), (0x70, 16)] {
         hdmi[BLOCK + 10] = flags;
-        hdmi[BLOCK + 4] = 0x66;
-        assert_eq!(depth(&hdmi), bits, "HDMI flags {flags:#x}");
+        let wanted = Hdmi {
+            depth,
+            max_clock_khz: Some(300_000),
+        };
+        assert_eq!(over_hdmi(&hdmi), Some(wanted), "HDMI flags {flags:#x}");
     }
+    hdmi[BLOCK + 17] = 120;
+    let clock = |bytes: &[u8]| over_hdmi(bytes).and_then(|hdmi| hdmi.max_clock_khz);
+    assert_eq!(clock(&hdmi), Some(600_000));
+    hdmi[BLOCK + 19] = 0x60;
+    assert_eq!(
+        clock(&hdmi),
+        None,
+        "a fixed-rate link has no character clock"
+    );
+    assert_eq!(over_hdmi(&display), None);
     let mut display_id = display;
     display_id[BLOCK..].fill(0);
     display_id[BLOCK..BLOCK + 8].copy_from_slice(&[DISPLAY_ID, 0x20, 32, 0, 0, 0x21, 0, 29]);

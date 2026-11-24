@@ -104,6 +104,7 @@ impl PaneId {
             }
             Self::Power
             | Self::Users
+            | Self::Passwords
             | Self::PrivacySecurity
             | Self::Apps
             | Self::LanguageTime
@@ -111,7 +112,6 @@ impl PaneId {
             | Self::Backup
             | Self::About => Some(Group::System),
             Self::KeyboardShortcuts
-            | Self::Passwords
             | Self::Camera
             | Self::Microphone
             | Self::Screenshots
@@ -333,7 +333,6 @@ impl PaneId {
         match self {
             Self::Storage => Some(Self::About),
             Self::Diagnostics => Some(Self::PrivacySecurity),
-            Self::Passwords => Some(Self::Users),
             Self::KeyboardShortcuts => Some(Self::Keyboard),
             Self::Camera
             | Self::Microphone
@@ -517,13 +516,11 @@ pub enum SettingId {
     Printers,
     NearbyPrinters,
     Sharing,
-    BootScreen,
     Accounts,
     FullName,
     LockMessage,
     ShowPreviews,
     SavedPasswords,
-    PasswordsPage,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -544,7 +541,6 @@ pub enum List {
     Printers,
     NearbyPrinters,
     Sharing,
-    BootScreen,
     KnownNetworks,
     Networks,
     PairedDevices,
@@ -1956,10 +1952,6 @@ fn system_panes() -> Vec<Pane> {
                         List::Accounts,
                     )],
                 ),
-                section(
-                    None,
-                    vec![page(SettingId::PasswordsPage, PaneId::Passwords)],
-                ),
             ],
         ),
         pane(
@@ -2440,17 +2432,6 @@ fn about_pane() -> Pane {
                         "model, chip, processor, cpu, memory, ram, version, debian, bande, serial number"
                     ),
                     List::About,
-                )],
-            ),
-            section(
-                Some(tr!("Startup")),
-                vec![list(
-                    SettingId::BootScreen,
-                    tr!("Show a boot screen"),
-                    tr!(
-                        "boot screen, splash, start up, startup, logo, plymouth, grub, boot messages"
-                    ),
-                    List::BootScreen,
                 )],
             ),
             section(None, vec![page(SettingId::StoragePage, PaneId::Storage)]),

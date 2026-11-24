@@ -26,7 +26,6 @@ use jiff::Zoned;
 use crate::about::{About, AboutCommand};
 use crate::backup::{BackupIntent, BackupView};
 use crate::battery::{BatteryCommand, PowerState};
-use crate::boot_screen::{BootScreenCommand, BootScreenState};
 use crate::defaults::{DefaultApp, DefaultAppCommand};
 use crate::diagnostics::{Diagnostics, DiagnosticsCommand};
 use crate::enterprise::{Certificate, EnterpriseField};
@@ -145,7 +144,6 @@ pub(crate) enum Intent {
     DefaultPrinter(String),
     Sharing(SharingCommand),
     SignInPages(bool),
-    BootScreen(BootScreenCommand),
     PrinterAddress(String),
     AddPrinterAddress,
     InstallPrinting(Support),
@@ -335,8 +333,6 @@ pub struct SettingsView {
     pub(crate) screen_password: Rc<RefCell<Zeroizing<String>>>,
     pub(crate) screen_password_field: Option<WidgetId>,
     pub(crate) turning_on_screen: bool,
-    pub(crate) boot_screen: Option<BootScreenState>,
-    pub(crate) changing_boot_screen: bool,
     pub(crate) installing_vpn_plugin: bool,
     pub(crate) adding_printer: bool,
     pub(crate) installing_printing: Option<Support>,
@@ -462,8 +458,6 @@ impl SettingsView {
             screen_password: Rc::default(),
             screen_password_field: None,
             turning_on_screen: false,
-            boot_screen: None,
-            changing_boot_screen: false,
             installing_vpn_plugin: false,
             adding_printer: false,
             installing_printing: None,
@@ -765,7 +759,6 @@ impl SettingsView {
             }
             Update::Pictures(_) | Update::Thumbnail(..) => (None, &[SettingId::Wallpaper]),
             Update::Sharing(_) => (Some(PaneId::Sharing), &[SettingId::Sharing]),
-            Update::BootScreen(_) => (Some(PaneId::About), &[SettingId::BootScreen]),
             Update::Printers(_)
             | Update::PrinterAdded(..)
             | Update::PrintingInstalled
@@ -1014,10 +1007,6 @@ impl SettingsView {
                 self.installing_sharing = false;
                 self.turning_on_screen = false;
                 self.sharing = Some(state);
-            }
-            Update::BootScreen(state) => {
-                self.changing_boot_screen = false;
-                self.boot_screen = Some(state);
             }
             Update::KeyboardAccess(access) => self.keyboard_access = access,
             Update::Spelling(state) => self.spelling = state,
@@ -1806,10 +1795,6 @@ impl SettingsView {
                     );
                     self.commands.push(Command::Sharing(command));
                 }
-                Intent::BootScreen(command) => {
-                    self.changing_boot_screen |= command != BootScreenCommand::Read;
-                    self.commands.push(Command::BootScreen(command));
-                }
                 Intent::InstallPrinting(support) => {
                     self.installing_printing = Some(support);
                     self.commands
@@ -2226,7 +2211,6 @@ impl SettingsView {
             PaneId::Wifi | PaneId::Network => Command::Network(NetworkCommand::Watch(on)),
             PaneId::Printers => Command::Printers(PrinterCommand::Watch(on)),
             PaneId::Sharing if on => Command::Sharing(SharingCommand::Read),
-            PaneId::About if on => Command::BootScreen(BootScreenCommand::Read),
             PaneId::Keyboard if on => Command::Locale(LocaleCommand::Read),
             PaneId::LanguageTime if on => {
                 self.commands

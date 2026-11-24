@@ -1108,6 +1108,7 @@ where
         }
         if let Some(number) = compositor.take_virtual_terminal() {
             output.switch_virtual_terminal(number);
+            compositor.redraw_hdr_displays();
         }
         let reveal_wait = compositor
             .reveal_wake(now())

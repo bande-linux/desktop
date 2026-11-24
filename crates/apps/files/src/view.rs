@@ -499,7 +499,7 @@ impl FilesView {
             mode: ViewMode::default(),
             icon_size: DEFAULT_ICON_SIZE,
             show_hidden: false,
-            show_extensions: false,
+            show_extensions: true,
             warn_extension_change: true,
             spring_delay: Some(Duration::from_millis(u64::from(DEFAULT_SPRING_DELAY))),
             folders_first: true,

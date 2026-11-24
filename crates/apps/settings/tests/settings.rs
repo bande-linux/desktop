@@ -5,8 +5,8 @@ use std::sync::Arc;
 use bande_config::SoftwareUpdates;
 use bande_config::{Config, ConfigService, ConfigStore};
 use bande_settings::{
-    Command, Display, Mode, PaneId, PointingDevices, Problem, ScreenSharing, SettingId,
-    SettingsClient, SettingsView, SharingCommand, SharingState, Update, Value,
+    Command, Display, Mode, PaneId, Problem, ScreenSharing, SettingId, SettingsClient,
+    SettingsView, SharingCommand, SharingState, Update, Value,
 };
 use bande_test_bus::SessionBus;
 use bande_toolkit::ui::{Event, Key, Modifiers};
@@ -24,10 +24,6 @@ fn press(view: &mut SettingsView, key: Key) {
 
 fn search(query: &str) -> SettingsView {
     let mut view = SettingsView::new(Palette::for_scheme(Scheme::Light), TextSystem::new());
-    view.set_pointing_devices(PointingDevices {
-        mouse: true,
-        trackpad: false,
-    });
     view.set_displays(vec![Display::default()]);
     view.set_value(SettingId::BarFloating, Value::Flag(false));
     view.set_value(SettingId::NightLight, Value::Flag(false));
@@ -39,7 +35,7 @@ fn search(query: &str) -> SettingsView {
 }
 
 #[test]
-fn moved_settings_are_found_in_their_pane_and_absent_devices_are_not() {
+fn moved_settings_are_found_in_their_pane() {
     for (query, pane) in [
         ("sleep after", PaneId::Power),
         ("lock screen", PaneId::PrivacySecurity),
@@ -47,7 +43,9 @@ fn moved_settings_are_found_in_their_pane_and_absent_devices_are_not() {
         ("send report", PaneId::Diagnostics),
         ("saved passwords", PaneId::Passwords),
         ("automatic updates", PaneId::SoftwareUpdate),
-        ("primary button", PaneId::Pointing),
+        ("primary button", PaneId::Mouse),
+        ("tap to click", PaneId::Trackpad),
+        ("show desktop", PaneId::Trackpad),
         ("spacing", PaneId::Bar),
         ("variable refresh", PaneId::Displays),
         ("warmth", PaneId::Displays),
@@ -64,13 +62,19 @@ fn moved_settings_are_found_in_their_pane_and_absent_devices_are_not() {
     let mut spacing = search("spacing");
     press(&mut spacing, Key::Enter);
     assert_eq!(spacing.focused_setting(), Some(SettingId::BarFloating));
-    let mut panes = bande_settings_panes::panes();
-    bande_settings_panes::with_pointers(&mut panes, true, false);
-    assert!(
-        bande_settings_panes::search(&panes, "tap to click")
-            .iter()
-            .all(|hit| hit.setting(SettingId::TrackpadTapToClick).is_none())
-    );
+    let panes = search("").visible_panes();
+    for (first, next) in [
+        (PaneId::Users, PaneId::Passwords),
+        (PaneId::Keyboard, PaneId::Mouse),
+        (PaneId::Mouse, PaneId::Trackpad),
+    ] {
+        assert!(
+            panes
+                .windows(2)
+                .any(|pair| pair == [first, next].as_slice()),
+            "{first:?} comes right before {next:?}"
+        );
+    }
     assert_eq!(
         PaneId::from_keyword("software-update"),
         Some(PaneId::SoftwareUpdate)

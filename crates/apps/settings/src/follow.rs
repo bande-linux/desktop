@@ -17,7 +17,6 @@ use bande_settings_panes::{PaneId, SettingId, Value};
 use bande_status::brightness::{DisplayLevel, LevelRequest};
 use bande_status::devices::can_sleep;
 use bande_toolkit::SessionEnd;
-use bande_watch::FolderWatch;
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::PropertiesProxy;
 
@@ -38,7 +37,6 @@ use crate::notifications::{AppNotifications, NotificationCommand, follow_app_not
 use crate::passwords::{Concealed, PasswordCommand, Saved, follow_passwords};
 use crate::permissions::{Grants, PermissionCommand, follow_permissions};
 use crate::pictures::{Pair, PictureCommand, follow_pictures};
-use crate::pointing::follow_pointing;
 use crate::printers::{PrinterCommand, PrintersState, follow_printers};
 use crate::privacy::clear_clipboard;
 use crate::privilege::{Privilege, follow_privileges};
@@ -55,7 +53,6 @@ use crate::state::{Answer, BluetoothState, Joined, NetworkState, Question, WifiS
 use crate::storage::{Storage, StorageCommand, follow_storage};
 use crate::time::{TimeCommand, TimeState, follow_time};
 use crate::users::{Account, PasswordOutcome, UsersCommand, follow_users};
-use bande_status::pointing::{PointingDevices, UDEV_DATA};
 
 const NOTIFICATIONS: &str = "org.freedesktop.Notifications";
 const NOTIFICATIONS_PATH: &str = "/org/freedesktop/Notifications";
@@ -98,7 +95,6 @@ pub enum Update {
     FirmwareMissing(bool),
     Locale(Option<LocaleState>),
     Layouts(Layouts),
-    Pointing(PointingDevices),
     InputLevel(f32),
     Failed(SettingId, String),
     PaneFailed(PaneId, String),
@@ -459,7 +455,6 @@ pub struct Services {
     sharing: Sender<SharingCommand>,
     sign_in_pages: Sender<bool>,
     users: Sender<UsersCommand>,
-    _pointing: Option<FolderWatch>,
 }
 
 impl Services {
@@ -508,9 +503,6 @@ impl Services {
             sharing: follow_sharing(Some(session.clone()), system.cloned(), updates.clone()),
             sign_in_pages,
             users: follow_users(session, system, updates.clone()),
-            _pointing: follow_pointing(PathBuf::from(UDEV_DATA), updates.clone())
-                .inspect_err(|error| tracing::warn!("cannot watch {UDEV_DATA}: {error}"))
-                .ok(),
         }
     }
 

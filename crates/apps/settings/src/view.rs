@@ -14,7 +14,7 @@ use bande_l10n::tr;
 use bande_settings_panes::{
     AUTOMATIC, Kind, Pane, PaneId, Permission, Setting, SettingId, Value, panes,
 };
-use bande_settings_panes::{PaneHit, search, with_pointers};
+use bande_settings_panes::{PaneHit, search};
 use bande_status::brightness::{DisplayLevel, LevelRequest};
 use bande_toolkit::ui::{
     Alert, Context, Event, Key, Modifiers, PointerButton, ScrollState, SearchField, Size, Ui,
@@ -58,7 +58,6 @@ use crate::users::{Account, NewAccountForm, PasswordForm, PictureEdit, UsersComm
 use crate::widgets::{Column, Crossfade, Root};
 use crate::wifi::{HIDDEN_SECURITY, Other};
 use bande_network::Security;
-use bande_status::pointing::PointingDevices;
 use zeroize::Zeroizing;
 
 pub(crate) const PICK_RESULTS: usize = 8;
@@ -301,7 +300,6 @@ pub struct SettingsView {
     pub(crate) pane: PaneId,
     pub(crate) layouts: Option<Layouts>,
     pub(crate) system_keys: RefCell<Option<SystemKeys>>,
-    pub(crate) pointing: PointingDevices,
     pub(crate) about: Option<About>,
     pub(crate) diagnostics: Diagnostics,
     pub(crate) report_form: ReportForm,
@@ -427,7 +425,6 @@ impl SettingsView {
             pane: PaneId::Appearance,
             layouts: None,
             system_keys: RefCell::default(),
-            pointing: PointingDevices::default(),
             about: None,
             diagnostics: Diagnostics::default(),
             report_form: ReportForm::default(),
@@ -562,13 +559,6 @@ impl SettingsView {
 
     pub(crate) fn fail_here(&mut self, failure: String) {
         self.failures.insert(self.pane, failure);
-    }
-
-    pub fn set_pointing_devices(&mut self, devices: PointingDevices) {
-        if self.pointing != devices {
-            self.pointing = devices;
-            self.availability_changed();
-        }
     }
 
     pub fn hide_screen_reader(&mut self) {
@@ -900,7 +890,6 @@ impl SettingsView {
             Update::SoftwareHint(hint) => self.software_hint = hint,
             Update::FirmwareMissing(missing) => self.firmware_missing = missing,
             Update::Locale(locale) => self.locale = locale,
-            Update::Pointing(devices) => self.set_pointing_devices(devices),
             Update::Network(network) => {
                 let opened = match &self.detail {
                     Some(Detail::Wired(interface)) => network
@@ -1162,9 +1151,10 @@ impl SettingsView {
             | PaneId::Storage
             | PaneId::Diagnostics
             | PaneId::Backup
+            | PaneId::Mouse
+            | PaneId::Trackpad
             | PaneId::SoftwareUpdate => true,
             PaneId::LanguageTime => self.locale.is_some() || self.time.is_some(),
-            PaneId::Pointing => self.pointing.mouse || self.pointing.trackpad,
             PaneId::Microphone | PaneId::Location => self.has_grants(pane),
         }
     }
@@ -2268,9 +2258,7 @@ impl SettingsView {
     }
 
     fn search_hits(&self, query: &str) -> Vec<PaneHit> {
-        let mut panes = self.panes.clone();
-        with_pointers(&mut panes, self.pointing.mouse, self.pointing.trackpad);
-        search(&panes, query)
+        search(&self.panes, query)
             .into_iter()
             .filter(|hit| self.available(hit.pane))
             .collect()

@@ -33,7 +33,8 @@ pub enum PaneId {
     Sound,
     Keyboard,
     KeyboardShortcuts,
-    Pointing,
+    Mouse,
+    Trackpad,
     Printers,
     Sharing,
     Power,
@@ -55,7 +56,7 @@ pub enum PaneId {
 }
 
 impl PaneId {
-    const KEYWORDS: [(Self, &'static str); 31] = [
+    const KEYWORDS: [(Self, &'static str); 32] = [
         (Self::Wifi, "wifi"),
         (Self::Bluetooth, "bluetooth"),
         (Self::Network, "network"),
@@ -68,7 +69,8 @@ impl PaneId {
         (Self::Sound, "sound"),
         (Self::Keyboard, "keyboard"),
         (Self::KeyboardShortcuts, "keyboard-shortcuts"),
-        (Self::Pointing, "mouse-trackpad"),
+        (Self::Mouse, "mouse"),
+        (Self::Trackpad, "trackpad"),
         (Self::Printers, "printers"),
         (Self::Sharing, "sharing"),
         (Self::Power, "power"),
@@ -99,9 +101,12 @@ impl PaneId {
             | Self::Notifications
             | Self::Search
             | Self::Accessibility => Some(Group::Desktop),
-            Self::Displays | Self::Sound | Self::Keyboard | Self::Pointing | Self::Printers => {
-                Some(Group::Devices)
-            }
+            Self::Displays
+            | Self::Sound
+            | Self::Keyboard
+            | Self::Mouse
+            | Self::Trackpad
+            | Self::Printers => Some(Group::Devices),
             Self::Power
             | Self::Users
             | Self::Passwords
@@ -135,7 +140,8 @@ impl PaneId {
             Self::Displays => "video-display-symbolic",
             Self::Sound => "audio-volume-high-symbolic",
             Self::Keyboard | Self::KeyboardShortcuts => "input-keyboard-symbolic",
-            Self::Pointing => "input-mouse-symbolic",
+            Self::Mouse => "input-mouse-symbolic",
+            Self::Trackpad => "input-touchpad-symbolic",
             Self::Printers => "printer-symbolic",
             Self::Sharing => "folder-publicshare-symbolic",
             Self::Power => "system-shutdown-symbolic",
@@ -171,7 +177,8 @@ impl PaneId {
             Self::Sound => tr!("Sound"),
             Self::Keyboard => tr!("Keyboard"),
             Self::KeyboardShortcuts => tr!("Keyboard Shortcuts"),
-            Self::Pointing => tr!("Mouse & Trackpad"),
+            Self::Mouse => tr!("Mouse"),
+            Self::Trackpad => tr!("Trackpad"),
             Self::Printers => tr!("Printers"),
             Self::Sharing => tr!("Sharing"),
             Self::Power => tr!("Power"),
@@ -211,9 +218,8 @@ impl PaneId {
             Self::Sound => tr!("Output, input and sound effects"),
             Self::Keyboard => tr!("Input sources, key repeat and modifier keys"),
             Self::KeyboardShortcuts => tr!("The keys that work everywhere on the desktop"),
-            Self::Pointing => {
-                tr!("Buttons, tapping, scrolling, tracking speed and trackpad gestures")
-            }
+            Self::Mouse => tr!("Primary button, scrolling and tracking speed"),
+            Self::Trackpad => tr!("Tapping, scrolling, tracking speed and gestures"),
             Self::Printers => tr!("Add printers, pick the default, see what is printing and scan"),
             Self::Sharing => {
                 tr!("Share folders and the screen with other computers and allow remote login")
@@ -259,9 +265,10 @@ impl PaneId {
             Self::KeyboardShortcuts => {
                 tr!("hotkeys, shortcuts, keys, super, command, combinations")
             }
-            Self::Pointing => tr!(
-                "mouse, trackpad, touchpad, pointer, cursor, click, tap, scroll, wheel, buttons, gestures"
-            ),
+            Self::Mouse => tr!("pointer, cursor, click, scroll, wheel, buttons"),
+            Self::Trackpad => {
+                tr!("touchpad, pointer, cursor, click, tap, scroll, gestures")
+            }
             Self::Printers => {
                 tr!("print, printer, cups, queue, ipp, airprint, scan, scanner, escl")
             }
@@ -719,36 +726,6 @@ impl Section {
         self.note = Some(note);
         self
     }
-
-    pub fn fits_pointers(&self, mouse: bool, trackpad: bool) -> bool {
-        self.settings.iter().all(|setting| match setting.id {
-            SettingId::MousePrimaryButton
-            | SettingId::MouseNaturalScrolling
-            | SettingId::MouseSpeed
-            | SettingId::MouseAcceleration => mouse,
-            SettingId::TrackpadTapToClick
-            | SettingId::TrackpadNaturalScrolling
-            | SettingId::TrackpadSpeed
-            | SettingId::TrackpadSecondaryClick
-            | SettingId::TrackpadDisableWhileTyping
-            | SettingId::TrackpadWorkspaceSwipe
-            | SettingId::TrackpadOverviewSwipe
-            | SettingId::TrackpadDesktopSpread
-            | SettingId::TrackpadLauncherPinch
-            | SettingId::TrackpadAcceleration
-            | SettingId::TrackpadDragging
-            | SettingId::TrackpadScrollMethod => trackpad,
-            _ => true,
-        })
-    }
-}
-
-pub fn with_pointers(panes: &mut Vec<Pane>, mouse: bool, trackpad: bool) {
-    for pane in panes.iter_mut() {
-        pane.sections
-            .retain(|section| section.fits_pointers(mouse, trackpad));
-    }
-    panes.retain(|pane| pane.id != PaneId::Pointing || !pane.sections.is_empty());
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -1436,7 +1413,8 @@ fn device_panes() -> Vec<Pane> {
                 )],
             )],
         ),
-        pointing_pane(),
+        mouse_pane(),
+        trackpad_pane(),
         pane(
             PaneId::Printers,
             vec![
@@ -1805,37 +1783,43 @@ fn acceleration(id: SettingId) -> Setting {
     .described(tr!("Faster movements move the pointer farther"))
 }
 
-fn pointing_pane() -> Pane {
+fn mouse_pane() -> Pane {
     pane(
-        PaneId::Pointing,
+        PaneId::Mouse,
+        vec![section(
+            None,
+            vec![
+                setting(
+                    SettingId::MousePrimaryButton,
+                    tr!("Primary button"),
+                    tr!("left-handed, right-handed, swap buttons, click"),
+                    Kind::Choices(keyword_choices(vec![
+                        (tr!("Left"), "left"),
+                        (tr!("Right"), "right"),
+                    ])),
+                ),
+                setting(
+                    SettingId::MouseNaturalScrolling,
+                    tr!("Natural scrolling"),
+                    tr!("scroll direction, reverse, wheel"),
+                    Kind::Switch,
+                ),
+                speed(
+                    SettingId::MouseSpeed,
+                    tr!("pointer, cursor, acceleration, mouse"),
+                ),
+                acceleration(SettingId::MouseAcceleration),
+            ],
+        )],
+    )
+}
+
+fn trackpad_pane() -> Pane {
+    pane(
+        PaneId::Trackpad,
         vec![
             section(
-                Some(tr!("Mouse")),
-                vec![
-                    setting(
-                        SettingId::MousePrimaryButton,
-                        tr!("Primary button"),
-                        tr!("left-handed, right-handed, swap buttons, click"),
-                        Kind::Choices(keyword_choices(vec![
-                            (tr!("Left"), "left"),
-                            (tr!("Right"), "right"),
-                        ])),
-                    ),
-                    setting(
-                        SettingId::MouseNaturalScrolling,
-                        tr!("Natural scrolling"),
-                        tr!("scroll direction, reverse, wheel"),
-                        Kind::Switch,
-                    ),
-                    speed(
-                        SettingId::MouseSpeed,
-                        tr!("pointer, cursor, acceleration, mouse"),
-                    ),
-                    acceleration(SettingId::MouseAcceleration),
-                ],
-            ),
-            section(
-                Some(tr!("Trackpad")),
+                Some(tr!("Tap and click")),
                 vec![
                     switch(
                         SettingId::TrackpadTapToClick,
@@ -1865,7 +1849,7 @@ fn pointing_pane() -> Pane {
                 ],
             ),
             section(
-                Some(tr!("Trackpad scrolling")),
+                Some(tr!("Scrolling")),
                 vec![
                     switch(
                         SettingId::TrackpadNaturalScrolling,
@@ -1884,7 +1868,7 @@ fn pointing_pane() -> Pane {
                 ],
             ),
             section(
-                Some(tr!("Trackpad pointer")),
+                Some(tr!("Pointer")),
                 vec![
                     speed(
                         SettingId::TrackpadSpeed,
@@ -1899,7 +1883,7 @@ fn pointing_pane() -> Pane {
                 ],
             ),
             section(
-                Some(tr!("Trackpad gestures")),
+                Some(tr!("Gestures")),
                 vec![
                     gesture(
                         SettingId::TrackpadWorkspaceSwipe,

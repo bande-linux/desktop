@@ -49,7 +49,6 @@ bande-status.workspace = true
 bande-toolkit.workspace = true
 bande-volumes.workspace = true
 bande-wallpaper.workspace = true
-bande-watch.workspace = true
 bande-xdg.workspace = true
 wayland-client.workspace = true
 wayland-protocols.workspace = true

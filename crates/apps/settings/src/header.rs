@@ -256,7 +256,8 @@ impl SettingsView {
             | PaneId::Search
             | PaneId::Accessibility
             | PaneId::KeyboardShortcuts
-            | PaneId::Pointing
+            | PaneId::Mouse
+            | PaneId::Trackpad
             | PaneId::Apps
             | PaneId::PrivacySecurity
             | PaneId::Passwords

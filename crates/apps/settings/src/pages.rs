@@ -1385,9 +1385,6 @@ impl SettingsView {
     }
 
     fn section_shown(&self, section: &Section) -> bool {
-        if !section.fits_pointers(self.pointing.mouse, self.pointing.trackpad) {
-            return false;
-        }
         section.settings.iter().all(|setting| match setting.id {
             SettingId::Networks => self.wifi.present().is_some_and(|wifi| wifi.enabled),
             SettingId::KnownNetworks | SettingId::Hotspot => self

@@ -195,9 +195,7 @@ when they reach the screen is Bande's own.
   the link bad and costs a second mode-set) moves nothing. A mode is tested with the driver before
   it is used. A refused mode falls back to the next that passes, nearest size first, without
   touching the saved settings; with none left the display waits for the next change event. The link
-  is set good again in the frame path, after any pending flip. Each connector's `max bpc` is set
-  to 8 before its output starts, as frames are 8 bits per channel; a display that offers more
-  would otherwise get a wider link format the frames never use. A display is named by its EDID
+  is set good again in the frame path, after any pending flip. A display is named by its EDID
   (maker from the PNP id, model and serial from the descriptors without control characters,
   falling back to the product code and
   serial number; two displays with the same name are told apart by their connector). A fullscreen

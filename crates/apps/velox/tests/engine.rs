@@ -71,7 +71,12 @@ fn the_list_follows_events_and_reconciles_when_the_engine_stops_and_returns() {
     let blocked = next(&informer, queue, |u| matches!(u, Update::Blocked(_)));
     let mut view = VeloxView::new(Appearance::default());
     view.apply(blocked);
-    assert!(format!("{:?}", view.ui_ref().accessibility()).contains("Copy"));
+    let page = format!("{:?}", view.ui_ref().accessibility());
+    assert!(
+        page.contains("Install Docker or Podman to use Velox"),
+        "{page}"
+    );
+    assert!(!page.contains("apt install"), "{page}");
 
     let engine = serve(&socket);
     let ready = next(&informer, queue, |u| matches!(u, Update::Ready(_)));

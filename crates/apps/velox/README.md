@@ -22,7 +22,6 @@ ready or not on their own. Packaged as `bande-velox`.
   `bande-velox --background`, which opens no window and follows the engine, so a container that
   stops unexpectedly still raises a notice. Velox stays there after Quit while that or the
   status item is on; with both off `--background` exits at once.
-- **Installing only when asked.** When no engine is installed, Install Podman installs Debian's
-  `podman` through PackageKit and starts its user socket; otherwise, when an engine or the QEMU
-  stack is missing, Velox shows copyable steps. Passing a USB device to a machine and bridging it onto the local network
+- **No engine is installed for the user.** When none is there, Velox only says that Docker or Podman
+  is needed. The QEMU stack is installed through PackageKit, only when asked. Passing a USB device to a machine and bridging it onto the local network
   ask for an administrator's password through polkit and run only `velox-helper` as root.

@@ -676,6 +676,7 @@ const SHOW_REPORT_ACTION: &str = "show-report";
 const SETTINGS_APP: &str = "org.bande.Settings";
 const SETTINGS_PROGRAM: &str = "bande-settings";
 const DIAGNOSTICS_PANE: &str = "diagnostics";
+const APP_MEMORY_KEPT: u64 = 256 << 20;
 const PLACED_POLL: Duration = Duration::from_millis(2);
 const APP_STOP_TIMEOUT_USEC: u64 = 5_000_000;
 const COMPOSITOR_UNIT: &str = "bande-compositor.service";
@@ -703,9 +704,10 @@ fn place_in_scope(bus: &Connection, app_id: &str, instance: &str, pid: u32) -> z
         ("Before", Value::from(vec![COMPOSITOR_UNIT])),
         ("TimeoutStopUSec", Value::from(APP_STOP_TIMEOUT_USEC)),
     ];
-    if is_tab(&scope) {
-        properties.push(("OOMPolicy", Value::from("continue")));
-    }
+    properties.push(match is_tab(&scope) {
+        true => ("OOMPolicy", Value::from("continue")),
+        false => ("MemoryLow", Value::from(APP_MEMORY_KEPT)),
+    });
     bus.call_method(
         Some(SYSTEMD),
         SYSTEMD_PATH,

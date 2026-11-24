@@ -12,24 +12,46 @@ the kernel OOM killer is not a policy. A desktop needs its own.
 
 ## Decision
 
-Three layers, each with one job, and nothing outside Debian. Swap, zram and the system's
+Four layers, each with one job, and nothing outside Debian. Swap, zram and the system's
 memory settings stay the system's own.
 
 | Layer | What | Owner |
 | :--- | :--- | :--- |
+| 0. Keep and slow | memory kept for the desktop; `app.slice` is slowed and swapped first, while a reserve stays free | `bande-login`, `bande-session` (runtime properties) |
 | 1. Ask the user | at sustained memory stall, the shell's "running low on memory" window with the heaviest apps and Force Quit | `bande-shell` |
 | 2. Act for the user | systemd-oomd kills the app with the most reclaim activity in `app.slice` | `bande-session` (runtime properties of `app.slice`) and Debian's `systemd-oomd` |
 | 3. Tell the user | a notification naming the app that was closed | `bande-shell` through `bande-xdg` |
+
+### 0. Memory for the desktop
+
+- While a person's Bande session runs, `bande-login` sets `MemoryMin=` at runtime on `user.slice`,
+  `user-UID.slice` and `user@UID.service`, and `bande-session` on `session.slice`: a tenth of the
+  memory, at most 512 MiB. The kernel honours a guarantee only as far as every level above grants
+  it; `memory_recursiveprot` shares it among `session.slice`'s units by use. `MemoryMin=` and not
+  `MemoryLow=`: when nothing else can be reclaimed, the kernel breaks `MemoryLow=` and the desktop
+  stalls. A level where the administrator set a value is left alone. `bande-login` sets
+  the values back to 0 when the session ends, `user.slice` only when no other Bande session is left.
+- `app.slice` gets `MemoryHigh=` all memory but 15 % of it, at most 1.5 GiB. Apps together above
+  that are reclaimed and slowed, so the desktop and the system still find free memory at once.
+- Each app's scope gets `MemoryLow=256M`. When `app.slice` is reclaimed at its limit that keeps the
+  other apps' pages, so a build in a Terminal tab does not swap out the windows on screen; a
+  tab's own scope has none.
+- `bande-session` removes the runtime properties it set when the session ends.
 
 ### 1. Kill domain: `app.slice`
 
 - `bande-session` sets `ManagedOOMMemoryPressure=kill` and `ManagedOOMMemoryPressureLimit=40%`
   on `app.slice` with `systemctl --user set-property --runtime` as the session starts, so other
-  desktops' apps keep systemd's defaults. Debian's default duration of 20 s stays. The systemd manual
+  desktops' apps keep systemd's defaults, with `ManagedOOMMemoryPressureDurationSec=10s` there
+  instead of Debian's 20 s. The systemd manual
   suggests about 40 % for latency-sensitive user cgroups [3]. The candidates are the apps' scopes
   only. Debian's own 50 % kill on `user@.service` stays as the backstop.
 - Every app already runs in its own `app-bande-<id>-<pid>.scope` in `app.slice`
-  (`bande_xdg::spawn_detached`).
+  (`bande_xdg::spawn_detached`), and what runs in a Terminal tab in
+  `app-bande-org.bande.Terminal-tab<pid>.scope` (`place_tab_in_scope`), so oomd and Force Quit end
+  that tab alone. The shell of a new tab waits, stopped, until it is in its scope (2 s at most), so
+  nothing it starts is left behind. The tab scope has `OOMPolicy=continue`: a kernel kill of one
+  process leaves the tab's shell. A tab ended as a whole stays open and says so until Return.
 - The compositor (and with it the shell and every session client it starts) runs in
   `bande-compositor.service` in `session.slice`, with `ManagedOOMPreference=avoid` and
   `OOMScoreAdjust=100`, the lowest a user unit can set. `avoid` is honoured because the candidate
@@ -38,8 +60,7 @@ memory settings stay the system's own.
   clipboard daemon) start at 200 like the services (`bande_xdg::adopt_service_oom_score` before
   `exec`), so the kernel kills one of them before the compositor, which then starts it again:
   the unit has `OOMPolicy=continue`, since systemd's default `stop` would end the whole session
-  when the kernel kills the shell. The unit sets no `MemoryLow=`: `user.slice` protects no
-  memory, and a child cannot be given more than its parents have.
+  when the kernel kills the shell. The unit sets no `MemoryMin=` itself: `session.slice` has it.
 - The session services (config, power, sound, tray, polkit agent, automount, portal) move from
   the default `app.slice` to `session.slice`. They are not apps, and no app-level kill should
   ever pick them.
@@ -64,16 +85,17 @@ memory settings stay the system's own.
 
 ### 2. The low-memory window
 
-The shell (one process, always running, fonts already loaded) opens a PSI trigger on
-`/proc/pressure/memory` [1]: `full 100000 2000000`, a full stall of at least 5 % in a 2 s window.
+The shell (one process, always running, fonts already loaded) opens a PSI trigger on `app.slice`'s
+`memory.pressure` [1] (the whole computer's `/proc/pressure/memory` when it cannot): `full 100000
+2000000`, a full stall of at least 5 % in a 2 s window.
 That is System Monitor's "Critical" level (full avg10 ≥ 5 %), so the window and the graph
-agree. It is the system-wide file, because thrashing hurts the whole machine whoever causes it.
-`/proc/pressure/*` is mode 0666 on Debian 14 (forky), and a 2 s window is allowed for
-unprivileged users. The fd sits in the shell's `poll()` set. Idle cost is zero: no timer, no
+agree. It is `app.slice`'s file, because at `MemoryHigh=` the apps stall and the rest does not. The
+user manager owns it, and a 2 s window is allowed for unprivileged users. The fd sits in the shell's `poll()` set. Idle cost is zero: no timer, no
 reads, and the kernel only arms the trigger while memory stalls.
 
 Debounce (`bande_status::memory::Streak`): each trigger event is one stalled window. Events
-less than 5 s apart form a streak. When a streak lasts 10 s, the window opens. Closing it snoozes
+less than 5 s apart form a streak. When a streak lasts 4 s and memory and swap are nearly used up or
+the apps are at their limit, the window opens, before systemd-oomd acts. Closing it snoozes
 until memory has been calm for 60 s, so it never nags during one bad build.
 
 The window (in the shell process, not a new one, because starting a process when memory is
@@ -82,7 +104,7 @@ short is exactly what must be avoided) is a toplevel kept on top:
 - System Monitor's icon as the alert disc, the heading "Your computer is running low on
   memory", and a line telling the user to quit apps they are not using.
 - The six heaviest apps, read from each app scope's `memory.current + memory.swap.current` and
-  grouped by app (two windows of one app add up), with icon, name and size. The list refreshes
+  grouped by app (two windows of one app add up; a Terminal tab is its own row, "cargo in Terminal"), with icon, name and size. The list refreshes
   every 2 s while the window is open, and only then.
 - **Force Quit** asks first ("Force quit Terminal? Any unsaved changes in it are lost.") and
   then calls systemd's `KillUnit(scope, "all", SIGKILL)`, which kills the app's whole cgroup.
@@ -97,7 +119,8 @@ only sends unit signals while someone is subscribed) and watches `PropertiesChan
 `/org/freedesktop/systemd1/unit/*`. Since systemd 248 both a kernel OOM kill and a systemd-oomd
 kill set a scope's or service's `Result` to `oom-kill` [3]. The unit name is decoded from the bus
 path, the app from the unit name (the decoder System Monitor uses too), and the
-notification says "Terminal was closed because memory ran low". Clicking it opens the app again,
+notification says "Files was closed because memory ran low" ("A tab in Terminal was stopped
+because memory ran low" for a tab's scope). Clicking it opens the app again,
 as the crash notice does. Units that are not apps (a build in `run-*.scope`, a service) get "A
 background task was stopped because memory ran low", naming the unit.
 
@@ -106,6 +129,15 @@ background task was stopped because memory ran low", naming the unit.
 - **earlyoom.** It is in Debian, but it acts on free memory and swap, not on stall time, and it
   kills processes, not cgroups. systemd-oomd is the systemd-native, cgroup-aware choice that
   Debian's own defaults build on.
+- **Locking the compositor's pages** (`mlockall`). A locked mapping counts by its size against
+  `RLIMIT_MEMLOCK` (8 MiB for the user manager, which `bande-login` does not start), and mappings
+  above it fail. `MemoryMin=` kept the compositor out of swap in the same load.
+- **Real-time drawing.** See [session.md](../architecture/session.md): 200 ms of computing ends the
+  process. Short slices keep the pointer within the target.
+- **Changing weights with the focus.** Each scope already has an equal share; a change on every
+  focus change would write a drop-in and wake the service manager each time.
+- **I/O weights.** The `io` controller is not delegated to the user manager, and enabling it changes
+  the whole system; a disk writer alone does not stall the pointer.
 - **Our own killer in the shell.** That would duplicate oomd and run in the session it must
   protect.
 - **`min_ttl_ms` by default.** The MGLRU knob [2] makes the kernel kill rather than thrash, but the

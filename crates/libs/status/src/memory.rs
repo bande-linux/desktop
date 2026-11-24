@@ -10,14 +10,15 @@ use bande_xdg::{DesktopEntry, find_app, is_tab, unit_app_ids};
 use rustix::event::epoll::{self, CreateFlags, EventData, EventFlags};
 use zbus::blocking::Connection;
 
-pub const SYSTEM_PRESSURE: &str = "/proc/pressure/memory";
+const SYSTEM_PRESSURE: &str = "/proc/pressure/memory";
 pub const MEMINFO: &str = "/proc/meminfo";
+const SLICE_PRESSURE: &str = "memory.pressure";
 pub const OWN_CGROUP: &str = "/proc/self/cgroup";
 pub const CGROUP_ROOT: &str = "/sys/fs/cgroup";
 
 const STALL: Duration = Duration::from_millis(100);
 const WINDOW: Duration = Duration::from_secs(2);
-const SUSTAINED: Duration = Duration::from_secs(10);
+const SUSTAINED: Duration = Duration::from_secs(4);
 const STREAK_GAP: Duration = Duration::from_secs(5);
 const CALM: Duration = Duration::from_secs(60);
 const SIGKILL: i32 = 9;
@@ -33,7 +34,19 @@ pub struct PressureTrigger {
 }
 
 impl PressureTrigger {
-    pub fn open(pressure: &Path) -> io::Result<Self> {
+    pub fn of_apps(app_slice: Option<&Path>) -> io::Result<Self> {
+        app_slice
+            .and_then(|slice| {
+                Self::open(&slice.join(SLICE_PRESSURE))
+                    .inspect_err(|error| {
+                        tracing::debug!("watching the whole computer's memory: {error}");
+                    })
+                    .ok()
+            })
+            .map_or_else(|| Self::open(Path::new(SYSTEM_PRESSURE)), Ok)
+    }
+
+    fn open(pressure: &Path) -> io::Result<Self> {
         let mut file = OpenOptions::new().read(true).write(true).open(pressure)?;
         file.write_all(trigger(STALL, WINDOW).as_bytes())?;
         let events = epoll::create(CreateFlags::CLOEXEC)?;
@@ -68,6 +81,17 @@ pub fn memory_exhausted(meminfo: &str) -> bool {
     let swap_total = read("SwapTotal").unwrap_or(0);
     let swap_free = read("SwapFree").unwrap_or(0).min(swap_total);
     (available + swap_free) * NEARLY_EXHAUSTED < total + swap_total
+}
+
+pub fn apps_at_limit(app_slice: &Path) -> bool {
+    let read = |file: &str| {
+        let text = fs::read_to_string(app_slice.join(file)).ok()?;
+        text.trim().parse::<u64>().ok()
+    };
+    let (Some(current), Some(high)) = (read("memory.current"), read("memory.high")) else {
+        return false;
+    };
+    current >= high / NEARLY_EXHAUSTED * (NEARLY_EXHAUSTED - 1)
 }
 
 #[derive(Debug, Default)]

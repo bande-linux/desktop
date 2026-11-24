@@ -78,6 +78,7 @@ const USERS_INDEX: usize = 3;
 const POWER_INDEX: usize = 4;
 pub const RESTS_AFTER: Duration = Duration::from_secs(60);
 const BACKOFF_TICK: Duration = Duration::from_secs(1);
+const LEAVES_UNDRAWN_AFTER: Duration = Duration::from_secs(1);
 const NOTE_SHARE: f32 = 0.25;
 
 #[derive(Debug, Clone, Copy)]
@@ -1312,7 +1313,17 @@ impl LockScreen {
                     false => into_second,
                 }
         });
-        model.rests_at.into_iter().chain(backoff).min()
+        let leaving = model
+            .content_shown
+            .value_at(model.now)
+            .1
+            .then(|| model.now + LEAVES_UNDRAWN_AFTER);
+        model
+            .rests_at
+            .into_iter()
+            .chain(backoff)
+            .chain(leaving)
+            .min()
     }
 
     pub fn tick(&mut self, now: Instant) -> bool {
@@ -1602,5 +1613,19 @@ mod tests {
             screen.take_answer().as_deref().map(String::as_str),
             Some("a ")
         );
+    }
+
+    #[test]
+    fn a_screen_no_display_draws_still_leaves() {
+        let mut screen = screen(Purpose::Login);
+        screen.leave(Instant::now());
+        assert!(!screen.has_left());
+        for _ in 0..5 {
+            if let Some(due) = screen.deadline() {
+                screen.tick(due);
+            }
+        }
+        assert!(screen.has_left());
+        assert_eq!(screen.deadline(), None);
     }
 }

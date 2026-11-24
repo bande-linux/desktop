@@ -60,18 +60,19 @@ fn free_half(
     tile: Tile,
     tiled: Rectangle<i32, Logical>,
     area: Rectangle<i32, Logical>,
+    gap: i32,
 ) -> Rectangle<i32, Logical> {
     if tile == Tile::Left {
+        let x = tiled.loc.x + tiled.size.w + gap;
         Rectangle::new(
-            (tiled.loc.x + tiled.size.w, area.loc.y).into(),
-            (
-                area.loc.x + area.size.w - tiled.loc.x - tiled.size.w,
-                area.size.h,
-            )
-                .into(),
+            (x, area.loc.y).into(),
+            (area.loc.x + area.size.w - x, area.size.h).into(),
         )
     } else {
-        Rectangle::new(area.loc, (tiled.loc.x - area.loc.x, area.size.h).into())
+        Rectangle::new(
+            area.loc,
+            (tiled.loc.x - gap - area.loc.x, area.size.h).into(),
+        )
     }
 }
 
@@ -82,7 +83,9 @@ impl State {
             return;
         };
         let screen = self.screen_of(&self.windows[index]);
-        let free = free_half(tile, tiled, self.usable_area(screen));
+        let gap = self.window_gap(screen);
+        let free = free_half(tile, tiled, self.placement_area(screen), gap);
+        let inset = if gap > 0 { 0.0 } else { INSET };
         let opposite = tile.opposite();
         let taken = self.windows.iter().enumerate().any(|(other, window)| {
             other != index
@@ -108,10 +111,10 @@ impl State {
             return;
         }
         let panel: Frame = Rectangle::new(
-            free.loc.to_f64() + Point::from((INSET, INSET)),
+            free.loc.to_f64() + Point::from((inset, inset)),
             (
-                f64::from(free.size.w) - 2.0 * INSET,
-                f64::from(free.size.h) - 2.0 * INSET,
+                f64::from(free.size.w) - 2.0 * inset,
+                f64::from(free.size.h) - 2.0 * inset,
             )
                 .into(),
         );
@@ -242,7 +245,12 @@ impl State {
         let (Some(index), Some((_, tiled))) = (self.window_index(&surface), tiled) else {
             return;
         };
-        let free = free_half(tile, tiled, self.usable_area(screen));
+        let free = free_half(
+            tile,
+            tiled,
+            self.placement_area(screen),
+            self.window_gap(screen),
+        );
         self.tile_window_into(index, tile.opposite(), free, Spring::STANDARD);
         self.focus(Some(surface));
     }

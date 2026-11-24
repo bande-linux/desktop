@@ -255,7 +255,6 @@ impl SettingsView {
             | PaneId::Bar
             | PaneId::Search
             | PaneId::Accessibility
-            | PaneId::BarMore
             | PaneId::KeyboardShortcuts
             | PaneId::Pointing
             | PaneId::Apps

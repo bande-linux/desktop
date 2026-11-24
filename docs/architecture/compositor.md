@@ -366,21 +366,28 @@ when they reach the screen is Bande's own.
   is drawn at its destination. Reduce Motion follows the Settings portal's
   `org.freedesktop.appearance` `reduced-motion` key (read once at session start, then on
   `SettingChanged`): windows and the snap preview keep their rectangles and fade with `fade`.
-- **Snapping and tiling.** The edges are those of the usable area, the display minus the
-  taskbar, so a drag against the taskbar snaps. Dragging a window until the pointer touches the
-  left or right edge previews the half, within 64 pt of a corner the quarter, and against the top
-  maximize; the translucent rounded preview grows from the pointer at once, except at an edge shared
-  with another display, where the pointer must rest 250 ms so a window can still be dragged
-  across. Releasing over a shown preview springs the window into it. `Super+Left/Right` tile halves,
-  `Up/Down` on a half give its top or bottom quarter and on a quarter go back to the half,
-  `Up` maximizes a free window and `Down` returns a maximized one. A tile is only a shape:
-  no gaps, but the window keeps its rounded corners, shadow and resize edges, and gets no
-  xdg-shell tiled states, since clients drop their resize edges for those (GTK) and would have
-  none to offer. `bande_app_v1.window_tiled` tells toolkit apps instead. Dragging the edge two
-  neighbouring tiles share resizes both, down to the neighbour's minimum size, and both stay
-  tiled; resizing any other edge makes the window an ordinary window of that size. Dragging a
-  tiled window away gives back its earlier size under the pointer; one that became ordinary
-  keeps its size. Filling the other half fills what the tile next to it leaves free.
+- **Snapping and tiling.** The edges are those of the usable area, the display minus the taskbar, so
+  a drag against the taskbar snaps. Dragging a window until the pointer touches the left or right
+  edge previews the half, within 64 pt of a corner the quarter, and against the top maximize; the
+  translucent rounded preview grows from the pointer at once, except at an edge shared with another
+  display, where the pointer must rest 250 ms so a window can still be dragged across. Releasing
+  over a shown preview springs the window into it. `Super+Left/Right` tile halves, `Up/Down` on a
+  half give its top or bottom quarter and on a quarter go back to the half, `Up` maximizes a free
+  window and `Down` returns a maximized one. Halves, quarters, the preview, the offered other half
+  and maximized windows are laid out in the placement area (`Screen`'s usable area inset by
+  `Bar::window_gap`, the spacing of a floating taskbar): the gap is on every edge of every display,
+  where the taskbar's own zone already holds it, and once between neighbours. It is 0 with an
+  attached taskbar, at most a quarter of a very small area, and full screen has none. A change lays
+  placed windows out again and leaves free ones alone. Gaps are whole points, so at a scale where
+  the spacing is whole pixels every gap is exactly as wide, and an odd point left over goes to the
+  right or lower window. A tile is only a shape: the window keeps its rounded corners, shadow and
+  resize edges, and gets no xdg-shell tiled states, since clients drop their resize edges for those
+  (GTK) and would have none to offer. `bande_app_v1.window_tiled` tells toolkit apps instead.
+  Dragging the edge two neighbouring tiles share resizes both and keeps their gap, down to the
+  neighbour's minimum size, and both stay tiled; resizing any other edge makes the window an
+  ordinary window of that size. Dragging a tiled window away gives back its earlier size under the
+  pointer; one that became ordinary keeps its size. Filling the other half fills what the tile next
+  to it leaves free.
 - **Drag and drop.** The compositor draws the drag icon a client passes to `start_drag` at the
   pointer, offset by the icon's attach offset, below the pointer. Holding Ctrl makes a
   drop a copy and Shift a move, when source and destination offer it; otherwise the

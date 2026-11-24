@@ -314,6 +314,7 @@ impl State {
             .unwrap_or_else(|| self.pointer_screen());
         let space = self.space_for_resuming(screen, &record);
         let area = self.usable_area(screen);
+        let maximized = self.placement_area(screen);
         let output = self.screen_rect(screen);
         let frame = clamp_into(
             Rectangle::new(
@@ -336,11 +337,11 @@ impl State {
                 self.windows[index].restore = Some(frame);
             }
             (false, true, _) => {
-                self.place(index, xdg_toplevel::State::Maximized, Some(area));
+                self.place(index, xdg_toplevel::State::Maximized, Some(maximized));
                 self.windows[index].restore = Some(frame);
             }
             (false, false, Some(tile)) => {
-                let target = tile.rect(area);
+                let target = self.tile_rect(screen, tile);
                 let window = &mut self.windows[index];
                 window.restore = Some(frame);
                 window.recalled = Some(target.loc);

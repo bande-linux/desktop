@@ -330,13 +330,19 @@ fn follow_display_settings(
     let changes = properties.receive_properties_changed()?;
     std::thread::spawn(move || {
         for change in changes {
-            let displays_changed = change.args().is_ok_and(|args| {
+            let layout_changed = change.args().is_ok_and(|args| {
                 let changed = args.changed_properties();
-                ["Displays", "Arrangements", "NightLight"]
-                    .iter()
-                    .any(|property| changed.contains_key(property))
+                [
+                    "Displays",
+                    "Arrangements",
+                    "NightLight",
+                    "BarFloating",
+                    "BarGap",
+                ]
+                .iter()
+                .any(|property| changed.contains_key(property))
             });
-            if displays_changed && publish.send(()).is_err() {
+            if layout_changed && publish.send(()).is_err() {
                 return;
             }
         }

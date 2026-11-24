@@ -997,7 +997,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 .unwrap_or_default()
         })
         .unwrap_or_default();
-    let window = Window::open(
+    let window = Window::open_fixed(
+        Appearance::default(),
         Role::Layer(LayerOptions {
             layer: LayerKind::Overlay,
             anchor: Edges::ALL,

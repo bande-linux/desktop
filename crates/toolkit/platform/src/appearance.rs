@@ -36,6 +36,17 @@ impl AppearanceWatch {
         })
     }
 
+    pub(crate) fn fixed(current: Appearance) -> io::Result<Self> {
+        let (wake, woken) = UnixStream::pair()?;
+        woken.set_nonblocking(true)?;
+        Ok(Self {
+            readings: channel().1,
+            woken,
+            _wake: wake,
+            current,
+        })
+    }
+
     pub(crate) fn wait_for_first_reading(&mut self) {
         if let Ok(appearance) = self.readings.recv_timeout(FIRST_READING) {
             self.current = appearance;

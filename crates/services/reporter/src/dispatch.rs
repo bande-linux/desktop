@@ -3,6 +3,7 @@ use std::io;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
+use jiff::civil::Date;
 use serde_json::Value;
 
 use crate::checkin;
@@ -47,6 +48,14 @@ fn pause_for(outcome: Outcome, retry: Duration) -> Pause {
     }
 }
 
+fn note_check_in(spool: &Spool, day: Date) -> io::Result<()> {
+    checkin::sent(spool.root(), day)?;
+    if spool.checkin_waiting() {
+        return Ok(());
+    }
+    checkin::forget(spool.root())
+}
+
 fn check_in(spool: &Spool, sender: &mut Sender, retry: Duration) -> Option<Pause> {
     for day in checkin::due_days(spool.root()) {
         if !spool.checkin_waiting() {
@@ -60,17 +69,17 @@ fn check_in(spool: &Spool, sender: &mut Sender, retry: Duration) -> Option<Pause
             }
         };
         if checkin::is_empty(&payload) {
-            if let Err(error) = checkin::sent(spool.root(), day) {
+            if let Err(error) = note_check_in(spool, day) {
                 tracing::warn!("cannot note the check-in for {day}: {error}");
                 break;
             }
             continue;
         }
         let recorded = match sender.checkin(&payload) {
-            Outcome::Stored => checkin::sent(spool.root(), day),
+            Outcome::Stored => note_check_in(spool, day),
             Outcome::BadFormat | Outcome::TooLarge => {
                 tracing::warn!("the server refused the check-in for {day}");
-                checkin::sent(spool.root(), day)
+                note_check_in(spool, day)
             }
             outcome => return Some(pause_for(outcome, retry)),
         };
@@ -81,6 +90,7 @@ fn check_in(spool: &Spool, sender: &mut Sender, retry: Duration) -> Option<Pause
     }
     if let Err(error) = spool.unqueue_checkin() {
         tracing::warn!("cannot take the check-in out of the outbox: {error}");
+        return Some(Pause::Server(retry));
     }
     None
 }
@@ -105,16 +115,19 @@ fn send_waiting(
     } else {
         asked.clone()
     };
+    let mut stuck = false;
     if !config.send {
         for id in waiting.iter().filter(|id| !asked.contains(id)) {
-            settle(spool, id, None);
+            stuck |= !settle(spool, id, None);
         }
         if let Err(error) = spool.unqueue_checkin() {
             tracing::warn!("cannot take the check-in out of the outbox: {error}");
+            stuck = true;
         }
     }
     if batch.is_empty() && !checkin {
         return match (config.send, metered) {
+            (false, _) if stuck => Pause::Server(retry),
             (false, _) => Pause::None,
             (true, true) => Pause::Metered,
             (true, false) => next_run(spool, waiting, &mut ledger, &policy, until_run),
@@ -135,7 +148,7 @@ fn send_waiting(
                 continue;
             }
             let Ok(report) = spool.read(id) else {
-                settle(spool, id, Some(Status::Rejected));
+                stuck |= !settle(spool, id, Some(Status::Rejected));
                 continue;
             };
             let field = |name| {
@@ -149,7 +162,7 @@ fn send_waiting(
             let by_hand = asked.contains(&id);
             let counts_only = match policy.choose(&kind, field("signature"), id) {
                 Choice::KeepHere if !by_hand => {
-                    settle(spool, id, None);
+                    stuck |= !settle(spool, id, None);
                     continue;
                 }
                 Choice::CountsOnly => true,
@@ -170,17 +183,18 @@ fn send_waiting(
             match outcome {
                 Outcome::Stored => {
                     ledger.spend(&kind, bytes);
-                    settle(spool, id, Some(Status::Sent));
+                    stuck |= !settle(spool, id, Some(Status::Sent));
                 }
                 Outcome::OverBudget => held.0 = true,
                 Outcome::BadFormat | Outcome::TooLarge => {
                     tracing::warn!("the server refused report {id}");
-                    settle(spool, id, Some(Status::Rejected));
+                    stuck |= !settle(spool, id, Some(Status::Rejected));
                 }
                 outcome => return pause_for(outcome, retry),
             }
         }
         match held {
+            (false, false) if stuck => Pause::Server(retry),
             (false, false) => Pause::None,
             (next_day, power) => Pause::Held { next_day, power },
         }
@@ -226,7 +240,7 @@ fn next_run(
     }
 }
 
-fn settle(spool: &Spool, id: &str, status: Option<Status>) {
+fn settle(spool: &Spool, id: &str, status: Option<Status>) -> bool {
     let settled = match status {
         Some(status) => spool.settle(id, status),
         None => spool.unqueue(id),
@@ -235,8 +249,10 @@ fn settle(spool: &Spool, id: &str, status: Option<Status>) {
         tracing::warn!("cannot record the state of report {id}: {error}");
         if let Err(error) = spool.unqueue(id) {
             tracing::warn!("cannot take report {id} out of the outbox: {error}");
+            return false;
         }
     }
+    true
 }
 
 fn forget(session: &Session, spool: &Spool, retry: Duration) -> Pause {

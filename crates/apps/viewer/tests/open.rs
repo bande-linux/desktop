@@ -4,7 +4,7 @@ use std::path::Path;
 use std::time::{Duration, Instant};
 
 use bande_toolkit::Appearance;
-use bande_viewer::FileView;
+use bande_viewer::{FileView, SidebarMode};
 use image::codecs::gif::GifEncoder;
 use image::{Frame, Rgba, RgbaImage};
 
@@ -132,8 +132,9 @@ fn a_pdf_renders_in_its_own_process_finds_text_and_lists_its_outline() {
     std::fs::write(folder.path().join("bad.pdf"), "%PDF-1.7\n1 0 obj <<").unwrap();
 
     let mut view = FileView::new(Appearance::default(), vec![folder.path().join("doc.pdf")]);
-    let shown = until(&mut view, "doc.pdf, 1 / 2");
-    assert!(shown.contains("Chapter Two"), "{shown}");
+    until(&mut view, "doc.pdf, 1 / 2");
+    view.show_sidebar(SidebarMode::Contents);
+    until(&mut view, "Chapter Two");
     view.search("bande");
     until(&mut view, "doc.pdf, 2 / 2");
     assert_eq!(view.matches(), (Some(0), 1));

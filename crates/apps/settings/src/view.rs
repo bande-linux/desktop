@@ -2677,6 +2677,9 @@ impl SettingsView {
             (SettingId::VariableRefresh, Value::Flag(on)) => {
                 display.variable_refresh = (!on).then_some(false);
             }
+            (SettingId::DeepColour, Value::Flag(on)) => {
+                display.deep_colour = (!on).then_some(false);
+            }
             _ => return,
         }
         if display == previous {

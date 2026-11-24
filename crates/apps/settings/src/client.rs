@@ -350,6 +350,9 @@ fn display_values(display: &DisplaySettings) -> HashMap<&'static str, zbus::zvar
     if let Some(on) = display.variable_refresh {
         settings.insert("variable-refresh", on.into());
     }
+    if let Some(on) = display.deep_colour {
+        settings.insert("deep-colour", on.into());
+    }
     settings
 }
 
@@ -376,6 +379,9 @@ fn display_settings(settings: &HashMap<String, OwnedValue>) -> DisplaySettings {
             .and_then(|value| String::try_from(value).ok()),
         variable_refresh: settings
             .get("variable-refresh")
+            .and_then(|value| bool::try_from(value).ok()),
+        deep_colour: settings
+            .get("deep-colour")
             .and_then(|value| bool::try_from(value).ok()),
     }
 }

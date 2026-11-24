@@ -850,6 +850,12 @@ msgstr "vrr, adaptiv synk, freesync, spel, video, jämn"
 msgid "In full-screen games and videos"
 msgstr "I spel och video i helskärm"
 
+msgid "Deep color"
+msgstr "Djup färg"
+
+msgid "10 bit, bits per channel, color depth, banding, gradients"
+msgstr "10 bitar, bitar per kanal, färgdjup, ränder, övertoningar"
+
 msgid "Night Light"
 msgstr "Nattljus"
 

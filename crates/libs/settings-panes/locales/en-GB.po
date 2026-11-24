@@ -15,3 +15,9 @@ msgstr "close, minimise, maximise, title bar, controls, left, right"
 
 msgid "Accent color"
 msgstr "Accent colour"
+
+msgid "Deep color"
+msgstr "Deep colour"
+
+msgid "10 bit, bits per channel, color depth, banding, gradients"
+msgstr "10 bit, bits per channel, colour depth, banding, gradients"

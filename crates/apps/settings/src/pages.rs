@@ -145,6 +145,7 @@ fn display_value(
                 .map_or(display.rotation, |rotation| rotation.degrees()),
         ),
         SettingId::VariableRefresh => Value::Flag(output.variable_refresh.unwrap_or(true)),
+        SettingId::DeepColour => Value::Flag(output.deep_colour.unwrap_or(true)),
         _ => return None,
     })
 }

@@ -416,6 +416,7 @@ pub enum SettingId {
     RefreshRate,
     DisplayRotation,
     VariableRefresh,
+    DeepColour,
     ScreenSaverAfter,
     DisplayOffAfter,
     RequirePasswordAfter,
@@ -1532,6 +1533,11 @@ fn displays_pane() -> Pane {
                         tr!("vrr, adaptive sync, freesync, games, video, smooth"),
                     )
                     .described(tr!("In full-screen games and videos")),
+                    switch(
+                        SettingId::DeepColour,
+                        tr!("Deep color"),
+                        tr!("10 bit, bits per channel, color depth, banding, gradients"),
+                    ),
                 ],
             ),
             section(

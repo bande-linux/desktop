@@ -528,6 +528,7 @@ impl State {
                     .colour_profile
                     .clone_from(&display.colour_profile);
                 self.screens[screen].variable_refresh = display.variable_refresh;
+                self.screens[screen].deep_colour = display.deep_colour;
             }
         }
         if let Some(main) = arranged
@@ -610,6 +611,12 @@ impl Compositor {
         self.state
             .screen_named(output)
             .and_then(|screen| self.state.screens[screen].colour_profile.as_deref())
+    }
+
+    pub fn deep_colour(&self, output: &str) -> bool {
+        self.state
+            .screen_named(output)
+            .is_none_or(|screen| self.state.screens[screen].deep_colour)
     }
 
     pub fn output_settings(&self, output: &str) -> Option<OutputSettings> {

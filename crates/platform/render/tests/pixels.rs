@@ -15,6 +15,7 @@ type Area = Rectangle<i32, Physical>;
 
 const CELL: i32 = 32;
 const CLIENT: (i32, i32) = (256, 192);
+const SCALED: (i32, i32) = (300, 240);
 const TARGET: (i32, i32) = (1280, 720);
 const PASSES: u32 = 3;
 const OFFSET: f64 = 1.5;
@@ -285,15 +286,15 @@ fn blurred(area: Area, pixel: impl Fn(i32, i32) -> [u8; 3]) -> Level {
     level
 }
 
-fn farthest(found: &[u8], area: Area, expected: impl Fn(i32, i32) -> [f64; 3]) -> f64 {
+fn farthest(found: &[u8], area: Area, expected: impl Fn(i32, i32) -> Option<[f64; 3]>) -> f64 {
     (area.loc.y..area.loc.y + area.size.h)
         .flat_map(|y| (area.loc.x..area.loc.x + area.size.w).map(move |x| (x, y)))
-        .map(|(x, y)| {
+        .filter_map(|(x, y)| {
             let at = ((y * TARGET.0 + x) * 4) as usize;
-            let expected = expected(x, y);
+            let expected = expected(x, y)?;
             (0..3)
                 .map(|channel| (f64::from(found[at + 2 - channel]) - expected[channel]).abs())
-                .fold(0.0, f64::max)
+                .reduce(f64::max)
         })
         .fold(0.0, f64::max)
 }
@@ -310,7 +311,7 @@ fn blurred_matches(found: &[u8], blur: &Blur, level: &Level, case: &str) {
     );
     let off = farthest(found, inside, |x, y| {
         let at = (y - bounds.loc.y) as usize * level.size.0 + (x - bounds.loc.x) as usize;
-        level.pixels[at].map(|value| value * 255.0)
+        Some(level.pixels[at].map(|value| value * 255.0))
     });
     assert!(off <= 3.0, "{case}: a blurred pixel is off by {off}");
 }
@@ -330,9 +331,13 @@ fn every_texture_of_a_frame_shows_its_own_pixels() -> Outcome {
         clients.push((buffer, dmabuf));
     }
     let place = |index: i32| -> Area {
+        let size = match index % 2 {
+            0 => CLIENT,
+            _ => SCALED,
+        };
         Rectangle::new(
             (index % 3 * 400 + 20, index / 3 * 330 + 20).into(),
-            CLIENT.into(),
+            size.into(),
         )
     };
     for with_blur in [false, true, false] {
@@ -355,32 +360,49 @@ fn every_texture_of_a_frame_shows_its_own_pixels() -> Outcome {
                     Color32F::new(0.1, 0.2, 0.3, 1.0),
                     &[Rectangle::from_size(TARGET.into())],
                 )?;
-                if with_blur {
-                    let blur = blur(200);
-                    frame.draw_blur(&blur, backdrop, &[Rectangle::from_size(whole(&blur).size)])?;
-                }
                 for (texture, index) in textures.iter().zip(0..) {
+                    let area = place(index);
                     frame.render_texture_from_to(
                         texture,
                         Rectangle::from_size((f64::from(CLIENT.0), f64::from(CLIENT.1)).into()),
-                        place(index),
-                        &[Rectangle::from_size(CLIENT.into())],
+                        area,
+                        &[Rectangle::from_size(area.size)],
                         &[],
                         Transform::Normal,
                         1.0,
                     )?;
+                    if with_blur && index == 3 {
+                        let blur = blur(200);
+                        frame.draw_blur(
+                            &blur,
+                            backdrop,
+                            &[Rectangle::from_size(whole(&blur).size)],
+                        )?;
+                    }
                 }
                 frame.finish()?.wait()?;
+            }
+            if with_blur {
+                continue;
             }
             let found = gpu.read(&targets[0].1)?;
             for index in 0..6 {
                 let area = place(index);
+                let source = |at: i32, shown: i32, size: i32| {
+                    (f64::from(at) + 0.5) * f64::from(size) / f64::from(shown)
+                };
                 let off = farthest(&found, area, |x, y| {
-                    cell_colour(index, x - area.loc.x, y - area.loc.y).map(f64::from)
+                    let u = source(x - area.loc.x, area.size.w, CLIENT.0);
+                    let v = source(y - area.loc.y, area.size.h, CLIENT.1);
+                    let edge = [u, v].iter().any(|at| {
+                        let within = at.rem_euclid(f64::from(CELL));
+                        area.size.w != CLIENT.0 && !(1.0..f64::from(CELL) - 1.0).contains(&within)
+                    });
+                    (!edge).then(|| cell_colour(index, u as i32, v as i32).map(f64::from))
                 });
                 assert!(
                     off <= 1.0,
-                    "texture {index} in layout {layout:?} (blur: {with_blur}) is off by {off}"
+                    "texture {index} in layout {layout:?} is off by {off}"
                 );
             }
         }

@@ -25,7 +25,8 @@ when they reach the screen is Bande's own.
   hasvk's Haswell and Broadwell GPUs qualify); every device left out is logged with the reason. Each
   sampled image view (with its chroma plane or colour table) gets one descriptor set, made at its
   first draw and freed with the image; sets come from pools of 64, any pool with room, and a pool
-  is destroyed once its last set is freed. It implements Smithay's `Renderer`, `Frame`,
+  is destroyed once its last set is freed (push descriptors made blurs sample the wrong image on Intel
+  Gen9 with anv; the cause is not traced). It implements Smithay's `Renderer`, `Frame`,
   `ImportMemWl`, `ImportDmaWl`, `Offscreen` and `Bind<Dmabuf>`. Both outputs compose the same Wayland surface
   elements through Smithay: the headless output with `OutputDamageTracker` into a persistent
   offscreen image (read back only for tests), the DRM output with `DrmCompositor`. Each surface
@@ -50,7 +51,8 @@ when they reach the screen is Bande's own.
   whenever the plane cannot take the fence (`needs_sync`: no `IN_FENCE_FD`, older NVIDIA drivers,
   virtio-gpu without syncobj), so a buffer is never scanned out while it is drawn. Completion is
   taken to follow submission order on the one queue, as every driver's ring does. A submission the
-  driver refuses drops every kept blur and has the renderer made again, as its uploads are lost.
+  driver refuses drops every kept blur and has the renderer made again (at most every ten seconds
+  when memory ran out), as its uploads are lost; a wait that fails counts as a lost device.
   Staging memory unused for two seconds is freed. The render elements of a frame, and with them the
   client buffers they hold, are kept until its submission finishes (`drawing.rs`, woken by the sync file), so no buffer goes
   back to a client while the GPU still reads it. The scheduler prices a frame at its CPU time plus
@@ -176,7 +178,8 @@ when they reach the screen is Bande's own.
   the display through the foreign queue (a buffer's first frame starts from `UNDEFINED`, as it is
   drawn whole); with a colour profile each buffer has its own unconverted image that the frame is
   drawn into, and only the drawn regions are converted into the buffer. When such a buffer
-  fails to render for a reason other than a lost device or exhausted memory, that output steps down
+  fails to be allocated, imported or drawn into (not for a lost device, exhausted memory, an
+  interrupted wait, an inactive display or a swapchain without a free buffer), that output steps down
   for as long as it is connected: first to LINEAR GBM buffers, then to dumb buffers; another display
   starts again from tiled buffers. With LINEAR GBM or dumb buffers, or without a tiled modifier, the
   renderer binds the buffer as a dma-buf: each frame is rendered into its own image and its drawn

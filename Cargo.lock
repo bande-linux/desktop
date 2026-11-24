@@ -1605,6 +1605,7 @@ name = "bande-render"
 version = "0.2.0"
 dependencies = [
  "ash",
+ "bande-graphics",
  "naga",
  "smithay",
  "tracing",

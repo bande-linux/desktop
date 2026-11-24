@@ -2,7 +2,7 @@ use std::sync::Mutex;
 
 use super::{Compositor, OutputElement, State};
 use crate::cursor_set::Pointer;
-use crate::element::ScreenElement;
+use crate::element::{ScreenElement, keep_backdrops_whole};
 use smithay::backend::renderer::Renderer as _;
 use smithay::backend::renderer::element::Kind as ElementKind;
 use smithay::backend::renderer::element::memory::MemoryRenderBufferRenderElement;
@@ -14,7 +14,7 @@ use bande_render::VulkanRenderer;
 use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
 use smithay::reexports::wayland_server::Resource;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
-use smithay::utils::{Logical, Physical, Point};
+use smithay::utils::{Logical, Physical, Point, Rectangle};
 use smithay::wayland::compositor::with_states;
 use smithay::wayland::shell::wlr_layer::Layer;
 
@@ -125,7 +125,7 @@ impl Compositor {
         self.state.prepare_switcher(screen);
         self.state.prepare_window_menu(screen);
         self.state.prepare_force_quit(screen);
-        let (elements, drawn, icon) = self.compose(renderer, screen, true);
+        let (elements, drawn, icon) = self.compose(renderer, screen, true, false);
         self.state.remember_lock_frame(renderer, screen);
         if self.state.pointer_screen() == screen {
             self.state.remember_drag_icon(icon);
@@ -149,10 +149,40 @@ impl Compositor {
         screen: usize,
         with_cursor: bool,
     ) -> Vec<ScreenElement> {
-        self.compose(renderer, screen, with_cursor).0
+        self.compose(renderer, screen, with_cursor, true).0
     }
 
-    fn compose(&self, renderer: &mut VulkanRenderer, screen: usize, with_cursor: bool) -> Composed {
+    fn compose(
+        &self,
+        renderer: &mut VulkanRenderer,
+        screen: usize,
+        with_cursor: bool,
+        captured: bool,
+    ) -> Composed {
+        let (mut elements, drawn, icon) = self.compose_view(renderer, screen, with_cursor);
+        let shown = &self.state.screens[screen];
+        let area = shown.settings.transform.transform_size(shown.mode_size());
+        let scale = match shown.mirror {
+            Some(_) => shown.scale(),
+            None => self.state.render_scale(screen),
+        };
+        let name = shown.name();
+        keep_backdrops_whole(
+            &mut elements,
+            scale,
+            Rectangle::from_size(area),
+            renderer,
+            (&name, captured),
+        );
+        (elements, drawn, icon)
+    }
+
+    fn compose_view(
+        &self,
+        renderer: &mut VulkanRenderer,
+        screen: usize,
+        with_cursor: bool,
+    ) -> Composed {
         if let Some(source) = self.state.screens[screen]
             .mirror
             .as_deref()

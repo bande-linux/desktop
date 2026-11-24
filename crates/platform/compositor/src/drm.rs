@@ -10,13 +10,14 @@ use smithay::backend::allocator::dumb::DumbAllocator;
 use smithay::backend::allocator::format::FormatSet;
 use smithay::backend::allocator::gbm::{GbmAllocator, GbmBufferFlags, GbmDevice};
 use smithay::backend::drm::compositor::{
-    DrmCompositor, FrameError, FrameFlags, PrimaryPlaneElement,
+    DrmCompositor, FrameError, FrameFlags, PrimaryPlaneElement, RenderFrameError,
 };
 use smithay::backend::drm::{
     DrmDevice, DrmDeviceFd, DrmDeviceNotifier, DrmError, DrmEventMetadata, DrmEventTime, DrmNode, NodeType,
     VrrSupport,
 };
 use smithay::backend::libinput::{LibinputInputBackend, LibinputSessionInterface};
+use smithay::backend::renderer::damage::Error as DamageError;
 use smithay::backend::renderer::{ImportDma, ImportMem, Renderer as _};
 use smithay::backend::session::libseat::{LibSeatSession, LibSeatSessionNotifier};
 use smithay::backend::session::{Event as SessionEvent, Session};
@@ -33,7 +34,7 @@ use smithay::reexports::udev::MonitorBuilder;
 use smithay::reexports::wayland_protocols::wp::linux_dmabuf::zv1::server::zwp_linux_dmabuf_feedback_v1::TrancheFlags;
 use smithay::utils::{Clock, DeviceFd, Monotonic, Size};
 use smithay::wayland::dmabuf::{DmabufFeedback, DmabufFeedbackBuilder};
-use bande_render::VulkanRenderer;
+use bande_render::{RenderError, VulkanRenderer};
 
 use crate::boot_screen::boot_screen_shown;
 use crate::clock::{FrameOutput, Submission, Vblank};
@@ -1314,11 +1315,19 @@ impl FrameOutput for DrmBackend {
     }
 
     fn renew_failed_renderer(&mut self) -> Result<bool, DrmBackendError> {
-        if !self.renderer.needs_renewal() {
+        let Some(renewed) = self.renderer.renewed_if_failed()? else {
             return Ok(false);
-        }
-        self.renew_renderer()?;
+        };
+        self.use_renewed(renewed);
         Ok(true)
+    }
+
+    fn renewal_wait(&self) -> Option<Duration> {
+        self.renderer.renewal_wait()
+    }
+
+    fn gpu_time(&self, output: &str) -> Duration {
+        self.renderer.gpu_frame_time(output).unwrap_or_default()
     }
 
     fn refresh(&self, output: &str) -> Option<Duration> {
@@ -1343,7 +1352,8 @@ impl FrameOutput for DrmBackend {
     }
 
     fn restart_display(&mut self) -> Result<(), DrmBackendError> {
-        self.renew_renderer()?;
+        let renewed = self.renderer.renew()?;
+        self.use_renewed(renewed);
         for head in &mut self.heads {
             if let Err(error) = head.compositor.reset_state() {
                 tracing::warn!("cannot reset {}: {error}", head.config.name);
@@ -1366,6 +1376,27 @@ fn prove_with_gbm(renderer: &mut VulkanRenderer, gbm: Option<&GbmDevice<DrmDevic
             .then(|| buffer.export().ok())
             .flatten()
     });
+}
+
+fn buffers_at_fault<A, B, F>(error: &RenderFrameError<A, B, F, RenderError>) -> bool
+where
+    A: Error + Send + Sync + 'static,
+    B: Error + Send + Sync + 'static,
+    F: Error + Send + Sync + 'static,
+{
+    match error {
+        RenderFrameError::RenderFrame(DamageError::Rendering(error)) => !error.is_transient(),
+        RenderFrameError::PrepareFrame(error) => matches!(
+            error,
+            FrameError::Allocator(_)
+                | FrameError::AsDmabufError(_)
+                | FrameError::FramebufferExport(_)
+                | FrameError::NoSupportedPlaneFormat
+                | FrameError::NoSupportedRendererFormat
+                | FrameError::DrmError(DrmError::TestFailed(_))
+        ),
+        RenderFrameError::RenderFrame(DamageError::OutputNoMode(_)) => false,
+    }
 }
 
 impl DrmBackend {
@@ -1399,13 +1430,12 @@ impl DrmBackend {
         Ok(())
     }
 
-    fn renew_renderer(&mut self) -> Result<(), DrmBackendError> {
+    fn use_renewed(&mut self, mut renewed: VulkanRenderer) {
         tracing::error!(
-            "starting the renderer again (lost: {}, holding {})",
+            "started the renderer again (lost: {}, held {})",
             self.renderer.is_lost(),
             self.renderer.memory_use()
         );
-        let mut renewed = self.renderer.renew()?;
         prove_with_gbm(&mut renewed, self.gbm.as_ref());
         if renewed.dmabuf_planes() != self.renderer.dmabuf_planes() {
             tracing::warn!(
@@ -1417,7 +1447,6 @@ impl DrmBackend {
         for head in &mut self.heads {
             head.compositor.reset_buffers();
         }
-        Ok(())
     }
 
     fn present(
@@ -1517,15 +1546,18 @@ impl DrmBackend {
             None => FrameFlags::DEFAULT | FrameFlags::ALLOW_PRIMARY_PLANE_SCANOUT_ANY,
         };
         let elements = compositor.render_elements_on(&mut self.renderer, output);
+        self.renderer.measure_frames_of(Some(output));
         let (rendered, drew_everything) = drawing_everything(|| {
             head.compositor
                 .render_frame(&mut self.renderer, &elements, background(), flags)
         });
+        self.renderer.measure_frames_of(None);
         let frame = match rendered {
             Ok(frame) => frame,
             Err(error)
                 if !self.renderer.is_lost()
                     && !self.renderer.out_of_memory()
+                    && buffers_at_fault(&error)
                     && let Some(next) = head.buffers.next() =>
             {
                 tracing::warn!("{output} uses {next} from now on: {error}");
@@ -1535,8 +1567,14 @@ impl DrmBackend {
             Err(error) => return Err(error.into()),
         };
         self.renderer.finish_uploads()?;
+        if frame.needs_sync() {
+            self.renderer.wait_idle()?;
+        }
         head.scanned_out = matches!(frame.primary_element, PrimaryPlaneElement::Element(_));
         let empty = frame.is_empty;
+        let submitted = self.renderer.submitted();
+        let fence = self.renderer.fence_of(submitted)?;
+        compositor.keep_until_drawn(elements, (submitted, self.renderer.completed()), fence);
         compositor.copy_captures(&mut self.renderer, output);
         if empty {
             return Ok(Submission::Unchanged);
@@ -1553,6 +1591,34 @@ impl DrmBackend {
                 Ok(after_refusal(head))
             }
             Err(error) => Err(error.into()),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io;
+
+    use super::*;
+
+    type Failure = RenderFrameError<io::Error, io::Error, io::Error, RenderError>;
+
+    #[test]
+    fn only_errors_of_the_buffers_change_the_buffers_of_a_display() {
+        let rendering = |error| Failure::RenderFrame(DamageError::Rendering(error));
+        for kept in [
+            Failure::PrepareFrame(FrameError::DrmError(DrmError::DeviceInactive)),
+            Failure::PrepareFrame(FrameError::NoFreeSlotsError),
+            rendering(RenderError::Interrupted),
+            rendering(RenderError::Io(io::Error::other("no size"))),
+        ] {
+            assert!(!buffers_at_fault(&kept), "{kept}");
+        }
+        for changed in [
+            Failure::PrepareFrame(FrameError::FramebufferExport(io::Error::other("refused"))),
+            rendering(RenderError::UnsupportedFormat),
+        ] {
+            assert!(buffers_at_fault(&changed), "{changed}");
         }
     }
 }

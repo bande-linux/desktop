@@ -1141,6 +1141,7 @@ where
                 return Err(format!("the renderer cannot start again: {}", error.into()).into());
             }
         }
+        let renewal_wait = output.renewal_wait();
         let stalled_for = schedulers
             .iter()
             .map(FrameScheduler::stalled_since)
@@ -1198,6 +1199,7 @@ where
             .chain(night_wait)
             .chain(reveal_wait)
             .chain(menu_wait)
+            .chain(renewal_wait)
             .chain(force_quit_wait)
             .min();
         compositor.flush_clients()?;

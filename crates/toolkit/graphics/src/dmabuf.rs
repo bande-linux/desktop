@@ -315,10 +315,10 @@ impl Sharing {
         let mut commands = Vec::with_capacity(3);
         if image.handed_over.load(Ordering::Acquire) {
             wait_for_readers(&image.fd);
-            commands.push(self.hand_over(device, image.image, false)?);
+            commands.push(self.hand_over(device, image.image, true)?);
         }
         commands.push(draw);
-        commands.push(self.hand_over(device, image.image, true)?);
+        commands.push(self.hand_over(device, image.image, false)?);
         image.handed_over.store(true, Ordering::Release);
         let fence = self.fence.lock().unwrap_or_else(PoisonError::into_inner);
         let Some(active) = fence.as_ref() else {

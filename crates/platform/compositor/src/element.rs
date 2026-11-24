@@ -43,11 +43,113 @@ fn skip_failed(id: &Id, error: RenderError) -> Result<(), RenderError> {
 pub struct ScreenElement {
     inner: OutputElement,
     by: Point<i32, Physical>,
+    opaque_inset: Option<(i32, Rectangle<i32, Physical>)>,
 }
 
 impl ScreenElement {
     pub(crate) fn new(inner: OutputElement, by: Point<i32, Physical>) -> Self {
-        Self { inner, by }
+        Self {
+            inner,
+            by,
+            opaque_inset: None,
+        }
+    }
+}
+
+impl ScreenElement {
+    fn eroded_opaque_regions(
+        &self,
+        scale: Scale<f64>,
+        (inset, output): (i32, Rectangle<i32, Physical>),
+    ) -> impl Iterator<Item = Rectangle<i32, Physical>> {
+        let at = self.geometry(scale).loc;
+        let end = output.loc + output.size;
+        self.inner
+            .opaque_regions(scale)
+            .into_iter()
+            .filter_map(move |mut region| {
+                region.loc += at;
+                let kept = |edge: i32, output_edge: i32, inward: i32| match (edge - output_edge)
+                    * inward
+                    <= 0
+                {
+                    true => edge,
+                    false => edge + inset * inward,
+                };
+                let until = region.loc + region.size;
+                let from = Point::<i32, Physical>::from((
+                    kept(region.loc.x, output.loc.x, 1),
+                    kept(region.loc.y, output.loc.y, 1),
+                ));
+                let size = (
+                    kept(until.x, end.x, -1) - from.x,
+                    kept(until.y, end.y, -1) - from.y,
+                );
+                (size.0 > 0 && size.1 > 0).then(|| Rectangle::new(from - at, size.into()))
+            })
+    }
+}
+
+pub(crate) fn keep_backdrops_whole(
+    elements: &mut Vec<ScreenElement>,
+    scale: f64,
+    output: Rectangle<i32, Physical>,
+    renderer: &mut VulkanRenderer,
+    view: (&str, bool),
+) {
+    let scale = Scale::from(scale);
+    let mut hidden = Vec::new();
+    for index in 0..elements.len() {
+        let (above, rest) = elements.split_at_mut(index);
+        let at = rest[0].by;
+        let Some((blur, backdrop)) = (match &rest[0].inner {
+            OutputElement::Blur(blur) => rest[0]
+                .geometry(scale)
+                .intersection(output)
+                .map(|backdrop| (blur, backdrop)),
+            _ => None,
+        }) else {
+            continue;
+        };
+        let reach = blur.reach();
+        let mut shape = blur.shape();
+        shape.loc += at;
+        let covered = |above: &[ScreenElement]| -> Vec<_> {
+            above
+                .iter()
+                .flat_map(|above| {
+                    let at = above.geometry(scale).loc;
+                    above
+                        .opaque_regions(scale)
+                        .into_iter()
+                        .filter_map(move |mut region| {
+                            region.loc += at;
+                            region.intersection(backdrop)
+                        })
+                })
+                .collect()
+        };
+        let seen = Rectangle::subtract_rects_many(shape.intersection(output), covered(above));
+        if seen.is_empty() {
+            hidden.push(index);
+            continue;
+        }
+        for above in above
+            .iter_mut()
+            .filter(|above| above.geometry(scale).overlaps(backdrop))
+        {
+            let inset = above
+                .opaque_inset
+                .map_or(reach, |(inset, _)| inset.max(reach));
+            above.opaque_inset = Some((inset, output));
+        }
+        let covered = covered(above);
+        if let OutputElement::Blur(blur) = &mut rest[0].inner {
+            blur.keep(renderer, view, &covered);
+        }
+    }
+    for index in hidden.into_iter().rev() {
+        elements.remove(index);
     }
 }
 
@@ -87,7 +189,10 @@ impl Element for ScreenElement {
     }
 
     fn opaque_regions(&self, scale: Scale<f64>) -> OpaqueRegions<i32, Physical> {
-        self.inner.opaque_regions(scale)
+        match self.opaque_inset {
+            None => self.inner.opaque_regions(scale),
+            Some(inset) => self.eroded_opaque_regions(scale, inset).collect(),
+        }
     }
 
     fn alpha(&self) -> f32 {

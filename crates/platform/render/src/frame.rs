@@ -16,8 +16,8 @@ use crate::{
 
 mod blur;
 
-pub use blur::Blur;
-pub(crate) use blur::BlurChain;
+pub use blur::{Backdrop, Blur};
+pub(crate) use blur::{BlurChain, KEEP_UNUSED};
 
 pub(crate) const QUAD_BYTES: u32 = 112;
 
@@ -413,50 +413,23 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
         }
     }
 
-    fn push_chroma(&mut self, view: vk::ImageView) {
-        let image_info = vk::DescriptorImageInfo::default()
-            .image_view(view)
-            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL);
-        let write = vk::WriteDescriptorSet::default()
-            .dst_binding(2)
-            .descriptor_type(vk::DescriptorType::SAMPLED_IMAGE)
-            .image_info(slice::from_ref(&image_info));
+    fn sample(&mut self, view: vk::ImageView, second: vk::ImageView) -> Result<(), RenderError> {
+        let set = self.renderer.descriptor_set(view, second)?;
         // SAFETY: the frame holds the renderer mutably from `begin_commands` until `finish_frame`
         // ends the buffer, so `command_buffer` is recording and only this frame records into it;
-        // `view` belongs to a texture or target that `collect_garbage` cannot destroy while the
-        // frame holds the renderer, and `submit_and_wait` finishes before the frame returns it.
+        // `set` was written with `view` and `second`, whose images `collect_garbage` cannot
+        // destroy while the frame holds the renderer, and a set is freed only with its images.
         unsafe {
-            self.renderer.push_descriptor.cmd_push_descriptor_set(
+            self.renderer.device.cmd_bind_descriptor_sets(
                 self.renderer.command_buffer,
                 vk::PipelineBindPoint::GRAPHICS,
                 self.renderer.pipeline_layout,
                 0,
-                slice::from_ref(&write),
+                slice::from_ref(&set),
+                &[],
             );
         }
-    }
-
-    fn push_texture(&mut self, view: vk::ImageView) {
-        let image_info = vk::DescriptorImageInfo::default()
-            .image_view(view)
-            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL);
-        let write = vk::WriteDescriptorSet::default()
-            .dst_binding(0)
-            .descriptor_type(vk::DescriptorType::SAMPLED_IMAGE)
-            .image_info(slice::from_ref(&image_info));
-        // SAFETY: the frame holds the renderer mutably from `begin_commands` until `finish_frame`
-        // ends the buffer, so `command_buffer` is recording and only this frame records into it;
-        // `view` belongs to a texture or target that `collect_garbage` cannot destroy while the
-        // frame holds the renderer, and `submit_and_wait` finishes before the frame returns it.
-        unsafe {
-            self.renderer.push_descriptor.cmd_push_descriptor_set(
-                self.renderer.command_buffer,
-                vk::PipelineBindPoint::GRAPHICS,
-                self.renderer.pipeline_layout,
-                0,
-                slice::from_ref(&write),
-            );
-        }
+        Ok(())
     }
 
     fn draw_quad(&mut self, quad: &Quad, rects: &[Rect]) {
@@ -511,8 +484,13 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
         }
     }
 
-    fn finish_frame(&mut self) -> Result<(), RenderError> {
+    fn finish_frame(&mut self) -> Result<u64, RenderError> {
         self.finished = true;
+        self.end_frame()
+            .inspect_err(|_| self.renderer.forget_blurs())
+    }
+
+    fn end_frame(&mut self) -> Result<u64, RenderError> {
         // SAFETY: the frame holds the renderer mutably from `begin_commands` until `finish_frame`
         // ends the buffer, so `command_buffer` is recording and only this frame records into it,
         // and the rendering begun on the target is still open.
@@ -558,31 +536,28 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
             }
             self.record_readbacks(converted.unwrap_or(self.image), &readbacks);
         }
-        // SAFETY: the frame holds the renderer mutably from `begin_commands` until `finish_frame`
-        // ends the buffer, so `command_buffer` is recording and only this frame records into it,
-        // and every rendering it began has ended.
-        unsafe {
-            self.renderer
-                .device
-                .end_command_buffer(self.renderer.command_buffer)
-        }?;
         if verifying {
             self.mark_output(&readbacks)?;
         }
-        self.renderer.submit_and_wait()?;
+        let serial = self.renderer.submit(self.renderer.measuring())?;
         self.renderer.retire_unused_blur_chains();
+        if let Some(target) = self.renderer.targets.get_mut(&self.target) {
+            target.rendered = true;
+        }
+        if readbacks.is_empty() {
+            self.renderer.hand_staging_to(serial);
+            return Ok(serial);
+        }
+        self.renderer.wait_for(serial)?;
         let written = match verifying {
             true => self.verify_output(&readbacks),
             false => self.write_back(&readbacks),
         };
-        self.renderer.recycle_staging();
-        if let Some(target) = self.renderer.targets.get_mut(&self.target) {
-            target.rendered = true;
-        }
-        written
+        self.renderer.hand_staging_to(serial);
+        written.map(|()| serial)
     }
 
-    fn finish_direct(&mut self, drawn: &[Rect]) -> Result<(), RenderError> {
+    fn finish_direct(&mut self, drawn: &[Rect]) -> Result<u64, RenderError> {
         let shown = match self.converted_into {
             Some(view) => {
                 self.convert_into(view, drawn)?;
@@ -602,17 +577,13 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
             renderer.queue_family,
             (false, DRAWING),
         );
-        // SAFETY: the frame holds the renderer mutably from `begin_commands` until `finish_frame`
-        // ends the buffer, so `command_buffer` is recording and only this frame records into it,
-        // and every rendering it began has ended.
-        unsafe { renderer.device.end_command_buffer(renderer.command_buffer) }?;
-        renderer.submit_and_wait()?;
+        let serial = renderer.submit(renderer.measuring())?;
         renderer.retire_unused_blur_chains();
-        renderer.recycle_staging();
+        renderer.hand_staging_to(serial);
         if let Some(target) = renderer.targets.get_mut(&self.target) {
             target.rendered = true;
         }
-        Ok(())
+        Ok(serial)
     }
 
     fn convert_into(&mut self, shown: vk::ImageView, drawn: &[Rect]) -> Result<(), RenderError> {
@@ -692,6 +663,10 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
         drawn: &[Rect],
     ) -> Result<vk::Image, RenderError> {
         let key = (self.bounds.width, self.bounds.height, self.format);
+        let prior = match self.renderer.colour_scratch.contains_key(&key) {
+            true => TRANSFER_SOURCE,
+            false => blur::DISCARDED,
+        };
         if !self.renderer.colour_scratch.contains_key(&key) {
             let scratch = self.renderer.create_image(
                 self.bounds.width,
@@ -712,7 +687,7 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
         let device = &self.renderer.device;
         let commands = self.renderer.command_buffer;
         barrier(device, commands, self.image, ATTACHMENT, SAMPLED);
-        barrier(device, commands, scratch.0, blur::DISCARDED, blur::DRAWN);
+        barrier(device, commands, scratch.0, prior, blur::DRAWN);
         self.begin_rendering(scratch.1, self.bounds, vk::AttachmentLoadOp::DONT_CARE);
         let drawn_colours = self.draw_display_colour(&colour, drawn);
         let device = &self.renderer.device;
@@ -730,7 +705,6 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
         drawn: &[Rect],
     ) -> Result<(), RenderError> {
         self.bind(Program::DisplayColour)?;
-        self.push_texture(self.target_view);
         let table = self
             .renderer
             .encode_table
@@ -738,7 +712,7 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
             .filter(|_| colour.encode.is_some())
             .and_then(|(_, texture)| self.renderer.textures.get(&texture.id))
             .map(|table| table.image.view);
-        self.push_chroma(table.unwrap_or(self.target_view));
+        self.sample(self.target_view, table.unwrap_or(self.target_view))?;
         let matrix = colour.matrix;
         let row = |values: [f32; 3]| RoundedRect {
             x: values[0],
@@ -1131,11 +1105,13 @@ impl Frame for VulkanFrame<'_, '_> {
             (true, None) => return Ok(()),
             (true, Some(chroma)) => {
                 self.bind(Program::Video)?;
-                self.push_chroma(chroma);
+                self.sample(view, chroma)?;
             }
-            (false, _) => self.bind(Program::Texture)?,
+            (false, _) => {
+                self.bind(Program::Texture)?;
+                self.sample(view, view)?;
+            }
         }
-        self.push_texture(view);
         self.draw(
             &Quad {
                 destination,
@@ -1158,8 +1134,8 @@ impl Frame for VulkanFrame<'_, '_> {
     }
 
     fn finish(mut self) -> Result<SyncPoint, RenderError> {
-        self.finish_frame()?;
-        Ok(SyncPoint::signaled())
+        let serial = self.finish_frame()?;
+        self.renderer.sync_point(serial)
     }
 }
 

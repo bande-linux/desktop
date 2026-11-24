@@ -46,7 +46,8 @@ debhelper compat 14, built with Debian's `rustc` and `cargo` through dh-cargo's 
   `ci/copyright.d/*` for the third-party material in it, a paragraph per vendored crate with the
   authors and licence from its `Cargo.toml`, then each licence's text from `ci/licenses`.
 - **Units and maintainer scripts**: `dh_installsystemd` and `dh_installsystemduser` enable and
-  restart the units: the user units of the session services are enabled for every user and
+  restart the units, except `bande-compositor`'s, whose restart would end the session (an upgrade
+  takes effect at the next login): the user units of the session services are enabled for every user and
   never started from a package, except `bande-screen-sharing.service`, which only Settings
   enables; `bande-backup`'s timer and service are neither enabled nor
   started (Settings turns backups on; `postinst` restarts a running backup service), the

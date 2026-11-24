@@ -1096,16 +1096,20 @@ impl Program for Velox {
             )),
             _ => None,
         }));
-        Menus {
-            menus: vec![
-                Entry::submenu(&tr!("File"), file),
-                edit_submenu(vec![Entry::item(&tr!("Find"), FIND).shortcut("Ctrl+F")]),
-                Entry::submenu(&tr!("View"), sections),
-                pane,
-                self.machine_menu(cx),
-            ],
-            window,
-        }
+        let passes_keys_on = matches!(
+            cx.focused().and_then(|id| cx.view(id)),
+            Some(Screen::Shell(_) | Screen::Display(_) | Screen::Machine(_))
+        );
+        let edit = (!passes_keys_on)
+            .then(|| edit_submenu(vec![Entry::item(&tr!("Find"), FIND).shortcut("Ctrl+F")]));
+        let mut menus = vec![Entry::submenu(&tr!("File"), file)];
+        menus.extend(edit);
+        menus.extend([
+            Entry::submenu(&tr!("View"), sections),
+            pane,
+            self.machine_menu(cx),
+        ]);
+        Menus { menus, window }
     }
 
     fn command(&mut self, cx: &mut Cx<Self>, window: Option<WindowId>, command: &str) {

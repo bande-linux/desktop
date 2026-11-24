@@ -106,6 +106,9 @@ msgstr "Visa arkivet i Filer"
 msgid "{size} more free space is needed."
 msgstr "{size} mer ledigt utrymme behövs."
 
+msgid "The archive is damaged."
+msgstr "Arkivet är skadat."
+
 msgid "Expanding “{name}”"
 msgstr "Packar upp ”{name}”"
 

@@ -333,8 +333,17 @@ fn every_pane_keeps_clear_of_the_window_buttons_and_the_list_acts_by_swipe_and_k
         -----BEGIN PGP MESSAGE-----\r\n\r\nx\r\n-----END PGP MESSAGE-----\r\n";
     store.store_body(inbox, read.uid, sealed).unwrap();
     store.set_flag(&[read.id], Flag::Draft, true).unwrap();
+    store.set_flag(&[read.id], Flag::Seen, false).unwrap();
     view.reload();
+    let seen = || store.summary(read.id).unwrap().unwrap().flags.seen;
+    view.handle(&Event::Key {
+        key: Key::Character('j'),
+        modifiers: Modifiers::default(),
+    });
+    assert_eq!(view.selected(), Some(read.id));
+    assert!(!seen(), "a message chosen in the list alone stays unread");
     assert!(click(&mut view, &read.subject), "a click opens the reader");
+    assert!(seen(), "and marks it as read");
     let mut requests = view.take_requests().into_iter();
     assert!(
         !requests.any(|request| matches!(request, Request::Compose(_))),

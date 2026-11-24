@@ -6,3 +6,4 @@ pref("extensions.unsignedScopes", 12);
 pref("browser.ai.control.translations", "available", locked);
 pref("distribution.searchplugins.defaultLocale", "en-US");
 pref("spellchecker.dictionary_path", "/usr/share/hunspell");
+pref("browser.theme.dark-private-windows", false);

@@ -115,7 +115,8 @@ cp "$repo"/search/2c4b8834-030c-4097-a887-c7506689095c* services/settings/dumps/
 find browser/locales/en-US toolkit/locales/en-US dom/locales/en-US -type f \( -name '*.ftl' -o -name '*.properties' -o -name '*.dtd' \) \
     -exec sed -i -E '/^\s*(#|<!--)/! s/\bFirefox\b/Browser/g' {} +
 python3 "$repo/scripts/check-theme.py" .
-cat "$repo/theme/colors.css" "$repo/theme/bande.css" >> browser/themes/linux/browser.css
+cat "$repo/theme/colors.css" "$repo/theme/controls.css" "$repo/theme/bande.css" >> browser/themes/linux/browser.css
+cat "$repo/theme/colors.css" "$repo/theme/pages.css" >> toolkit/themes/shared/in-content/common-shared.css
 cp "$repo/l10n/languages" debian/bande-languages
 sed -i 's/^L10N_LANGS = .*/L10N_LANGS = $(shell cat debian\/bande-languages)/' debian/upstream.mk
 sed -i 's/^         @browser@ (>= ${source:Version}), @browser@ (<< ${source:Version}.1~)$/         @browser@ (= ${source:Version})\nEnhances: @browser@/' debian/l10n/browser-l10n.control.in

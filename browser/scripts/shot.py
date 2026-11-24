@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
-"""shot.py <dir>: serves screenshots over ext-image-copy-capture on the WAYLAND_SOCKET the compositor
-gives its review client. A file <dir>/<n>.req holding a path asks for a PNG there; <n>.done answers."""
+"""shot.py: serves screenshots over ext-image-copy-capture on the WAYLAND_SOCKET the compositor gives its
+review client. A file $SHOT_DIR/<n>.req holding a path asks for a PNG there; <n>.done answers."""
 import mmap
 import os
 import select
 import socket
 import struct
-import sys
 import time
 import zlib
 
@@ -138,7 +137,7 @@ def main():
         wl.send(session, 1)
         wl.send(pool, 1)
 
-    requests = sys.argv[1]
+    requests = os.environ["SHOT_DIR"]
     while True:
         for name in os.listdir(requests):
             if name.endswith(".req"):

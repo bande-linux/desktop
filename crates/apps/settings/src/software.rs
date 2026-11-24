@@ -219,7 +219,7 @@ impl SoftwareState {
             Self::Installed { logout: true, .. } => {
                 Some(tr!("Log out to finish updating the desktop"))
             }
-            Self::Interrupted => Some(tr!("Updates didn't finish installing")),
+            Self::Interrupted => Some(tr!("Updates didn’t finish installing")),
             _ => None,
         }
     }
@@ -256,10 +256,10 @@ pub enum SoftwareCommand {
 pub(crate) fn explain(failure: &Failure) -> String {
     tracing::warn!("PackageKit: {:?}: {}", failure.code, failure.details);
     match failure.code {
-        ErrorCode::NoNetwork => tr!("You're offline. Connect to the internet and try again."),
+        ErrorCode::NoNetwork => tr!("You’re offline. Connect to the internet and try again."),
         ErrorCode::Locked => tr!("Another installation is running. Try again when it finishes."),
         ErrorCode::NoSpace => {
-            tr!("There isn't enough free space. Free up some space and try again.")
+            tr!("There isn’t enough free space. Free up some space and try again.")
         }
         ErrorCode::NotAuthorized => tr!("Only an administrator can change this."),
         ErrorCode::Cancelled => tr!("The update was canceled."),
@@ -427,7 +427,7 @@ fn finished_offline(system: &Connection) -> Result<Option<SoftwareState>, Error>
         Some(Results::Failed(failure)) => problems.push(explain(&failure)),
         None => {}
     }
-    let kept = tr!("The firmware update didn't install. The device keeps its earlier firmware.");
+    let kept = tr!("The firmware update didn’t install. The device keeps its earlier firmware.");
     for finished in flashed {
         match finished.installed {
             true => count += 1,
@@ -597,9 +597,9 @@ fn flatpak_reason(error: &flatpak::Error) -> String {
         .iter()
         .any(|word| details.contains(word))
     {
-        tr!("You're offline. Connect to the internet and try again.")
+        tr!("You’re offline. Connect to the internet and try again.")
     } else if details.contains("space") {
-        tr!("There isn't enough free space. Free up some space and try again.")
+        tr!("There isn’t enough free space. Free up some space and try again.")
     } else {
         tr!("Something went wrong. Try again later.")
     }
@@ -634,7 +634,7 @@ fn firmware_reason(error: &firmware::Error) -> String {
                 tr!("The battery is too low to update firmware safely. Charge it and try again.")
             }
             firmware::Problem::DeviceBatteryLow => {
-                tr!("The device's battery is too low. Charge it and try again.")
+                tr!("The device’s battery is too low. Charge it and try again.")
             }
             firmware::Problem::AcPowerRequired => {
                 tr!("Plug in the computer to install this firmware update.")
@@ -645,7 +645,7 @@ fn firmware_reason(error: &firmware::Error) -> String {
             }
             firmware::Problem::Busy => tr!("The device is busy. Try again in a moment."),
             firmware::Problem::NotReachable => {
-                tr!("The device isn't connected. Connect it and try again.")
+                tr!("The device isn’t connected. Connect it and try again.")
             }
             firmware::Problem::NeedsUserAction => {
                 tr!("The device needs your attention. Follow its instructions and try again.")
@@ -660,7 +660,7 @@ fn firmware_reason(error: &firmware::Error) -> String {
             }
         },
         firmware::Error::Offline(_) => {
-            tr!("You're offline. Connect to the internet and try again.")
+            tr!("You’re offline. Connect to the internet and try again.")
         }
         firmware::Error::Download(_) => tr!("Could not download the firmware. Try again later."),
         firmware::Error::Missing | firmware::Error::Vanished | firmware::Error::Bus(_) => {
@@ -1192,7 +1192,7 @@ fn install_firmware_support(system: &Connection, client: &Client) -> SoftwareSta
     match firmware_missing(system) {
         true => SoftwareState::Failed {
             during: Stage::Install,
-            reason: tr!("Firmware updates aren't available from this computer's software sources."),
+            reason: tr!("Firmware updates aren’t available from this computer’s software sources."),
         },
         false => check(system, client, Refresh::Always),
     }

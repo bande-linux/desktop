@@ -109,7 +109,7 @@ impl SettingsView {
             )
             .detail(
                 Text::new(
-                    &tr!("Stops charging before full to slow the battery's ageing."),
+                    &tr!("Stops charging before full to slow the battery’s ageing."),
                     Tone::Muted,
                 )
                 .caption(),
@@ -120,7 +120,7 @@ impl SettingsView {
     pub(crate) fn power_status_rows(&mut self) -> Widgets {
         let Some(power) = self.power.clone() else {
             return vec![muted_row(&tr!(
-                "Power information isn't available because the power service isn't running."
+                "Power information isn’t available because the power service isn’t running."
             ))];
         };
         let mut rows = Vec::new();
@@ -129,13 +129,13 @@ impl SettingsView {
         }
         match &power.profiles {
             Profiles::Missing => rows.push(muted_row(&tr!(
-                "Power modes aren't available because the power profiles service isn't installed."
+                "Power modes aren’t available because the power profiles service isn’t installed."
             ))),
             Profiles::Stopped => rows.push(muted_row(&tr!(
-                "Power modes aren't available because the power profiles service isn't responding."
+                "Power modes aren’t available because the power profiles service isn’t responding."
             ))),
             Profiles::Offered(names) if names.is_empty() => {
-                rows.push(muted_row(&tr!("This computer doesn't offer power modes.")));
+                rows.push(muted_row(&tr!("This computer doesn’t offer power modes.")));
             }
             Profiles::Offered(_) => {}
         }
@@ -149,13 +149,13 @@ impl SettingsView {
         let mut rows = Vec::new();
         match power.hibernation.as_deref() {
             Some("yes") => rows.push(muted_row(&hibernation_text(power.hibernate_delay))),
-            Some(NO_RESUME) => rows.push(muted_row(&tr!("Hibernation isn't set up, so sleep lasts until the battery runs out."))),
-            Some("na") => rows.push(muted_row(&tr!("This computer can't hibernate, so sleep lasts until the battery runs out. Hibernation needs swap space at least as large as memory and isn't possible while Secure Boot locks the kernel."))),
-            Some(_) => rows.push(muted_row(&tr!("The administrator doesn't allow hibernation, so sleep lasts until the battery runs out."))),
+            Some(NO_RESUME) => rows.push(muted_row(&tr!("Hibernation isn’t set up, so sleep lasts until the battery runs out."))),
+            Some("na") => rows.push(muted_row(&tr!("This computer can’t hibernate, so sleep lasts until the battery runs out. Hibernation needs swap space at least as large as memory and isn’t possible while Secure Boot locks the kernel."))),
+            Some(_) => rows.push(muted_row(&tr!("The administrator doesn’t allow hibernation, so sleep lasts until the battery runs out."))),
             None => {}
         }
         if !self.sleeps {
-            rows.push(muted_row(&tr!("This computer can't sleep, so it stays on when idle. The display still turns off as set above.")));
+            rows.push(muted_row(&tr!("This computer can’t sleep, so it stays on when idle. The display still turns off as set above.")));
         }
         rows
     }

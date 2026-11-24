@@ -55,7 +55,7 @@ impl SettingsView {
                 )),
                 SoftwareState::UpToDate => Some(tr!("Your computer is up to date")),
                 SoftwareState::Unavailable => {
-                    Some(tr!("Updates aren't available on this computer"))
+                    Some(tr!("Updates aren’t available on this computer"))
                 }
                 state => state.pending(),
             },

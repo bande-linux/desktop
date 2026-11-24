@@ -10,13 +10,13 @@ msgstr ""
 msgid "{app} quit while reopening its windows"
 msgstr "{app} avslutades när fönstren öppnades igen"
 
-msgid "Reopen them again? If it keeps quitting, choose Don't Reopen."
+msgid "Reopen them again? If it keeps quitting, choose Don’t Reopen."
 msgstr "Vill du försöka öppna dem igen? Om appen fortsätter att avslutas väljer du Öppna inte igen."
 
 msgid "Reopen"
 msgstr "Öppna igen"
 
-msgid "Don't Reopen"
+msgid "Don’t Reopen"
 msgstr "Öppna inte igen"
 
 msgid "{app} could not be opened"

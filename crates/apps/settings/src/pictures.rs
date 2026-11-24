@@ -148,7 +148,7 @@ pub fn follow_pictures(
                             Err(error) => {
                                 updates.send(pane_failed(
                                     PaneId::Appearance,
-                                    text!("Couldn't open the file chooser."),
+                                    text!("Couldn’t open the file chooser."),
                                     error,
                                 ));
                                 continue;
@@ -169,7 +169,7 @@ pub fn follow_pictures(
                     if let Err(error) = result {
                         updates.send(pane_failed(
                             PaneId::Appearance,
-                            text!("Couldn't set this picture as the wallpaper."),
+                            text!("Couldn’t set this picture as the wallpaper."),
                             error,
                         ));
                     }

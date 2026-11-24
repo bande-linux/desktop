@@ -28,7 +28,7 @@ pub(crate) fn unresponsive(error: &zbus::Error) -> bool {
 
 pub(crate) fn not_responding(service: Text) -> String {
     tr!(
-        "{service} isn't responding. Try again in a moment.",
+        "{service} isn’t responding. Try again in a moment.",
         service = service.tr()
     )
 }
@@ -54,7 +54,7 @@ pub(crate) fn explained(error: &zbus::Error, service: Text, otherwise: Text) -> 
 }
 
 pub fn sentence(error: &zbus::Error, service: Text) -> String {
-    explained(error, service, text!("Couldn't make this change."))
+    explained(error, service, text!("Couldn’t make this change."))
 }
 
 pub(crate) fn failed(setting: SettingId, error: &zbus::Error, service: Text) -> Update {

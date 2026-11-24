@@ -250,7 +250,7 @@ pub fn follow_permissions(session: &Connection, updates: Updates) -> Sender<Perm
                 if let Err(error) = result {
                     updates.send(pane_failed(
                         permission.pane(),
-                        text!("Couldn't change this app's permission."),
+                        text!("Couldn’t change this app’s permission."),
                         error,
                     ));
                 }

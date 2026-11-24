@@ -372,7 +372,7 @@ pub fn follow_passwords(
                 Err(error) => {
                     unlocked = false;
                     updates.send(passwords_failure(
-                        text!("Couldn't open the keyring."),
+                        text!("Couldn’t open the keyring."),
                         &error,
                     ));
                     updates.send(Update::Passwords(false, Vec::new()));
@@ -380,14 +380,14 @@ pub fn follow_passwords(
                 }
             };
             let what = match &command {
-                PasswordCommand::Unlock => text!("Couldn't show the keyring prompt."),
+                PasswordCommand::Unlock => text!("Couldn’t show the keyring prompt."),
                 PasswordCommand::Reveal(_) | PasswordCommand::Copy(_) => {
-                    text!("Couldn't read this password.")
+                    text!("Couldn’t read this password.")
                 }
-                PasswordCommand::Change(..) => text!("Couldn't save the new password."),
-                PasswordCommand::Delete(_) => text!("Couldn't delete this password."),
+                PasswordCommand::Change(..) => text!("Couldn’t save the new password."),
+                PasswordCommand::Delete(_) => text!("Couldn’t delete this password."),
                 PasswordCommand::Refresh | PasswordCommand::Lock => {
-                    text!("Couldn't list your saved passwords.")
+                    text!("Couldn’t list your saved passwords.")
                 }
             };
             let result = match command {
@@ -414,7 +414,7 @@ pub fn follow_passwords(
                 true => open.items().unwrap_or_else(|error| {
                     unlocked = false;
                     updates.send(passwords_failure(
-                        text!("Couldn't list your saved passwords."),
+                        text!("Couldn’t list your saved passwords."),
                         &error,
                     ));
                     Vec::new()

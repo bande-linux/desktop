@@ -10,13 +10,13 @@ msgstr ""
 msgid "Open an audio or video file to play it."
 msgstr "Öppna en ljud- eller videofil för att spela upp den."
 
-msgid "This file can't be played"
+msgid "This file can’t be played"
 msgstr "Den här filen kan inte spelas upp"
 
 msgid "Bande has no decoder for its format."
 msgstr "Bande saknar avkodare för filens format."
 
-msgid "This file can't be opened"
+msgid "This file can’t be opened"
 msgstr "Den här filen kan inte öppnas"
 
 msgid "It may have been moved, or you may not have permission to read it."

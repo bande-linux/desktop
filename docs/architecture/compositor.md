@@ -206,13 +206,16 @@ when they reach the screen is Bande's own.
   `deep-colour` is not off for it (Settings ▸ Displays ▸ Deep color). Otherwise it gets 8 bits;
   the refresh rate is never lowered for depth. The choice is made again when the mode or the setting
   changes or the session comes back, on the live surface, so the CRTC stays on. Buffers that fail
-  lose depth first, then tiling, then GPU rendering, for as long as the display is connected; a
-  display whose commit refuses 10 bits keeps the mode with 8. Every such change draws the display
-  again by itself and counts as a stall until a frame shows. `max bpc` is what it was found at, or
-  the frames' bits when that is more, and 8 while deep colour is off. Smithay's public commits carry
-  no connector properties, so it is set by a commit of its own, only when it differs, after a test
-  together with the mode; that is one extra mode-set, and the value stays after the session. When
-  the display then refuses the depth it goes back. Above eight bits the kernel may still send
+  lose depth first, then tiling, then GPU rendering, for as long as the display is connected. A
+  flip the kernel refuses is committed once whole, with a mode-set allowed and nothing but the frame
+  on the planes; refused again, the display loses depth in that mode, or keeps the buffers it shows.
+  Refusals are forgotten when the setting is switched or the session comes back. Every such change
+  draws the display again by itself and counts as a stall until a frame shows. `max bpc` is what it
+  was found at, or the frames' bits when that is more, and 8 while deep colour is off. Smithay's
+  public commits carry no connector properties, so it is set by a blocking commit of its own, tested
+  first as it is committed and only when the value differs: a mode-set, shared with a new mode of the
+  same size and apart from one of another size; the value stays after the session, and a display
+  that then refuses the depth gets it back. One display's depth is not lowered for another's sake. Above eight bits the kernel may still send
   fewer, which nothing but its debug files tells; frames are dithered to the buffer's depth, so a
   link that cuts 10 bits to 8 shows coarser shadows than 8-bit frames would. On GPUs without
   compressed 10-bit layouts (Intel gen9) scanout reads every pixel uncompressed, also when idle: at

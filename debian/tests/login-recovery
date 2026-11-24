@@ -109,7 +109,7 @@ signed_out() { ! signed_in; }
 has_login_window() { has_session _bande-greeter greeter; }
 no_login_window() { ! has_login_window; }
 restart() {
-    rm -f "$state/said" "$state/leave"
+    rm -f "$state/said" "$state/leave" "$state/environment"
     echo "$1" > "$state/mode"
     echo "${2:-exit}" > "$state/session"
     systemctl reset-failed bande-greeter.service 2> /dev/null || true

@@ -385,8 +385,12 @@ impl MailView {
                     self.select(id);
                 }
                 self.focus = Pane::List;
-                if request.action == Action::Click && self.panes() == Panes::One {
-                    self.single_reader = true;
+                if request.action == Action::Click {
+                    if self.selects_draft() {
+                        self.continue_draft();
+                    } else if self.panes() == Panes::One {
+                        self.single_reader = true;
+                    }
                 }
             }
             Part::Conversation(index) => {

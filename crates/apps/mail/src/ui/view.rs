@@ -279,6 +279,7 @@ pub struct MailView {
     pub(crate) setup: Option<Guide>,
     pub(crate) open_file: Option<WidgetId>,
     read_later: Vec<(Instant, MessageId)>,
+    unshown: Vec<MessageId>,
     pub(crate) filter: Filter,
     pub(crate) groups: Vec<(usize, String)>,
     pub(crate) swipe: Option<(MessageId, f32)>,
@@ -370,6 +371,7 @@ impl MailView {
             setup: None,
             open_file: None,
             read_later: Vec::new(),
+            unshown: Vec::new(),
             filter: Filter::All,
             groups: Vec::new(),
             swipe: None,
@@ -703,7 +705,7 @@ impl MailView {
         let shown = match self.focus {
             Pane::Sidebar => self.sidebar_shown(),
             Pane::List => !self.reading_alone(),
-            Pane::Reader => self.panes() != Panes::One || self.single_reader,
+            Pane::Reader => self.reader_shown(),
         };
         if !shown {
             self.focus = match self.reading_alone() {
@@ -715,6 +717,7 @@ impl MailView {
 
     pub(crate) fn advance_motion(&mut self) {
         self.settle_focus();
+        self.mark_shown();
         if self.panes() == Panes::Three && (self.overlay || self.slid > 0.0) {
             self.overlay = false;
             self.slide.jump_to(0.0);
@@ -830,6 +833,27 @@ impl MailView {
             .min()
     }
 
+    fn reader_shown(&self) -> bool {
+        self.panes() != Panes::One || self.single_reader
+    }
+
+    fn mark_shown(&mut self) {
+        if !self.reader_shown() {
+            return;
+        }
+        let mut shown = std::mem::take(&mut self.unshown);
+        shown.retain(|id| self.is_open(*id));
+        self.opened_unseen(shown);
+    }
+
+    fn is_open(&self, id: MessageId) -> bool {
+        self.reader
+            .thread
+            .as_ref()
+            .and_then(|thread| thread.entry(id))
+            .is_some_and(|entry| entry.reading.is_some())
+    }
+
     fn opened_unseen(&mut self, unseen: Vec<MessageId>) {
         if unseen.is_empty() {
             return;
@@ -869,15 +893,11 @@ impl MailView {
         let still_open = due
             .into_iter()
             .map(|(_, id)| id)
-            .filter(|id| {
-                self.reader
-                    .thread
-                    .as_ref()
-                    .and_then(|thread| thread.entry(*id))
-                    .is_some_and(|entry| entry.reading.is_some())
-            })
+            .filter(|id| self.is_open(*id))
             .collect::<Vec<_>>();
-        if !still_open.is_empty() {
+        if !self.reader_shown() {
+            self.unshown.extend(still_open);
+        } else if !still_open.is_empty() {
             self.set_flag_on(&still_open, Flag::Seen, true);
         }
     }
@@ -1207,6 +1227,7 @@ impl MailView {
             }
             self.select(id);
             self.single_reader = self.panes() == Panes::One && self.selected == Some(id);
+            self.mark_shown();
         }
     }
 
@@ -1236,8 +1257,8 @@ impl MailView {
         self.also.clear();
         self.focus = Pane::List;
         self.reader.scroll = ScrollState::default();
-        let unseen = self.open_thread(&summary);
-        self.opened_unseen(unseen);
+        self.unshown = self.open_thread(&summary);
+        self.mark_shown();
         self.reveal_selected();
     }
 
@@ -1459,6 +1480,7 @@ impl MailView {
     fn set_flag_on(&mut self, ids: &[MessageId], flag: Flag, value: bool) {
         if flag == Flag::Seen {
             self.read_later.retain(|(_, id)| !ids.contains(id));
+            self.unshown.retain(|id| !ids.contains(id));
         }
         match self.store.set_flag(ids, flag, value) {
             Ok(accounts) => self.flush(&accounts),
@@ -1997,6 +2019,11 @@ impl MailView {
         })
     }
 
+    pub(crate) fn selects_draft(&self) -> bool {
+        self.draft_read()
+            .is_some_and(|(summary, _)| self.selected == Some(summary.id))
+    }
+
     pub fn continue_draft(&mut self) {
         let Some((summary, reading)) = self.draft_read() else {
             return;
@@ -2328,13 +2355,7 @@ impl MailView {
                     self.notify(&left);
                 }
                 MailEvent::Body(id) => {
-                    if self
-                        .reader
-                        .thread
-                        .as_ref()
-                        .and_then(|thread| thread.entry(id))
-                        .is_some_and(|entry| entry.reading.is_some())
-                    {
+                    if self.is_open(id) {
                         self.read_entry(id);
                     }
                     stale = true;
@@ -2849,6 +2870,7 @@ impl MailView {
             self.requests.push(Request::ShowMenu(menu, at));
         }
         self.settle_focus();
+        self.mark_shown();
         self.refresh_toolbar();
     }
 
@@ -3243,7 +3265,7 @@ impl MailView {
                 if plain
                     && self.focus == Pane::List
                     && self.panes() == Panes::One
-                    && self.draft_read().is_none()
+                    && !self.selects_draft()
                     && self.selected.is_some() =>
             {
                 self.single_reader = true;
@@ -3574,7 +3596,7 @@ impl MailView {
                     self.select(id);
                 }
                 if alone {
-                    self.single_reader = self.draft_read().is_none();
+                    self.single_reader = !self.selects_draft();
                 }
                 if !secondary && pointer.count == 1 {
                     self.drag = Some(Drag {
@@ -3586,7 +3608,7 @@ impl MailView {
                     });
                 }
                 let edits = match alone {
-                    true => pointer.count == 1,
+                    true => pointer.count == 1 && !self.single_reader,
                     false => pointer.count >= 2,
                 };
                 if edits && !secondary {

@@ -50,7 +50,6 @@ const STALL_LIMIT: Duration = Duration::from_secs(6);
 const GREETER_HANG_LIMIT_SECONDS: u32 = 20;
 const GREETER_HANG_CHECK: Duration = Duration::from_secs(10);
 const LOGIN_DISPLAY_OFF: Duration = Duration::from_secs(10 * 60);
-const LOGIN_WINDOW_SHOWN: &str = "/run/bande-greeter/shown";
 const MINIMUM_UPTIME_TO_RESTART: Duration = Duration::from_secs(300);
 
 enum Backend {
@@ -1025,7 +1024,8 @@ where
                 false => Vec::new(),
             };
             app.compositor.fade_in_over(shown);
-            app.first_frame_marker = Some(PathBuf::from(LOGIN_WINDOW_SHOWN));
+            app.first_frame_marker =
+                Some(Path::new(bande_xdg::LOGIN_WINDOW_FOLDER).join(bande_xdg::LOGIN_WINDOW_SHOWN));
             (Some(Greeter::start(&mut app.compositor)), None)
         }
     };
@@ -1122,11 +1122,16 @@ where
                 Ok(frame) => frame_wake = frame_wake.into_iter().chain(frame.wake_at).min(),
                 Err(error) => {
                     let text = error.into().to_string();
-                    if frame_error.as_ref() != Some(&text) {
+                    if !scheduler.keeps_failing(now()) {
+                        tracing::debug!("cannot show a frame: {text}");
+                    } else if frame_error.as_ref() != Some(&text) {
                         tracing::warn!("cannot show a frame: {text}");
                         frame_error = Some(text);
                     }
-                    frame_wake = Some(now());
+                    frame_wake = frame_wake
+                        .into_iter()
+                        .chain([scheduler.retry_at(now())])
+                        .min();
                 }
             }
         }

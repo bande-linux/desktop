@@ -32,10 +32,12 @@ use zeroize::Zeroizing;
 
 pub use backdrop::{BackdropSource, Look, load_backdrop, load_pictures};
 pub use bande_inbox::Inbox;
+pub use bande_pam::Backoff;
 pub use bande_wallpaper::{Fit, Variant};
 pub use choices::Peer;
 use choices::{SourceButton, UserList};
-pub use conversation::{Backoff, Messages, Prompt, Refusal, clip_message};
+use conversation::backoff_notice;
+pub use conversation::{Messages, Prompt, Refusal, clip_message};
 pub use devices::{Corner, Devices};
 pub use pam::{Accepted, Said, Transaction};
 pub use user::{User, current as current_user, display_name};
@@ -157,7 +159,7 @@ impl Model {
         if let Some(question) = &self.question {
             return Some(question.clone());
         }
-        let notice = self.backoff.notice(self.now);
+        let notice = backoff_notice(&self.backoff, self.now);
         match (self.messages.text(), notice) {
             (Some(messages), Some(notice)) => Some(format!("{messages}\n{notice}")),
             (messages, notice) => messages.or(notice),

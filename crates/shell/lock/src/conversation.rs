@@ -1,13 +1,10 @@
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use bande_l10n::{tr, trn};
-use bande_pam::Code;
+use bande_pam::{Backoff, Code};
 
 pub const MESSAGE_LIMIT: usize = 400;
 const SHOWN_MESSAGES: usize = 3;
-const FREE_ATTEMPTS: u32 = 4;
-const FIRST_WAIT: Duration = Duration::from_secs(5);
-const LONGEST_WAIT: Duration = Duration::from_secs(60);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Prompt {
@@ -94,46 +91,13 @@ impl Messages {
     }
 }
 
-#[derive(Debug, Default, Clone)]
-pub struct Backoff {
-    failures: u32,
-    until: Option<Instant>,
-}
-
-impl Backoff {
-    pub fn fail(&mut self, now: Instant) {
-        self.failures += 1;
-        let over = self.failures.saturating_sub(FREE_ATTEMPTS);
-        if over > 0 {
-            let wait = FIRST_WAIT
-                .saturating_mul(1 << (over - 1).min(8))
-                .min(LONGEST_WAIT);
-            self.until = Some(now + wait);
-        }
-    }
-
-    pub fn succeed(&mut self) {
-        *self = Self::default();
-    }
-
-    pub fn until(&self) -> Option<Instant> {
-        self.until
-    }
-
-    pub fn waiting(&self, now: Instant) -> Option<Duration> {
-        self.until
-            .map(|until| until.saturating_duration_since(now))
-            .filter(|left| !left.is_zero())
-    }
-
-    pub fn notice(&self, now: Instant) -> Option<String> {
-        self.waiting(now).map(|left| {
-            let seconds = left.as_secs() + u64::from(left.subsec_nanos() > 0);
-            trn!(
-                "Too many attempts. Try again in 1 second.",
-                "Too many attempts. Try again in {count} seconds.",
-                count = seconds
-            )
-        })
-    }
+pub fn backoff_notice(backoff: &Backoff, now: Instant) -> Option<String> {
+    backoff.waiting(now).map(|left| {
+        let seconds = left.as_secs() + u64::from(left.subsec_nanos() > 0);
+        trn!(
+            "Too many attempts. Try again in 1 second.",
+            "Too many attempts. Try again in {count} seconds.",
+            count = seconds
+        )
+    })
 }

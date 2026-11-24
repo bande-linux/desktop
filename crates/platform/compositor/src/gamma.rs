@@ -15,7 +15,7 @@ const ENTRY: usize = 8;
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Tint {
     Table(Table),
-    Ramp(usize),
+    Ramp(Ramp),
     Matrix(property::Handle),
     Fixed,
 }
@@ -24,7 +24,7 @@ impl fmt::Display for Tint {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Table(table) => write!(f, "a table of {} entries", table.size),
-            Self::Ramp(size) => write!(f, "a legacy ramp of {size} entries"),
+            Self::Ramp(ramp) => write!(f, "a legacy ramp of {} entries", ramp.size),
             Self::Matrix(_) => f.write_str("a colour matrix"),
             Self::Fixed => f.write_str("nothing"),
         }
@@ -36,6 +36,14 @@ pub(crate) struct Table {
     gamma: property::Handle,
     size: usize,
     before: Vec<property::Handle>,
+}
+
+/// A legacy ramp. Where it stands in for a table the kernel keeps it in that table, and only the
+/// table's property says whether one is shown.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct Ramp {
+    size: usize,
+    within: Option<Table>,
 }
 
 impl Tint {
@@ -63,18 +71,33 @@ impl Tint {
             .get_crtc(crtc)
             .map_or(0, |info| info.gamma_length() as usize);
         match find("CTM") {
-            _ if length > 0 => Self::Ramp(length),
+            _ if length > 0 => Self::Ramp(Ramp {
+                size: length,
+                within: None,
+            }),
             Some((_, property, _)) => Self::Matrix(*property),
             None => Self::Fixed,
         }
     }
 
     pub(crate) fn instead(&self, device: &DrmDevice, crtc: crtc::Handle) -> Option<Self> {
+        if let Self::Table(table)
+        | Self::Ramp(Ramp {
+            within: Some(table),
+            ..
+        }) = self
+            && let Err(error) = table.clear(device, crtc)
+        {
+            tracing::warn!("a colour table stays: {error}");
+        }
         let length = device
             .get_crtc(crtc)
             .map_or(0, |info| info.gamma_length() as usize);
         match self {
-            Self::Table(_) if length > 0 => Some(Self::Ramp(length)),
+            Self::Table(table) if length > 0 => Some(Self::Ramp(Ramp {
+                size: length,
+                within: Some(table.clone()),
+            })),
             Self::Table(_) | Self::Ramp(_) | Self::Matrix(_) => Some(Self::Fixed),
             Self::Fixed => None,
         }
@@ -94,7 +117,11 @@ impl Tint {
                 true => table.clear(device, crtc),
                 false => table.set(device, crtc, kelvin),
             },
-            Self::Ramp(size) => {
+            Self::Ramp(Ramp {
+                within: Some(table),
+                ..
+            }) if neutral => table.clear(device, crtc),
+            Self::Ramp(Ramp { size, .. }) => {
                 if neutral && shows_linear(device, crtc, *size)? {
                     return Ok(());
                 }

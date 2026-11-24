@@ -79,6 +79,7 @@ struct Head {
     dark: bool,
     tint: Option<Tint>,
     tone: Option<f64>,
+    tint_failed: bool,
     lost_at: Option<Instant>,
     relink_wanted: bool,
     flip_pending: bool,
@@ -1109,6 +1110,7 @@ impl DrmBackend {
             dark: false,
             tint: None,
             tone: None,
+            tint_failed: false,
             lost_at: None,
             relink_wanted: false,
             flip_pending: false,
@@ -1374,6 +1376,8 @@ impl DrmBackend {
                 tracing::warn!("cannot reset {}: {error}", head.config.name);
             }
             head.tone = None;
+            head.tint = None;
+            head.tint_failed = false;
             head.dark = false;
             head.flip_pending = false;
             head.formats.forget_refusals();
@@ -1595,7 +1599,13 @@ fn tint(device: &DrmDevice, head: &mut Head, kelvin: f64) {
         return;
     }
     let crtc = head.compositor.crtc();
-    let mut tint = head.tint.take().unwrap_or_else(|| Tint::of(device, crtc));
+    let mut tint = head.tint.take().unwrap_or_else(|| {
+        let tint = Tint::of(device, crtc);
+        if tint == Tint::Fixed {
+            tracing::info!("{} cannot be tinted", head.config.name);
+        }
+        tint
+    });
     let mut shown = tint.show(device, crtc, kelvin);
     while let Err(error) = &shown
         && matches!(
@@ -1609,6 +1619,7 @@ fn tint(device: &DrmDevice, head: &mut Head, kelvin: f64) {
         shown = tint.show(device, crtc, kelvin);
     }
     head.tint = Some(tint);
+    head.tint_failed = shown.is_err();
     match shown {
         Ok(()) => head.tone = Some(kelvin),
         Err(error) => tracing::debug!("{} is tinted later: {error}", head.config.name),
@@ -1672,6 +1683,16 @@ impl FrameOutput for DrmBackend {
         for head in &mut self.heads {
             tint(&self.device, head, kelvin);
         }
+    }
+
+    fn retry_tint(&mut self) -> bool {
+        let Some(kelvin) = self.kelvin.filter(|_| self.session.is_active()) else {
+            return true;
+        };
+        for head in self.heads.iter_mut().filter(|head| head.tint_failed) {
+            tint(&self.device, head, kelvin);
+        }
+        self.heads.iter().all(|head| !head.tint_failed)
     }
 
     fn switch_virtual_terminal(&mut self, number: i32) {

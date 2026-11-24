@@ -45,6 +45,7 @@ use zbus::blocking::Connection;
 use zbus::blocking::fdo::PropertiesProxy;
 
 const HEADLESS_SIZE: (i32, i32) = (1920, 1080);
+const TINT_RETRY: Duration = Duration::from_millis(250);
 const SHELL_READY_TIMEOUT: Duration = Duration::from_millis(2500);
 const BEHIND_BOOT_SCREEN_LIMIT: Duration = Duration::from_secs(5);
 const LOGIN_WINDOW_LIMIT: Duration = Duration::from_secs(300);
@@ -1419,6 +1420,7 @@ where
             compositor.redraw_hdr_displays();
         }
         let night_wait = night.wake_at.map(|at| at.saturating_sub(now()));
+        let tint_wait = (!output.retry_tint()).then_some(TINT_RETRY);
         timeout = upkeep
             .retry_in
             .into_iter()
@@ -1428,6 +1430,7 @@ where
             .chain(snap_wait)
             .chain(watchdog_wait)
             .chain(night_wait)
+            .chain(tint_wait)
             .chain(reveal_wait)
             .chain(menu_wait)
             .chain(renewal_wait)

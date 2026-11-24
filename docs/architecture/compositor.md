@@ -519,7 +519,8 @@ driver with only legacy gamma gets a ramp, and one with only a `CTM` a matrix. W
 there is no table at all (some drivers round to 8 bits with a legacy-size one): nothing is set on a
 display that has none, and a table, matrix or ramp another process left is taken away. Scheduled changes fade over a
 minute, switching fades in 1.5 s and a new warmth applies at once; it wakes every 50 ms only while
-fading. A display that can do none of these is left alone with one log line, and the tint is looked at
+fading. A display that can do none of these is left alone with one log line; a tint
+the display was too busy for is tried again 250 ms later, and the tint is looked at
 again after a session switch or wake once the first frame has flipped.
 
 ## Sleep and wake

@@ -891,9 +891,9 @@ what the one before could not save:
   of `session.slice`, and the compositor asks `rtkit` to raise its drawing and input thread to
   nice −11 (`MakeThreadHighPriority`), keeping the normal priority when rtkit is missing or
   refuses, so the pointer and animations stay smooth. That thread also asks the scheduler for
-  short 0.1 ms slices (`sched_setattr`), so it runs soon after it wakes among busy programs, and
-  is set to reset on fork (`SCHED_RESET_ON_FORK`), so every thread and client started from it
-  begins at the normal priority; without these it is not raised at all. It is not real-time: the
+  short 0.1 ms slices (`sched_setattr`, with or without rtkit), so it runs soon after it wakes among
+  busy programs, and is set to reset on fork (`SCHED_RESET_ON_FORK`), so every thread and client
+  started from it begins at the normal priority; without that it is not raised at all. It is not real-time: the
   kernel kills a real-time thread that computes for 200 ms without sleeping, which a mode change
   or a driver compiling shaders can take. Each app and each Terminal tab has its own scope, so the
   focused app gets an equal share however many programs another one runs.

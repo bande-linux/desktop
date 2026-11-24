@@ -14,8 +14,8 @@ use bande_compositor::{
 use bande_render::{OffscreenTarget, VulkanRenderer};
 use bande_test_bus::SessionBus;
 use bande_test_wayland::keys::{
-    BTN_LEFT, KEY_A, KEY_DOWN, KEY_ENTER, KEY_ESC, KEY_L, KEY_LEFTALT, KEY_LEFTCTRL, KEY_LEFTMETA,
-    KEY_Q, KEY_SPACE, KEY_TAB, KEY_W,
+    BTN_LEFT, KEY_8, KEY_A, KEY_DOWN, KEY_ENTER, KEY_ESC, KEY_L, KEY_LEFTALT, KEY_LEFTCTRL,
+    KEY_LEFTMETA, KEY_Q, KEY_SPACE, KEY_TAB, KEY_W,
 };
 use bande_test_wayland::{
     BLUE, ConstraintAdjustment, Frames, PopupRequest, RED, SeparateApp, ShmImage, TestClient,
@@ -815,6 +815,40 @@ fn moving_the_pointer_redraws_only_the_display_it_is_on() {
     assert_eq!(redrawn, [true, false], "a pointer move redrew {outputs:?}");
 }
 
+#[test]
+fn moving_the_pointer_redraws_the_display_the_magnifier_leaves() {
+    let mut server = headless(640, 480);
+    server.add_output(OutputConfig::virtual_display(
+        "HEADLESS-2",
+        (640, 480).into(),
+    ));
+    let outputs = server.outputs();
+    server.move_pointer_to((900.0, 200.0).into(), 0);
+    let mut beside = TestClient::window(&mut server, "org.bande.Beside");
+    server.move_pointer_to((100.0, 100.0).into(), 1);
+    let mut here = TestClient::window(&mut server, "org.bande.Here");
+    chord(&mut server, &[KEY_LEFTALT, KEY_LEFTMETA, KEY_8]);
+    chord(&mut server, &[KEY_LEFTALT, KEY_TAB]);
+    roundtrip(&mut server, &mut [&mut here, &mut beside]);
+    let mut frames = Frames::start();
+    idle(&mut frames, &mut server, Duration::from_millis(500));
+    let levels = |server: &Compositor| -> Vec<Option<f64>> {
+        outputs
+            .iter()
+            .map(|output| server.render_scale(output))
+            .collect()
+    };
+    assert_eq!(levels(&server), [Some(1.0), Some(2.0)]);
+    for output in &outputs {
+        server.take_redraw_on(output);
+    }
+    server.move_pointer_to((110.0, 100.0).into(), 2);
+    assert_eq!(levels(&server), [Some(2.0), Some(1.0)]);
+    for output in &outputs {
+        assert!(server.take_redraw_on(output), "{output} is not redrawn");
+    }
+}
+
 struct DrawnOutput {
     vulkan: VulkanRenderer,
     name: String,
@@ -891,11 +925,8 @@ fn draw_output(
         .render_output(vulkan, &mut framebuffer, age, &elements, background())
         .expect("render a frame");
     let submitted = vulkan.submitted();
-    server.keep_until_drawn(
-        elements,
-        (submitted, vulkan.completed()),
-        vulkan.fence_of(submitted),
-    );
+    let fence = vulkan.fence_of(submitted).expect("the frame's fence");
+    server.keep_until_drawn(elements, (submitted, vulkan.completed()), fence);
     drop(drawn);
 }
 

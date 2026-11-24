@@ -250,6 +250,10 @@ pub trait FrameOutput {
         Ok(false)
     }
 
+    fn renewal_wait(&self) -> Option<Duration> {
+        None
+    }
+
     fn refresh(&self, _output: &str) -> Option<Duration> {
         None
     }
@@ -517,7 +521,10 @@ impl FrameScheduler {
                         self.phase = Phase::Backoff(started + FAILED_FRAME_RETRY);
                     })?;
                     now = clock();
-                    let done = now + output.gpu_time(&name);
+                    let done = match submission {
+                        Submission::Unchanged => now,
+                        _ => now + output.gpu_time(&name),
+                    };
                     let rendered = Rendered {
                         vblank,
                         started,

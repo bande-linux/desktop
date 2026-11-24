@@ -454,7 +454,7 @@ pub struct VulkanRenderer {
     blur_chains: HashMap<u64, frame::BlurChain>,
     lost: AtomicBool,
     exhausted: AtomicBool,
-    created: Instant,
+    renewable_from: Instant,
     messenger: Option<(ash::ext::debug_utils::Instance, vk::DebugUtilsMessengerEXT)>,
     display: Option<u64>,
     _entry: ash::Entry,
@@ -889,7 +889,7 @@ impl VulkanRenderer {
             blur_chains: HashMap::new(),
             lost: AtomicBool::new(false),
             exhausted: AtomicBool::new(false),
-            created: Instant::now(),
+            renewable_from: Instant::now() + MIN_RENDERER_LIFETIME,
             messenger,
             display,
             instance,
@@ -2223,8 +2223,37 @@ impl VulkanRenderer {
         self.exhausted.load(Ordering::Relaxed)
     }
 
-    pub fn needs_renewal(&self) -> bool {
-        self.is_lost() || (self.out_of_memory() && self.created.elapsed() >= MIN_RENDERER_LIFETIME)
+    pub fn renewal_wait(&self) -> Option<Duration> {
+        match (self.is_lost(), self.out_of_memory()) {
+            (true, _) => Some(Duration::ZERO),
+            (false, true) => Some(
+                self.renewable_from
+                    .saturating_duration_since(Instant::now()),
+            ),
+            (false, false) => None,
+        }
+    }
+
+    pub fn renewed_if_failed(&mut self) -> Result<Option<Self>, RenderError> {
+        if self.renewal_wait() != Some(Duration::ZERO) {
+            return Ok(None);
+        }
+        let renewed = self.renew();
+        self.kept_if_usable(renewed)
+    }
+
+    fn kept_if_usable(
+        &mut self,
+        renewed: Result<Self, RenderError>,
+    ) -> Result<Option<Self>, RenderError> {
+        match renewed {
+            Err(error) if !self.is_lost() => {
+                tracing::warn!("keeping the renderer, as another cannot start: {error}");
+                self.renewable_from = Instant::now() + MIN_RENDERER_LIFETIME;
+                Ok(None)
+            }
+            renewed => renewed.map(Some),
+        }
     }
 
     pub fn memory_use(&self) -> MemoryUse {
@@ -2934,6 +2963,7 @@ fn hand_over(
             .dst_queue_family_index(family)
             .old_layout(vk::ImageLayout::GENERAL)
             .new_layout(layout)
+            .src_stage_mask(stage)
             .dst_stage_mask(stage)
             .dst_access_mask(access),
         false => foreign
@@ -2976,6 +3006,7 @@ fn hand_over_buffers(
                 true => barrier
                     .src_queue_family_index(foreign)
                     .dst_queue_family_index(family)
+                    .src_stage_mask(stage)
                     .dst_stage_mask(stage)
                     .dst_access_mask(access),
                 false => barrier
@@ -3028,5 +3059,39 @@ fn barrier(
             commands,
             &vk::DependencyInfo::default().image_memory_barriers(slice::from_ref(&barrier)),
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_renderer_out_of_memory_outlives_a_failed_renewal_and_tries_again()
+    -> Result<(), RenderError> {
+        let Ok(mut renderer) = VulkanRenderer::new(None) else {
+            println!("skipped: no Vulkan device");
+            return Ok(());
+        };
+        assert_eq!(renderer.renewal_wait(), None);
+        renderer.exhausted.store(true, Ordering::Relaxed);
+        renderer.renewable_from = Instant::now();
+        assert_eq!(renderer.renewal_wait(), Some(Duration::ZERO));
+        assert!(
+            renderer
+                .kept_if_usable(Err(RenderError::NoDevice))?
+                .is_none()
+        );
+        assert!(
+            renderer
+                .renewal_wait()
+                .is_some_and(|wait| wait > Duration::ZERO)
+        );
+        assert!(renderer.renewed_if_failed()?.is_none());
+        renderer.renewable_from = Instant::now();
+        assert!(renderer.renewed_if_failed()?.is_some());
+        renderer.lost.store(true, Ordering::Relaxed);
+        assert!(renderer.kept_if_usable(Err(RenderError::NoDevice)).is_err());
+        Ok(())
     }
 }

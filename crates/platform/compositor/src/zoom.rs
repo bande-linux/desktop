@@ -122,6 +122,10 @@ impl State {
         self.zoom.focus.unwrap_or(self.pointer_location)
     }
 
+    pub(crate) fn magnified_screen(&self) -> Option<usize> {
+        (0..self.screens.len()).find(|&screen| self.zoom_on(screen) > 1.0)
+    }
+
     pub(crate) fn zoom_on(&self, screen: usize) -> f64 {
         let level = self.zoom.level();
         let followed = self

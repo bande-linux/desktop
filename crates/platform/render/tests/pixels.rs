@@ -340,12 +340,12 @@ fn every_texture_of_a_frame_shows_its_own_pixels() -> Outcome {
             size.into(),
         )
     };
-    for with_blur in [false, true, false] {
-        for layout in gpu.layouts() {
-            let Some(mut targets) = gpu.targets(layout, 3) else {
-                println!("skipped: no buffer in layout {layout:?}");
-                continue;
-            };
+    for layout in gpu.layouts() {
+        let Some(mut targets) = gpu.targets(layout, 3) else {
+            println!("skipped: no buffer in layout {layout:?}");
+            continue;
+        };
+        for with_blur in [false, true, false] {
             for step in 0..7 {
                 let textures = clients
                     .iter()

@@ -47,6 +47,7 @@ pub(crate) struct Submissions {
     recording: Option<usize>,
     submitted: u64,
     completed: u64,
+    ended: Option<u64>,
     spare: Vec<Staging>,
     measuring: Option<Arc<str>>,
     frame_times: HashMap<Arc<str>, VecDeque<Duration>>,
@@ -61,6 +62,7 @@ impl Submissions {
             recording: None,
             submitted: last,
             completed: last,
+            ended: None,
             spare: Vec::new(),
             measuring: None,
             frame_times: HashMap::new(),
@@ -99,6 +101,15 @@ impl Fence for GpuFence {
 
     fn export(&self) -> Option<OwnedFd> {
         self.0.as_fd().try_clone_to_owned().ok()
+    }
+}
+
+fn busy_ticks([began, ended]: [u64; 2], earlier: Option<u64>, mask: u64) -> u64 {
+    let whole = ended.wrapping_sub(began) & mask;
+    let overlap = earlier.map_or(0, |earlier| earlier.wrapping_sub(began) & mask);
+    match overlap <= whole {
+        true => whole - overlap,
+        false => whole,
     }
 }
 
@@ -431,6 +442,7 @@ impl VulkanRenderer {
                 done.push(index);
             }
         }
+        done.sort_by_key(|&index| self.submissions.slots[index].serial);
         for index in done {
             let timed = self.slot_time(index);
             let slot = &mut self.submissions.slots[index];
@@ -483,7 +495,7 @@ impl VulkanRenderer {
         self.free_unused_staging();
     }
 
-    fn slot_time(&self, index: usize) -> Option<Duration> {
+    fn slot_time(&mut self, index: usize) -> Option<Duration> {
         let slot = &self.submissions.slots[index];
         let period = self.timestamp_period?;
         if slot.timestamps == vk::QueryPool::null() {
@@ -505,7 +517,8 @@ impl VulkanRenderer {
             64.. => u64::MAX,
             bits => (1u64 << bits) - 1,
         };
-        let nanos = (ticks[1].wrapping_sub(ticks[0]) & mask) as f64 * f64::from(period);
+        let ended = self.submissions.ended.replace(ticks[1]);
+        let nanos = busy_ticks(ticks, ended, mask) as f64 * f64::from(period);
         Some(Duration::from_nanos(nanos as u64))
     }
 
@@ -517,14 +530,18 @@ impl VulkanRenderer {
         self.submissions.completed
     }
 
-    pub fn fence_of(&self, serial: u64) -> Option<OwnedFd> {
-        self.submissions
+    pub fn fence_of(&mut self, serial: u64) -> Result<Option<OwnedFd>, RenderError> {
+        let pending = self
+            .submissions
             .slots
             .iter()
             .filter(|slot| slot.serial != 0 && slot.serial <= serial)
-            .max_by_key(|slot| slot.serial)
-            .and_then(|slot| slot.sync_file.as_ref())
-            .and_then(|fd| fd.as_fd().try_clone_to_owned().ok())
+            .max_by_key(|slot| slot.serial);
+        match pending.map(|slot| &slot.sync_file) {
+            Some(Some(file)) => Ok(Some(file.as_fd().try_clone_to_owned()?)),
+            Some(None) => self.wait_for(serial).map(|()| None),
+            None => Ok(None),
+        }
     }
 
     pub fn measure_frames_of(&mut self, output: Option<&str>) {
@@ -635,5 +652,19 @@ impl VulkanRenderer {
         for staging in std::mem::take(&mut self.submissions.spare) {
             self.destroy_staging(&staging);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::busy_ticks;
+
+    #[test]
+    fn a_frame_is_timed_from_the_end_of_the_one_before_it() {
+        let mask = 0xff;
+        assert_eq!(busy_ticks([10, 50], None, mask), 40);
+        assert_eq!(busy_ticks([10, 50], Some(30), mask), 20);
+        assert_eq!(busy_ticks([10, 50], Some(5), mask), 40);
+        assert_eq!(busy_ticks([250, 20], Some(10), mask), 10);
     }
 }

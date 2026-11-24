@@ -25,8 +25,8 @@ when they reach the screen is Bande's own.
   hasvk's Haswell and Broadwell GPUs qualify); every device left out is logged with the reason. Each
   sampled image view (with its chroma plane or colour table) gets one descriptor set, made at its
   first draw and freed with the image; sets come from pools of 64, any pool with room, and a pool
-  is destroyed once its last set is freed (push descriptors made blurs sample the wrong image on Intel
-  Gen9 with anv; the cause is not traced). It implements Smithay's `Renderer`, `Frame`,
+  is destroyed once its last set is freed (with push descriptors, blurs and textures drawn after a
+  blur sampled the wrong image on Intel Gen9 with anv; the cause is not traced). It implements Smithay's `Renderer`, `Frame`,
   `ImportMemWl`, `ImportDmaWl`, `Offscreen` and `Bind<Dmabuf>`. Both outputs compose the same Wayland surface
   elements through Smithay: the headless output with `OutputDamageTracker` into a persistent
   offscreen image (read back only for tests), the DRM output with `DrmCompositor`. Each surface
@@ -51,8 +51,9 @@ when they reach the screen is Bande's own.
   whenever the plane cannot take the fence (`needs_sync`: no `IN_FENCE_FD`, older NVIDIA drivers,
   virtio-gpu without syncobj), so a buffer is never scanned out while it is drawn. Completion is
   taken to follow submission order on the one queue, as every driver's ring does. A submission the
-  driver refuses drops every kept blur and has the renderer made again (at most every ten seconds
-  when memory ran out), as its uploads are lost; a wait that fails counts as a lost device.
+  driver refuses drops every kept blur and has the renderer made again (not in its first ten
+  seconds when memory ran out; a renewal that fails keeps the working renderer and is tried again
+  ten seconds later), as its uploads are lost; a wait that fails counts as a lost device.
   Staging memory unused for two seconds is freed. The render elements of a frame, and with them the
   client buffers they hold, are kept until its submission finishes (`drawing.rs`, woken by the sync file), so no buffer goes
   back to a client while the GPU still reads it. The scheduler prices a frame at its CPU time plus
@@ -212,8 +213,8 @@ when they reach the screen is Bande's own.
   opaque dma-buf window is put on the primary plane without composition. A display whose connector
   can change its refresh without a mode-set gets variable refresh while a full-screen window on its
   active workspace says its content is a game or video (`wp_content_type_v1`), unless
-  `variable-refresh #false` is in its settings (Settings ▸ Displays ▸ Advanced ▸ Variable refresh
-  rate in full screen); presentation feedback then reports the refresh as variable, with the mode's
+  `variable-refresh #false` is in its settings (Settings ▸ Displays ▸ Variable refresh
+  rate); presentation feedback then reports the refresh as variable, with the mode's
   as the fastest. Tearing page flips are not offered: Smithay 0.7's `DrmCompositor` cannot ask for
   `DRM_MODE_PAGE_FLIP_ASYNC`.
 - **Displays.** Every output lives in one logical coordinate space in points. Its mode, scale
@@ -274,9 +275,8 @@ when they reach the screen is Bande's own.
   The main display carries a white bar along its top. Each display then offers Use as (Main
   display, Extended, Mirror), Scale (Default, then Larger Text to More Space, each
   shown as the size the desktop looks like at the native resolution), Resolution (up to four sizes
-  of its native shape first, then every other mode below a separator in the same menu) and
-  Rotation; Displays ▸ Advanced offers each display's Refresh rate and Variable refresh rate in
-  full screen. Every change is written to
+  of its native shape first, then every other mode below a separator in the same menu), Refresh rate,
+  Rotation and Variable refresh rate. Night Light, for every display, follows them. Every change is written to
   `config.kdl` and applied live. A change of resolution, refresh rate, rotation or variable
   refresh is a trial: Settings asks "Keep these display settings?" in a dialog that takes the
   keyboard focus, with Keep and Revert. Revert is the default, taken by Enter and Escape alike, so

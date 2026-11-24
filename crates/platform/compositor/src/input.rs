@@ -423,10 +423,12 @@ impl Compositor {
         let location = state.nearest_on_screens(location);
         let left = state.pointer_location;
         let entered = state.screen_at(location) != state.screen_at(left);
+        let magnified = state.magnified_screen();
         state.pointer_location = location;
         state.zoom.follow_pointer();
         state.cursor_shown = true;
         state.redraw_screens_at(&[left, location]);
+        state.needs_redraw |= state.drag.is_some() || state.magnified_screen() != magnified;
         if entered {
             state.reload_cursor();
         }

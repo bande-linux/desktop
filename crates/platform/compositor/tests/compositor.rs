@@ -8,14 +8,14 @@ use std::time::{Duration, Instant};
 
 use bande_compositor::background;
 use bande_compositor::{
-    Compositor, KEYBOARD_MONITOR_NAME, SCREEN_READER_NAME, SessionReport, UNRESPONSIVE_AFTER,
-    serve_keyboard_monitor,
+    Compositor, KEYBOARD_MONITOR_NAME, OutputConfig, SCREEN_READER_NAME, SessionReport,
+    UNRESPONSIVE_AFTER, serve_keyboard_monitor,
 };
-use bande_render::VulkanRenderer;
+use bande_render::{OffscreenTarget, VulkanRenderer};
 use bande_test_bus::SessionBus;
 use bande_test_wayland::keys::{
-    BTN_LEFT, KEY_A, KEY_DOWN, KEY_ENTER, KEY_ESC, KEY_L, KEY_LEFTALT, KEY_LEFTCTRL, KEY_LEFTMETA,
-    KEY_Q, KEY_SPACE, KEY_TAB, KEY_W,
+    BTN_LEFT, KEY_8, KEY_A, KEY_DOWN, KEY_ENTER, KEY_ESC, KEY_L, KEY_LEFTALT, KEY_LEFTCTRL,
+    KEY_LEFTMETA, KEY_Q, KEY_SPACE, KEY_TAB, KEY_W,
 };
 use bande_test_wayland::{
     BLUE, ConstraintAdjustment, Frames, PopupRequest, RED, SeparateApp, ShmImage, TestClient,
@@ -24,9 +24,10 @@ use bande_test_wayland::{
 use smithay::backend::allocator::dmabuf::{AsDmabuf, Dmabuf};
 use smithay::backend::allocator::gbm::{GbmAllocator, GbmBufferFlags, GbmDevice};
 use smithay::backend::allocator::{Allocator, Buffer, Fourcc, Modifier};
-use smithay::backend::renderer::Bind;
 use smithay::backend::renderer::damage::OutputDamageTracker;
-use smithay::utils::Transform;
+use smithay::backend::renderer::element::Element;
+use smithay::backend::renderer::{Bind, Offscreen};
+use smithay::utils::{Rectangle, Transform};
 use wayland_client::protocol::wl_shm::Format;
 
 const MONITOR: &str = "org.freedesktop.a11y.KeyboardMonitor";
@@ -464,7 +465,10 @@ fn drag_over_scanout_buffers(colour: Option<bande_render::OutputColour>) {
         let mut framebuffer = vulkan.bind(dmabuf).expect("bind the scanout buffer");
         damage
             .render_output(&mut vulkan, &mut framebuffer, age, &elements, background())
-            .expect("render into the scanout buffer");
+            .expect("render into the scanout buffer")
+            .sync
+            .wait()
+            .expect("the GPU finishes the frame");
         *used = Some(*step);
         *step += 1;
         slot
@@ -503,7 +507,10 @@ fn drag_over_scanout_buffers(colour: Option<bande_render::OutputColour>) {
     let mut framebuffer = vulkan.bind(&mut fresh).expect("bind the fresh buffer");
     OutputDamageTracker::new((640, 480), 1.0, Transform::Normal)
         .render_output(&mut vulkan, &mut framebuffer, 0, &elements, background())
-        .expect("a full redraw");
+        .expect("a full redraw")
+        .sync
+        .wait()
+        .expect("the GPU finishes the full redraw");
     let full = read_back(&gbm, &fresh, (width, height));
     let wrong = drawn
         .as_chunks::<4>()
@@ -734,4 +741,487 @@ fn a_closing_window_keeps_the_buffer_it_still_shows_until_it_is_gone() {
         client.released(&shown),
         "the closed window never let go of its buffer"
     );
+}
+
+#[test]
+fn the_overview_opens_on_the_gpu_over_windows_updated_in_pieces() {
+    if hardware().is_none() {
+        println!("skipped: no hardware Vulkan device with a DRM render node");
+        return;
+    }
+    let mut server = headless(2928, 1818);
+    server.set_output_scale(1.5);
+    server.set_reduce_motion(false);
+    let mut frames = Frames::start();
+    let mut windows = Vec::new();
+    for (index, (width, height)) in [(1002, 741), (1602, 963)].into_iter().enumerate() {
+        let bytes = BLUE.repeat((width * height) as usize);
+        let image = ShmImage {
+            width,
+            height,
+            stride: width * 4,
+            format: Format::Argb8888,
+            bytes: &bytes,
+        };
+        let mut client = TestClient::connect(&mut server);
+        client.use_seat(&mut server);
+        client.show_window(&mut server, &image);
+        client.set_app_id(&mut server, 0, &format!("org.bande.Piece{index}"));
+        roundtrip(&mut server, &mut [&mut client]);
+        idle(&mut frames, &mut server, Duration::from_millis(100));
+        for (x, y, w, h) in [(870, 27, 105, 42), (825, 27, 42, 42), (27, 18, 113, 60)] {
+            client.commit_buffer(0, &image, (x, y, w, h));
+            idle(&mut frames, &mut server, Duration::from_millis(30));
+        }
+        windows.push(client);
+    }
+    idle(&mut frames, &mut server, Duration::from_millis(500));
+    for _ in 0..2 {
+        chord(&mut server, &[KEY_LEFTMETA, KEY_W]);
+        idle(&mut frames, &mut server, Duration::from_millis(800));
+        chord(&mut server, &[KEY_LEFTMETA, KEY_W]);
+        idle(&mut frames, &mut server, Duration::from_millis(800));
+    }
+    assert_eq!(bande_render::vulkan_errors(), 0, "Vulkan reported errors");
+}
+
+#[test]
+fn moving_the_pointer_redraws_only_the_display_it_is_on() {
+    let mut server = headless(640, 480);
+    server.add_output(OutputConfig::virtual_display(
+        "HEADLESS-2",
+        (640, 480).into(),
+    ));
+    let outputs = server.outputs();
+    assert_eq!(outputs.len(), 2, "the second display is not arranged");
+    let mut frames = Frames::start();
+    idle(&mut frames, &mut server, Duration::from_millis(200));
+    for output in &outputs {
+        server.take_redraw_on(output);
+    }
+    server.move_pointer_to((100.0, 100.0).into(), 0);
+    server.move_pointer_to((120.0, 110.0).into(), 1);
+    let redrawn: Vec<bool> = outputs
+        .iter()
+        .map(|output| server.take_redraw_on(output))
+        .collect();
+    assert_eq!(redrawn, [true, false], "a pointer move redrew {outputs:?}");
+}
+
+#[test]
+fn moving_the_pointer_redraws_the_display_the_magnifier_leaves() {
+    let mut server = headless(640, 480);
+    server.add_output(OutputConfig::virtual_display(
+        "HEADLESS-2",
+        (640, 480).into(),
+    ));
+    let outputs = server.outputs();
+    server.move_pointer_to((900.0, 200.0).into(), 0);
+    let mut beside = TestClient::window(&mut server, "org.bande.Beside");
+    server.move_pointer_to((100.0, 100.0).into(), 1);
+    let mut here = TestClient::window(&mut server, "org.bande.Here");
+    chord(&mut server, &[KEY_LEFTALT, KEY_LEFTMETA, KEY_8]);
+    chord(&mut server, &[KEY_LEFTALT, KEY_TAB]);
+    roundtrip(&mut server, &mut [&mut here, &mut beside]);
+    let mut frames = Frames::start();
+    idle(&mut frames, &mut server, Duration::from_millis(500));
+    let levels = |server: &Compositor| -> Vec<Option<f64>> {
+        outputs
+            .iter()
+            .map(|output| server.render_scale(output))
+            .collect()
+    };
+    assert_eq!(levels(&server), [Some(1.0), Some(2.0)]);
+    for output in &outputs {
+        server.take_redraw_on(output);
+    }
+    server.move_pointer_to((110.0, 100.0).into(), 2);
+    assert_eq!(levels(&server), [Some(2.0), Some(1.0)]);
+    for output in &outputs {
+        assert!(server.take_redraw_on(output), "{output} is not redrawn");
+    }
+}
+
+struct DrawnOutput {
+    vulkan: VulkanRenderer,
+    name: String,
+    target: OffscreenTarget,
+    damage: OutputDamageTracker,
+    frames: usize,
+}
+
+impl DrawnOutput {
+    fn new(server: &Compositor) -> Option<Self> {
+        Self::of(server.main_output(), server, hardware()?.0)
+    }
+
+    fn of(name: String, server: &Compositor, mut vulkan: VulkanRenderer) -> Option<Self> {
+        let settings = server.output_settings(&name)?;
+        let size = settings.mode.size;
+        let target =
+            Offscreen::create_buffer(&mut vulkan, Fourcc::Abgr8888, (size.w, size.h).into())
+                .expect("a target");
+        Some(Self {
+            vulkan,
+            name,
+            target,
+            damage: OutputDamageTracker::new(size, settings.scale, Transform::Normal),
+            frames: 0,
+        })
+    }
+
+    fn draw(&mut self, server: &mut Compositor) {
+        server.dispatch().expect("server dispatch");
+        let age = usize::from(self.frames > 0);
+        self.vulkan.measure_frames_of(Some(&self.name));
+        draw_output(
+            &mut self.vulkan,
+            (&mut self.target, &mut self.damage, age),
+            server,
+            &self.name,
+        );
+        self.vulkan.measure_frames_of(None);
+        self.frames += 1;
+    }
+
+    fn assert_matches_a_full_redraw(&mut self, server: &mut Compositor, moment: &str) {
+        let (fresh, _) = hardware().expect("the GPU that drew the frames");
+        let mut full =
+            Self::of(self.name.clone(), server, fresh).expect("the output is still there");
+        full.draw(server);
+        let drawn = self.vulkan.read_target(&self.target).expect("read back");
+        let full = full.vulkan.read_target(&full.target).expect("read back");
+        let wrong = drawn
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .zip(full.as_chunks::<4>().0)
+            .filter(|(drawn, full)| drawn.iter().zip(*full).any(|(a, b)| a.abs_diff(*b) > 2))
+            .count();
+        assert_eq!(
+            wrong, 0,
+            "{moment}: {wrong} pixels differ from a full redraw"
+        );
+        assert_eq!(bande_render::vulkan_errors(), 0, "Vulkan reported errors");
+    }
+}
+
+fn draw_output(
+    vulkan: &mut VulkanRenderer,
+    (target, damage, age): (&mut OffscreenTarget, &mut OutputDamageTracker, usize),
+    server: &mut Compositor,
+    name: &str,
+) {
+    let elements = server.render_elements_on(vulkan, name);
+    let mut framebuffer = vulkan.bind(target).expect("bind the target");
+    let drawn = damage
+        .render_output(vulkan, &mut framebuffer, age, &elements, background())
+        .expect("render a frame");
+    let submitted = vulkan.submitted();
+    let fence = vulkan.fence_of(submitted).expect("the frame's fence");
+    server.keep_until_drawn(elements, (submitted, vulkan.completed()), fence);
+    drop(drawn);
+}
+
+struct PatternWindow {
+    client: TestClient,
+    size: (i32, i32),
+    format: Format,
+    bytes: Vec<u8>,
+}
+
+impl PatternWindow {
+    fn show(server: &mut Compositor, app_id: &str, size: (i32, i32), alpha: u8) -> Self {
+        let mut window = Self {
+            client: TestClient::connect(server),
+            size,
+            format: match alpha {
+                u8::MAX => Format::Xrgb8888,
+                _ => Format::Argb8888,
+            },
+            bytes: pattern(size, 0, alpha),
+        };
+        window.client.use_seat(server);
+        window.client.show_window(
+            server,
+            &ShmImage {
+                width: size.0,
+                height: size.1,
+                stride: size.0 * 4,
+                format: window.format,
+                bytes: &window.bytes,
+            },
+        );
+        window.client.set_app_id(server, 0, app_id);
+        roundtrip(server, &mut [&mut window.client]);
+        window
+    }
+
+    fn commit(&mut self, server: &mut Compositor, damage: (i32, i32, i32, i32)) {
+        self.client.commit_buffer(
+            0,
+            &ShmImage {
+                width: self.size.0,
+                height: self.size.1,
+                stride: self.size.0 * 4,
+                format: self.format,
+                bytes: &self.bytes,
+            },
+            damage,
+        );
+        roundtrip(server, &mut [&mut self.client]);
+    }
+}
+
+fn pattern(size: (i32, i32), shift: i32, alpha: u8) -> Vec<u8> {
+    let opacity = u32::from(alpha);
+    (0..size.1)
+        .flat_map(|y| (0..size.0).map(move |x| (x, y)))
+        .flat_map(|(x, y)| {
+            let [blue, green, red]: [u32; 3] = match (x / 17 + y / 13 + shift) % 3 {
+                0 => [255, 30, 0],
+                1 => [0, 220, 40],
+                _ => [20, 0, 250],
+            };
+            let dimmed = |channel: u32| (channel * opacity / 255) as u8;
+            [dimmed(blue), dimmed(green), dimmed(red), alpha]
+        })
+        .collect()
+}
+
+fn drag_window(server: &mut Compositor, window: usize, by: (f64, f64)) {
+    let frame = server.windows()[window]
+        .geometry()
+        .expect("the window is mapped");
+    let at = (
+        f64::from(frame.loc.x + frame.size.w / 2),
+        f64::from(frame.loc.y + frame.size.h / 2),
+    );
+    server.move_pointer_to(at.into(), 0);
+    server.key(KEY_LEFTMETA, true, 0);
+    server.press_button(BTN_LEFT, true, 0);
+    for step in 1..=4u32 {
+        let part = f64::from(step) / 4.0;
+        server.move_pointer_to((at.0 + by.0 * part, at.1 + by.1 * part).into(), step * 10);
+        server.dispatch().expect("server dispatch");
+    }
+    server.press_button(BTN_LEFT, false, 50);
+    server.key(KEY_LEFTMETA, false, 50);
+}
+
+#[test]
+fn blurred_backdrops_drawn_frame_by_frame_match_a_full_redraw() {
+    let mut server = headless(1000, 700);
+    let Some(mut output) = DrawnOutput::new(&server) else {
+        println!("skipped: no hardware Vulkan device with a DRM render node");
+        return;
+    };
+    let mut below = PatternWindow::show(&mut server, "org.bande.Below", (700, 500), u8::MAX);
+    let mut glass = PatternWindow::show(&mut server, "org.bande.Glass", (600, 400), 60);
+    glass.client.blur_behind(&mut server, 0, (600, 400));
+    let mut upper = PatternWindow::show(&mut server, "org.bande.Upper", (500, 300), 60);
+    upper.client.blur_behind(&mut server, 0, (500, 300));
+    let _above = PatternWindow::show(&mut server, "org.bande.Above", (300, 200), u8::MAX);
+    server.move_pointer_to((5.0, 690.0).into(), 0);
+    for _ in 0..6 {
+        output.draw(&mut server);
+    }
+    output.assert_matches_a_full_redraw(&mut server, "settled");
+    for shift in 1..4 {
+        below.bytes = pattern(below.size, shift, u8::MAX);
+        below.commit(&mut server, (0, 0, 700, 500));
+        output.draw(&mut server);
+        output.assert_matches_a_full_redraw(&mut server, "the window below changed");
+    }
+    for _ in 0..20 {
+        drag_window(&mut server, 3, (-4.0, 2.0));
+        output.draw(&mut server);
+    }
+    output.assert_matches_a_full_redraw(&mut server, "an opaque window was dragged across");
+}
+
+#[test]
+fn a_backdrop_left_alone_for_seconds_is_not_blurred_from_the_finished_frame() {
+    let mut server = headless(1300, 700);
+    let Some(mut output) = DrawnOutput::new(&server) else {
+        println!("skipped: no hardware Vulkan device with a DRM render node");
+        return;
+    };
+    let _below = PatternWindow::show(&mut server, "org.bande.Below", (400, 300), u8::MAX);
+    let mut glass = PatternWindow::show(&mut server, "org.bande.Glass", (360, 260), 100);
+    glass.client.blur_behind(&mut server, 0, (360, 260));
+    let mut aside = PatternWindow::show(&mut server, "org.bande.Aside", (100, 100), u8::MAX);
+    drag_window(&mut server, 2, (590.0, 190.0));
+    server.move_pointer_to((5.0, 690.0).into(), 100);
+    for _ in 0..6 {
+        output.draw(&mut server);
+    }
+    glass.commit(&mut server, (100, 100, 40, 40));
+    output.draw(&mut server);
+    output.assert_matches_a_full_redraw(&mut server, "a piece redrawn at once");
+    thread::sleep(Duration::from_millis(2500));
+    for _ in 0..2 {
+        aside.commit(&mut server, (0, 0, 10, 10));
+        output.draw(&mut server);
+    }
+    glass.commit(&mut server, (100, 100, 40, 40));
+    output.draw(&mut server);
+    output.assert_matches_a_full_redraw(&mut server, "a piece redrawn after two idle seconds");
+}
+
+#[test]
+fn a_mirror_keeps_its_own_blurred_backdrops() {
+    let mut server = headless(1000, 700);
+    let second = OutputConfig::virtual_display("HEADLESS-2", (500, 350).into());
+    let displays = [
+        OutputConfig::virtual_display("HEADLESS-1", (1000, 700).into()).identity(),
+        second.identity(),
+    ];
+    server.add_output(second);
+    let placed = |display: &str, mirror: Option<&str>| bande_config::Placement {
+        display: display.to_owned(),
+        x: 0,
+        y: 0,
+        main: mirror.is_none(),
+        mirror: mirror.map(str::to_owned),
+    };
+    let config = bande_config::Config {
+        arrangements: vec![vec![
+            placed(&displays[0], None),
+            placed(&displays[1], Some(&displays[0])),
+        ]],
+        ..bande_config::Config::default()
+    };
+    server.set_display_config(config);
+    let Some(mut output) = DrawnOutput::new(&server) else {
+        println!("skipped: no hardware Vulkan device with a DRM render node");
+        return;
+    };
+    let mirror = String::from("HEADLESS-2");
+    let mut mirrored: OffscreenTarget =
+        Offscreen::create_buffer(&mut output.vulkan, Fourcc::Abgr8888, (500, 350).into())
+            .expect("a target");
+    let scale = server
+        .output_settings(&mirror)
+        .expect("the mirror is arranged")
+        .scale;
+    assert_eq!(scale, 0.5, "the second display does not mirror the first");
+    let mut mirror_damage = OutputDamageTracker::new((500, 350), scale, Transform::Normal);
+    let _below = PatternWindow::show(&mut server, "org.bande.Below", (700, 500), u8::MAX);
+    let mut glass = PatternWindow::show(&mut server, "org.bande.Glass", (600, 400), 60);
+    glass.client.blur_behind(&mut server, 0, (600, 400));
+    server.move_pointer_to((5.0, 690.0).into(), 0);
+    for frame in 0..6 {
+        output.draw(&mut server);
+        draw_output(
+            &mut output.vulkan,
+            (&mut mirrored, &mut mirror_damage, usize::from(frame > 0)),
+            &mut server,
+            &mirror,
+        );
+    }
+    for _ in 0..3 {
+        glass.commit(&mut server, (100, 100, 40, 40));
+        output.draw(&mut server);
+        draw_output(
+            &mut output.vulkan,
+            (&mut mirrored, &mut mirror_damage, 1),
+            &mut server,
+            &mirror,
+        );
+    }
+    output.assert_matches_a_full_redraw(&mut server, "a piece redrawn beside a mirror");
+}
+
+#[test]
+fn a_full_screen_window_stays_opaque_above_a_blurred_panel() {
+    let Some((mut vulkan, _)) = hardware() else {
+        println!("skipped: no hardware Vulkan device with a DRM render node");
+        return;
+    };
+    let mut server = headless(800, 600);
+    let mut window = PatternWindow::show(&mut server, "org.bande.Full", (400, 300), u8::MAX);
+    let bytes = pattern((800, 40), 0, 100);
+    let mut panel = TestClient::connect(&mut server);
+    panel.show_blurred_panel(
+        &mut server,
+        &ShmImage {
+            width: 800,
+            height: 40,
+            stride: 3200,
+            format: Format::Argb8888,
+            bytes: &bytes,
+        },
+    );
+    window.client.make_full_screen(&mut server, 0);
+    window.size = (800, 600);
+    window.bytes = pattern(window.size, 0, u8::MAX);
+    window.commit(&mut server, (0, 0, 800, 600));
+    idle(&mut Frames::start(), &mut server, Duration::from_secs(1));
+    let output = server.main_output();
+    let opaque = server
+        .render_elements_on(&mut vulkan, &output)
+        .iter()
+        .flat_map(|element| element.opaque_regions(1.0.into()).to_vec())
+        .collect::<Vec<_>>();
+    assert!(
+        opaque.contains(&Rectangle::from_size((800, 600).into())),
+        "the full-screen window is opaque only in {opaque:?}"
+    );
+}
+
+#[test]
+fn memory_of_large_uploads_is_freed_once_they_stop() {
+    let mut server = headless(2000, 1500);
+    let Some(mut output) = DrawnOutput::new(&server) else {
+        println!("skipped: no hardware Vulkan device with a DRM render node");
+        return;
+    };
+    let mut large = PatternWindow::show(&mut server, "org.bande.Large", (1900, 1400), u8::MAX);
+    for _ in 0..6 {
+        large.commit(&mut server, (0, 0, 1900, 1400));
+        output.draw(&mut server);
+    }
+    let held = output.vulkan.memory_use().staging.1;
+    assert!(held >= 1900 * 1400 * 4, "uploads held only {held} bytes");
+    thread::sleep(Duration::from_millis(2500));
+    server.move_pointer_to((20.0, 20.0).into(), 0);
+    output.draw(&mut server);
+    server.move_pointer_to((40.0, 40.0).into(), 10);
+    output.draw(&mut server);
+    output.vulkan.wait_idle().expect("the GPU finishes");
+    let held = output.vulkan.memory_use().staging.1;
+    assert!(held < 1900 * 1400 * 4, "{held} bytes are still held");
+}
+
+#[test]
+fn only_frames_of_a_display_count_towards_its_gpu_time() {
+    let mut server = headless(1300, 900);
+    let Some(mut output) = DrawnOutput::new(&server) else {
+        println!("skipped: no hardware Vulkan device with a DRM render node");
+        return;
+    };
+    let mut window = PatternWindow::show(&mut server, "org.bande.Drawn", (800, 600), u8::MAX);
+    for _ in 0..6 {
+        window.commit(&mut server, (0, 0, 10, 10));
+        output.draw(&mut server);
+    }
+    output.vulkan.wait_idle().expect("the GPU finishes");
+    let display = output.vulkan.gpu_frame_time(&output.name);
+    assert!(display.is_some(), "the display has no GPU time");
+    let mut capture: OffscreenTarget =
+        Offscreen::create_buffer(&mut output.vulkan, Fourcc::Abgr8888, (1300, 900).into())
+            .expect("a target");
+    for _ in 0..6 {
+        let mut whole = OutputDamageTracker::new((1300, 900), 1.0, Transform::Normal);
+        let name = output.name.clone();
+        draw_output(
+            &mut output.vulkan,
+            (&mut capture, &mut whole, 0),
+            &mut server,
+            &name,
+        );
+    }
+    output.vulkan.wait_idle().expect("the GPU finishes");
+    assert_eq!(output.vulkan.gpu_frame_time(&output.name), display);
 }

@@ -63,7 +63,7 @@ pub use locale::{
     AvailableLocale, LocaleCommand, LocaleState, announce_translations, supported_locales,
 };
 pub use login::{App, LoginCommand, LoginItems, login_items, login_matches};
-pub use night::{clock_text, night_summary};
+pub use night::clock_text;
 pub use notifications::{AppNotifications, NotificationCommand, follow_app_notifications};
 pub use passwords::{Concealed, PasswordCommand, Saved, follow_passwords};
 pub use permissions::{Grant, Grants, PermissionCommand, follow_permissions};

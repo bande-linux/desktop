@@ -29,7 +29,7 @@ use bande_graphics::{
     BackdropTone, Color, Elevation, Palette, Radius, Scheme, window_edge_opacity,
 };
 use bande_render::{
-    Blur, RenderError, RoundedRect, Shadow, VulkanFrame, VulkanRenderer, VulkanTexture,
+    Backdrop, Blur, RenderError, RoundedRect, Shadow, VulkanFrame, VulkanRenderer, VulkanTexture,
 };
 
 pub(crate) const CORNER_RADIUS: f64 = Radius::XL as f64;
@@ -479,7 +479,9 @@ const BLUR_OFFSET: f64 = 1.5;
 pub struct BlurElement {
     id: Id,
     blur: Blur,
+    backdrop: Option<Backdrop>,
     params: u64,
+    below: u64,
     commit: CommitCounter,
 }
 
@@ -524,13 +526,48 @@ impl BlurElement {
         Self {
             id,
             blur,
+            backdrop: None,
             params,
+            below: 0,
             commit: CommitCounter::from(params as usize),
         }
     }
 
     pub(crate) fn depend_on(&mut self, below: u64) {
+        self.below = below;
         self.commit = CommitCounter::from((self.params ^ below) as usize);
+    }
+
+    pub(crate) fn reach(&self) -> i32 {
+        self.blur.reach()
+    }
+
+    pub(crate) fn shape(&self) -> Rectangle<i32, Physical> {
+        let region = self.blur.region;
+        let from = (region.x.floor() as i32, region.y.floor() as i32);
+        let until = (
+            (region.x + region.width).ceil() as i32,
+            (region.y + region.height).ceil() as i32,
+        );
+        Rectangle::new(from.into(), (until.0 - from.0, until.1 - from.1).into())
+    }
+
+    pub(crate) fn keep(
+        &mut self,
+        renderer: &mut VulkanRenderer,
+        view: (&str, bool),
+        covered: &[Rectangle<i32, Physical>],
+    ) {
+        let mut owner = DefaultHasher::new();
+        (view, &self.id).hash(&mut owner);
+        let mut below = DefaultHasher::new();
+        (self.below, self.blur.offset.to_bits(), self.blur.passes).hash(&mut below);
+        for rect in covered {
+            (rect.loc.x, rect.loc.y, rect.size.w, rect.size.h).hash(&mut below);
+        }
+        let backdrop = renderer.backdrop(owner.finish(), below.finish());
+        self.commit = CommitCounter::from((self.params ^ backdrop.drawing) as usize);
+        self.backdrop = Some(backdrop);
     }
 }
 
@@ -566,7 +603,8 @@ impl RenderElement<VulkanRenderer> for BlurElement {
         damage: &[Rectangle<i32, Physical>],
         _opaque_regions: &[Rectangle<i32, Physical>],
     ) -> Result<(), RenderError> {
-        frame.draw_blur(&self.blur, damage)
+        let backdrop = self.backdrop.ok_or(RenderError::NothingRendered)?;
+        frame.draw_blur(&self.blur, backdrop, damage)
     }
 }
 
@@ -688,7 +726,10 @@ pub(crate) fn tie_blurs_to_what_lies_below(elements: &mut [OutputElement], scale
                 continue;
             }
             below.id().hash(&mut hasher);
-            format!("{:?}", below.current_commit()).hash(&mut hasher);
+            below
+                .current_commit()
+                .distance(Some(CommitCounter::default()))
+                .hash(&mut hasher);
             (
                 geometry.loc.x,
                 geometry.loc.y,

@@ -7,7 +7,7 @@ use bande_settings_panes::{SettingId, Value};
 use jiff::civil::Time;
 use jiff::{Timestamp, Zoned};
 
-pub const CUSTOM: &str = "custom";
+const CUSTOM: &str = "custom";
 
 pub fn clock_text(text: &str) -> Option<String> {
     let (hour, minute) = text.trim().split_once(':')?;
@@ -26,32 +26,27 @@ fn shown(formats: &DateFormats, next: Timestamp, now: &Zoned) -> String {
     formats.clock_time(&next.to_zoned(now.time_zone().clone()))
 }
 
-pub fn night_summary(
+fn night_summary(
     formats: &DateFormats,
-    on: bool,
     custom: Option<(&str, &str)>,
     now: &Zoned,
     place: Option<Place>,
-) -> String {
-    if !on {
-        return tr!("Off");
-    }
-    let scheduled = match custom {
+) -> Option<String> {
+    let (night, next) = match custom {
         Some((from, to)) => time(from)
             .zip(time(to))
             .and_then(|(from, to)| within_daily(now, from, to)),
         None => sky(now, place).map(|(sky, next)| (sky == Sky::Night, next)),
-    };
-    let Some((night, next)) = scheduled else {
-        return tr!("On");
-    };
+    }?;
     let until = shown(formats, next, now);
-    (if night {
-        text!("On until {time}")
-    } else {
-        text!("Off until {time}")
-    })
-    .tr_args(&[("time", &until as &dyn std::fmt::Display)])
+    Some(
+        (if night {
+            text!("On until {time}")
+        } else {
+            text!("Off until {time}")
+        })
+        .tr_args(&[("time", &until as &dyn std::fmt::Display)]),
+    )
 }
 
 impl SettingsView {
@@ -86,14 +81,35 @@ impl SettingsView {
         }
     }
 
-    pub(crate) fn night_custom(&self) -> bool {
+    fn night_on(&self) -> bool {
+        self.values.get(&SettingId::NightLight) == Some(&Value::Flag(true))
+    }
+
+    fn night_custom(&self) -> bool {
         self.values.get(&SettingId::NightSchedule) == Some(&Value::Keyword(CUSTOM.to_owned()))
     }
 
-    pub(crate) fn night_light_summary(&self) -> Option<String> {
-        let Value::Flag(on) = self.values.get(&SettingId::NightLight)? else {
+    pub(crate) fn night_revealed(&self, id: SettingId) -> SettingId {
+        match id {
+            SettingId::NightSchedule
+            | SettingId::NightFrom
+            | SettingId::NightTo
+            | SettingId::NightWarmth
+                if !self.night_on() =>
+            {
+                SettingId::NightLight
+            }
+            SettingId::NightFrom | SettingId::NightTo if !self.night_custom() => {
+                SettingId::NightSchedule
+            }
+            _ => id,
+        }
+    }
+
+    pub(crate) fn night_light_note(&self, id: SettingId) -> Option<String> {
+        if id != SettingId::NightLight || !self.night_on() {
             return None;
-        };
+        }
         let custom = self
             .night_custom()
             .then(|| {
@@ -104,12 +120,6 @@ impl SettingsView {
             })
             .flatten();
         let place = self.time.as_ref().and_then(|time| time.place);
-        Some(night_summary(
-            &self.date_formats(),
-            *on,
-            custom,
-            &(self.clock)(),
-            place,
-        ))
+        night_summary(&self.date_formats(), custom, &(self.clock)(), place)
     }
 }

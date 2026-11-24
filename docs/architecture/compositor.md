@@ -20,11 +20,14 @@ when they reach the screen is Bande's own.
 
 ## Implemented
 
-- **Renderer.** `crates/platform/render` is one Vulkan 1.2 or later device with push descriptors,
-  dynamic rendering and synchronization2 (from `VK_KHR_dynamic_rendering` and
-  `VK_KHR_synchronization2` below 1.3, so hasvk's Haswell and Broadwell GPUs qualify); every device
-  left out is logged with the reason. It implements Smithay's `Renderer`, `Frame`, `ImportMemWl`,
-  `ImportDmaWl`, `Offscreen` and `Bind<Dmabuf>`. Both outputs compose the same Wayland surface
+- **Renderer.** `crates/platform/render` is one Vulkan 1.2 or later device with dynamic rendering
+  and synchronization2 (from `VK_KHR_dynamic_rendering` and `VK_KHR_synchronization2` below 1.3, so
+  hasvk's Haswell and Broadwell GPUs qualify); every device left out is logged with the reason. Each
+  sampled image view (with its chroma plane or colour table) gets one descriptor set, made at its
+  first draw and freed with the image; sets come from pools of 64, any pool with room, and a pool
+  is destroyed once its last set is freed (with push descriptors, blurs and textures drawn after a
+  blur sampled the wrong image on Intel Gen9 with anv; the cause is not traced). It implements Smithay's `Renderer`, `Frame`,
+  `ImportMemWl`, `ImportDmaWl`, `Offscreen` and `Bind<Dmabuf>`. Both outputs compose the same Wayland surface
   elements through Smithay: the headless output with `OutputDamageTracker` into a persistent
   offscreen image (read back only for tests), the DRM output with `DrmCompositor`. Each surface
   keeps a texture for its lifetime and an import uploads only the buffer's damaged rows; the damage
@@ -36,10 +39,27 @@ when they reach the screen is Bande's own.
   cannot draw is left out of the frame with one warning; only a lost device fails it. On a DRM
   device the compositor logs the chosen Vulkan device, its driver (name, driver ID, driver info) and
   the device extensions it enabled. When the Vulkan loader offers `VK_EXT_debug_utils`, its messages
-  (and the validation layer's, when enabled with `VK_LOADER_LAYERS_ENABLE`) go to the log. Every
-  submission is waited for before the frame returns, so nothing the GPU does is pending when a
-  buffer goes back to a client or to the display; client fences are waited for before a commit
-  applies (`sync.rs`: the dma-buf's implicit fences, or the `linux-drm-syncobj-v1` acquire point).
+  (and the validation layer's, when enabled with `VK_LOADER_LAYERS_ENABLE`) go to the log. Up to
+  three submissions are in flight (`render/src/submit.rs`), each with its own command buffer, fence,
+  staging memory and timestamps; the CPU waits only when all three are pending, or for work it reads
+  back itself (snapshots, captures, copies on the CPU, uploads from client dma-bufs that no frame
+  holds). An image, buffer or descriptor set dropped while a submission may use it is destroyed once
+  that submission finishes. A frame hands the display a sync file of its submission
+  (`VK_KHR_external_semaphore_fd`, the plane's `IN_FENCE_FD` on DRM); when the extension is missing,
+  a sync file cannot be exported (the slot then gets a new semaphore), or no GPU time is known yet
+  for that display, the frame is waited for, and on DRM the CPU waits before queueing
+  whenever the plane cannot take the fence (`needs_sync`: no `IN_FENCE_FD`, older NVIDIA drivers,
+  virtio-gpu without syncobj), so a buffer is never scanned out while it is drawn. Completion is
+  taken to follow submission order on the one queue, as every driver's ring does. A submission the
+  driver refuses drops every kept blur and has the renderer made again (not in its first ten
+  seconds when memory ran out; a renewal that fails keeps the working renderer and is tried again
+  ten seconds later), as its uploads are lost; a wait that fails counts as a lost device.
+  Staging memory unused for two seconds is freed. The render elements of a frame, and with them the
+  client buffers they hold, are kept until its submission finishes (`drawing.rs`, woken by the sync file), so no buffer goes
+  back to a client while the GPU still reads it. The scheduler prices a frame at its CPU time plus
+  the longest GPU time of the last four frames of its display (captures do not count), plus that of
+  the frames of other displays the GPU has yet to finish, measured with timestamps masked to the
+  queue's valid bits. Client fences are waited for before a commit applies (`sync.rs`: the dma-buf's implicit fences, or the `linux-drm-syncobj-v1` acquire point).
 - **Window shape and depth.** Every window that is not full screen is clipped to its
   `xdg_surface` window geometry with 16 pt rounded corners (antialiased in the fragment shader)
   and casts a soft shadow drawn analytically (a Gaussian-blurred rounded box): the focused window's
@@ -159,7 +179,8 @@ when they reach the screen is Bande's own.
   the display through the foreign queue (a buffer's first frame starts from `UNDEFINED`, as it is
   drawn whole); with a colour profile each buffer has its own unconverted image that the frame is
   drawn into, and only the drawn regions are converted into the buffer. When such a buffer
-  fails to render for a reason other than a lost device or exhausted memory, that output steps down
+  fails to be allocated, imported or drawn into (not for a lost device, exhausted memory, an
+  interrupted wait, an inactive display or a swapchain without a free buffer), that output steps down
   for as long as it is connected: first to LINEAR GBM buffers, then to dumb buffers; another display
   starts again from tiled buffers. With LINEAR GBM or dumb buffers, or without a tiled modifier, the
   renderer binds the buffer as a dma-buf: each frame is rendered into its own image and its drawn
@@ -184,8 +205,8 @@ when they reach the screen is Bande's own.
   opaque dma-buf window is put on the primary plane without composition. A display whose connector
   can change its refresh without a mode-set gets variable refresh while a full-screen window on its
   active workspace says its content is a game or video (`wp_content_type_v1`), unless
-  `variable-refresh #false` is in its settings (Settings ▸ Displays ▸ Advanced ▸ Variable refresh
-  rate in full screen); presentation feedback then reports the refresh as variable, with the mode's
+  `variable-refresh #false` is in its settings (Settings ▸ Displays ▸ Variable refresh
+  rate); presentation feedback then reports the refresh as variable, with the mode's
   as the fastest. Tearing page flips are not offered: Smithay 0.7's `DrmCompositor` cannot ask for
   `DRM_MODE_PAGE_FLIP_ASYNC`.
 - **Displays.** Every output lives in one logical coordinate space in points. Its mode, scale
@@ -202,7 +223,9 @@ when they reach the screen is Bande's own.
   only there, except while it is dragged across an edge; it is told the display through
   `wl_surface.enter`/`leave` and its scale through `wp_fractional_scale_v1`, so it redraws
   sharp when it moves to a display of another scale. The pointer moves across the displays at
-  their own scales and never leaves them (it stops at an edge without a neighbour); a new
+  their own scales and never leaves them (it stops at an edge without a neighbour); a move
+  redraws only the displays it leaves and enters (and their mirrors), where the damage is the
+  cursor's, on the cursor plane when `DrmCompositor` can put it there; a new
   window opens on the display with the pointer, cascading only from its app's windows shown on
   that display, maximizing, full screen, tiling and snapping
   use the window's display, and dragging a window until the pointer crosses onto another
@@ -244,9 +267,8 @@ when they reach the screen is Bande's own.
   The main display carries a white bar along its top. Each display then offers Use as (Main
   display, Extended, Mirror), Scale (Default, then Larger Text to More Space, each
   shown as the size the desktop looks like at the native resolution), Resolution (up to four sizes
-  of its native shape first, then every other mode below a separator in the same menu) and
-  Rotation; Displays ▸ Advanced offers each display's Refresh rate and Variable refresh rate in
-  full screen. Every change is written to
+  of its native shape first, then every other mode below a separator in the same menu), Refresh rate,
+  Rotation and Variable refresh rate. Night Light, for every display, follows them. Every change is written to
   `config.kdl` and applied live. A change of resolution, refresh rate, rotation or variable
   refresh is a trial: Settings asks "Keep these display settings?" in a dialog that takes the
   keyboard focus, with Keep and Revert. Revert is the default, taken by Enter and Escape alike, so
@@ -560,4 +582,4 @@ Status is what `crates/platform/compositor` serves on `main`.
 | `zwlr_output_power_management_v1` | Display power for idle and lock | implemented |
 | `bande_shell_v1` (own) | Launcher, screenshots, active app, volume keys, Quick Settings, taskbar icon rectangles, apps that stopped responding; for the taskbar: hide, quit and force quit an app, activate one window by its foreign-toplevel identifier, minimized windows, attention requests, rounded blur for shell surfaces, `show_app_menu` to open an app's menus below a window's menu button, `active_menus` (version 4) with the focused window's menu address, `open_terminal` (version 5) for `Ctrl+Alt+T`, `dismiss_on_press_outside` and `move_layer` (version 7, places remembered per display in `$XDG_STATE_HOME/bande/layer-places`) for the launcher; workspaces, the workspace of each window and `show_windows` for the overview and an app's windows | implemented, shell clients only |
 | `bande_app_v1` (own, in `bande-shell-v1.xml`) | App-level requests: `quit_requested` on the bar's or the taskbar's Quit instead of closing every window; `place_window` and `move_to_workspace` for the window menu; `offer_placements` (version 8) for the Tile menu on a toolkit window's maximize control; `keep_running` (version 2) so an app outlives its last window; `end_session` (version 3) opens the Bande menu's Log Out / Restart confirmation for Software Update; `set_menu_button`, `show_menus` and `menus_open` (version 4) for a window's menu button; `kept_on_top` (version 11) when the compositor's window menu changes Keep on Top | implemented, every client |
-| `ext-background-effect-v1` | The backdrop of window frames, the Taskbar and menus: the [style](../design/datum.md#styles) decides what fills it (`material.rs` for the wallpaper copy) | implemented: dual-filter Kawase blur (3 passes) clipped to the window's rounded shape, below the window's own shadow, redrawn when anything beneath it changes; a flat scrim on a CPU renderer |
+| `ext-background-effect-v1` | The backdrop of window frames, the Taskbar and menus: the [style](../design/datum.md#styles) decides what fills it (`material.rs` for the wallpaper copy) | implemented: dual-filter Kawase blur (3 passes) clipped to the window's rounded shape, below the window's own shadow, redrawn when anything beneath it changes; a blur whose whole shape lies under opaque content is left out; opaque regions above any other blur give up a border as wide as the blur's reach (except along the display's edges), so the damage tracker draws what a visible blurred pixel samples; each blur keeps one chain of levels per display (and one for its captures), freed after two seconds without being composed, and while what lies beneath and covers it is unchanged (a hash) the kept result is composited again; a blur without such a result gets a new commit, so all of it is redrawn and it never samples pixels of a finished frame; a flat scrim on a CPU renderer |

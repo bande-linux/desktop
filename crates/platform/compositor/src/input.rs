@@ -421,11 +421,14 @@ impl Compositor {
         self.state.note_activity();
         let state = &mut self.state;
         let location = state.nearest_on_screens(location);
-        let entered = state.screen_at(location) != state.screen_at(state.pointer_location);
+        let left = state.pointer_location;
+        let entered = state.screen_at(location) != state.screen_at(left);
+        let magnified = state.magnified_screen();
         state.pointer_location = location;
         state.zoom.follow_pointer();
         state.cursor_shown = true;
-        state.needs_redraw = true;
+        state.redraw_screens_at(&[left, location]);
+        state.needs_redraw |= state.drag.is_some() || state.magnified_screen() != magnified;
         if entered {
             state.reload_cursor();
         }

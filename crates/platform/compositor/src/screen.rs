@@ -260,6 +260,22 @@ impl State {
             .position(|screen| screen.mirror.is_none() && screen.contains(point))
     }
 
+    pub(crate) fn redraw_screens_at(&mut self, points: &[Point<f64, Logical>]) {
+        let touched: Vec<String> = points
+            .iter()
+            .filter_map(|&point| self.screen_at(point))
+            .map(|screen| self.screens[screen].name())
+            .collect();
+        for screen in &mut self.screens {
+            let shown = touched.contains(&screen.name())
+                || screen
+                    .mirror
+                    .as_ref()
+                    .is_some_and(|source| touched.contains(source));
+            screen.redraw |= shown;
+        }
+    }
+
     pub(crate) fn pointer_screen(&self) -> usize {
         self.screen_at(self.pointer_location).unwrap_or(0)
     }

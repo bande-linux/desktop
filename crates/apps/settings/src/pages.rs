@@ -643,6 +643,7 @@ impl SettingsView {
         if let Some(detail) = unavailable
             .or_else(|| setting.description.clone())
             .or_else(|| self.inactivity_note(setting.id))
+            .or_else(|| self.night_light_note(setting.id))
         {
             row = row.detail(Text::new(&detail, Tone::Muted).caption());
         }
@@ -708,12 +709,7 @@ impl SettingsView {
                 vec![self.page_row(setting, child, matched)]
             }
             Kind::Page(_) => Vec::new(),
-            Kind::Text
-                if matches!(setting.id, SettingId::NightFrom | SettingId::NightTo)
-                    && !self.night_custom() =>
-            {
-                Vec::new()
-            }
+            _ if self.night_revealed(setting.id) != setting.id => Vec::new(),
             Kind::Text
                 if matches!(setting.id, SettingId::FocusFrom | SettingId::FocusTo)
                     && self.values.get(&SettingId::FocusScheduled) != Some(&Value::Flag(true)) =>
@@ -1555,14 +1551,7 @@ impl SettingsView {
         section: &Section,
         matched: &dyn Fn(SettingId) -> Option<SettingHit>,
     ) -> Widgets {
-        let mut page = Vec::new();
-        if section
-            .settings
-            .iter()
-            .any(|setting| setting.id == SettingId::DisplayUse)
-        {
-            page.extend(self.arrangement_card().into_iter().flatten());
-        }
+        let mut page = self.arrangement_card().unwrap_or_default();
         for display in self.displays.clone() {
             let title = display.name();
             page.push(boxed(Caption::new(Text::label(&title))));
@@ -1642,7 +1631,7 @@ impl SettingsView {
             if section
                 .settings
                 .iter()
-                .any(|setting| matches!(setting.id, SettingId::DisplayUse | SettingId::RefreshRate))
+                .any(|setting| setting.id == SettingId::DisplayUse)
             {
                 body.extend(self.display_sections(section, &matched));
                 continue;

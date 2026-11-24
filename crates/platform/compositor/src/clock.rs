@@ -250,8 +250,16 @@ pub trait FrameOutput {
         Ok(false)
     }
 
+    fn renewal_wait(&self) -> Option<Duration> {
+        None
+    }
+
     fn refresh(&self, _output: &str) -> Option<Duration> {
         None
+    }
+
+    fn gpu_time(&self, _output: &str) -> Duration {
+        Duration::ZERO
     }
 
     fn flip_missed(&mut self, _output: &str) {}
@@ -527,10 +535,14 @@ impl FrameScheduler {
                         self.phase = Phase::Backoff(started + FAILED_FRAME_RETRY);
                     })?;
                     now = clock();
+                    let done = match submission {
+                        Submission::Unchanged => now,
+                        _ => now + output.gpu_time(&name),
+                    };
                     let rendered = Rendered {
                         vblank,
                         started,
-                        done: now,
+                        done,
                         refresh: self.clock.refresh(),
                     };
                     if let Some((cause, detail)) =
@@ -541,7 +553,7 @@ impl FrameScheduler {
                     self.clock.record_render(
                         deadline,
                         started,
-                        now,
+                        done,
                         submission != Submission::Unchanged,
                     );
                     self.committed = (submission == Submission::AwaitingFlip).then_some(Commit {

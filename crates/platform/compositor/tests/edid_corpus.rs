@@ -260,7 +260,7 @@ fn check_profile(edid: &Edid, profile: &Profile) -> Result<(), String> {
         || converted.encode.last() != Some(&[u16::MAX; 3])
     {
         return Err(format!(
-            "encoding curve for gamma {:?} is not 0..=255 rising",
+            "encoding curve for gamma {:?} is not 0..=65535 rising",
             edid.gamma
         ));
     }

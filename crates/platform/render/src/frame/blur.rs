@@ -80,6 +80,7 @@ pub(crate) struct BlurChain {
     pub(crate) last_used: Instant,
     source: Rect,
     format: vk::Format,
+    light: (f32, f32, f32),
     drawn: bool,
     backdrop: Option<Backdrop>,
 }
@@ -458,9 +459,10 @@ impl VulkanFrame<'_, '_> {
         passes: u32,
     ) -> Result<Levels, RenderError> {
         let key = backdrop.owner;
+        let light = self.light();
         let fits = self.renderer.blur_chains.get(&key).is_some_and(|chain| {
             (chain.source.width, chain.source.height) == (source.width, source.height)
-                && chain.format == self.format
+                && (chain.format, chain.light) == (self.format, light)
                 && chain.levels.len() == passes as usize + 1
         });
         if !fits {
@@ -479,6 +481,7 @@ impl VulkanFrame<'_, '_> {
                     last_used: Instant::now(),
                     source,
                     format: self.format,
+                    light,
                     drawn: false,
                     backdrop: None,
                 },

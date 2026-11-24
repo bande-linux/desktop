@@ -449,8 +449,7 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
         Ok(())
     }
 
-    fn brightness(&self, content: HdrContent) -> [f32; 4] {
-        let content = content.max_nits.max(1.0);
+    fn light(&self) -> (f32, f32, f32) {
         match (&self.colour, self.format) {
             (
                 Some(OutputColour {
@@ -458,9 +457,14 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
                     ..
                 }),
                 crate::EXTENDED_FORMAT,
-            ) => [*white, *peak, content, 1.0],
-            _ => [crate::SDR_WHITE, crate::SDR_WHITE, content, 0.0],
+            ) => (*white, *peak, 1.0),
+            _ => (crate::SDR_WHITE, crate::SDR_WHITE, 0.0),
         }
+    }
+
+    fn brightness(&self, content: HdrContent) -> [f32; 4] {
+        let (white, peak, extended) = self.light();
+        [white, peak, content.max_nits.max(1.0), extended]
     }
 
     fn smallest_step(&self) -> f32 {

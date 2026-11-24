@@ -197,13 +197,14 @@ impl Table {
 }
 
 fn properties(device: &DrmDevice, crtc: crtc::Handle) -> Vec<(String, property::Handle, u64)> {
-    let Ok(properties) = device.get_properties(crtc) else {
+    let unread = |error: &io::Error| tracing::warn!("cannot read how to tint a display: {error}");
+    let Ok(properties) = device.get_properties(crtc).inspect_err(unread) else {
         return Vec::new();
     };
     properties
         .iter()
         .filter_map(|(property, value)| {
-            let info = device.get_property(*property).ok()?;
+            let info = device.get_property(*property).inspect_err(unread).ok()?;
             let name = info.name().to_string_lossy().into_owned();
             Some((name, *property, *value))
         })

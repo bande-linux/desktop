@@ -621,7 +621,14 @@ fn edid_of(device: &impl ControlDevice, handle: connector::Handle) -> Option<ban
     let property::Value::Blob(blob) = info.value_type().convert_value(value) else {
         return None;
     };
-    bande_edid::parse(&device.get_property_blob(blob).ok()?)
+    if blob == 0 {
+        return None;
+    }
+    let bytes = device
+        .get_property_blob(blob)
+        .inspect_err(|error| tracing::warn!("cannot read a display's EDID: {error}"))
+        .ok()?;
+    bande_edid::parse(&bytes)
 }
 
 fn shows_another_display(known: &OutputConfig, edid: Option<bande_edid::Edid>) -> bool {

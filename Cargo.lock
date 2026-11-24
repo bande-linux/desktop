@@ -1241,6 +1241,7 @@ dependencies = [
 name = "bande-log"
 version = "0.2.0"
 dependencies = [
+ "libc",
  "rustix 1.1.6",
  "tracing",
  "tracing-journald",

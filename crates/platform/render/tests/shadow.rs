@@ -168,10 +168,6 @@ fn a_toned_blur_of_one_colour_keeps_it_on_average() -> Outcome {
     let whole: Rectangle<i32, Physical> = Rectangle::from_size(SIZE.into());
     let mut target: OffscreenTarget = renderer.create_buffer(Fourcc::Argb8888, SIZE.into())?;
     let level = 100.0 / 255.0;
-    let backdrop = renderer.backdrop(1, 0);
-    let mut framebuffer = renderer.bind(&mut target)?;
-    let mut frame = renderer.render(&mut framebuffer, SIZE.into(), Transform::Normal)?;
-    frame.clear(Color32F::new(level, level, level, 1.0), &[whole])?;
     let blur = Blur {
         region: RoundedRect {
             x: 80.0,
@@ -185,10 +181,14 @@ fn a_toned_blur_of_one_colour_keeps_it_on_average() -> Outcome {
         alpha: 1.0,
         tone: Some([1.0, 0.0, 1.0, 0.0]),
     };
+    let backdrop = renderer.backdrop((1, &blur), 0, (Vec::new(), &[]), |_, _| Vec::new());
+    let mut framebuffer = renderer.bind(&mut target)?;
+    let mut frame = renderer.render(&mut framebuffer, SIZE.into(), Transform::Normal)?;
+    frame.clear(Color32F::new(level, level, level, 1.0), &[whole])?;
     let bounds = blur.bounds();
     frame.draw_blur(
         &blur,
-        backdrop,
+        &backdrop,
         &[Rectangle::from_size((bounds.width, bounds.height).into())],
     )?;
     frame.finish()?.wait()?;

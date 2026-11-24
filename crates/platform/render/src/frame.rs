@@ -17,7 +17,7 @@ use crate::{
 
 mod blur;
 
-pub use blur::{Backdrop, Blur};
+pub use blur::{Backdrop, Blur, Change, Layer};
 pub(crate) use blur::{BlurChain, KEEP_UNUSED};
 
 pub(crate) const QUAD_BYTES: u32 = 116;
@@ -44,7 +44,8 @@ impl RoundedRect {
         }
     }
 
-    fn covered(self) -> [Rect; 2] {
+    /// Two rectangles, overlapping, of which every pixel is wholly inside.
+    pub fn covered(self) -> [Rect; 2] {
         let radius = self.radius.max(0.0).min(self.width.min(self.height) / 2.0);
         let inset = |across: f32, down: f32| {
             let left = (self.x + across).ceil();

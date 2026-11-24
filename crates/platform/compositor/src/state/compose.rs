@@ -2,7 +2,7 @@ use std::sync::Mutex;
 
 use super::{Compositor, OutputElement, State};
 use crate::cursor_set::Pointer;
-use crate::element::{ScreenElement, keep_backdrops_whole};
+use crate::element::{ScreenElement, keep_backdrops_whole, steady_places};
 use smithay::backend::renderer::Renderer as _;
 use smithay::backend::renderer::element::Kind as ElementKind;
 use smithay::backend::renderer::element::memory::MemoryRenderBufferRenderElement;
@@ -18,10 +18,7 @@ use smithay::utils::{Logical, Physical, Point, Rectangle};
 use smithay::wayland::compositor::with_states;
 use smithay::wayland::shell::wlr_layer::Layer;
 
-use crate::scene::{
-    Closing, Drawn, Shading, preview_elements, surface_blurs, tie_blurs_to_what_lies_below,
-    window_elements,
-};
+use crate::scene::{Closing, Drawn, Shading, preview_elements, surface_blurs, window_elements};
 use crate::window::Window;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -125,7 +122,11 @@ impl Compositor {
         self.state.prepare_switcher(screen);
         self.state.prepare_window_menu(screen);
         self.state.prepare_force_quit(screen);
-        let (elements, drawn, icon) = self.compose(renderer, screen, true, false);
+        let (mut elements, drawn, icon) = self.compose(renderer, screen, true, false);
+        let scale = self.state.composed_scale(screen);
+        let shown = &mut self.state.screens[screen];
+        let output = shown.settings.transform.transform_size(shown.mode_size());
+        steady_places(&mut elements, &mut shown.places, scale, output);
         self.state.remember_lock_frame(renderer, screen);
         if self.state.pointer_screen() == screen {
             self.state.remember_drag_icon(icon);
@@ -162,10 +163,7 @@ impl Compositor {
         let (mut elements, drawn, icon) = self.compose_view(renderer, screen, with_cursor);
         let shown = &self.state.screens[screen];
         let area = shown.settings.transform.transform_size(shown.mode_size());
-        let scale = match shown.mirror {
-            Some(_) => shown.scale(),
-            None => self.state.render_scale(screen),
-        };
+        let scale = self.state.composed_scale(screen);
         let name = shown.name();
         keep_backdrops_whole(
             &mut elements,
@@ -317,7 +315,6 @@ impl Compositor {
                 }
             }
         }
-        tie_blurs_to_what_lies_below(&mut elements, scale);
         (elements, drawn, icon)
     }
 
@@ -397,6 +394,14 @@ impl State {
             (None, CursorImageStatus::Named(icon)) => Shown::Pointer((*icon).into()),
             (None, CursorImageStatus::Surface(surface)) => Shown::Surface(surface.clone()),
             (None, CursorImageStatus::Hidden) => Shown::Hidden,
+        }
+    }
+
+    fn composed_scale(&self, screen: usize) -> f64 {
+        let shown = &self.screens[screen];
+        match shown.mirror {
+            Some(_) => shown.scale(),
+            None => self.render_scale(screen),
         }
     }
 

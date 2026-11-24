@@ -37,7 +37,7 @@ they start reach the running session or the person's files, settings and saved w
 - **Frame times:** `bande-session-bench` runs the compositor in-process with the shell, Files and
   Terminal (`bande-terminal` in `target/release` or on `PATH`) and replays
   typical actions (pointer over Files, dragging a window, typing, scrolling, the launcher, the
-  overview, a context menu, banners); it prints the CPU time to record and submit a frame
+  overview, a context menu, banners, resizing); it prints the CPU time to record and submit a frame
   (p50/p99), the GPU time of its submission from timestamps (p50/p99), CPU per frame and pixels
   repainted. `bande-toolkit-bench` measures the toolkit sample (`crates/testing/sample`).
 - **Files at 100 000 items:** `bande-files-bench` drives `FilesView` in-process over a folder of
@@ -57,8 +57,10 @@ need a real GPU.
 ## Footprint
 
 Under `bande-idle` on amd64 with an Intel GPU (installed dist binaries, 2928×1818 at 1.5×) the
-compositor holds about 79 MB RSS, the shell 105 MB, the screenshot tool 38 MB and every session
-service 4–11 MB, each asleep in `epoll`. Every process that draws with wgpu also holds GPU memory
+compositor holds about 80 MB RSS, the shell 95 MB (release build; 75–80 MB PSS, 45 MB of it
+anonymous), the screenshot tool 40 MB and every session service 4–11 MB, each asleep in `epoll`.
+`bande_log::init` fixes the allocator's thresholds at 1 MiB, so larger blocks are returned as they
+are freed (an unfixed threshold grows with them and keeps decoded pictures resident). Every process that draws with wgpu also holds GPU memory
 (on an integrated GPU this is system memory): about 190–310 MiB each, which `bande-footprint`
 shows as device memory. Hidden windows drop their renderer after 30 s, decoded wallpapers are freed
 once uploaded (the other appearance's at once, redrawn from the cache when shown), and animations, sampling and timers run only while something on screen needs
@@ -74,6 +76,14 @@ buffer and the device's 8–64 MiB allocation blocks: under `bande-footprint` on
 Calculator holds about 26 MiB of GPU memory and Files and Settings about 50 MiB. A frame damages
 only what changed, so pointing at Calculator's close button makes the compositor repaint about
 1 200 pixels a frame.
+
+Under `bande-session-bench` on that GPU, on two cores (`taskset -c 0,1`) of a loaded machine, a
+frame of a menu that opens or closes takes the GPU at most 3.7 ms and repaints 0.22 Mpx on average,
+the launcher at most 4.4 ms, the overview 7.2–7.8 ms at the median (up to 24 ms for the frames that draw
+its whole blur), dragging a window 3.7 ms and pointing at a window 0.1 ms; recording and submitting
+a frame takes the CPU 0.1–0.5 ms at the median. On lavapipe with two cores dragging a window takes about 19 ms a
+frame, resizing 34 ms and the overview 70 ms. A banner's first and last frames repaint the whole
+display (15 ms): its surface covers it and its first picture is uploaded whole.
 
 ## Start-up
 

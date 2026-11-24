@@ -1,21 +1,25 @@
 use std::collections::HashSet;
+use std::hash::{DefaultHasher, Hash, Hasher};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{LazyLock, Mutex};
 
-use bande_render::{RenderError, VulkanFrame, VulkanRenderer, VulkanTexture};
+use bande_render::{Layer, RenderError, RoundedRect, VulkanFrame, VulkanRenderer, VulkanTexture};
 use smithay::backend::renderer::Texture;
 use smithay::backend::renderer::element::surface::{
     WaylandSurfaceRenderElement, WaylandSurfaceTexture,
 };
 use smithay::backend::renderer::element::{Element, Id, Kind, RenderElement, UnderlyingStorage};
 use smithay::backend::renderer::utils::{CommitCounter, DamageSet, OpaqueRegions};
-use smithay::utils::{Buffer as BufferCoords, Physical, Point, Rectangle, Scale, Transform};
+use smithay::utils::{Buffer as BufferCoords, Physical, Point, Rectangle, Scale, Size, Transform};
 
+use crate::scene::FillElement;
 use crate::state::OutputElement;
 
+const SPARE_PLACES: usize = 8;
 const REMEMBERED_FAILURES: usize = 256;
 
 static FAILED: LazyLock<Mutex<HashSet<Id>>> = LazyLock::new(Mutex::default);
+static PLACE_HOLDER: LazyLock<Id> = LazyLock::new(Id::new);
 static LEFT_OUT: AtomicBool = AtomicBool::new(false);
 
 pub(crate) fn drawing_everything<T>(draw: impl FnOnce() -> T) -> (T, bool) {
@@ -57,6 +61,21 @@ impl ScreenElement {
 }
 
 impl ScreenElement {
+    pub(crate) fn layer(&self, scale: Scale<f64>) -> Layer {
+        let src = self.src();
+        let mut look = DefaultHasher::new();
+        [src.loc.x, src.loc.y, src.size.w, src.size.h]
+            .map(f64::to_bits)
+            .hash(&mut look);
+        (self.transform(), self.alpha().to_bits()).hash(&mut look);
+        Layer {
+            id: self.id().clone(),
+            commit: self.current_commit(),
+            area: self.geometry(scale),
+            look: look.finish(),
+        }
+    }
+
     fn eroded_opaque_regions(
         &self,
         scale: Scale<f64>,
@@ -99,6 +118,7 @@ pub(crate) fn keep_backdrops_whole(
 ) {
     let scale = Scale::from(scale);
     let mut hidden = Vec::new();
+    let mut shown = Vec::new();
     for index in 0..elements.len() {
         let (above, rest) = elements.split_at_mut(index);
         let at = rest[0].by;
@@ -144,8 +164,22 @@ pub(crate) fn keep_backdrops_whole(
             above.opaque_inset = Some((inset, output));
         }
         let covered = covered(above);
-        if let OutputElement::Blur(blur) = &mut rest[0].inner {
-            blur.keep(renderer, view, &covered);
+        shown.push((index, covered));
+    }
+    for (index, covered) in shown.into_iter().rev() {
+        let (above, below) = elements.split_at_mut(index + 1);
+        let at = above[index].by;
+        let bounds = above[index].geometry(scale);
+        let below: Vec<&ScreenElement> = below
+            .iter()
+            .zip(index + 1..)
+            .filter(|(below, index)| {
+                below.geometry(scale).overlaps(bounds) && !hidden.contains(index)
+            })
+            .map(|(below, _)| below)
+            .collect();
+        if let OutputElement::Blur(blur) = &mut above[index].inner {
+            blur.keep(renderer, view, &covered, (output, at), &below, scale);
         }
     }
     for index in hidden.into_iter().rev() {
@@ -162,6 +196,56 @@ impl ScreenElement {
             _ => false,
         }
     }
+}
+
+/// Fills the stack up with elements that draw nothing, so that showing or removing something
+/// leaves the places of everything beneath it, which the damage tracker would redraw if they moved.
+/// Leaves a stack alone in which something above the wallpaper covers the display, as it may be
+/// scanned out.
+pub(crate) fn steady_places(
+    elements: &mut Vec<ScreenElement>,
+    places: &mut usize,
+    scale: f64,
+    output: Size<i32, Physical>,
+) {
+    let scale = Scale::from(scale);
+    let cursors = elements
+        .iter()
+        .take_while(|element| element.kind() == Kind::Cursor)
+        .count();
+    let output = Rectangle::from_size(output);
+    let covers = |element: &ScreenElement| {
+        let area = element.geometry(scale);
+        let opaque = |mut region: Rectangle<i32, Physical>| {
+            region.loc += area.loc;
+            region
+        };
+        area.contains_rect(output)
+            && output
+                .subtract_rects(element.opaque_regions(scale).into_iter().map(opaque))
+                .is_empty()
+    };
+    if elements.iter().rev().skip(1).any(covers) {
+        return;
+    }
+    let shown = elements.len() - cursors;
+    let corner = RoundedRect {
+        x: 0.0,
+        y: 0.0,
+        width: 1.0,
+        height: 1.0,
+        radius: 0.0,
+    };
+    if !(shown..=shown + 2 * SPARE_PLACES).contains(places) {
+        *places = shown + SPARE_PLACES;
+    }
+    elements.splice(
+        cursors..cursors,
+        (shown..*places).map(|_| {
+            let nothing = FillElement::new(PLACE_HOLDER.clone(), corner, [0.0; 4]);
+            ScreenElement::new(OutputElement::Fill(nothing), Point::default())
+        }),
+    );
 }
 
 impl Element for ScreenElement {

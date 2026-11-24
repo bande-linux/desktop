@@ -3,7 +3,7 @@ use std::fs::{File, OpenOptions, read_dir};
 use std::os::unix::fs::MetadataExt;
 use std::sync::Arc;
 
-use bande_render::{Blur, OffscreenTarget, RoundedRect, VulkanRenderer, vulkan_errors};
+use bande_render::{Backdrop, Blur, OffscreenTarget, RoundedRect, VulkanRenderer, vulkan_errors};
 use smithay::backend::allocator::dmabuf::{AsDmabuf, Dmabuf};
 use smithay::backend::allocator::gbm::{GbmAllocator, GbmBuffer, GbmBufferFlags, GbmDevice};
 use smithay::backend::allocator::{Allocator, Fourcc, Modifier};
@@ -351,7 +351,7 @@ fn every_texture_of_a_frame_shows_its_own_pixels() -> Outcome {
                     .iter()
                     .map(|(_, dmabuf)| gpu.renderer.import_dmabuf(dmabuf, None))
                     .collect::<Result<Vec<_>, _>>()?;
-                let backdrop = gpu.renderer.backdrop(1, step);
+                let backdrop = backdrop_of(&mut gpu.renderer, &blur(200), step);
                 let mut framebuffer = gpu.renderer.bind(&mut targets[step as usize % 3].1)?;
                 let mut frame =
                     gpu.renderer
@@ -375,7 +375,7 @@ fn every_texture_of_a_frame_shows_its_own_pixels() -> Outcome {
                         let blur = blur(200);
                         frame.draw_blur(
                             &blur,
-                            backdrop,
+                            &backdrop,
                             &[Rectangle::from_size(whole(&blur).size)],
                         )?;
                     }
@@ -425,7 +425,12 @@ fn equal_blurs_show_what_lies_beneath_each_in_every_frame() -> Outcome {
             continue;
         };
         for step in 0..5 {
-            let backdrops = [1, 2].map(|owner| gpu.renderer.backdrop(owner, step));
+            let backdrops = [1, 2].map(|owner| {
+                gpu.renderer
+                    .backdrop((owner, &blurs[0]), step, (Vec::new(), &[]), |_, _| {
+                        Vec::new()
+                    })
+            });
             let target = &mut targets[step as usize % 3].1;
             {
                 let mut framebuffer = gpu.renderer.bind(target)?;
@@ -433,7 +438,7 @@ fn equal_blurs_show_what_lies_beneath_each_in_every_frame() -> Outcome {
                     gpu.renderer
                         .render(&mut framebuffer, TARGET.into(), Transform::Normal)?;
                 fill_with_cells(&mut frame, TARGET, 0)?;
-                for (blur, backdrop) in blurs.iter().zip(backdrops) {
+                for (blur, backdrop) in blurs.iter().zip(&backdrops) {
                     frame.draw_blur(blur, backdrop, &[Rectangle::from_size(whole(blur).size)])?;
                 }
                 frame.finish()?.wait()?;
@@ -451,6 +456,10 @@ fn equal_blurs_show_what_lies_beneath_each_in_every_frame() -> Outcome {
     }
     assert_eq!(vulkan_errors(), 0, "Vulkan reported errors");
     Ok(())
+}
+
+fn backdrop_of(renderer: &mut VulkanRenderer, blur: &Blur, below: u64) -> Backdrop {
+    renderer.backdrop((1, blur), below, (Vec::new(), &[]), |_, _| Vec::new())
 }
 
 #[test]
@@ -481,7 +490,7 @@ fn a_part_of_a_blur_redrawn_shows_the_whole_backdrop() -> Outcome {
             .into_iter()
             .enumerate()
         {
-            let backdrop = gpu.renderer.backdrop(1, 1);
+            let backdrop = backdrop_of(&mut gpu.renderer, &blur, 1);
             {
                 let mut framebuffer = gpu.renderer.bind(&mut targets[0].1)?;
                 let mut frame =
@@ -499,7 +508,7 @@ fn a_part_of_a_blur_redrawn_shows_the_whole_backdrop() -> Outcome {
                     }
                 }
                 if let Some(damaged) = within(bounds) {
-                    frame.draw_blur(&blur, backdrop, &[damaged])?;
+                    frame.draw_blur(&blur, &backdrop, &[damaged])?;
                 }
                 if let Some(damaged) = within(panel) {
                     frame.draw_solid(panel, &[damaged], Color32F::new(0.4, 0.4, 0.4, 0.4))?;
@@ -514,10 +523,10 @@ fn a_part_of_a_blur_redrawn_shows_the_whole_backdrop() -> Outcome {
                 &format!("draw {step} in layout {layout:?}"),
             );
         }
-        let next = gpu.renderer.backdrop(1, 2);
+        let next = backdrop_of(&mut gpu.renderer, &blur, 2);
         assert_ne!(
             next.drawing,
-            gpu.renderer.backdrop(1, 1).drawing,
+            backdrop_of(&mut gpu.renderer, &blur, 1).drawing,
             "a changed backdrop must be redrawn whole"
         );
     }

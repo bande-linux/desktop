@@ -126,10 +126,11 @@ fn run() -> Result<(), Box<dyn Error>> {
     let mut bench = Bench::start(&binaries, home.path(), &folder, full_effects)?;
     bench.list_frames = list_frames;
     let adapter = bench.output.renderer.device_info().name.clone();
-    let scenarios: [(&'static str, Scenario); 9] = [
+    let scenarios: [(&'static str, Scenario); 10] = [
         ("idle", |bench| bench.wait(STEPS)),
         ("pointer over a window", Bench::hover),
         ("dragging a window", Bench::drag),
+        ("resizing a window", Bench::resize),
         ("typing in the terminal", Bench::type_text),
         ("scrolling a list", Bench::scroll),
         ("opening the launcher", Bench::launcher),
@@ -367,6 +368,25 @@ impl Bench {
             self.tap(&[KEY_A]);
             self.wait(2)?;
         }
+        Ok(())
+    }
+
+    fn resize(&mut self) -> Result<(), Box<dyn Error>> {
+        let (x, y, width, height) = self.raise(FILES)?;
+        let (start_x, start_y) = (x + width - 1.0, y + height - 1.0);
+        self.point(start_x, start_y);
+        let time = self.tick();
+        self.server.press_button(BUTTON_LEFT, true, time);
+        for step in 0..STEPS {
+            let inward = f64::from(step.min(STEPS - step)) * 3.0;
+            self.point(start_x - inward, start_y - inward / 2.0);
+            self.wait(1)?;
+            if step == STEPS / 2 && self.window(FILES)?.2 == width {
+                return Err("Files did not shrink when dragged by its corner".into());
+            }
+        }
+        let time = self.tick();
+        self.server.press_button(BUTTON_LEFT, false, time);
         Ok(())
     }
 

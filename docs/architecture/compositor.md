@@ -35,7 +35,13 @@ when they reach the screen is Bande's own.
   out in points and drawn in pixels at its scale. All eight `wl_output` buffer transforms are drawn,
   combined with the output's transform; `SurfaceElement` corrects Smithay's source rectangle (with a
   `wp_viewport` crop) for the 90°/270° and flipped 90°/270° transforms and repaints a whole 90°/270°
-  surface on damage, as Smithay maps their damage the wrong way round. An element the renderer
+  surface on damage, as Smithay maps their damage the wrong way round. The stack is kept at
+  one height with up to 16 elements that draw nothing (`steady_places`), unless something above the
+  wallpaper covers the display: the damage tracker redraws every element whose place in the stack
+  changes, so a menu or window shown on top would otherwise redraw the whole display. A blur keeps
+  its levels and redraws only what a change beneath it reaches (`Change::Parts`): the changed parts
+  of the layers below, and what an opaque window hid when they were copied, once it is seen. The
+  levels of a blur redrawn in part are kept twice, down and up; the rest are redrawn whole. An element the renderer
   cannot draw is left out of the frame with one warning; only a lost device fails it. On a DRM
   device the compositor logs the chosen Vulkan device, its driver (name, driver ID, driver info) and
   the device extensions it enabled. When the Vulkan loader offers `VK_EXT_debug_utils`, its messages

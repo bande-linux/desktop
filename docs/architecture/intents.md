@@ -420,7 +420,7 @@ copy can be made first, and what kind of proof is needed.
    PAM conversation of the service `bande-approval` (`common-auth`) as the person, as the lock
    screen does. Empty passwords are disallowed (`PAM_DISALLOW_NULL_AUTHTOK`), and success without an
    answered question or a device's message is a refusal. "Place your finger" is read before the
-   reader is used. Wrong answers back off, count as a Deny after five, and never lock the account.
+   reader is used. Wrong answers back off and count as a Deny after five.
    Fingerprint, security key and one-time code work where PAM has them, with nothing Bande's own.
 4. **The thing.** The plan froze the target by identity (a disk by serial, size and UUID, a package
    by name, version and source, a user by id), and the owner checks it again under its lock

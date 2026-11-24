@@ -47,6 +47,9 @@ fn noise(position: vec4<f32>) -> f32 {
 }
 
 fn dithered(color: vec4<f32>, position: vec4<f32>) -> vec4<f32> {
+    if quad.dither == 0.0 {
+        return color;
+    }
     let visible = select(0.0, quad.dither, color.a > 0.0);
     return vec4<f32>(max(color.rgb + noise(position) * visible, vec3<f32>(0.0)), color.a);
 }
@@ -103,19 +106,72 @@ fn fragment(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
     return dithered(texel * quad.alpha * coverage(position.xy, quad.clip, quad.clip_radius), position);
 }
 
-@fragment
-fn video(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
-    let local = (position.xy - quad.origin) / quad.size;
-    let source = quad.source_origin + local.x * quad.source_across + local.y * quad.source_down;
-    let uv = source / vec2<f32>(textureDimensions(surface));
+fn video_rgb(uv: vec2<f32>, red: f32, green: vec2<f32>, blue: f32) -> vec3<f32> {
     let luma = (textureSampleLevel(surface, filtered, uv, 0.0).r - 16.0 / 255.0) * 255.0 / 219.0;
     let difference = (textureSampleLevel(chroma, filtered, uv, 0.0).rg - vec2<f32>(128.0 / 255.0)) * 255.0 / 224.0;
     let rgb = vec3<f32>(
-        luma + 1.5748 * difference.y,
-        luma - 0.1873 * difference.x - 0.4681 * difference.y,
-        luma + 1.8556 * difference.x,
+        luma + red * difference.y,
+        luma - dot(green, difference),
+        luma + blue * difference.x,
     );
-    let shown = vec4<f32>(clamp(rgb, vec3<f32>(0.0), vec3<f32>(1.0)), 1.0);
+    return clamp(rgb, vec3<f32>(0.0), vec3<f32>(1.0));
+}
+
+fn source_at(position: vec4<f32>) -> vec2<f32> {
+    let local = (position.xy - quad.origin) / quad.size;
+    let source = quad.source_origin + local.x * quad.source_across + local.y * quad.source_down;
+    return source / vec2<f32>(textureDimensions(surface));
+}
+
+@fragment
+fn video(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
+    let rgb = video_rgb(source_at(position), 1.5748, vec2<f32>(0.1873, 0.4681), 1.8556);
+    return dithered(vec4<f32>(rgb, 1.0) * quad.alpha * coverage(position.xy, quad.clip, quad.clip_radius), position);
+}
+
+fn tone_mapped(nits: f32) -> f32 {
+    let source = pq_encode(vec3<f32>(quad.color.z)).x;
+    let target_peak = pq_encode(vec3<f32>(quad.color.y)).x / source;
+    if target_peak >= 1.0 {
+        return min(nits, quad.color.y);
+    }
+    let value = min(pq_encode(vec3<f32>(nits)).x / source, 1.0);
+    let knee = max(1.5 * target_peak - 0.5, 0.0);
+    if value <= knee {
+        return nits;
+    }
+    let t = (value - knee) / (1.0 - knee);
+    let curved = (2.0 * t * t * t - 3.0 * t * t + 1.0) * knee
+        + (t * t * t - 2.0 * t * t + t) * (1.0 - knee)
+        + (3.0 * t * t - 2.0 * t * t * t) * target_peak;
+    return pq_decode(vec3<f32>(curved * source)).x;
+}
+
+fn hdr_shown(encoded: vec3<f32>) -> vec3<f32> {
+    let nits = pq_decode(encoded);
+    let brightest = max(max(nits.r, nits.g), max(nits.b, 0.0001));
+    let wide = nits * (tone_mapped(brightest) / brightest) / quad.color.x;
+    let linear = vec3<f32>(
+        dot(vec3<f32>(1.6604910, -0.5876411, -0.0728499), wide),
+        dot(vec3<f32>(-0.1245505, 1.1328999, -0.0083494), wide),
+        dot(vec3<f32>(-0.0181508, -0.1005789, 1.1187297), wide),
+    );
+    let shown = extended_srgb_encode(linear);
+    return select(clamp(shown, vec3<f32>(0.0), vec3<f32>(1.0)), shown, quad.color.w > 0.5);
+}
+
+@fragment
+fn hdr(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
+    let texel = textureSampleLevel(surface, filtered, source_at(position), 0.0);
+    let opaque = texel.rgb / max(texel.a, 0.0001);
+    let shown = vec4<f32>(hdr_shown(opaque) * texel.a, texel.a);
+    return dithered(shown * quad.alpha * coverage(position.xy, quad.clip, quad.clip_radius), position);
+}
+
+@fragment
+fn hdr_video(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
+    let rgb = video_rgb(source_at(position), 1.4746, vec2<f32>(0.1646, 0.5714), 1.8814);
+    let shown = vec4<f32>(hdr_shown(rgb), 1.0);
     return dithered(shown * quad.alpha * coverage(position.xy, quad.clip, quad.clip_radius), position);
 }
 
@@ -168,9 +224,28 @@ fn blur_tone(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
 }
 
 fn srgb_decode(encoded: vec3<f32>) -> vec3<f32> {
-    let low = encoded / 12.92;
-    let high = pow((encoded + vec3<f32>(0.055)) / 1.055, vec3<f32>(2.4));
-    return select(high, low, encoded <= vec3<f32>(0.04045));
+    let size = abs(encoded);
+    let low = size / 12.92;
+    let high = pow((size + vec3<f32>(0.055)) / 1.055, vec3<f32>(2.4));
+    return sign(encoded) * select(high, low, size <= vec3<f32>(0.04045));
+}
+
+fn extended_srgb_encode(linear: vec3<f32>) -> vec3<f32> {
+    let size = abs(linear);
+    let low = size * 12.92;
+    let high = 1.055 * pow(size, vec3<f32>(1.0 / 2.4)) - vec3<f32>(0.055);
+    return sign(linear) * select(high, low, size <= vec3<f32>(0.0031308));
+}
+
+fn pq_encode(nits: vec3<f32>) -> vec3<f32> {
+    let power = pow(clamp(nits / 10000.0, vec3<f32>(0.0), vec3<f32>(1.0)), vec3<f32>(0.1593017578125));
+    return pow((0.8359375 + 18.8515625 * power) / (1.0 + 18.6875 * power), vec3<f32>(78.84375));
+}
+
+fn pq_decode(encoded: vec3<f32>) -> vec3<f32> {
+    let power = pow(clamp(encoded, vec3<f32>(0.0), vec3<f32>(1.0)), vec3<f32>(1.0 / 78.84375));
+    let ratio = max(power - vec3<f32>(0.8359375), vec3<f32>(0.0)) / (18.8515625 - 18.6875 * power);
+    return 10000.0 * pow(ratio, vec3<f32>(1.0 / 0.1593017578125));
 }
 
 fn srgb_encode(linear: vec3<f32>) -> vec3<f32> {
@@ -189,6 +264,9 @@ fn display_colour(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f
         dot(quad.clip.xyz, linear),
         dot(quad.caster.xyz, linear),
     );
+    if quad.alpha > 1.5 {
+        return dithered(vec4<f32>(pq_encode(max(converted, vec3<f32>(0.0)) * quad.blur), 1.0), position);
+    }
     if quad.alpha < 0.5 {
         return dithered(vec4<f32>(srgb_encode(converted), 1.0), position);
     }

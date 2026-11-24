@@ -415,7 +415,8 @@ fn a_window_dragged_on_a_wide_gamut_display_leaves_the_frame_a_full_redraw_draws
         .expect("a Display P3 conversion");
     drag_over_scanout_buffers(Some(bande_render::OutputColour {
         matrix: converted.matrix,
-        encode: Some(Arc::from(converted.encode)),
+        encode: bande_render::Encode::Table(Arc::from(converted.encode)),
+        extended: false,
     }));
 }
 

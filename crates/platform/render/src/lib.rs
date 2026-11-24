@@ -30,6 +30,7 @@ use smithay::reexports::rustix::mm;
 use smithay::utils::{Buffer as BufferCoords, Physical, Size, Transform};
 
 pub use frame::{Backdrop, Blur, RoundedRect, Shadow, VulkanFrame};
+pub use import::set_hdr_content;
 pub use rect::{Rect, disjoint};
 
 const SPIRV: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/compose.spv"));
@@ -62,8 +63,10 @@ const TARGET_FORMATS: [vk::Format; 4] = [
     vk::Format::A2R10G10B10_UNORM_PACK32,
     vk::Format::A2B10G10R10_UNORM_PACK32,
 ];
+const SDR_WHITE: f32 = 203.0;
+const EXTENDED_FORMAT: vk::Format = vk::Format::R16G16B16A16_SFLOAT;
 const PREPARED_FORMATS: [vk::Format; 2] = [vk::Format::B8G8R8A8_UNORM, vk::Format::R8G8B8A8_UNORM];
-const PROGRAMS: [Program; 8] = [
+const PREPARED_PROGRAMS: [Program; 8] = [
     Program::Texture,
     Program::Video,
     Program::DisplayColour,
@@ -231,10 +234,25 @@ pub struct VulkanTexture {
     _owned: Arc<Owned>,
     id: u64,
     chroma: Option<Arc<VulkanTexture>>,
+    hdr: Option<HdrContent>,
     renderer: u64,
     width: i32,
     height: i32,
     format: Fourcc,
+}
+
+impl VulkanTexture {
+    pub fn is_hdr(&self) -> bool {
+        self.hdr.is_some()
+    }
+
+    /// The same texture with its pixels read as `content`.
+    pub fn showing(self, content: Option<HdrContent>) -> Self {
+        Self {
+            hdr: content,
+            ..self
+        }
+    }
 }
 
 impl Texture for VulkanTexture {
@@ -338,11 +356,34 @@ impl Drop for MappedExport {
 #[derive(Debug, Clone, PartialEq)]
 pub struct OutputColour {
     pub matrix: [[f32; 3]; 3],
-    pub encode: Option<Arc<[[u16; 3]]>>,
+    pub encode: Encode,
+    pub extended: bool,
+}
+
+/// How linear colours, 1.0 being the white of ordinary content, leave for the display.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Encode {
+    Srgb,
+    Table(Arc<[[u16; 3]]>),
+    Pq { white: f32, peak: f32 },
+}
+
+/// PQ-encoded BT.2020 content whose brightest pixel is `max_nits`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct HdrContent {
+    pub max_nits: f32,
+}
+
+struct UnconvertedFrame {
+    image: vk::Image,
+    view: vk::ImageView,
+    format: vk::Format,
+    drawn: bool,
 }
 
 struct Unconverted {
     image: Image,
+    format: vk::Format,
     drawn: bool,
 }
 
@@ -474,6 +515,8 @@ impl fmt::Debug for VulkanRenderer {
 enum Program {
     Texture,
     Video,
+    Hdr,
+    HdrVideo,
     Solid,
     Shadow,
     BlurDown,
@@ -487,6 +530,8 @@ impl Program {
         match self {
             Self::Texture => c"fragment",
             Self::Video => c"video",
+            Self::Hdr => c"hdr",
+            Self::HdrVideo => c"hdr_video",
             Self::DisplayColour => c"display_colour",
             Self::Solid => c"solid",
             Self::Shadow => c"shadow",
@@ -988,7 +1033,7 @@ impl VulkanRenderer {
     }
 
     fn prepare_pipelines(&mut self, format: vk::Format) -> Result<(), RenderError> {
-        for program in PROGRAMS {
+        for program in PREPARED_PROGRAMS {
             if !self.pipelines.contains_key(&(format, program)) {
                 let pipeline = self.create_pipeline(format, program)?;
                 self.pipelines.insert((format, program), pipeline);
@@ -1119,7 +1164,7 @@ impl VulkanRenderer {
     }
 
     fn load_encode_table(&mut self, colour: &OutputColour) -> Result<(), RenderError> {
-        let Some(table) = &colour.encode else {
+        let Encode::Table(table) = &colour.encode else {
             return Ok(());
         };
         self.encode_tables
@@ -2095,29 +2140,43 @@ impl VulkanRenderer {
     fn unconverted_image(
         &mut self,
         id: u64,
-        converts: bool,
-    ) -> Result<Option<(vk::Image, vk::ImageView, bool)>, RenderError> {
+        colour: Option<&OutputColour>,
+    ) -> Result<Option<UnconvertedFrame>, RenderError> {
         let target = self
             .targets
             .get_mut(&id)
             .ok_or(RenderError::ForeignResource)?;
-        if !target.direct || !converts {
+        let format = match colour {
+            Some(colour) if colour.extended => EXTENDED_FORMAT,
+            _ => target.format,
+        };
+        let stale = target
+            .unconverted
+            .as_ref()
+            .is_some_and(|unconverted| unconverted.format != format);
+        if !target.direct || colour.is_none() || stale {
             if let Some(unconverted) = target.unconverted.take() {
                 self.destroy_image(&unconverted.image);
             }
+        }
+        let target = self
+            .targets
+            .get_mut(&id)
+            .ok_or(RenderError::ForeignResource)?;
+        if !target.direct || colour.is_none() {
             return Ok(None);
         }
         if let Some(unconverted) = &target.unconverted {
             let image = &unconverted.image;
-            return Ok(Some((image.image, image.view, unconverted.drawn)));
+            return Ok(Some(UnconvertedFrame {
+                image: image.image,
+                view: image.view,
+                format,
+                drawn: unconverted.drawn,
+            }));
         }
-        let (width, height, format) = (target.image.width, target.image.height, target.format);
-        if !self
-            .pipelines
-            .contains_key(&(format, Program::DisplayColour))
-        {
-            return Err(RenderError::UnsupportedFormat);
-        }
+        let (width, height) = (target.image.width, target.image.height);
+        self.prepare_pipelines(format)?;
         let image = self.create_image(
             width,
             height,
@@ -2127,10 +2186,16 @@ impl VulkanRenderer {
                 | vk::ImageUsageFlags::TRANSFER_SRC,
             vk::ComponentSwizzle::IDENTITY,
         )?;
-        let unconverted = (image.image, image.view, false);
+        let unconverted = UnconvertedFrame {
+            image: image.image,
+            view: image.view,
+            format,
+            drawn: false,
+        };
         if let Some(target) = self.targets.get_mut(&id) {
             target.unconverted = Some(Unconverted {
                 image,
+                format,
                 drawn: false,
             });
         }

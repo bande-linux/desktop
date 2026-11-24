@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use bande_colour::{Curve, DISPLAY, DISPLAY_P3, Profile, SRGB, UNMANAGED, conversion as convert};
 use bande_edid::Edid;
-use bande_render::OutputColour;
+use bande_render::{Encode, OutputColour};
 
 const COORDINATE_SCALE: f64 = 1024.0;
 const SRGB_PRIMARIES: [(f64, f64); 3] = [(0.64, 0.33), (0.30, 0.60), (0.15, 0.06)];
@@ -56,6 +56,7 @@ pub(crate) fn conversion(choice: Option<&str>, display: Option<&Profile>) -> Opt
     let converted = convert(&profile(choice, display)?, NEUTRAL)?;
     Some(OutputColour {
         matrix: converted.matrix,
-        encode: Some(Arc::from(converted.encode)),
+        encode: Encode::Table(Arc::from(converted.encode)),
+        extended: false,
     })
 }

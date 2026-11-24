@@ -9,9 +9,10 @@ use smithay::utils::{Buffer as BufferCoords, Physical, Rectangle, Transform};
 use smithay::reexports::rustix::ioctl;
 
 use crate::{
-    ATTACHMENT, BYTES_PER_PIXEL, COLOR_LAYERS, DRAWING, DeviceExport, MappedExport, OutputColour,
-    Program, Rect, RenderError, SAMPLED, TRANSFER_SOURCE, VulkanFramebuffer, VulkanRenderer,
-    VulkanTexture, barrier, disjoint, formats, hand_over, hand_over_buffers,
+    ATTACHMENT, BYTES_PER_PIXEL, COLOR_LAYERS, DRAWING, DeviceExport, Encode, HdrContent,
+    MappedExport, OutputColour, Program, Rect, RenderError, SAMPLED, TRANSFER_SOURCE,
+    VulkanFramebuffer, VulkanRenderer, VulkanTexture, barrier, disjoint, formats, hand_over,
+    hand_over_buffers,
 };
 
 mod blur;
@@ -166,6 +167,7 @@ pub struct VulkanFrame<'frame, 'buffer> {
     renderer: &'frame mut VulkanRenderer,
     target: u64,
     format: vk::Format,
+    shown_format: vk::Format,
     image: vk::Image,
     target_view: vk::ImageView,
     bounds: Rect,
@@ -219,7 +221,7 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
         );
         let bounds = Rect::new(0, 0, target.image.width, target.image.height);
         let colour = framebuffer.colour.clone();
-        let unconverted = renderer.unconverted_image(framebuffer.id, colour.is_some())?;
+        let unconverted = renderer.unconverted_image(framebuffer.id, colour.as_ref())?;
         let area = turn
             .invert()
             .transform_size(smithay::utils::Size::<i32, Physical>::from((
@@ -251,21 +253,27 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
             (_, false) => barrier(device, commands, image, unwritten, drawing),
             (false, true) => barrier(device, commands, image, ATTACHMENT, drawing),
         }
-        let (drawn_image, drawn_view, converted_into) = match unconverted {
-            Some((unconverted, unconverted_view, drawn)) => {
-                let before = match drawn {
+        let (drawn_image, drawn_view, drawn_format, converted_into) = match unconverted {
+            Some(unconverted) => {
+                let before = match unconverted.drawn {
                     true => SAMPLED,
                     false => unwritten,
                 };
-                barrier(device, commands, unconverted, before, drawing);
-                (unconverted, unconverted_view, Some(view))
+                barrier(device, commands, unconverted.image, before, drawing);
+                (
+                    unconverted.image,
+                    unconverted.view,
+                    unconverted.format,
+                    Some(view),
+                )
             }
-            None => (image, view, None),
+            None => (image, view, format, None),
         };
         let frame = Self {
             renderer,
             target: framebuffer.id,
-            format,
+            format: drawn_format,
+            shown_format: format,
             image: drawn_image,
             target_view: drawn_view,
             bounds,
@@ -418,11 +426,16 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
         if self.bound == Some(program) {
             return Ok(());
         }
-        let pipeline = *self
-            .renderer
-            .pipelines
-            .get(&(self.format, program))
-            .ok_or(RenderError::UnsupportedFormat)?;
+        let key = (self.format, program);
+        let pipeline = match self.renderer.pipelines.get(&key) {
+            Some(pipeline) => *pipeline,
+            None if matches!(program, Program::Hdr | Program::HdrVideo) => {
+                let pipeline = self.renderer.create_pipeline(self.format, program)?;
+                self.renderer.pipelines.insert(key, pipeline);
+                pipeline
+            }
+            None => return Err(RenderError::UnsupportedFormat),
+        };
         // SAFETY: the frame holds the renderer mutably from `begin_commands` until `finish_frame`
         // ends the buffer, so `command_buffer` is recording and only this frame records into it;
         // `pipeline` lives until the renderer drops.
@@ -437,10 +450,25 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
         Ok(())
     }
 
+    fn brightness(&self, content: HdrContent) -> [f32; 4] {
+        let content = content.max_nits.max(1.0);
+        match (&self.colour, self.format) {
+            (
+                Some(OutputColour {
+                    encode: Encode::Pq { white, peak },
+                    ..
+                }),
+                crate::EXTENDED_FORMAT,
+            ) => [*white, *peak, content, 1.0],
+            _ => [crate::SDR_WHITE, crate::SDR_WHITE, content, 0.0],
+        }
+    }
+
     fn smallest_step(&self) -> f32 {
-        match crate::is_deep_target(self.format) {
-            true => 1.0 / 1023.0,
-            false => 1.0 / 255.0,
+        match self.format {
+            crate::EXTENDED_FORMAT => 0.0,
+            format if crate::is_deep_target(format) => 1.0 / 1023.0,
+            _ => 1.0 / 255.0,
         }
     }
 
@@ -636,6 +664,7 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
             return Ok(());
         }
         self.bound = None;
+        self.format = self.shown_format;
         self.begin_rendering(shown, self.bounds, vk::AttachmentLoadOp::LOAD);
         let drawn_colours = self.draw_display_colour(&colour, drawn);
         // SAFETY: the frame holds the renderer mutably from `begin_commands` until `finish_frame`
@@ -724,10 +753,11 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
         drawn: &[Rect],
     ) -> Result<(), RenderError> {
         self.bind(Program::DisplayColour)?;
-        let table = colour
-            .encode
-            .as_ref()
-            .and_then(|table| self.renderer.encode_table(table));
+        let (encoding, white, table) = match &colour.encode {
+            Encode::Srgb => (0.0, 0.0, None),
+            Encode::Table(table) => (1.0, 0.0, self.renderer.encode_table(table)),
+            Encode::Pq { white, .. } => (2.0, *white, None),
+        };
         self.sample(self.target_view, table.unwrap_or(self.target_view))?;
         let matrix = colour.matrix;
         let row = |values: [f32; 3]| RoundedRect {
@@ -742,7 +772,8 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
                 destination: self.bounds,
                 clip: row(matrix[1]),
                 caster: row(matrix[2]),
-                alpha: if table.is_some() { 1.0 } else { 0.0 },
+                alpha: encoding,
+                blur: white,
                 dither: self.smallest_step(),
                 ..Quad::default()
             },
@@ -1118,19 +1149,20 @@ impl Frame for VulkanFrame<'_, '_> {
                 .filter(|image| image.readable)
                 .map(|image| image.image.view)
         });
-        match (texture.chroma.is_some(), chroma) {
+        let (colour, video) = match (texture.chroma.is_some(), chroma) {
             (true, None) => return Ok(()),
-            (true, Some(chroma)) => {
-                self.bind(Program::Video)?;
-                self.sample(view, chroma)?;
-            }
-            (false, _) => {
-                self.bind(Program::Texture)?;
-                self.sample(view, view)?;
-            }
-        }
+            (_, video) => (texture.hdr, video),
+        };
+        self.bind(match (colour.is_some(), video.is_some()) {
+            (false, false) => Program::Texture,
+            (false, true) => Program::Video,
+            (true, false) => Program::Hdr,
+            (true, true) => Program::HdrVideo,
+        })?;
+        self.sample(view, video.unwrap_or(view))?;
         self.draw(
             &Quad {
+                color: colour.map_or([0.0; 4], |content| self.brightness(content)),
                 destination,
                 dither: match formats::is_deep(texture.format)
                     && !crate::is_deep_target(self.format)

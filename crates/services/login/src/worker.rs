@@ -26,6 +26,7 @@ use crate::journal::JournalStream;
 use crate::vt::{self, GREETER_VT, Terminal};
 use crate::{GREETER_SOCKET, checked, signals};
 
+const SEAT: &str = "seat0";
 const USER_SERVICE: &str = "bande-greeter";
 const GREETER_SERVICE: &str = "bande-greeter-session";
 const GREETER_COMMAND: &str = "/usr/libexec/bande-greeter-session";
@@ -152,7 +153,7 @@ fn serve(
         Class::Greeter => GREETER_SERVICE,
     };
     let mut pam = Transaction::start(service, username, conversation).map_err(Failure::other)?;
-    pam.set_tty(&format!("tty{GREETER_VT}"))
+    pam.set_tty(SEAT)
         .map_err(|code| Failure::pam("pam_set_item", code))?;
     if class == Class::User {
         if let Ok(account) = Account::named(username) {
@@ -261,8 +262,6 @@ fn with_credentials(
     };
     let mut terminal = Terminal::open(number)
         .map_err(|error| Failure::other(format!("cannot open tty{number}: {error}")))?;
-    pam.set_tty(&format!("tty{number}"))
-        .map_err(|code| Failure::pam("pam_set_item", code))?;
     for assignment in session_environment(class, account, number)
         .iter()
         .chain(&carried)
@@ -285,7 +284,7 @@ fn with_credentials(
 fn session_environment(class: Class, account: &Account, number: u32) -> Vec<String> {
     let text = |value: &std::ffi::CStr| value.to_string_lossy().into_owned();
     let mut environment = vec![
-        "XDG_SEAT=seat0".to_owned(),
+        format!("XDG_SEAT={SEAT}"),
         format!("XDG_VTNR={number}"),
         "XDG_SESSION_TYPE=wayland".to_owned(),
         format!("HOME={}", text(&account.home)),
@@ -366,8 +365,9 @@ fn run_session(
         None => tracing::warn!("pam_systemd registered no session"),
     }
     let followed = launch(class, account, terminal, &environment, links);
-    if let Err(error) = terminal.reclaim() {
-        tracing::warn!("cannot take tty{} back: {error}", terminal.number());
+    match terminal.reclaim() {
+        Ok(()) => terminal.blank(),
+        Err(error) => tracing::warn!("cannot take tty{} back: {error}", terminal.number()),
     }
     if class == Class::User
         && let Err(error) = terminal.leave_to(GREETER_VT)

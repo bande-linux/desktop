@@ -1338,12 +1338,14 @@ impl LockScreen {
         }
         model.rests_at = None;
         model.resting = true;
-        model.question = None;
         model.messages.clear();
         model
             .identity_shown
             .animate_at(now, false, 0.0, Spring::FADE);
         drop(model);
+        if self.model.borrow().asking.is_some() {
+            self.ask_power(None);
+        }
         self.clear_field();
         true
     }
@@ -1545,5 +1547,41 @@ mod tests {
             screen.take_answer().as_deref().map(String::as_str),
             Some("a ")
         );
+    }
+
+    #[test]
+    fn a_power_question_no_one_answered_is_gone_after_the_screen_rested() {
+        let user = User {
+            uid: 1000,
+            login: "ada".to_owned(),
+            full_name: "Ada Lovelace".to_owned(),
+        };
+        let mut screen = LockScreen::new(
+            &user,
+            DateFormats::for_locale(&bande_datetime::posix_locale("en_GB.UTF-8")),
+            &"2026-10-28T09:41:00[UTC]".parse().unwrap_or_default(),
+            Appearance::default(),
+            TextSystem::new(),
+            Purpose::Login,
+        );
+        let enter = Event::Key {
+            key: Key::Enter,
+            modifiers: Modifiers::default(),
+        };
+        let start = Instant::now();
+        screen.offer_power(&[PowerAction::ShutDown]);
+        screen.ask_to_continue();
+        screen.wake(start);
+        screen.model.borrow_mut().power_press = Some(PowerPress::Ask(PowerAction::ShutDown));
+        assert_eq!(screen.take_power(), None);
+        screen.scene(1280, 800);
+        let rested = start + RESTS_AFTER;
+        assert!(screen.tick(rested) && screen.is_resting());
+        assert!(
+            !screen.wake_on(&enter, rested),
+            "the key that wakes the screen does nothing else"
+        );
+        screen.handle(&enter);
+        assert_eq!(screen.take_power(), None);
     }
 }

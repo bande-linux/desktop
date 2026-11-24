@@ -679,7 +679,8 @@ transparency. A screen reader turned on at the login window (`Alt+Super+S`) is k
 `BANDE_LOGIN_ACCESSIBILITY`, which the session's compositor turns on and remembers; a person
 who has never signed in also gets the login defaults that way.
 
-**Idle.** After a minute the login window rests like the lock screen, after 10 minutes the
+**Idle.** After a minute the login window rests like the lock screen, putting away an unanswered
+power question, and the key or click that wakes it does nothing else unless it types; after 10 minutes the
 compositor turns the displays off, and on battery the greeter then sleeps when logind allows it.
 
 **Several displays.** The login window is on the main display, which alone decides when the

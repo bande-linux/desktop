@@ -137,6 +137,15 @@ fn the_login_window_stays_until_the_desktop_is_shown_and_returns_after_logging_o
         "the login window is stopped only once the desktop's first frame is on screen"
     );
     assert!(manager.worker_ended(GREETER, at(20)).is_empty());
+    let asked_while_closing = FromWorker::Ask {
+        text: "Password:".to_owned(),
+        visible: false,
+    };
+    assert_eq!(
+        manager.worker_said(ADA, asked_while_closing, at(3599)),
+        vec![Action::Tell(ADA, ToWorker::Answer { response: None })],
+        "a PAM module that asks while the session closes does not hold it open for ever"
+    );
     assert_eq!(
         manager.worker_ended(ADA, at(3600)),
         vec![greeter_spawned(3)],

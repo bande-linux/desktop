@@ -198,10 +198,6 @@ impl ScreenElement {
     }
 }
 
-/// Fills the stack up with elements that draw nothing, so that showing or removing something
-/// leaves the places of everything beneath it, which the damage tracker would redraw if they moved.
-/// Leaves a stack alone in which something above the wallpaper covers the display, as it may be
-/// scanned out.
 pub(crate) fn steady_places(
     elements: &mut Vec<ScreenElement>,
     places: &mut usize,
@@ -225,10 +221,10 @@ pub(crate) fn steady_places(
                 .subtract_rects(element.opaque_regions(scale).into_iter().map(opaque))
                 .is_empty()
     };
-    if elements.iter().rev().skip(1).any(covers) {
+    let shown = elements.len() - cursors;
+    if shown < 2 || elements.iter().rev().skip(1).any(covers) {
         return;
     }
-    let shown = elements.len() - cursors;
     let corner = RoundedRect {
         x: 0.0,
         y: 0.0,

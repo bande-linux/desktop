@@ -28,7 +28,6 @@ impl Displays {
             .clone()
     }
 
-    /// The connectors whose displays can show HDR.
     #[zbus(property)]
     fn hdr(&self) -> Vec<String> {
         self.hdr

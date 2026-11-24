@@ -142,8 +142,11 @@ impl VulkanRenderer {
             .map(|part| Rectangle::new(part.loc - bounds.loc, part.size))
             .chain(kept.stale.iter().copied())
             .collect();
+        if changed.len().max(covered.len()) > MAX_PARTS {
+            return whole;
+        }
         let seen = Rectangle::subtract_rects_many(changed.iter().copied(), covered.iter().copied());
-        if changed.len().max(covered.len()).max(seen.len()) > MAX_PARTS {
+        if seen.len() > MAX_PARTS {
             return whole;
         }
         let parts = gathered(seen, blur.spread());

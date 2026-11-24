@@ -25,9 +25,6 @@ const TO_2020: [[f32; 3]; 3] = [
     [0.016_391_44, 0.088_013_31, 0.895_595_25],
 ];
 
-/// sRGB colours and the 10-bit PQ BT.2020 codes of their light with white at 203 cd/m². All tables
-/// were computed at 40 digits from the constants of SMPTE ST 2084 and BT.2390 and matrices derived
-/// from the primaries, apart from the renderer.
 const ORDINARY: [([u8; 3], [f64; 3]); 10] = [
     ([0, 0, 0], [0.0, 0.0, 0.0]),
     ([255, 255, 255], [594.0, 594.0, 594.0]),
@@ -41,8 +38,6 @@ const ORDINARY: [([u8; 3], [f64; 3]); 10] = [
     ([250, 128, 114], [552.9, 458.1, 423.1]),
 ];
 
-/// PQ BT.2020 codes of content mastered at 1000 cd/m², the codes a 600 cd/m² display gets and the
-/// sRGB values of a capture.
 const BRIGHT: [([u16; 3], [f64; 3], [f64; 3]); 11] = [
     ([0, 0, 0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]),
     (

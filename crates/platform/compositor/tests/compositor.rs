@@ -25,7 +25,7 @@ use smithay::backend::allocator::dmabuf::{AsDmabuf, Dmabuf};
 use smithay::backend::allocator::gbm::{GbmAllocator, GbmBufferFlags, GbmDevice};
 use smithay::backend::allocator::{Allocator, Buffer, Fourcc, Modifier};
 use smithay::backend::renderer::damage::OutputDamageTracker;
-use smithay::backend::renderer::element::{Element, RenderElement};
+use smithay::backend::renderer::element::{Element, Kind, RenderElement};
 use smithay::backend::renderer::{Bind, Offscreen};
 use smithay::utils::{Rectangle, Transform};
 use wayland_client::protocol::wl_shm::Format;
@@ -1311,6 +1311,26 @@ fn a_full_screen_window_stays_opaque_above_a_blurred_panel() {
         opaque.contains(&Rectangle::from_size((800, 600).into())),
         "the full-screen window is opaque only in {opaque:?}"
     );
+}
+
+#[test]
+fn a_full_screen_window_alone_on_a_display_has_nothing_above_it() {
+    let mut vulkan = VulkanRenderer::new(None).expect("a renderer");
+    let mut server = headless(800, 600);
+    let mut window = PatternWindow::show(&mut server, "org.bande.Full", (400, 300), u8::MAX);
+    window.client.make_full_screen(&mut server, 0);
+    window.size = (800, 600);
+    window.bytes = pattern(window.size, 0, u8::MAX);
+    window.commit(&mut server, (0, 0, 800, 600));
+    idle(&mut Frames::start(), &mut server, Duration::from_secs(1));
+    let output = server.main_output();
+    let shown = server
+        .render_elements_on(&mut vulkan, &output)
+        .iter()
+        .filter(|element| element.kind() != Kind::Cursor)
+        .map(|element| element.geometry(1.0.into()))
+        .collect::<Vec<_>>();
+    assert_eq!(shown, [Rectangle::from_size((800, 600).into())]);
 }
 
 #[test]

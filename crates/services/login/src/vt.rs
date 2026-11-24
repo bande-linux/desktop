@@ -199,7 +199,20 @@ impl Terminal {
         switch_to(self.number)
     }
 
-    fn switch_freely(&self) -> io::Result<()> {
+    /// Takes the terminal back once the session that had it as its controlling terminal has
+    /// ended, which hung up every descriptor open on it: until then a switch away from it could
+    /// not be acknowledged, nor the terminal restored.
+    pub fn reclaim(&mut self) -> io::Result<()> {
+        let fresh = device(&format!("/dev/tty{}", self.number))?;
+        if self.held {
+            HELD.store(fresh.as_raw_fd(), Ordering::Relaxed);
+        }
+        self.file = fresh;
+        Ok(())
+    }
+
+    fn restore(&self) -> io::Result<()> {
+        self.ioctl(KDSETMODE, KD_TEXT)?;
         self.set_mode(&VtMode {
             mode: VT_AUTO,
             waitv: 0,
@@ -207,11 +220,6 @@ impl Terminal {
             acqsig: 0,
             frsig: 0,
         })
-    }
-
-    fn restore(&self) -> io::Result<()> {
-        self.ioctl(KDSETMODE, KD_TEXT)?;
-        self.switch_freely()
     }
 
     /// Gives the terminal back to the kernel's console whoever left it in graphics mode or with

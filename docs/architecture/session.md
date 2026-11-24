@@ -706,7 +706,9 @@ desktop has drawn its first frame, then the desktop fades in over it:
 When the session ends before its first frame (`bande-session` failing, the compositor
 crashing), or its compositor has hung (the worker ends it when, after the compositor opened its
 Wayland socket, nothing new has appeared in the runtime directory for 30 s, or after 5 minutes
-in all, so a slow first login or `~/.profile` is waited for), the worker brings VT 1 back and `bande-login`
+in all, so a slow first login or `~/.profile` is waited for), the worker brings VT 1 back (the kernel hung up every descriptor
+on its terminal when the session's leader exited, so it opens the terminal again first, to
+acknowledge the switch) and `bande-login`
 answers `start_session` with an error and accepts a new `create_session`;
 the login window, still running, comes back with its content and the reason `bande-session` left
 for it (above). Logging out ends the session: logind gives the terminal back to the console,

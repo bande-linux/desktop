@@ -271,7 +271,10 @@ impl Daemon {
         match read_message::<FromWorker>(socket) {
             Ok(said) => self.manager.worker_said(id, said, Instant::now()),
             Err(error) => {
-                if error.kind() != io::ErrorKind::UnexpectedEof {
+                if !matches!(
+                    error.kind(),
+                    io::ErrorKind::UnexpectedEof | io::ErrorKind::ConnectionReset
+                ) {
                     tracing::warn!("letting go of session worker {id}: {error}");
                 }
                 worker.socket = None;

@@ -353,6 +353,9 @@ fn run_session(
         None => tracing::warn!("pam_systemd registered no session"),
     }
     let followed = launch(class, account, terminal, &environment, links);
+    if let Err(error) = terminal.reclaim() {
+        tracing::warn!("cannot take tty{} back: {error}", terminal.number());
+    }
     if class == Class::User
         && !matches!(followed, Ok(true))
         && let Err(error) = terminal.leave_to(GREETER_VT)

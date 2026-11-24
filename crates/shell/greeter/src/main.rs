@@ -34,7 +34,6 @@ use bande_toolkit::{
     Appearance, Contrast, Edges, Image, Item, KeyboardFocus, LayerKind, LayerOptions, Rect, Role,
     Scene, Shape, Surfaces, TextSize, TextSystem, Window, WindowEvent,
 };
-use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use rustix::process::{DumpableBehavior, set_dumpable_behavior};
 use zbus::blocking::Connection;
 use zeroize::Zeroizing;
@@ -751,15 +750,6 @@ impl Greeter {
         sources
     }
 
-    fn ready_source(&self, index: usize) -> Option<Source> {
-        let (source, fd) = self.sources_in_order().into_iter().nth(index)?;
-        let mut fds = [PollFd::from_borrowed_fd(fd, PollFlags::IN)];
-        poll(&mut fds, Some(&Timespec::default()))
-            .inspect_err(|error| tracing::warn!("cannot look at {source:?}: {error}"))
-            .is_ok_and(|ready| ready > 0)
-            .then_some(source)
-    }
-
     fn main_event(&mut self, event: WindowEvent) {
         let now = Instant::now();
         match &event {
@@ -894,7 +884,11 @@ impl Surfaces for Greeter {
     }
 
     fn source_ready(&mut self, index: usize) {
-        let Some(source) = self.ready_source(index) else {
+        let Some(source) = self
+            .sources_in_order()
+            .get(index)
+            .map(|(source, _)| *source)
+        else {
             return;
         };
         match source {

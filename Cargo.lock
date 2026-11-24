@@ -2112,6 +2112,7 @@ dependencies = [
  "bande-test-wayland",
  "bande-toolkit-platform",
  "bande-widgets",
+ "rustix 1.1.6",
  "zbus",
 ]
 

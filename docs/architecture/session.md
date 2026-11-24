@@ -139,6 +139,9 @@ graph LR
   `IconFile`, or the initial on the accent colour) and name, and a secure field. PAM
   (`/etc/pam.d/bande-lock`) runs off the UI thread with a progress row after 200 ms; a rejected
   password clears and shakes the field. The compositor sets logind's `LockedHint`.
+  Where the content does not fit, `LockView` takes the first of `ARRANGEMENTS` that does: the clock
+  and picture shrink and move up, then the clock goes to the corner and the users beside the power
+  buttons. Users that do not fit in the row come into it as they are focused or chosen.
 - **`bande-power`** (`crates/services/power`) locks the session through logind before sleep,
   holding a `delay` inhibitor until `LockedHint` is set or 3 s pass (below logind's
   `InhibitDelayMaxSec` of 5); with every display off `LockedHint` comes once the lock screen has
@@ -652,8 +655,9 @@ the login window keeps the count per name across switching people, and `bande-lo
 own for each account, under the account's own name (`bande_pam::Backoff`), which also counts an
 answer whose conversation was cancelled, cut off or crashed and refuses answers until the wait is
 over, so a login window that does not wait guesses no faster. A typed name is logged only when it
-is an account's. While a session is starting,
-the field holds text or a power confirmation is open, Up and Down do not switch people. At login
+is an account's. While a session is starting
+the login window takes no input; while the field holds text or a power confirmation is open, Up
+and Down do not switch people. At login
 `bande-login` changes an expired password with `pam_chauthtok` through the same conversation (the
 `password` stack of `bande-greeter`). The lock screen cannot change one, as it runs as the user
 with no `password` stack: when `account` answers that the password has expired it unlocks the
@@ -676,7 +680,8 @@ transparency. A screen reader turned on at the login window (`Alt+Super+S`) is k
 `BANDE_LOGIN_ACCESSIBILITY`, which the session's compositor turns on and remembers; a person
 who has never signed in also gets the login defaults that way.
 
-**Idle.** After a minute the login window rests like the lock screen, after 10 minutes the
+**Idle.** After a minute the login window rests like the lock screen, putting away an unanswered
+power question, and the key or click that wakes it does nothing else unless it types; after 10 minutes the
 compositor turns the displays off, and on battery the greeter then sleeps when logind allows it.
 
 **Several displays.** The login window is on the main display, which alone decides when the

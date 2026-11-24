@@ -23,8 +23,8 @@ use bande_keyboard::Layouts;
 use bande_l10n::tr;
 use bande_lock::{
     BackdropSource, Backoff, Corner, Devices, Fit, Inbox, LockScreen, Look as Drawn,
-    PICTURE_PIXELS, Peer, PowerAction, Prompt, Purpose, Refusal, User, Variant, load_backdrop,
-    load_pictures, night,
+    PICTURE_PIXELS, Peer, PowerAction, Prompt, Purpose, Refusal, User, Variant, is_deliberate,
+    load_backdrop, load_pictures, night,
 };
 use bande_login::protocol::{Request, SOCKET_VARIABLE, read_message, write_message};
 use bande_status::devices::{powers, use_power};
@@ -324,6 +324,9 @@ impl Greeter {
             backdrop.loading = None;
             backdrop.size = None;
         }
+        for window in self.windows.iter_mut().skip(1) {
+            window.request_redraw();
+        }
     }
 
     fn is_starting(&self) -> bool {
@@ -331,7 +334,7 @@ impl Greeter {
     }
 
     fn switch_to(&mut self, index: usize) {
-        if self.is_starting() || index > self.users.len() {
+        if index > self.users.len() {
             return;
         }
         self.shown = index;
@@ -377,12 +380,16 @@ impl Greeter {
     fn unavailable(&mut self, error: &std::io::Error) {
         tracing::warn!("bande-login: {error}");
         self.daemon = None;
+        let left = self.leaving || self.screen.has_left();
         self.leaving = false;
         self.login = None;
         self.unanswered = Unanswered::default();
         self.next = None;
         self.asked = false;
-        self.screen.ask(None);
+        if left {
+            self.rebuild_screen();
+        }
+        self.ask_first();
         self.screen
             .refuse(Refusal::Unavailable, frame_time().on_screen());
     }
@@ -402,14 +409,20 @@ impl Greeter {
         }
     }
 
+    fn ask_first(&mut self) {
+        let user_name = self.current_login().is_none().then(|| Prompt {
+            text: tr!("User Name"),
+            visible: true,
+        });
+        self.screen.ask(user_name.as_ref());
+    }
+
     fn converse(&mut self) {
         self.asked = false;
         self.refusal = None;
         let Some(login) = self.current_login() else {
-            self.screen.ask(Some(&Prompt {
-                text: tr!("User Name"),
-                visible: true,
-            }));
+            self.next = None;
+            self.ask_first();
             if let Some(current) = self.login.as_mut().filter(|login| !login.is_idle()) {
                 let cancel = current.cancel();
                 self.send(&cancel);
@@ -577,8 +590,11 @@ impl Greeter {
         self.leaving = true;
         self.screen.accepted();
         self.screen.leave(frame_time().on_screen());
+        let Some(login) = self.current_login() else {
+            return;
+        };
+        self.backoffs.remove(&login);
         if let Some(file) = &self.last_user
-            && let Some(login) = self.current_login()
             && let Err(error) = remember_user(file, &login)
         {
             tracing::info!("cannot remember who signed in last: {error}");
@@ -592,7 +608,7 @@ impl Greeter {
             self.switch_to(index.unwrap_or(self.users.len()));
             return;
         }
-        if self.screen.take_cancel() && !self.is_starting() {
+        if self.screen.take_cancel() {
             self.pending = None;
             if self.shown >= self.users.len() && self.other.is_some() {
                 self.other = None;
@@ -632,7 +648,6 @@ impl Greeter {
         {
             self.power_answers = ask_powers(system);
         }
-        self.screen.wake(now);
     }
 
     fn sleeps_at(&self) -> Option<Instant> {
@@ -640,7 +655,7 @@ impl Greeter {
             .corner
             .battery
             .is_some_and(|battery| !battery.on_adapter());
-        (on_battery && self.powers.contains(&PowerAction::Sleep) && !self.started)
+        (on_battery && self.powers.contains(&PowerAction::Sleep) && !self.is_starting())
             .then(|| self.last_input + SLEEPS_AFTER)
     }
 
@@ -736,14 +751,30 @@ impl Greeter {
     }
 
     fn main_event(&mut self, event: WindowEvent) {
-        if let WindowEvent::Input(_) | WindowEvent::Accessibility(_) = &event {
-            self.noticed(Instant::now());
+        let now = Instant::now();
+        match &event {
+            WindowEvent::Input(_) | WindowEvent::Accessibility(_) if self.is_starting() => {
+                self.last_input = now;
+                return;
+            }
+            WindowEvent::Input(input) => {
+                self.noticed(now);
+                if !self.screen.wake_on(input, now) && is_deliberate(input) {
+                    self.windows[0].request_redraw();
+                    return;
+                }
+            }
+            WindowEvent::Accessibility(_) => {
+                self.noticed(now);
+                self.screen.wake(now);
+            }
+            _ => {}
         }
         let changed = match event {
             WindowEvent::Input(Event::Key {
                 key: key @ (Key::Up | Key::Down),
                 ..
-            }) if !self.is_starting() && self.screen.can_switch_person() => {
+            }) if self.screen.can_switch_person() => {
                 self.step_user(key == Key::Down);
                 true
             }
@@ -836,7 +867,9 @@ impl Surfaces for Greeter {
             0 => self.main_event(event),
             _ => {
                 if let WindowEvent::Input(_) = event {
-                    self.noticed(Instant::now());
+                    let now = Instant::now();
+                    self.noticed(now);
+                    self.screen.wake(now);
                     self.windows[0].request_redraw();
                 }
             }

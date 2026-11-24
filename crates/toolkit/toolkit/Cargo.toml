@@ -17,6 +17,7 @@ bande-widgets.workspace = true
 bande-graphics = { workspace = true, features = ["gpu"] }
 bande-test-bus.workspace = true
 bande-test-wayland.workspace = true
+rustix.workspace = true
 zbus.workspace = true
 
 [lints]

@@ -94,8 +94,8 @@ pub fn run() -> ExitCode {
     };
     let (class, username) = match read_message(&mut &socket) {
         Ok(ToWorker::Begin { class, username }) => (class, username),
-        Ok(other) => {
-            tracing::error!("a session worker was sent {other:?} first");
+        Ok(_) => {
+            tracing::error!("a session worker was not told whom to sign in first");
             return ExitCode::FAILURE;
         }
         Err(error) => {
@@ -199,8 +199,8 @@ fn serve(
 }
 
 fn admit(account: &Account) -> Result<(), Failure> {
-    let shells = match std::fs::read_to_string(SHELLS) {
-        Ok(shells) => Some(shells),
+    let shells = match std::fs::read(SHELLS) {
+        Ok(shells) => Some(String::from_utf8_lossy(&shells).into_owned()),
         Err(error) if error.kind() == io::ErrorKind::NotFound => None,
         Err(error) => return Err(Failure::other(format!("cannot read {SHELLS}: {error}"))),
     };
@@ -229,7 +229,7 @@ fn launch_request(links: Links<'_>) -> Result<Option<Vec<String>>, Failure> {
     }
     match read_message(&mut &*links.socket) {
         Ok(ToWorker::Launch { env }) => Ok(Some(env)),
-        Ok(other) => Err(Failure::other(format!("expected Launch, got {other:?}"))),
+        Ok(_) => Err(Failure::other("told something else than to launch")),
         Err(error) => {
             tracing::info!("signing in was called off: {error}");
             Ok(None)

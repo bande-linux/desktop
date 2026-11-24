@@ -137,6 +137,15 @@ fn the_login_window_stays_until_the_desktop_is_shown_and_returns_after_logging_o
         "the login window is stopped only once the desktop's first frame is on screen"
     );
     assert!(manager.worker_ended(GREETER, at(20)).is_empty());
+    let asked_while_closing = FromWorker::Ask {
+        text: "Password:".to_owned(),
+        visible: false,
+    };
+    assert_eq!(
+        manager.worker_said(ADA, asked_while_closing, at(3599)),
+        vec![Action::Tell(ADA, ToWorker::Answer { response: None })],
+        "a PAM module that asks while the session closes does not hold it open for ever"
+    );
     assert_eq!(
         manager.worker_ended(ADA, at(3600)),
         vec![greeter_spawned(3)],
@@ -466,6 +475,44 @@ fn every_request_is_answered_once_and_cancelling_does_not_wait_for_pam() {
             .is_empty(),
         "what the cancelled worker still says reaches no one"
     );
+}
+
+#[test]
+fn what_pam_says_last_does_not_hide_how_signing_in_ended() {
+    let acknowledged = Request::PostAuthMessageResponse { response: None };
+    for (ended, expected) in [
+        (FromWorker::Authenticated, Response::Success),
+        (
+            FromWorker::Failed {
+                error_type: ErrorType::AuthError,
+                description: "pam_authenticate: AUTH_ERR".to_owned(),
+            },
+            Response::error(ErrorType::AuthError, "pam_authenticate: AUTH_ERR"),
+        ),
+    ] {
+        let mut manager = Manager::default();
+        manager.start();
+        tried(&mut manager, ADA, at(0));
+        for text in ["Your password expires in 3 days", "Change it soon"] {
+            let said = FromWorker::Show {
+                text: text.to_owned(),
+                error: false,
+            };
+            manager.worker_said(ADA, said, at(1));
+        }
+        assert!(manager.worker_said(ADA, ended, at(1)).is_empty());
+        assert_eq!(
+            manager.request(acknowledged.clone(), at(2)),
+            vec![Action::Reply(Response::AuthMessage {
+                auth_message_type: AuthMessageType::Info,
+                auth_message: "Change it soon".to_owned(),
+            })]
+        );
+        assert_eq!(
+            manager.request(acknowledged.clone(), at(2)),
+            vec![Action::Reply(expected)]
+        );
+    }
 }
 
 #[test]

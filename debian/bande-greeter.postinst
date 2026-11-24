@@ -51,6 +51,6 @@ if [ "$1" = configure ] && [ -n "$2" ] && [ -z "$DPKG_ROOT" ] && [ -d /run/syste
 	main=$(systemctl show --property MainPID --value bande-greeter.service)
 	if [ "${main:-0}" -gt 0 ] && [ "$(cat "/proc/$main/comm" 2> /dev/null)" = greetd ] &&
 		[ -z "$(signed_in_through_greetd)" ]; then
-		systemctl restart bande-greeter.service
+		systemctl restart bande-greeter.service || true
 	fi
 fi

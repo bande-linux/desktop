@@ -198,6 +198,9 @@ impl Manager {
             .as_mut()
             .filter(|login| login.phase == Phase::Authenticating)
         else {
+            if !self.queued.is_empty() {
+                return self.await_worker();
+            }
             return vec![Action::Reply(Response::error(
                 ErrorType::Error,
                 "nothing was asked",
@@ -333,7 +336,12 @@ impl Manager {
             return Vec::new();
         }
         let Some(login) = self.login.as_mut().filter(|login| login.worker == worker) else {
-            return Vec::new();
+            return match said {
+                FromWorker::Ask { .. } => {
+                    vec![Action::Tell(worker, ToWorker::Answer { response: None })]
+                }
+                _ => Vec::new(),
+            };
         };
         match (login.phase, said) {
             (Phase::Authenticating, FromWorker::Account { name }) => {

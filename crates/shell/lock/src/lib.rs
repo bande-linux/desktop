@@ -24,8 +24,8 @@ use bande_toolkit::ui::{
     WidgetId,
 };
 use bande_toolkit::{
-    Appearance, Color, Image, Item, Palette, Paragraph, Point, Rect, Scene, Scheme, Shape,
-    TextAlign, TextRole, TextStyle, TextSystem,
+    Appearance, Color, Cut, Image, Item, Palette, Paragraph, Point, Rect, Scene, Scheme, Shape,
+    TextAlign, TextRole, TextStyle, TextSystem, shortened,
 };
 use bande_xdg::{data_dirs, find_icon};
 use zeroize::Zeroizing;
@@ -35,7 +35,7 @@ pub use bande_inbox::Inbox;
 pub use bande_pam::Backoff;
 pub use bande_wallpaper::{Fit, Variant};
 pub use choices::Peer;
-use choices::{SourceButton, UserList};
+use choices::{PEER_AVATAR, PEER_NAME_GAP, SourceButton, UserList};
 use conversation::backoff_notice;
 pub use conversation::{Messages, Prompt, Refusal, clip_message};
 pub use devices::{Corner, Devices};
@@ -46,7 +46,6 @@ pub const PAM_SERVICE: &str = "bande-lock";
 pub const SHAKE_DURATION: Duration = Duration::from_millis(480);
 const SHAKE_KICK: f64 = 600.0;
 const CHECKING_SHOWN_AFTER: Duration = Duration::from_millis(200);
-const TIME_SIZE: f32 = 112.0;
 const TIME_WEIGHT: f32 = 300.0;
 const CLOCK_TOP: f32 = 0.11;
 const IDENTITY_TOP: f32 = 0.56;
@@ -67,7 +66,6 @@ const STATUS_MARGIN: f32 = 16.0;
 const STATUS_GAP: f32 = 10.0;
 const BATTERY_SLOT: f32 = 27.0;
 const PERCENT_GAP: f32 = 4.0;
-const POWER_BOTTOM: f32 = 40.0;
 const POWER_GAP: f32 = 12.0;
 const POWER_SYMBOL_GAP: f32 = 40.0;
 const POWER_BUTTON: f32 = 44.0;
@@ -80,6 +78,73 @@ const USERS_INDEX: usize = 3;
 const POWER_INDEX: usize = 4;
 pub const RESTS_AFTER: Duration = Duration::from_secs(60);
 const BACKOFF_TICK: Duration = Duration::from_secs(1);
+const LEAVES_UNDRAWN_AFTER: Duration = Duration::from_secs(1);
+const NOTE_SHARE: f32 = 0.25;
+
+#[derive(Debug, Clone, Copy)]
+enum ClockPlace {
+    Centre { size: f32 },
+    Corner,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct Arrangement {
+    clock: ClockPlace,
+    avatar: f32,
+    short_peer_names: bool,
+    bottom: f32,
+    users_beside_power: bool,
+}
+
+const ROOMY: Arrangement = Arrangement {
+    clock: ClockPlace::Centre { size: 112.0 },
+    avatar: AVATAR,
+    short_peer_names: false,
+    bottom: 40.0,
+    users_beside_power: false,
+};
+
+const ARRANGEMENTS: [Arrangement; 7] = [
+    ROOMY,
+    Arrangement {
+        short_peer_names: true,
+        ..ROOMY
+    },
+    Arrangement {
+        clock: ClockPlace::Centre { size: 80.0 },
+        avatar: 72.0,
+        short_peer_names: true,
+        ..ROOMY
+    },
+    Arrangement {
+        clock: ClockPlace::Centre { size: 56.0 },
+        avatar: 64.0,
+        short_peer_names: true,
+        bottom: 24.0,
+        users_beside_power: false,
+    },
+    Arrangement {
+        clock: ClockPlace::Corner,
+        avatar: 64.0,
+        short_peer_names: true,
+        bottom: 16.0,
+        users_beside_power: false,
+    },
+    Arrangement {
+        clock: ClockPlace::Corner,
+        avatar: 48.0,
+        short_peer_names: true,
+        bottom: 16.0,
+        users_beside_power: true,
+    },
+    Arrangement {
+        clock: ClockPlace::Corner,
+        avatar: 0.0,
+        short_peer_names: true,
+        bottom: 16.0,
+        users_beside_power: true,
+    },
+];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Purpose {
@@ -181,7 +246,39 @@ struct LockView {
     power_labels: Vec<Paragraph>,
     row: Vec<Size>,
     extras: [Size; 2],
+    field_height: f32,
+    arrangement: Arrangement,
+    clock_top: f32,
+    identity_top: f32,
     frame: Rect,
+}
+
+fn cut_to_height(text: &str, style: TextStyle, height: f32, cx: &mut Context) -> Paragraph {
+    let mut lay_out = |text: &str| {
+        cx.text
+            .paragraph(text, style, Some(MESSAGE_WIDTH), TextAlign::Center)
+    };
+    let shown = shortened(text, Cut::End, |candidate| {
+        lay_out(candidate).height() <= height
+    });
+    lay_out(&shown)
+}
+
+fn newest_lines(text: &str, style: TextStyle, height: f32, cx: &mut Context) -> Paragraph {
+    let whole = cx
+        .text
+        .paragraph(text, style, Some(MESSAGE_WIDTH), TextAlign::Center);
+    match text.split_once('\n') {
+        _ if whole.height() <= height => whole,
+        Some((_, newer)) => newest_lines(newer, style, height, cx),
+        None => cut_to_height(text, style, height, cx),
+    }
+}
+
+fn line_height(style: TextStyle, cx: &mut Context) -> f32 {
+    cx.text
+        .paragraph("X", style, None, TextAlign::Start)
+        .height()
 }
 
 fn centred(paragraph: &Paragraph, centre_x: f32, y: f32) -> Point {
@@ -199,30 +296,6 @@ impl Widget for LockView {
         let paragraph = |text: &str, style: TextStyle, cx: &mut Context| {
             cx.text.paragraph(text, style, None, TextAlign::Start)
         };
-        self.paragraphs = Some([
-            paragraph(
-                &model.date,
-                TextStyle::role(TextRole::Title, palette.ink).weight(TextStyle::MEDIUM),
-                cx,
-            ),
-            paragraph(
-                &model.time,
-                TextStyle::new(TIME_SIZE, palette.ink)
-                    .weight(TIME_WEIGHT)
-                    .tabular(),
-                cx,
-            ),
-            paragraph(
-                &model.initial,
-                TextStyle::new(INITIAL_SIZE, palette.on_accent).weight(TextStyle::BOLD),
-                cx,
-            ),
-            paragraph(
-                &model.name,
-                TextStyle::role(TextRole::Heading, palette.ink),
-                cx,
-            ),
-        ]);
         self.percent = model.battery.map(|battery| {
             let percent = tr!("{percent}%", percent = battery.percent.round());
             paragraph(
@@ -231,39 +304,34 @@ impl Widget for LockView {
                 cx,
             )
         });
-        self.message = model.shown_message().map(|message| {
-            cx.text.paragraph(
-                &message,
-                TextStyle::role(TextRole::BodyStrong, palette.ink).weight(TextStyle::MEDIUM),
-                Some(MESSAGE_WIDTH),
-                TextAlign::Center,
-            )
-        });
-        self.note = (!model.note.is_empty()).then(|| {
-            cx.text.paragraph(
-                &model.note,
-                TextStyle::role(TextRole::Callout, palette.ink),
-                Some(MESSAGE_WIDTH),
-                TextAlign::Center,
-            )
-        });
+        let note = model.note.clone();
         self.power_labels = model
             .power_labels
             .iter()
             .map(|label| paragraph(label, TextStyle::role(TextRole::Callout, palette.ink), cx))
             .collect();
         drop(model);
-        let mut sizes: Vec<Size> = Vec::new();
+        self.note = (!note.is_empty()).then(|| {
+            let style = TextStyle::role(TextRole::Callout, palette.ink);
+            cut_to_height(&note, style, available.height * NOTE_SHARE, cx)
+        });
+        self.row.clear();
         for (index, child) in self.children.iter_mut().enumerate() {
-            let room = match index {
-                SOURCE_INDEX | USERS_INDEX => available,
-                _ => Size::new(FIELD_WIDTH, available.height),
-            };
-            sizes.push(child.measure(cx, room));
+            let size = child.measure(cx, Size::new(FIELD_WIDTH, available.height));
+            if index == FIELD_INDEX {
+                self.field_height = size.height;
+            } else if index >= POWER_INDEX {
+                self.row.push(size);
+            } else if index == SOURCE_INDEX {
+                self.extras[0] = size;
+            }
         }
-        self.row = sizes.split_off(POWER_INDEX.min(sizes.len()));
-        self.extras =
-            [SOURCE_INDEX, USERS_INDEX].map(|index| sizes.get(index).copied().unwrap_or_default());
+        for arrangement in ARRANGEMENTS {
+            self.arrangement = arrangement;
+            if self.arrange(cx, available) {
+                break;
+            }
+        }
         available
     }
 
@@ -277,18 +345,20 @@ impl Widget for LockView {
         let name_bottom = self.name_bottom();
         let x = frame.x + ((frame.width - FIELD_WIDTH) / 2.0).round() + shake.round();
         let field_top = name_bottom + FIELD_GAP;
-        let status_left = self.status_left();
-        let power_top = self.power_top(frame);
-        let label_room = self.label_room();
+        let status_left = self.status_left(frame);
+        let users_frame = self.users_frame(frame);
+        let row_top = self.row_top(frame);
         let scale = self.model.borrow().scale;
         let first = self.children.len().min(POWER_INDEX);
+        let (widths, gap) = self.power_slots();
+        let mut left = self.row_left(frame);
         let (above, row) = self.children.split_at_mut(first);
         if let [field, progress, source, users] = above {
             field.place(cx, Rect::new(x, field_top, FIELD_WIDTH, frame.height));
             let centre_left = frame.x + ((frame.width - FIELD_WIDTH) / 2.0).round();
             let below = field.frame().y + field.frame().height + GAP;
             progress.place(cx, Rect::new(centre_left, below, FIELD_WIDTH, frame.height));
-            let [source_size, users_size] = self.extras;
+            let [source_size, _] = self.extras;
             source.place(
                 cx,
                 Rect::new(
@@ -298,47 +368,20 @@ impl Widget for LockView {
                     source_size.height,
                 ),
             );
-            users.place(
-                cx,
-                Rect::new(
-                    frame.x + ((frame.width - users_size.width) / 2.0).round(),
-                    power_top - USERS_GAP - users_size.height,
-                    users_size.width,
-                    users_size.height,
-                ),
-            );
+            users.place(cx, users_frame);
         }
         let symbols = !self.power_labels.is_empty();
-        let (button, gap) = match symbols {
-            true => (Size::new(POWER_BUTTON, POWER_BUTTON), POWER_SYMBOL_GAP),
-            false => (Size::default(), POWER_GAP),
-        };
-        let widths: Vec<f32> = self
-            .row
-            .iter()
-            .enumerate()
-            .map(|(index, size)| match symbols {
-                true => self
-                    .power_labels
-                    .get(index)
-                    .map_or(button.width, |label| label.width().max(button.width)),
-                false => size.width,
-            })
-            .collect();
-        let width = widths.iter().map(|width| width + gap).sum::<f32>() - gap;
-        let height = match symbols {
-            true => button.height,
-            false => self.row.iter().map(|size| size.height).fold(0.0, f32::max),
-        };
-        let mut left = frame.x + ((frame.width - width) / 2.0).round();
-        let top = frame.y + frame.height - POWER_BOTTOM - label_room - height;
+        let button = Size::new(POWER_BUTTON, POWER_BUTTON);
         for ((child, size), slot) in row.iter_mut().zip(&self.row).zip(&widths) {
             let shown = match symbols {
                 true => button,
                 false => *size,
             };
             let inset = ((slot - shown.width) / 2.0).round();
-            child.place(cx, Rect::new(left + inset, top, shown.width, shown.height));
+            child.place(
+                cx,
+                Rect::new(left + inset, row_top, shown.width, shown.height),
+            );
             left += slot + gap;
         }
     }
@@ -451,23 +494,30 @@ impl LockView {
             return;
         };
         let centre = self.frame.x + self.frame.width / 2.0;
-        let top = self.frame.y + self.frame.height * CLOCK_TOP;
+        let top = self.frame.y + self.clock_top;
+        let (date_at, time_at) = match self.arrangement.clock {
+            ClockPlace::Centre { .. } => (
+                centred(date, centre, top),
+                centred(time, centre, top + date.height()),
+            ),
+            ClockPlace::Corner => {
+                let left = self.frame.x + STATUS_MARGIN;
+                (
+                    Point::new((left + time.width() + STATUS_GAP).round(), top.round()),
+                    Point::new(left, top.round()),
+                )
+            }
+        };
         items.push(Item::Text {
-            origin: centred(date, centre, top),
+            origin: date_at,
             paragraph: date.clone(),
         });
         items.push(Item::Text {
-            origin: centred(time, centre, top + date.height()),
+            origin: time_at,
             paragraph: time.clone(),
         });
         if let Some(note) = &self.note {
-            let bottom = self
-                .children
-                .get(POWER_INDEX)
-                .map_or(self.frame.y + self.frame.height - POWER_BOTTOM, |button| {
-                    button.frame().y
-                })
-                - GAP * 2.0;
+            let bottom = self.row_top(self.frame) - GAP * 2.0;
             items.push(Item::Text {
                 origin: Point::new(
                     (centre - MESSAGE_WIDTH / 2.0).round(),
@@ -500,30 +550,32 @@ impl LockView {
         };
         let centre = self.frame.x + self.frame.width / 2.0;
         let avatar = self.avatar();
-        if let Some(picture) = self.model.borrow().picture.clone() {
+        let radius = AVATAR_RADIUS * avatar.width / AVATAR;
+        let picture = self.model.borrow().picture.clone();
+        if let Some(picture) = picture.filter(|_| avatar.width > 0.0) {
             items.push(Item::Clip {
-                shape: Shape::rounded(avatar, AVATAR_RADIUS),
+                shape: Shape::rounded(avatar, radius),
                 items: vec![Item::Image {
                     rect: avatar,
                     image: picture,
                 }],
             });
-        } else {
+        } else if avatar.width > 0.0 {
             items.push(Item::Fill {
-                shape: Shape::rounded(avatar, AVATAR_RADIUS),
+                shape: Shape::rounded(avatar, radius),
                 paint: cx.palette.accent.into(),
             });
             items.push(Item::Text {
                 origin: centred(
                     initial,
                     centre,
-                    avatar.y + (AVATAR - initial.height()) / 2.0,
+                    avatar.y + (avatar.height - initial.height()) / 2.0,
                 ),
                 paragraph: initial.clone(),
             });
         }
         items.push(Item::Text {
-            origin: centred(name, centre, avatar.y + AVATAR + NAME_GAP),
+            origin: centred(name, centre, self.name_top()),
             paragraph: name.clone(),
         });
         if let Some(users) = self.children.get(USERS_INDEX) {
@@ -537,7 +589,7 @@ impl LockView {
                 .chain(std::iter::repeat(None)),
         ) {
             child.paint(cx, items);
-            if let Some(label) = label {
+            if let Some(label) = label.filter(|_| !self.arrangement.users_beside_power) {
                 let button = child.frame();
                 items.push(Item::Text {
                     origin: centred(
@@ -618,9 +670,142 @@ impl LockView {
         }
     }
 
-    fn status_left(&self) -> f32 {
+    fn arrange(&mut self, cx: &mut Context, available: Size) -> bool {
+        let palette = cx.palette;
+        let arrangement = self.arrangement;
+        let frame = Rect::new(0.0, 0.0, available.width, available.height);
+        let room = available.width - 2.0 * STATUS_MARGIN;
+        let callout = TextStyle::role(TextRole::Callout, palette.ink);
+        let callout_line = line_height(callout, cx);
+        let message_style =
+            TextStyle::role(TextRole::BodyStrong, palette.ink).weight(TextStyle::MEDIUM);
+        let message_room = 2.0 * line_height(message_style, cx);
+
         let model = self.model.borrow();
-        let mut right = self.frame.x + self.frame.width - STATUS_MARGIN;
+        let message = model.shown_message();
+        let initial = cx.text.paragraph(
+            &model.initial,
+            TextStyle::new(
+                INITIAL_SIZE * arrangement.avatar / AVATAR,
+                palette.on_accent,
+            )
+            .weight(TextStyle::BOLD),
+            None,
+            TextAlign::Start,
+        );
+        let name = cx.text.fitted(
+            &model.name,
+            TextStyle::role(TextRole::Heading, palette.ink),
+            room,
+        );
+        let (date, time) = match arrangement.clock {
+            ClockPlace::Centre { size } => (
+                cx.text.paragraph(
+                    &model.date,
+                    TextStyle::role(TextRole::Title, palette.ink).weight(TextStyle::MEDIUM),
+                    None,
+                    TextAlign::Start,
+                ),
+                cx.text.paragraph(
+                    &model.time,
+                    TextStyle::new(size, palette.ink)
+                        .weight(TIME_WEIGHT)
+                        .tabular(),
+                    None,
+                    TextAlign::Start,
+                ),
+            ),
+            ClockPlace::Corner => {
+                let style =
+                    TextStyle::role(TextRole::WindowTitle, palette.ink).weight(TextStyle::MEDIUM);
+                let time = cx
+                    .text
+                    .paragraph(&model.time, style.tabular(), None, TextAlign::Start);
+                let taken = STATUS_MARGIN + time.width() + 2.0 * STATUS_GAP;
+                let date_room = self.status_left(frame) - self.extras[0].width - taken;
+                (cx.text.fitted(&model.date, style, date_room), time)
+            }
+        };
+        drop(model);
+
+        let users_room = match arrangement.users_beside_power {
+            true => self.row_left(frame) - 2.0 * STATUS_MARGIN,
+            false => room,
+        };
+        let users_height = match arrangement.short_peer_names {
+            true => PEER_AVATAR + PEER_NAME_GAP + 2.0 * callout_line,
+            false => available.height,
+        };
+        self.extras[1] = self
+            .children
+            .get_mut(USERS_INDEX)
+            .map(|users| users.measure(cx, Size::new(users_room, users_height)))
+            .unwrap_or_default();
+
+        let row_height = match (self.row.is_empty(), arrangement.users_beside_power) {
+            (true, _) => 0.0,
+            (false, true) => POWER_BUTTON,
+            (false, false) => POWER_BUTTON + POWER_LABEL_GAP + callout_line,
+        };
+        let row_top = frame.height - arrangement.bottom - row_height;
+        let users_top = match (self.extras[1].height > 0.0, arrangement.users_beside_power) {
+            (false, _) => row_top,
+            (true, true) => frame.height - arrangement.bottom - self.extras[1].height,
+            (true, false) => row_top - USERS_GAP - self.extras[1].height,
+        };
+        let note_top = self
+            .note
+            .as_ref()
+            .map_or(row_top, |note| row_top - 2.0 * GAP - note.height());
+        let floor = row_top.min(users_top).min(note_top) - GAP;
+
+        let avatar_height = match arrangement.avatar > 0.0 {
+            true => arrangement.avatar + NAME_GAP,
+            false => 0.0,
+        };
+        let identity_height = avatar_height + name.height() + FIELD_GAP + self.field_height + GAP;
+
+        let (clock_height, clock_fits, highest) = match arrangement.clock {
+            ClockPlace::Centre { .. } => (
+                date.height() + time.height(),
+                date.width().max(time.width()) <= room,
+                STATUS_TOP + STATUS_HEIGHT,
+            ),
+            ClockPlace::Corner => (
+                0.0,
+                true,
+                STATUS_TOP + (STATUS_HEIGHT + time.height()) / 2.0 + POWER_LABEL_GAP,
+            ),
+        };
+        let natural = (frame.height * IDENTITY_TOP).round();
+        let lowest = floor - identity_height;
+        self.message = message.map(|message| {
+            let height = (lowest - highest - clock_height).max(message_room);
+            newest_lines(&message, message_style, height, cx)
+        });
+        let whole = self.message.as_ref().is_none_or(|shown| {
+            self.model.borrow().shown_message().as_deref() == Some(shown.text())
+        });
+        let below = self
+            .message
+            .as_ref()
+            .map_or(0.0, Paragraph::height)
+            .max(message_room);
+        let top = natural.min((lowest - below).floor());
+        self.identity_top = top.max(highest);
+        self.clock_top = match arrangement.clock {
+            ClockPlace::Centre { .. } => {
+                (frame.height * CLOCK_TOP).min(self.identity_top - clock_height)
+            }
+            ClockPlace::Corner => STATUS_TOP + (STATUS_HEIGHT - time.height()) / 2.0,
+        };
+        self.paragraphs = Some([date, time, initial, name]);
+        whole && clock_fits && top >= highest + clock_height
+    }
+
+    fn status_left(&self, frame: Rect) -> f32 {
+        let model = self.model.borrow();
+        let mut right = frame.x + frame.width - STATUS_MARGIN;
         if model.battery.is_some() {
             right -= BATTERY_SLOT + STATUS_GAP;
             if let Some(percent) = &self.percent {
@@ -633,31 +818,80 @@ impl LockView {
         right
     }
 
-    fn label_room(&self) -> f32 {
-        self.power_labels
-            .first()
-            .map_or(0.0, |label| label.height() + POWER_LABEL_GAP)
+    fn power_slots(&self) -> (Vec<f32>, f32) {
+        let beside = self.arrangement.users_beside_power;
+        if self.power_labels.is_empty() || beside {
+            let width = |size: &Size| match self.power_labels.is_empty() {
+                true => size.width,
+                false => POWER_BUTTON,
+            };
+            return (self.row.iter().map(width).collect(), POWER_GAP);
+        }
+        let widths = self
+            .power_labels
+            .iter()
+            .map(|label| label.width().max(POWER_BUTTON));
+        (widths.collect(), POWER_SYMBOL_GAP)
     }
 
-    fn power_top(&self, frame: Rect) -> f32 {
+    fn row_left(&self, frame: Rect) -> f32 {
+        let (widths, gap) = self.power_slots();
+        let width = widths.iter().map(|width| width + gap).sum::<f32>() - gap;
+        match self.arrangement.users_beside_power {
+            true => frame.x + frame.width - STATUS_MARGIN - width.max(0.0),
+            false => frame.x + ((frame.width - width) / 2.0).round(),
+        }
+    }
+
+    fn row_top(&self, frame: Rect) -> f32 {
+        let bottom = frame.y + frame.height - self.arrangement.bottom;
         let height = match self.power_labels.is_empty() {
             false => POWER_BUTTON,
             true => self.row.iter().map(|size| size.height).fold(0.0, f32::max),
         };
-        let bottom = frame.y + frame.height - POWER_BOTTOM;
-        match self.row.is_empty() {
-            true => bottom,
-            false => bottom - self.label_room() - height,
-        }
+        let labels = match self.arrangement.users_beside_power {
+            true => 0.0,
+            false => self
+                .power_labels
+                .first()
+                .map_or(0.0, |label| label.height() + POWER_LABEL_GAP),
+        };
+        bottom - labels - height
+    }
+
+    fn users_frame(&self, frame: Rect) -> Rect {
+        let [_, users] = self.extras;
+        let (right, bottom) = match self.arrangement.users_beside_power {
+            true => (
+                self.row_left(frame),
+                frame.y + frame.height - self.arrangement.bottom,
+            ),
+            false => (frame.x + frame.width, self.row_top(frame) - USERS_GAP),
+        };
+        Rect::new(
+            frame.x + ((right - frame.x - users.width) / 2.0).round(),
+            bottom - users.height,
+            users.width,
+            users.height,
+        )
     }
 
     fn avatar(&self) -> Rect {
+        let side = self.arrangement.avatar;
         Rect::new(
-            self.frame.x + ((self.frame.width - AVATAR) / 2.0).round(),
-            self.frame.y + (self.frame.height * IDENTITY_TOP).round(),
-            AVATAR,
-            AVATAR,
+            self.frame.x + ((self.frame.width - side) / 2.0).round(),
+            self.frame.y + self.identity_top,
+            side,
+            side,
         )
+    }
+
+    fn name_top(&self) -> f32 {
+        let avatar = self.avatar();
+        match avatar.height > 0.0 {
+            true => avatar.y + avatar.height + NAME_GAP,
+            false => avatar.y,
+        }
     }
 
     fn name_bottom(&self) -> f32 {
@@ -665,7 +899,7 @@ impl LockView {
             .paragraphs
             .as_ref()
             .map_or(0.0, |[_, _, _, name]| name.height());
-        self.avatar().y + AVATAR + NAME_GAP + name
+        self.name_top() + name
     }
 }
 
@@ -805,6 +1039,10 @@ impl LockScreen {
             power_labels: Vec::new(),
             row: Vec::new(),
             extras: [Size::default(); 2],
+            field_height: 0.0,
+            arrangement: ROOMY,
+            clock_top: 0.0,
+            identity_top: 0.0,
             frame: Rect::default(),
         };
         let ui = Ui::new(Box::new(view), Context::new(text, night(appearance)));
@@ -1075,7 +1313,17 @@ impl LockScreen {
                     false => into_second,
                 }
         });
-        model.rests_at.into_iter().chain(backoff).min()
+        let leaving = model
+            .content_shown
+            .value_at(model.now)
+            .1
+            .then(|| model.now + LEAVES_UNDRAWN_AFTER);
+        model
+            .rests_at
+            .into_iter()
+            .chain(backoff)
+            .chain(leaving)
+            .min()
     }
 
     pub fn tick(&mut self, now: Instant) -> bool {
@@ -1101,12 +1349,15 @@ impl LockScreen {
         }
         model.rests_at = None;
         model.resting = true;
-        model.question = None;
         model.messages.clear();
         model
             .identity_shown
             .animate_at(now, false, 0.0, Spring::FADE);
         drop(model);
+        if self.model.borrow().asking.is_some() {
+            self.ask_power(None);
+        }
+        self.focus(self.field);
         self.clear_field();
         true
     }
@@ -1271,21 +1522,25 @@ mod tests {
     use super::*;
     use bande_toolkit::ui::{Modifiers, Pointer};
 
-    #[test]
-    fn a_click_on_the_input_source_keeps_typing_in_the_password_field() {
+    fn screen(purpose: Purpose) -> LockScreen {
         let user = User {
             uid: 1000,
             login: "ada".to_owned(),
             full_name: "Ada Lovelace".to_owned(),
         };
-        let mut screen = LockScreen::new(
+        LockScreen::new(
             &user,
             DateFormats::for_locale(&bande_datetime::posix_locale("en_GB.UTF-8")),
             &"2026-10-28T09:41:00[UTC]".parse().unwrap_or_default(),
             Appearance::default(),
             TextSystem::new(),
-            Purpose::Lock,
-        );
+            purpose,
+        )
+    }
+
+    #[test]
+    fn a_click_on_the_input_source_keeps_typing_in_the_password_field() {
+        let mut screen = screen(Purpose::Lock);
         screen.set_input_source(Some("Svenska".to_owned()));
         screen.wake(Instant::now());
         screen.scene(480, 360);
@@ -1308,5 +1563,69 @@ mod tests {
             screen.take_answer().as_deref().map(String::as_str),
             Some("a ")
         );
+    }
+
+    #[test]
+    fn a_power_question_no_one_answered_is_gone_after_the_screen_rested() {
+        let mut screen = screen(Purpose::Login);
+        let enter = Event::Key {
+            key: Key::Enter,
+            modifiers: Modifiers::default(),
+        };
+        let start = Instant::now();
+        screen.offer_power(&[PowerAction::ShutDown]);
+        screen.ask_to_continue();
+        screen.wake(start);
+        screen.model.borrow_mut().power_press = Some(PowerPress::Ask(PowerAction::ShutDown));
+        assert_eq!(screen.take_power(), None);
+        screen.scene(1280, 800);
+        let rested = start + RESTS_AFTER;
+        assert!(screen.tick(rested) && screen.is_resting());
+        assert!(
+            !screen.wake_on(&enter, rested),
+            "the key that wakes the screen does nothing else"
+        );
+        screen.handle(&enter);
+        assert_eq!(screen.take_power(), None);
+    }
+
+    #[test]
+    fn what_wakes_a_rested_screen_is_typed_into_the_field_wherever_the_focus_was() {
+        let press = |key| Event::Key {
+            key,
+            modifiers: Modifiers::default(),
+        };
+        let mut screen = screen(Purpose::Login);
+        let start = Instant::now();
+        screen.offer_power(&[PowerAction::ShutDown]);
+        screen.wake(start);
+        screen.scene(1280, 800);
+        screen.handle(&press(Key::Tab));
+        assert_ne!(screen.ui.focus(), Some(screen.field));
+        let rested = start + RESTS_AFTER;
+        assert!(screen.tick(rested) && screen.is_resting());
+        assert!(screen.wake_on(&press(Key::Character('a')), rested));
+        for key in [Key::Character('a'), Key::Space, Key::Enter] {
+            screen.handle(&press(key));
+        }
+        assert_eq!(screen.take_power(), None);
+        assert_eq!(
+            screen.take_answer().as_deref().map(String::as_str),
+            Some("a ")
+        );
+    }
+
+    #[test]
+    fn a_screen_no_display_draws_still_leaves() {
+        let mut screen = screen(Purpose::Login);
+        screen.leave(Instant::now());
+        assert!(!screen.has_left());
+        for _ in 0..5 {
+            if let Some(due) = screen.deadline() {
+                screen.tick(due);
+            }
+        }
+        assert!(screen.has_left());
+        assert_eq!(screen.deadline(), None);
     }
 }

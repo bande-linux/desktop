@@ -1,5 +1,5 @@
 use std::io;
-use std::os::fd::BorrowedFd;
+use std::os::fd::{AsRawFd, BorrowedFd, RawFd};
 use std::time::Instant;
 
 use accesskit::TreeUpdate;
@@ -7,6 +7,7 @@ use accesskit::TreeUpdate;
 use bande_graphics::{Rect, Scene};
 use bande_widgets::{set_frame_time, take_wake};
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
+use rustix::fs::fstat;
 use wayland_client::backend::{ReadEventsGuard, WaylandError};
 use wayland_client::protocol::wl_surface::WlSurface;
 
@@ -222,13 +223,43 @@ fn deliver(app: &mut impl Surfaces) -> Result<bool, WindowError> {
     Ok(app.closed() || app.windows().is_empty())
 }
 
+struct ReadySource {
+    fd: RawFd,
+    inode: u64,
+    nth: usize,
+}
+
+impl ReadySource {
+    fn new(sources: &[BorrowedFd<'_>], index: usize) -> io::Result<Self> {
+        let fd = sources[index].as_raw_fd();
+        let same = |earlier: &&BorrowedFd<'_>| earlier.as_raw_fd() == fd;
+        Ok(Self {
+            fd,
+            inode: fstat(sources[index])?.st_ino,
+            nth: sources[..index].iter().filter(same).count(),
+        })
+    }
+
+    fn index_in(&self, sources: &[BorrowedFd<'_>]) -> io::Result<Option<usize>> {
+        let found = sources
+            .iter()
+            .enumerate()
+            .filter(|(_, fd)| fd.as_raw_fd() == self.fd)
+            .nth(self.nth);
+        match found {
+            Some((index, fd)) => Ok((fstat(fd)?.st_ino == self.inode).then_some(index)),
+            None => Ok(None),
+        }
+    }
+}
+
 struct Readiness {
     wayland: bool,
     appearance: bool,
     spelling: bool,
     accessibility: Vec<usize>,
     pastes: Vec<(usize, usize)>,
-    sources: Vec<usize>,
+    sources: Vec<ReadySource>,
 }
 
 fn wait(
@@ -284,7 +315,8 @@ fn wait(
         pastes: Vec::new(),
         sources: (0..sources.len())
             .filter(|at| ready(2 + count + pastes.len() + at))
-            .collect(),
+            .map(|at| ReadySource::new(&sources, at))
+            .collect::<io::Result<_>>()?,
     };
     let mut seen = vec![0; count];
     for (at, (index, _)) in pastes.iter().enumerate() {
@@ -405,7 +437,10 @@ pub fn run_surfaces(app: &mut impl Surfaces) -> Result<(), WindowError> {
             }
         }
         for source in readiness.sources {
-            app.source_ready(source);
+            let index = source.index_in(&app.sources())?;
+            if let Some(index) = index {
+                app.source_ready(index);
+            }
         }
         let now = Instant::now();
         for (index, deadline) in window_deadlines.into_iter().enumerate() {

@@ -358,23 +358,20 @@ impl App for Locker {
                 }
             }
             Source::Backdrop => {
-                let Some((_, image)) = self
-                    .backdrop
-                    .take()
-                    .and_then(|mut inbox| inbox.drain().pop())
+                let Some((_, image)) = self.backdrop.as_mut().and_then(|inbox| inbox.drain().pop())
                 else {
                     return;
                 };
+                self.backdrop = None;
                 self.screen.set_backdrop(image, frame_time().on_screen());
             }
             Source::Picture => {
-                let Some((_, picture)) = self
-                    .picture
-                    .take()
-                    .and_then(|mut inbox| inbox.drain().pop())
+                let Some((_, picture)) =
+                    self.picture.as_mut().and_then(|inbox| inbox.drain().pop())
                 else {
                     return;
                 };
+                self.picture = None;
                 self.screen.set_picture(picture);
             }
             Source::Wakes => {

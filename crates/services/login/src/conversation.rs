@@ -43,8 +43,8 @@ impl<S: Read + Write> Conversation for Relay<S> {
         }
         match read_message(&mut self.stream) {
             Ok(ToWorker::Answer { response }) => response,
-            Ok(other) => {
-                tracing::warn!("bande-login sent {other:?} instead of an answer");
+            Ok(_) => {
+                tracing::warn!("bande-login sent something else than an answer");
                 None
             }
             Err(error) => {

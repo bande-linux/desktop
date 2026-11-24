@@ -1073,8 +1073,6 @@ dependencies = [
  "bande-xdg",
  "libc",
  "rustix 1.1.6",
- "serde",
- "serde_json",
  "tempfile",
  "tracing",
  "zbus",
@@ -2115,6 +2113,7 @@ dependencies = [
  "bande-test-wayland",
  "bande-toolkit-platform",
  "bande-widgets",
+ "rustix 1.1.6",
  "zbus",
 ]
 

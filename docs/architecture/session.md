@@ -139,6 +139,9 @@ graph LR
   `IconFile`, or the initial on the accent colour) and name, and a secure field. PAM
   (`/etc/pam.d/bande-lock`) runs off the UI thread with a progress row after 200 ms; a rejected
   password clears and shakes the field. The compositor sets logind's `LockedHint`.
+  Where the content does not fit, `LockView` takes the first of `ARRANGEMENTS` that does: the clock
+  and picture shrink and move up, then the clock goes to the corner and the users beside the power
+  buttons. Users that do not fit in the row come into it as they are focused or chosen.
 - **`bande-power`** (`crates/services/power`) locks the session through logind before sleep,
   holding a `delay` inhibitor until `LockedHint` is set or 3 s pass (below logind's
   `InhibitDelayMaxSec` of 5); with every display off `LockedHint` comes once the lock screen has

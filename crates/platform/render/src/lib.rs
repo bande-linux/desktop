@@ -56,7 +56,23 @@ const MEMORY_PLANES: [vk::ImageAspectFlags; 4] = [
     vk::ImageAspectFlags::MEMORY_PLANE_2_EXT,
     vk::ImageAspectFlags::MEMORY_PLANE_3_EXT,
 ];
-const TARGET_FORMATS: [vk::Format; 2] = [vk::Format::B8G8R8A8_UNORM, vk::Format::R8G8B8A8_UNORM];
+const TARGET_FORMATS: [vk::Format; 4] = [
+    vk::Format::B8G8R8A8_UNORM,
+    vk::Format::R8G8B8A8_UNORM,
+    vk::Format::A2R10G10B10_UNORM_PACK32,
+    vk::Format::A2B10G10R10_UNORM_PACK32,
+];
+const PREPARED_FORMATS: [vk::Format; 2] = [vk::Format::B8G8R8A8_UNORM, vk::Format::R8G8B8A8_UNORM];
+const PROGRAMS: [Program; 8] = [
+    Program::Texture,
+    Program::Video,
+    Program::DisplayColour,
+    Program::Solid,
+    Program::Shadow,
+    Program::BlurDown,
+    Program::BlurUp,
+    Program::BlurTone,
+];
 const TEXTURE_FOURCCS: [Fourcc; 3] = [Fourcc::Argb8888, Fourcc::Xrgb8888, Fourcc::Abgr8888];
 const TARGET_FOURCCS: [Fourcc; 4] = [
     Fourcc::Argb8888,
@@ -687,6 +703,10 @@ fn target_format(format: Fourcc) -> Option<vk::Format> {
     }
 }
 
+fn is_deep_target(format: vk::Format) -> bool {
+    !PREPARED_FORMATS.contains(&format)
+}
+
 fn is_opaque(format: Fourcc) -> Option<bool> {
     match format {
         Fourcc::Argb8888 | Fourcc::Abgr8888 => Some(false),
@@ -954,17 +974,15 @@ impl VulkanRenderer {
                 None,
             )
         }?;
-        for format in TARGET_FORMATS {
-            for program in [
-                Program::Texture,
-                Program::Video,
-                Program::DisplayColour,
-                Program::Solid,
-                Program::Shadow,
-                Program::BlurDown,
-                Program::BlurUp,
-                Program::BlurTone,
-            ] {
+        for format in PREPARED_FORMATS {
+            self.prepare_pipelines(format)?;
+        }
+        Ok(())
+    }
+
+    fn prepare_pipelines(&mut self, format: vk::Format) -> Result<(), RenderError> {
+        for program in PROGRAMS {
+            if !self.pipelines.contains_key(&(format, program)) {
                 let pipeline = self.create_pipeline(format, program)?;
                 self.pipelines.insert((format, program), pipeline);
             }
@@ -1988,6 +2006,7 @@ impl VulkanRenderer {
         capability: formats::Capability,
     ) -> Result<u64, RenderError> {
         let texel = formats::texel(dmabuf.format().code).ok_or(RenderError::UnsupportedFormat)?;
+        self.prepare_pipelines(texel.format)?;
         let mut image = self.import_image(dmabuf, texel, (formats::RENDERED, capability))?;
         image.view =
             match self.create_view(image.image, texel.format, vk::ComponentSwizzle::IDENTITY) {

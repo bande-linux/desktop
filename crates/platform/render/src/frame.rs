@@ -11,7 +11,7 @@ use smithay::reexports::rustix::ioctl;
 use crate::{
     ATTACHMENT, BYTES_PER_PIXEL, COLOR_LAYERS, DRAWING, DeviceExport, MappedExport, OutputColour,
     Program, Rect, RenderError, SAMPLED, TRANSFER_SOURCE, VulkanFramebuffer, VulkanRenderer,
-    VulkanTexture, barrier, disjoint, hand_over, hand_over_buffers,
+    VulkanTexture, barrier, disjoint, formats, hand_over, hand_over_buffers,
 };
 
 mod blur;
@@ -19,7 +19,7 @@ mod blur;
 pub use blur::{Backdrop, Blur};
 pub(crate) use blur::{BlurChain, KEEP_UNUSED};
 
-pub(crate) const QUAD_BYTES: u32 = 112;
+pub(crate) const QUAD_BYTES: u32 = 116;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
 pub struct RoundedRect {
@@ -142,6 +142,7 @@ struct Quad {
     blur: f32,
     clip: RoundedRect,
     caster: RoundedRect,
+    dither: f32,
 }
 
 pub struct VulkanFrame<'frame, 'buffer> {
@@ -379,6 +380,7 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
                 blur: shadow.blur,
                 clip: shadow.window,
                 caster: shadow.caster,
+                dither: self.smallest_step(),
                 ..Quad::default()
             },
             &rects,
@@ -407,6 +409,13 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
         }
         self.bound = Some(program);
         Ok(())
+    }
+
+    fn smallest_step(&self) -> f32 {
+        match crate::is_deep_target(self.format) {
+            true => 1.0 / 1023.0,
+            false => 1.0 / 255.0,
+        }
     }
 
     fn draw(&mut self, quad: &Quad, rects: &[Rect]) {
@@ -459,6 +468,7 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
             .chain(quad.caster.components())
             .chain([quad.clip.radius, quad.caster.radius])
             .chain(quad.sampling.down.map(|component| component as f32))
+            .chain([quad.dither])
             .flat_map(f32::to_ne_bytes)
             .collect();
         let device = &self.renderer.device;
@@ -707,6 +717,7 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
                 clip: row(matrix[1]),
                 caster: row(matrix[2]),
                 alpha: if table.is_some() { 1.0 } else { 0.0 },
+                dither: self.smallest_step(),
                 ..Quad::default()
             },
             drawn,
@@ -1095,6 +1106,12 @@ impl Frame for VulkanFrame<'_, '_> {
         self.draw(
             &Quad {
                 destination,
+                dither: match formats::is_deep(texture.format)
+                    && !crate::is_deep_target(self.format)
+                {
+                    true => self.smallest_step(),
+                    false => 0.0,
+                },
                 sampling: Sampling::oriented(src, src_transform, self.turn),
                 alpha,
                 clip: self.clip.unwrap_or_default(),

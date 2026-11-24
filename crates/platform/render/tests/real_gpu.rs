@@ -264,16 +264,17 @@ impl Drop for Exporter {
     }
 }
 
-fn packed(code: Fourcc, [red, green, blue]: [u8; 3]) -> Option<[u8; 4]> {
-    let ten = |value: u8| u32::from(value) << 2 | u32::from(value) >> 6;
+fn packed(code: Fourcc, colour: [f32; 3]) -> Option<[u8; 4]> {
+    let [red, green, blue] = colour.map(|value| (value * 255.0).round() as u8);
+    let [red_ten, green_ten, blue_ten] = colour.map(|value| (value * 1023.0).round() as u32);
     let pixel = match code {
         Fourcc::Argb8888 | Fourcc::Xrgb8888 => return Some([blue, green, red, 0xff]),
         Fourcc::Abgr8888 | Fourcc::Xbgr8888 => return Some([red, green, blue, 0xff]),
         Fourcc::Argb2101010 | Fourcc::Xrgb2101010 => {
-            3 << 30 | ten(red) << 20 | ten(green) << 10 | ten(blue)
+            3 << 30 | red_ten << 20 | green_ten << 10 | blue_ten
         }
         Fourcc::Abgr2101010 | Fourcc::Xbgr2101010 => {
-            3 << 30 | ten(blue) << 20 | ten(green) << 10 | ten(red)
+            3 << 30 | blue_ten << 20 | green_ten << 10 | red_ten
         }
         _ => return None,
     };
@@ -416,7 +417,10 @@ fn allocate(
 }
 
 fn sample(gpu: &mut Gpu, format: Format) -> Outcome<bool> {
-    let (dmabuf, wanted) = match (packed(format.code, COLOUR), video(format.code)) {
+    let (dmabuf, wanted) = match (
+        packed(format.code, COLOUR.map(|value| f32::from(value) / 255.0)),
+        video(format.code),
+    ) {
         (Some(pixel), _) => {
             let Some(mut buffer) = allocate(&gpu.gbm, format, GbmBufferFlags::RENDERING) else {
                 return Ok(false);
@@ -511,13 +515,7 @@ fn scan_out(gpu: &mut Gpu, format: Format) -> Outcome<bool> {
     let corner = [0.0, 0.0, 1.0];
     let damage = Rectangle::from_size((16, 16).into());
     clear(&mut gpu.renderer, &mut dmabuf, corner, damage)?;
-    let bytes = |colour: [f32; 3]| {
-        packed(
-            format.code,
-            colour.map(|value| (value * 255.0).round() as u8),
-        )
-        .ok_or("not a colour format")
-    };
+    let bytes = |colour: [f32; 3]| packed(format.code, colour).ok_or("not a colour format");
     let mut wanted = [bytes(corner)?, bytes(colours[FRAMES - 1])?];
     let centre = (SIZE.0.unsigned_abs() / 2, SIZE.1.unsigned_abs() / 2);
     let found = match foreign_pixels(&gpu.gbm, &dmabuf, [(4, 4), centre]) {

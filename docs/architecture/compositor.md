@@ -138,7 +138,10 @@ when they reach the screen is Bande's own.
   the proven set unless the proof itself lost the device; on another device it proves again. The
   formats are ARGB, XRGB, ABGR and XBGR in 8 and 10 bits per channel, NV12 and P010 for video
   (BT.709 limited range, converted in the `video` shader), each with its tiled and compressed
-  modifiers; LINEAR ARGB8888, XRGB8888, ABGR8888 and NV12 always, also without the extension. On a
+  modifiers; LINEAR ARGB8888, XRGB8888, ABGR8888 and NV12 always, also without the extension. Frames
+  are drawn in the 8- and 10-bit formats (each format's pipelines are made with its first buffer);
+  shadows, blurred backdrops, converted colours and 10-bit content shown in 8 bits are dithered by
+  half a step with a pattern fixed to the pixel, and 8-bit content passes through unchanged. On a
   DRM device it is version 4 with feedback: the main device and tranches name the card's render node
   and a scanout tranche lists the primary plane's formats and modifiers that the GPU can also
   sample; headless it is version 3 with LINEAR only. A buffer is accepted with exactly the memory

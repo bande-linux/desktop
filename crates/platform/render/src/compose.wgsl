@@ -12,6 +12,7 @@ struct Quad {
     clip_radius: f32,
     caster_radius: f32,
     source_down: vec2<f32>,
+    dither: f32,
 }
 
 var<immediate> quad: Quad;
@@ -39,6 +40,15 @@ fn coverage(point: vec2<f32>, rect: vec4<f32>, radius: f32) -> f32 {
         return 1.0;
     }
     return clamp(0.5 - rounded_distance(point, rect, radius), 0.0, 1.0);
+}
+
+fn noise(position: vec4<f32>) -> f32 {
+    return fract(52.9829189 * fract(dot(floor(position.xy), vec2<f32>(0.06711056, 0.00583715)))) - 0.5;
+}
+
+fn dithered(color: vec4<f32>, position: vec4<f32>) -> vec4<f32> {
+    let visible = select(0.0, quad.dither, color.a > 0.0);
+    return vec4<f32>(max(color.rgb + noise(position) * visible, vec3<f32>(0.0)), color.a);
 }
 
 fn erf(x: vec2<f32>) -> vec2<f32> {
@@ -90,7 +100,7 @@ fn fragment(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
     } else {
         texel = textureSampleLevel(surface, filtered, source / dimensions, 0.0);
     }
-    return texel * quad.alpha * coverage(position.xy, quad.clip, quad.clip_radius);
+    return dithered(texel * quad.alpha * coverage(position.xy, quad.clip, quad.clip_radius), position);
 }
 
 @fragment
@@ -105,7 +115,8 @@ fn video(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
         luma - 0.1873 * difference.x - 0.4681 * difference.y,
         luma + 1.8556 * difference.x,
     );
-    return vec4<f32>(clamp(rgb, vec3<f32>(0.0), vec3<f32>(1.0)), 1.0) * quad.alpha * coverage(position.xy, quad.clip, quad.clip_radius);
+    let shown = vec4<f32>(clamp(rgb, vec3<f32>(0.0), vec3<f32>(1.0)), 1.0);
+    return dithered(shown * quad.alpha * coverage(position.xy, quad.clip, quad.clip_radius), position);
 }
 
 @fragment
@@ -117,7 +128,9 @@ fn solid(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
 fn shadow(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
     let falloff = box_shadow(position.xy, quad.caster, quad.caster_radius, quad.blur);
     let uncovered = 1.0 - coverage(position.xy, quad.clip, quad.clip_radius);
-    return quad.color * (falloff * uncovered * quad.alpha);
+    let shade = quad.color * (falloff * uncovered * quad.alpha);
+    let visible = select(0.0, quad.dither, shade.a > 0.0);
+    return vec4<f32>(shade.rgb, clamp(shade.a + noise(position) * visible, 0.0, 1.0));
 }
 
 fn sample_at(uv: vec2<f32>) -> vec4<f32> {
@@ -151,7 +164,7 @@ fn blur_tone(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
         linear = linear * quad.color.x / luminance;
     }
     let toned = vec4<f32>(to_encoded(linear), 1.0);
-    return toned * quad.alpha * coverage(position.xy, quad.clip, quad.clip_radius);
+    return dithered(toned * quad.alpha * coverage(position.xy, quad.clip, quad.clip_radius), position);
 }
 
 fn srgb_decode(encoded: vec3<f32>) -> vec3<f32> {
@@ -177,16 +190,17 @@ fn display_colour(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f
         dot(quad.caster.xyz, linear),
     );
     if quad.alpha < 0.5 {
-        return vec4<f32>(srgb_encode(converted), 1.0);
+        return dithered(vec4<f32>(srgb_encode(converted), 1.0), position);
     }
     let width = f32(textureDimensions(chroma).x);
     let at = (sqrt(clamp(converted, vec3<f32>(0.0), vec3<f32>(1.0))) * (width - 1.0) + 0.5) / width;
-    return vec4<f32>(
+    let encoded = vec4<f32>(
         textureSampleLevel(chroma, filtered, vec2<f32>(at.r, 0.5), 0.0).r,
         textureSampleLevel(chroma, filtered, vec2<f32>(at.g, 0.5), 0.0).g,
         textureSampleLevel(chroma, filtered, vec2<f32>(at.b, 0.5), 0.0).b,
         1.0,
     );
+    return dithered(encoded, position);
 }
 
 @fragment

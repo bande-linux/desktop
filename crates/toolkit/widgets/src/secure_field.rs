@@ -434,6 +434,9 @@ impl Widget for SecureField {
             false => Node::new(Role::PasswordInput),
         };
         node.set_placeholder(self.placeholder.clone());
+        if !self.placeholder.is_empty() {
+            node.set_label(self.placeholder.clone());
+        }
         if cx.caps_lock && cx.is_focused(self.id) {
             node.set_description(tr!("Caps Lock is on"));
         }

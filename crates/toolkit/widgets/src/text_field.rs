@@ -295,6 +295,9 @@ impl Widget for TextField {
         let mut node = Node::new(Role::TextInput);
         node.set_value(self.editor.text());
         node.set_placeholder(self.placeholder.clone());
+        if !self.placeholder.is_empty() {
+            node.set_label(self.placeholder.clone());
+        }
         self.naming.apply(&mut node);
         let runs = self.editor.runs(WHOLE_LINE);
         self.editor.describe(&mut node, self.id, &runs);

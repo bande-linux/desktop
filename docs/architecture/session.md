@@ -787,7 +787,7 @@ nothing for 30 s. When its display goes away it moves to another. Once a frame i
 element was drawn and the login window was among them is on screen, the compositor creates
 `shown`
 there and the root `bande-greeter-splash.path` runs `plymouth quit --retain-splash`. Plymouth
-is not dismissed onto a frame that left the login window out, except that 2.5 s after it appeared
+is not dismissed onto a frame that left the login window out, except that at the next 2.5 s look after it appeared
 the compositor creates `shown` anyway and logs which surfaces were not drawn, so boot always
 finishes. When the handover does not come within 3 s (the unit failed or is missing), the
 compositor logs it and takes the display anyway. The background is Datum's `deep`,

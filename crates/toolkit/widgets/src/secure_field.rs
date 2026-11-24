@@ -130,12 +130,12 @@ impl SecureField {
         placeholder.clone_into(&mut self.placeholder);
     }
 
-    /// Shows what is typed instead of bullets, for answers that are not secret.
     /// Shows the go button also while the field is empty.
     pub fn set_optional(&mut self, optional: bool) {
         self.optional = optional;
     }
 
+    /// Shows what is typed instead of bullets, for answers that are not secret.
     pub fn set_revealed(&mut self, revealed: bool) {
         self.revealed = revealed;
     }

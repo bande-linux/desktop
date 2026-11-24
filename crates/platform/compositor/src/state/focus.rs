@@ -122,7 +122,11 @@ impl State {
         let next = self
             .focused_behind_layer
             .clone()
-            .filter(|key| self.window_index(key).is_some() || self.acting_app_of(key).is_some())
+            .filter(|key| {
+                self.window_index(key)
+                    .is_some_and(|index| self.windows[index].visible())
+                    || self.acting_app_of(key).is_some()
+            })
             .or_else(|| self.frontmost_unless_windowless());
         self.focus(next);
     }

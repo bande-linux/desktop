@@ -1107,7 +1107,7 @@ Description: container and virtual machine manager for the Bande desktop
  grouped by Compose project, and starts and stops them. It also makes and
  runs virtual machines from Debian, Ubuntu and Fedora cloud images on
  QEMU. It follows the engine and the machines live and never installs
- anything: when something is missing it shows the steps to set it up.
+ a container engine.
  Passing a USB device to a machine or bridging it onto the local network
  asks for an administrator's password.
 

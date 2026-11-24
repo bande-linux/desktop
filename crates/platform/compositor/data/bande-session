@@ -83,7 +83,7 @@ elif [ -z "$ending" ] && [ $(($(date +%s) - started)) -lt 5 ]; then
     note_failure quick
 fi
 systemctl --user stop bande-compositor.service
-systemctl --user unset-environment ELECTRON_OZONE_PLATFORM_HINT QT_QPA_PLATFORMTHEME GTK_USE_PORTAL WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE BANDE_LOGIN_ACCESSIBILITY
+systemctl --user unset-environment ELECTRON_OZONE_PLATFORM_HINT QT_QPA_PLATFORMTHEME GTK_USE_PORTAL WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE XDG_MENU_PREFIX BANDE_LOGIN_ACCESSIBILITY
 if [ -n "$session_proxy" ] || [ -e "$proxy_settings" ]; then
     systemctl --user unset-environment $proxy_variables
 fi

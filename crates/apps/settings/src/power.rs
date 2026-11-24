@@ -5,7 +5,6 @@ use bande_l10n::tr;
 use bande_toolkit::ui::Toggle;
 
 use crate::battery::{BatteryCommand, Charge, ChargeLimit, NO_RESUME, Profiles};
-use crate::general::info_row;
 use crate::pages::{Widgets, boxed, muted_row};
 use crate::view::{Intent, SettingsView, intent};
 use crate::widgets::{LevelHistory, Row, Text, Tone};
@@ -124,9 +123,6 @@ impl SettingsView {
             ))];
         };
         let mut rows = Vec::new();
-        if power.battery.is_none() {
-            rows.push(info_row(&tr!("Power source"), &tr!("Power adapter")));
-        }
         match &power.profiles {
             Profiles::Missing => rows.push(muted_row(&tr!(
                 "Power modes aren’t available because the power profiles service isn’t installed."
@@ -147,8 +143,12 @@ impl SettingsView {
             return Vec::new();
         };
         let mut rows = Vec::new();
+        let delay = power.hibernate_delay;
+        let battery = power.battery.is_some();
         match power.hibernation.as_deref() {
-            Some("yes") => rows.push(muted_row(&hibernation_text(power.hibernate_delay))),
+            _ if !battery && !(delay.after.is_some() && delay.on_ac_power) => {}
+            Some("yes") => rows.push(muted_row(&hibernation_text(delay))),
+            _ if !battery => {}
             Some(NO_RESUME) => rows.push(muted_row(&tr!("Hibernation isn’t set up, so sleep lasts until the battery runs out."))),
             Some("na") => rows.push(muted_row(&tr!("This computer can’t hibernate, so sleep lasts until the battery runs out. Hibernation needs swap space at least as large as memory and isn’t possible while Secure Boot locks the kernel."))),
             Some(_) => rows.push(muted_row(&tr!("The administrator doesn’t allow hibernation, so sleep lasts until the battery runs out."))),

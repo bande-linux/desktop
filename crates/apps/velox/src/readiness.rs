@@ -6,9 +6,6 @@ use bande_l10n::{Text, text, tr};
 
 use crate::engine::{Engine, EngineInfo, Error, Flavor};
 
-const DOCKER_INSTALL: &str = "\
-sudo apt install docker.io docker-compose docker-buildx
-sudo usermod -aG docker $USER";
 const PODMAN_INSTALL: &str = "\
 sudo apt install podman
 systemctl --user enable --now podman.socket";
@@ -72,14 +69,7 @@ impl Readiness {
             })
         };
         match self {
-            Self::NotInstalled => Advice {
-                steps: steps(text!("Podman, rootless (recommended)"), PODMAN_INSTALL),
-                alternative: Some(Steps {
-                    title: tr!("Or Docker Engine"),
-                    commands: DOCKER_INSTALL,
-                }),
-                ..advice(text!("Install a container engine to continue"))
-            },
+            Self::NotInstalled => advice(text!("Install Docker or Podman to use Velox")),
             Self::NotRunning(Flavor::Docker) => Advice {
                 steps: steps(text!("Start Docker"), DOCKER_START),
                 ..advice(text!("Docker is not running"))

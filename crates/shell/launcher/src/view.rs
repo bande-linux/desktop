@@ -91,6 +91,7 @@ struct Card {
     labels: Vec<Item>,
     footer: Vec<Item>,
     empty: bool,
+    settled_results: f32,
     scroll: ScrollState,
     followed: Option<usize>,
     max_height: f32,
@@ -175,11 +176,16 @@ impl Card {
         }
     }
 
+    fn waits_for_files(&self) -> bool {
+        !self.state.borrow().model.files_complete
+    }
+
     fn shows_results(&self) -> bool {
         let state = self.state.borrow();
         !state.model.hits.is_empty()
             || state.model.mode == Mode::Clipboard
             || (!state.model.query.trim().is_empty() && state.model.files_complete)
+            || self.waits_for_files() && self.settled_results > 0.0
     }
 
     fn is_grid(&self) -> bool {
@@ -349,12 +355,15 @@ impl Widget for Card {
             0.0
         };
         self.max_height -= footer;
-        let results = if self.shows_results() {
+        let results = if self.waits_for_files() && self.settled_results > 0.0 {
+            self.settled_results.min(self.max_height + 1.0 + footer)
+        } else if self.shows_results() {
             let (_, content) = self.slots(CARD_WIDTH);
             self.list_height(content) + 1.0 + footer
         } else {
             0.0
         };
+        self.settled_results = results;
         Size::new(CARD_WIDTH, FIELD_ROW + results)
     }
 
@@ -408,7 +417,7 @@ impl Widget for Card {
         let height = frame.y + frame.height - top - footer.height;
         let grid = self.is_grid();
         self.empty = self.state.borrow().model.hits.is_empty();
-        if self.empty {
+        if self.empty && self.state.borrow().model.answered {
             let empty_history = {
                 let model = &self.state.borrow().model;
                 model.mode == Mode::Clipboard && model.query.trim().is_empty()
@@ -726,6 +735,7 @@ impl Launcher {
             labels: Vec::new(),
             footer: Vec::new(),
             empty: false,
+            settled_results: 0.0,
             scroll: ScrollState::default(),
             followed: None,
             max_height: RESULTS_MAX_HEIGHT,
@@ -796,6 +806,12 @@ impl Launcher {
             let mut state = self.state.borrow_mut();
             let selected_frame = state.selected_frame;
             let model = &mut state.model;
+            if uses_results(*key, *modifiers) {
+                model.stop_holding();
+            }
+            let moves_in_grid = model.columns > 0
+                && model.held_until().is_none()
+                && *modifiers == Modifiers::default();
             let handled = match key {
                 Key::Down | Key::Up if modifiers.control => {
                     model.select_next_group(*key == Key::Down);
@@ -805,11 +821,11 @@ impl Launcher {
                     model.select_vertically(*key == Key::Down);
                     true
                 }
-                Key::Left if model.columns > 0 && *modifiers == Modifiers::default() => {
+                Key::Left if moves_in_grid => {
                     model.select_previous();
                     true
                 }
-                Key::Right if model.columns > 0 && *modifiers == Modifiers::default() => {
+                Key::Right if moves_in_grid => {
                     model.select_next();
                     true
                 }
@@ -1005,6 +1021,14 @@ impl Launcher {
         Some((state.model.generation, state.model.query.clone()))
     }
 
+    pub fn held_until(&self) -> Option<Instant> {
+        self.state.borrow().model.held_until()
+    }
+
+    pub fn stop_holding(&mut self) {
+        self.state.borrow_mut().model.stop_holding();
+    }
+
     pub fn set_files(&mut self, results: FileResults) {
         self.state.borrow_mut().model.set_files(results);
     }
@@ -1051,6 +1075,12 @@ impl Launcher {
         };
         scene
     }
+}
+
+fn uses_results(key: Key, modifiers: Modifiers) -> bool {
+    matches!(key, Key::Down | Key::Up | Key::Tab | Key::Enter)
+        || key == Key::Character('c') && modifiers.control
+        || opens_menu(key, modifiers)
 }
 
 fn results_height(screen_height: f32) -> f32 {

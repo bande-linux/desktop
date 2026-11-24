@@ -4,7 +4,7 @@ use std::os::fd::BorrowedFd;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::mpsc::{Sender, channel};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use crate::{
     Action, AppInfo, Catalog, Clips, Hit, ICON_SIZE, Kind, Launcher, Loaded, Mode, PaneInfo, Reply,
@@ -220,6 +220,7 @@ pub struct LauncherShell {
     home: PathBuf,
     skin_tone: PathBuf,
     input_region: Option<Rect>,
+    closed_by: Option<(u32, Mode)>,
 }
 
 fn load_skin_tone(path: &Path) -> Option<usize> {
@@ -489,9 +490,19 @@ impl App for LauncherShell {
 
     fn event(&mut self, window: &mut Window, event: WindowEvent) {
         match event {
-            WindowEvent::ShowLauncher => self.toggle(window, Mode::Search, false),
+            WindowEvent::ShowLauncher { pressed } => {
+                if pressed == 0 || self.closed_by != Some((pressed, Mode::Search)) {
+                    self.toggle(window, Mode::Search, false);
+                }
+            }
+            WindowEvent::TogglePanel(_) => self.close(window),
             WindowEvent::OpenTerminal => self.open_terminal(window),
-            WindowEvent::PressedOutside => self.close(window),
+            WindowEvent::PressedOutside { pressed } => {
+                if window.is_visible() {
+                    self.closed_by = Some((pressed, self.launcher.mode()));
+                }
+                self.close(window);
+            }
             WindowEvent::OpenLauncher { mode, text_field } => {
                 let mode = match mode {
                     LauncherMode::Clipboard => Mode::Clipboard,
@@ -568,6 +579,15 @@ impl App for LauncherShell {
         self.sync(window);
     }
 
+    fn deadline(&self) -> Option<Instant> {
+        self.launcher.held_until()
+    }
+
+    fn tick(&mut self, window: &mut Window, _now: Instant) {
+        self.launcher.stop_holding();
+        self.sync(window);
+    }
+
     fn text_input_area(&self) -> Option<Rect> {
         self.launcher.ui.text_input_area()
     }
@@ -612,6 +632,9 @@ fn settings_panes(sleeps: bool, hardware: Hardware) -> Vec<PaneInfo> {
     let mut panes = bande_settings_panes::panes();
     if !sleeps {
         bande_settings_panes::without_sleep(&mut panes);
+    }
+    if !hardware.battery {
+        bande_settings_panes::without_battery(&mut panes);
     }
     panes.retain(|pane| match pane.id {
         PaneId::Wifi => hardware.wifi,
@@ -721,6 +744,7 @@ impl LauncherShell {
             home,
             skin_tone,
             input_region: None,
+            closed_by: None,
         };
         shell.follow_config();
         Ok(shell)

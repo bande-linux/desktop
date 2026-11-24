@@ -1,4 +1,6 @@
 crates/shell/launcher/data/emoji/* usr/share/bande/emoji/
+crates/shell/launcher/data/menus/bande-applications.directory usr/share/desktop-directories/
+crates/shell/launcher/data/menus/bande-applications.menu etc/xdg/menus/
 debian/build/bin/bande-shell usr/bin/
 data/wallpapers/*.svg usr/share/bande/wallpapers/
 debian/build/l10n/development/bande-shell/* usr/share/bande/l10n/bande-shell/

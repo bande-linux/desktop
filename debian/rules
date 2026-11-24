@@ -106,7 +106,7 @@ override_dh_installpam:
 
 override_dh_installsystemduser:
 	dh_installsystemduser -pbande-screen-sharing --no-enable
-	dh_installsystemduser --remaining-packages
+	dh_installsystemduser --remaining-packages -Nbande-compositor
 
 override_dh_installdocs:
 	dh_installdocs

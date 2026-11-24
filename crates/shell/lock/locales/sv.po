@@ -63,6 +63,9 @@ msgstr "Offline"
 msgid "Enter Password"
 msgstr "Ange lösenord"
 
+msgid "Press Return to Sign In"
+msgstr "Tryck på Retur för att logga in"
+
 msgid "Users"
 msgstr "Användare"
 

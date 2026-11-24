@@ -6,6 +6,7 @@ use zeroize::Zeroizing;
 pub enum Step {
     Send(Request),
     Ask(Prompt),
+    Confirm,
     Show(String),
     Refused(Refusal),
     Authenticated,
@@ -114,6 +115,13 @@ impl Login {
                 text: clip_message(&auth_message),
                 visible: kind == AuthMessageType::Visible,
             })],
+            (
+                _,
+                Response::AuthMessage {
+                    auth_message_type: AuthMessageType::Confirm,
+                    ..
+                },
+            ) => vec![Step::Confirm],
             (
                 _,
                 Response::AuthMessage {

@@ -147,6 +147,16 @@ fn other_user(name: Option<&str>) -> User {
     }
 }
 
+fn login_role() -> Role {
+    Role::Layer(LayerOptions {
+        layer: LayerKind::Overlay,
+        anchor: Edges::ALL,
+        exclusive_zone: -1,
+        keyboard: KeyboardFocus::Exclusive,
+        namespace: "greeter".to_owned(),
+    })
+}
+
 fn backdrop_role() -> Role {
     Role::Layer(LayerOptions {
         layer: LayerKind::Overlay,
@@ -501,6 +511,13 @@ impl Greeter {
                         _ => self.screen.ask(Some(&prompt)),
                     }
                 }
+                Step::Confirm => {
+                    self.asked = true;
+                    match self.pending.take() {
+                        Some(answer) => self.answer(answer),
+                        None => self.screen.ask_to_continue(),
+                    }
+                }
                 Step::Show(message) => self.screen.set_message(Some(message)),
                 Step::Refused(refusal) => self.refusal = Some(refusal),
                 Step::Authenticated => self.leave(),
@@ -625,6 +642,21 @@ impl Greeter {
             .is_some_and(|battery| !battery.on_adapter());
         (on_battery && self.powers.contains(&PowerAction::Sleep) && !self.started)
             .then(|| self.last_input + SLEEPS_AFTER)
+    }
+
+    fn reopened(&mut self) -> bool {
+        match self.windows[0].open_beside(login_role(), (0, 0)) {
+            Ok(window) => {
+                tracing::info!("the login window's display went away; showing it on another");
+                self.windows[0] = window;
+                self.backdrop_size = None;
+                true
+            }
+            Err(error) => {
+                tracing::error!("cannot show the login window on another display: {error}");
+                false
+            }
+        }
     }
 
     fn show_displays(&mut self, names: &[String]) {
@@ -942,7 +974,10 @@ impl Surfaces for Greeter {
     }
 
     fn closed(&mut self) -> bool {
-        self.windows[0].is_closed() || (self.started && self.screen.has_left())
+        if self.started && self.screen.has_left() {
+            return true;
+        }
+        self.windows[0].is_closed() && !self.reopened()
     }
 }
 
@@ -987,17 +1022,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 .unwrap_or_default()
         })
         .unwrap_or_default();
-    let window = Window::open_fixed(
-        Appearance::default(),
-        Role::Layer(LayerOptions {
-            layer: LayerKind::Overlay,
-            anchor: Edges::ALL,
-            exclusive_zone: -1,
-            keyboard: KeyboardFocus::Exclusive,
-            namespace: "greeter".to_owned(),
-        }),
-        (0, 0),
-    )?;
+    let window = Window::open_fixed(Appearance::default(), login_role(), (0, 0))?;
     let devices = system.as_ref().and_then(Devices::follow);
     let picture_inbox = load_pictures(
         users.iter().map(|user| user.login.clone()).collect(),

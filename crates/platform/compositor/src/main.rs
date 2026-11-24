@@ -8,14 +8,14 @@ use std::time::{Duration, Instant};
 use bande_compositor::{
     Awaited, BehindBootScreen, CLIPBOARD_DAEMON, Compositor, CursorTheme, DisplaysHandle,
     DrmBackend, DrmNotifiers, FirstMode, FrameClock, FrameOutput, FrameRecovery, FrameScheduler,
-    GREETER, InputSettings, OutputConfig, REFRESH, REVIEW, RecoveryStep, Renderer, SCREENSHOT,
-    SESSION_CLIENT_RESTART_THROTTLE, SHELL, ScanoutDevice, SessionRequest, SessionRole,
+    GREETER, InputSettings, OutputConfig, Progress, REFRESH, REVIEW, RecoveryStep, Renderer,
+    SCREENSHOT, SESSION_CLIENT_RESTART_THROTTLE, SHELL, ScanoutDevice, SessionRequest, SessionRole,
     SessionUpkeep, Shutdown, Sleep, boot_screen_has_display, boot_screen_shown,
     export_session_environment, follow_alerts, follow_appearance, follow_input_settings,
     follow_lid, follow_login_settings, follow_session, follow_shutdown, follow_sleep,
-    handle_power_key, notify_service_manager, raise_priority, render_material, serve_app_states,
-    serve_displays, serve_global_shortcuts, serve_keyboard_monitor, take_display_from_boot_screen,
-    user_config, watchdog_keepalive_interval,
+    handle_power_key, lid_closed, notify_service_manager, raise_priority, render_material,
+    serve_app_states, serve_displays, serve_global_shortcuts, serve_keyboard_monitor,
+    take_display_from_boot_screen, user_config, watchdog_keepalive_interval,
 };
 use bande_config::{BUS_NAME, CARRIED_ACCESSIBILITY, OBJECT_PATH, login_accessibility_file};
 use bande_datetime::ClockChanges;
@@ -47,7 +47,8 @@ use zbus::blocking::fdo::PropertiesProxy;
 const HEADLESS_SIZE: (i32, i32) = (1920, 1080);
 const SHELL_READY_TIMEOUT: Duration = Duration::from_millis(2500);
 const BEHIND_BOOT_SCREEN_LIMIT: Duration = Duration::from_secs(5);
-const LOGIN_WINDOW_LIMIT: Duration = Duration::from_secs(10);
+const LOGIN_WINDOW_LIMIT: Duration = Duration::from_secs(300);
+const PROGRESS_LOOK: Duration = Duration::from_millis(2500);
 const COMPOSITOR_STALL: &str = "compositor-stall";
 const STALL_LIMIT: Duration = Duration::from_secs(6);
 const GREETER_HANG_LIMIT_SECONDS: u32 = 20;
@@ -502,9 +503,43 @@ fn open_display(
     }
 }
 
+fn end_frozen_login_window(
+    compositor: &Compositor,
+    login_window: &mut Child,
+    progress: &mut Option<Progress>,
+) -> io::Result<SessionUpkeep> {
+    if compositor.holds_frames() {
+        return Ok(SessionUpkeep::default());
+    }
+    if !compositor.is_unresponsive(login_window.id()) {
+        *progress = None;
+        return Ok(SessionUpkeep::default());
+    }
+    let frozen = progress
+        .get_or_insert_with(|| Progress::of(login_window.id(), now()))
+        .hung(now());
+    if frozen {
+        tracing::error!("the login window has frozen; starting it again");
+        login_window.kill()?;
+    }
+    Ok(SessionUpkeep {
+        retry_in: Some(PROGRESS_LOOK),
+        ..SessionUpkeep::default()
+    })
+}
+
+fn is_lid_closed(buses: &Buses) -> bool {
+    buses.system.as_ref().is_some_and(|system| {
+        lid_closed(system)
+            .inspect_err(|error| tracing::warn!("cannot tell whether the lid is closed: {error}"))
+            .unwrap_or_default()
+    })
+}
+
 fn compositor_on(
     outputs: Vec<OutputConfig>,
     scanout: ScanoutDevice,
+    buses: &Buses,
 ) -> Result<Compositor, Box<dyn Error>> {
     let mut outputs = outputs.into_iter();
     let first = outputs.next().ok_or("no display is connected")?;
@@ -513,6 +548,7 @@ fn compositor_on(
         compositor.add_output(output);
     }
     compositor.set_display_config(user_config().unwrap_or_default());
+    compositor.set_lid_closed(is_lid_closed(buses));
     Ok(compositor)
 }
 
@@ -532,7 +568,8 @@ impl DrawnBehind {
         let Some(display) = BehindBootScreen::open(device)? else {
             return Ok(None);
         };
-        let mut compositor = compositor_on(display.outputs().to_vec(), display.scanout_device())?;
+        let mut compositor =
+            compositor_on(display.outputs().to_vec(), display.scanout_device(), buses)?;
         let socket = open_socket(&mut compositor, buses)?;
         prepare_login_window(&mut compositor);
         let greeter = Greeter::start(&mut compositor);
@@ -650,7 +687,7 @@ fn run_drm(
             (compositor, Some(login))
         }
         None => (
-            compositor_on(backend.outputs(), backend.scanout_device())?,
+            compositor_on(backend.outputs(), backend.scanout_device(), &buses)?,
             None,
         ),
     };
@@ -1186,7 +1223,7 @@ where
             app.compositor.hold_frames_until(
                 Awaited::LoginWindow,
                 app.started,
-                now() + LOGIN_WINDOW_LIMIT,
+                now() + SHELL_READY_TIMEOUT,
             );
             let shown = match boot_screen_shown() {
                 true => app.output.frames_on_screen(),
@@ -1211,6 +1248,11 @@ where
     let _keyboard_watch = keyboard_watch.take();
     let mut timeout = None;
     let mut recovery = FrameRecovery::default();
+    let serving_since = now();
+    let mut progress = greeter
+        .as_ref()
+        .and_then(|greeter| greeter.child.as_ref())
+        .map(|child| Progress::of(child.id(), serving_since));
     let mut frame_error = None;
     loop {
         event_loop.dispatch(timeout, &mut app)?;
@@ -1234,7 +1276,7 @@ where
                     return Ok(app);
                 }
                 app.compositor.keep_login_window_helpers();
-                SessionUpkeep::default()
+                end_frozen_login_window(&app.compositor, child, &mut progress)?
             }
             Some(waiting) => {
                 app.compositor.keep_login_window_helpers();
@@ -1276,8 +1318,14 @@ where
         if let Some(number) = compositor.take_virtual_terminal() {
             output.switch_virtual_terminal(number);
         }
-        if session == Session::Greeter && compositor.awaited_never_appeared(now()) {
-            return Err("the login window did not appear".into());
+        if session == Session::Greeter && compositor.awaited_has_not_appeared(now()) {
+            let hung = progress
+                .as_mut()
+                .is_some_and(|progress| progress.hung(now()));
+            if hung || now().saturating_sub(serving_since) >= LOGIN_WINDOW_LIMIT {
+                return Err("the login window did not appear".into());
+            }
+            compositor.hold_frames_longer(now() + SHELL_READY_TIMEOUT);
         }
         let reveal_wait = compositor
             .reveal_wake(now())

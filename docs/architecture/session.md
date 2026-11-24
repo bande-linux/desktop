@@ -643,8 +643,9 @@ typed before the first prompt answers it. PAM's info and error messages stay und
 the last three of them, each at most 400 characters. Escape cancels; while checking it lets go
 of the conversation and starts a new one (`bande-login` ends the worker running the module at
 once). PAM's codes become sentences (wrong password, expired password or account, not
-allowed, too many attempts, unavailable); the raw text goes to the journal. A refusal after an
-answer starts a new conversation at once; one before any prompt (`pam_nologin`, a PAM that cannot
+allowed, too many attempts, unavailable); the raw text goes to the journal. An account PAM accepts
+without asking or showing anything (no password) is signed in only once the person presses Return
+or the field's button (`confirm`). A refusal after an answer starts a new conversation at once; one before any prompt (`pam_nologin`, a PAM that cannot
 load) waits for the next answer, Escape or another person. After four wrong answers for the same
 login name each further one waits 5 s, doubling to a minute, with a countdown under the field;
 the login window keeps the count per name across switching people, and `bande-login` keeps its
@@ -748,8 +749,9 @@ hands over without a blank frame or console text. `bande-greeter.service` starts
 quit it. The login window runs on VT 1, Plymouth's terminal, so nothing switches VT, and
 `bande-login` leaves the mode of a terminal already on screen alone. While Plymouth runs
 (`/run/plymouth/pid`) the login window is drawn behind it, so the indicator keeps moving through
-the start of the compositor and the login window: the compositor opens the card without becoming
-its master, only to read which displays there are, their modes and what is on them, closes it,
+the start of the compositor and the login window: the compositor opens the card only to read which
+displays there are, their modes and what is on them (the kernel makes it master meanwhile when no
+one is), closes it, asks logind whether the lid is closed,
 starts Vulkan on the same device, starts `bande-greeter` and imports its first buffer
 (`BehindBootScreen`). When the login window ends, fails, or draws nothing within 5 s, or the
 card cannot be read, the compositor goes on as without this and takes the display. Then it sets
@@ -772,14 +774,20 @@ out over it with the `standard` spring (`fade` with Reduce Motion). When the fra
 be read while Plymouth runs, the frame is the boot screen's own background and mark at
 Plymouth's scale, drawn by `bande-splash`. The compositor holds its frames until the login
 window's buffer is imported for its renderer, not merely attached, as the session's compositor
-does for the wallpaper and the Taskbar (there at most 2.5 s). When no login window has appeared
-10 s after the display was taken, the compositor ends instead of showing an empty screen, and one
-that hangs anywhere on the way, except while no display is connected, is ended by `alarm(20)`, so
-`bande-login` starts it again or, the third time, brings the console. Once a frame in which every
+does for the wallpaper and the Taskbar (there at most 2.5 s).
+While no login window has
+appeared the compositor goes on holding its frames as long as the login window does anything: it
+ends only when that has used no processor time, read no page and waited for no device for 30 s
+(longer than D-Bus lets AccountsService take to start), or after 5 minutes in all. A compositor
+that hangs, except while no display is connected, is ended by `alarm(20)`, and one that finds no
+graphics card at all gives up after 30 s. Each way `bande-login` starts the login window again or,
+the third time, brings the console. A login window that freezes after it was shown leaves the ping
+that follows a key or click unanswered, and is ended and started again once it has also done
+nothing for 30 s. When its display goes away it moves to another. Once a frame in which every
 element was drawn and the login window was among them is on screen, the compositor creates
 `shown`
 there and the root `bande-greeter-splash.path` runs `plymouth quit --retain-splash`. Plymouth
-is not dismissed onto a frame that left the login window out, except that once the 10 s are up
+is not dismissed onto a frame that left the login window out, except that 2.5 s after it appeared
 the compositor creates `shown` anyway and logs which surfaces were not drawn, so boot always
 finishes. When the handover does not come within 3 s (the unit failed or is missing), the
 compositor logs it and takes the display anyway. The background is Datum's `deep`,

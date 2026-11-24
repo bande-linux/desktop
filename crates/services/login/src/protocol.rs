@@ -36,6 +36,8 @@ pub enum ErrorType {
 pub enum AuthMessageType {
     Visible,
     Secret,
+    /// PAM accepted the person without asking or showing anything: sign in only once they say so.
+    Confirm,
     Info,
     Error,
 }

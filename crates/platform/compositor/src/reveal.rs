@@ -269,9 +269,19 @@ impl Compositor {
     }
 
     /// Whether held frames have waited until their deadline for something no client has shown.
-    pub fn awaited_never_appeared(&self, now: Duration) -> bool {
+    pub fn awaited_has_not_appeared(&self, now: Duration) -> bool {
         matches!(self.state.reveal, Reveal::Holding { deadline, ready, .. }
             if now >= deadline && self.state.awaited(ready).is_none())
+    }
+
+    /// Goes on holding frames until `until`.
+    pub fn hold_frames_longer(&mut self, until: Duration) {
+        if let Reveal::Holding { deadline, .. } = &mut self.state.reveal {
+            *deadline = until;
+        }
+        if let Some((_, deadline)) = &mut self.state.awaited {
+            *deadline = until;
+        }
     }
 
     pub fn reveal_wake(&mut self, now: Duration) -> Option<Duration> {

@@ -411,6 +411,37 @@ fn the_console_does_not_wait_forever_for_a_worker_that_hangs() {
 }
 
 #[test]
+fn someone_pam_asked_nothing_signs_in_only_once_they_say_so() {
+    let mut manager = Manager::default();
+    manager.start();
+    manager.request(
+        Request::CreateSession {
+            username: "ada".to_owned(),
+        },
+        at(0),
+    );
+    assert_eq!(
+        manager.worker_said(ADA, FromWorker::Accepted, at(0)),
+        vec![Action::Reply(Response::AuthMessage {
+            auth_message_type: AuthMessageType::Confirm,
+            auth_message: String::new(),
+        })],
+        "an account without a password is not signed in by being shown"
+    );
+    assert_eq!(
+        manager.request(
+            Request::PostAuthMessageResponse { response: None },
+            at(3600)
+        ),
+        vec![Action::Tell(ADA, ToWorker::Proceed)]
+    );
+    assert_eq!(
+        manager.worker_said(ADA, FromWorker::Authenticated, at(3600)),
+        vec![Action::Reply(Response::Success)]
+    );
+}
+
+#[test]
 fn every_request_is_answered_once_and_cancelling_does_not_wait_for_pam() {
     let mut manager = Manager::default();
     manager.start();

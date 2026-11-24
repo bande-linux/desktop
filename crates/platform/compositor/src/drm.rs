@@ -54,6 +54,7 @@ pub type DrmBackendError = Box<dyn Error>;
 
 type OutputCompositor = DrmCompositor<ScanoutAllocator, ScanoutExporter, (), DrmDeviceFd>;
 
+const NO_CARD_LIMIT: Duration = Duration::from_secs(30);
 const DRM_IOCTL_MODE_CLOSEFB: libc::c_ulong = 0xC008_64D0;
 const DRM_IOCTL_MODE_MAP_DUMB: libc::c_ulong = 0xC010_64B3;
 const CURSOR_SIZE: (u32, u32) = (64, 64);
@@ -527,6 +528,14 @@ fn cards() -> Result<Vec<PathBuf>, DrmBackendError> {
     Ok(cards)
 }
 
+fn has_card(cards: &Path) -> bool {
+    std::fs::read_dir(cards)
+        .into_iter()
+        .flatten()
+        .filter_map(Result::ok)
+        .any(|entry| entry.file_name().to_string_lossy().starts_with("card"))
+}
+
 fn shows_connected_display(connectors: &Path) -> bool {
     let read = |connector: &Path, attribute: &str| {
         std::fs::read_to_string(connector.join(attribute)).unwrap_or_default()
@@ -580,8 +589,14 @@ impl DrmBackend {
             )
             .map_err(|inserted| inserted.error)?;
         let mut connected = false;
+        let started = Instant::now();
         while !connected {
-            event_loop.dispatch(None, &mut connected)?;
+            let left =
+                (!has_card(connectors)).then(|| NO_CARD_LIMIT.saturating_sub(started.elapsed()));
+            if left.is_some_and(|left| left.is_zero()) {
+                return Err("the computer has no graphics card the kernel can drive".into());
+            }
+            event_loop.dispatch(left, &mut connected)?;
         }
         Ok(())
     }

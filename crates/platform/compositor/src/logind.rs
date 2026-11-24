@@ -168,6 +168,13 @@ pub fn follow_sleep(connection: &Connection, sender: Sender<Sleep>) -> zbus::Res
 
 const LID_SETTLES_AFTER_WAKE: Duration = Duration::from_secs(2);
 
+pub fn lid_closed(connection: &Connection) -> zbus::Result<bool> {
+    ManagerProxyBlocking::builder(connection)
+        .cache_properties(zbus::proxy::CacheProperties::No)
+        .build()?
+        .lid_closed()
+}
+
 pub fn follow_lid(connection: &Connection, sender: Sender<bool>) -> zbus::Result<()> {
     let manager = ManagerProxyBlocking::builder(connection)
         .cache_properties(zbus::proxy::CacheProperties::No)

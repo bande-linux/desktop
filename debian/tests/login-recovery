@@ -1,13 +1,16 @@
 #!/bin/bash
 # bande-login on a booted machine, with a scripted login window and session: a session that ends
 # at once, or after its first frame, gives its virtual terminal back and the login window the
-# screen; guessing is slowed down although each guess is cancelled; stopping ends the session; and
-# a login window that takes seconds to fail still ends in a text console.
+# screen; guessing is slowed down although each guess is cancelled; an account without a password
+# waits to be asked; stopping ends the session; and a login window that takes seconds to fail
+# still ends in a text console.
 set -euo pipefail
 state=/run/login-recovery
 install -d -m 1777 "$state"
 useradd --create-home --shell /bin/bash ada
 echo ada:hunter2 | chpasswd
+useradd --create-home --shell /bin/bash eve
+passwd --quiet --delete eve
 
 cat > /usr/libexec/bande-greeter-session <<'GREETER'
 #!/usr/bin/python3 -I
@@ -59,6 +62,11 @@ if mode == "guess":
         assert receive()["type"] == "success"
     prompt()
     tell(ask(type="post_auth_message_response", response="hunter2")["description"])
+elif mode == "no-password":
+    answer = ask(type="create_session", username="eve")
+    assert answer.get("auth_message_type") == "confirm", answer
+    time.sleep(2)
+    tell(ask(type="post_auth_message_response", response=None)["type"])
 elif mode == "sign-in":
     prompt()
     answer = ask(type="post_auth_message_response", response="hunter2")
@@ -150,6 +158,11 @@ restart guess
 wait_for 30 said
 grep -qx "too many attempts: MAXTRIES" "$state/said"
 echo "cancelling a guess does not make the next one free"
+
+restart no-password
+wait_for 30 said
+grep -qx success "$state/said"
+echo "an account without a password is signed in only when asked to"
 
 complaints=$(journalctl --no-pager --boot --quiet --grep "cannot (give tty|take tty|bring the login window)" || true)
 [ -z "$complaints" ] || { echo "$complaints"; exit 1; }

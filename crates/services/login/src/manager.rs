@@ -61,6 +61,8 @@ struct Login {
     phase: Phase,
     answered: bool,
     accepted: bool,
+    spoke: bool,
+    confirming: bool,
 }
 
 #[derive(Debug)]
@@ -202,7 +204,9 @@ impl Manager {
             ))];
         };
         let mut actions = Vec::new();
-        if std::mem::take(&mut self.asked) {
+        if std::mem::take(&mut login.confirming) {
+            actions.push(Action::Tell(login.worker, ToWorker::Proceed));
+        } else if std::mem::take(&mut self.asked) {
             let throttled = !login.accepted
                 && login
                     .account
@@ -271,6 +275,8 @@ impl Manager {
                     phase: Phase::Authenticating,
                     answered: false,
                     accepted: false,
+                    spoke: false,
+                    confirming: false,
                 });
                 actions.push(spawn);
                 actions.extend(self.await_worker());
@@ -339,9 +345,17 @@ impl Manager {
                 if let Some(account) = &login.account {
                     self.attempts.remove(account);
                 }
-                vec![Action::Tell(worker, ToWorker::Proceed)]
+                login.confirming = !login.spoke;
+                match login.confirming {
+                    true => self.respond(Response::AuthMessage {
+                        auth_message_type: AuthMessageType::Confirm,
+                        auth_message: String::new(),
+                    }),
+                    false => vec![Action::Tell(worker, ToWorker::Proceed)],
+                }
             }
             (Phase::Authenticating, FromWorker::Ask { text, visible }) => {
+                login.spoke = true;
                 let auth_message_type = match visible {
                     true => AuthMessageType::Visible,
                     false => AuthMessageType::Secret,
@@ -352,6 +366,7 @@ impl Manager {
                 })
             }
             (Phase::Authenticating, FromWorker::Show { text, error }) => {
+                login.spoke = true;
                 let auth_message_type = match error {
                     true => AuthMessageType::Error,
                     false => AuthMessageType::Info,

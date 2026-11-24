@@ -135,6 +135,7 @@ struct Model {
     time: String,
     submitted: Option<Zeroizing<String>>,
     checking: Option<Instant>,
+    answer_needed: bool,
     shake_from: Option<Instant>,
     now: Instant,
     backdrop: Option<Image>,
@@ -748,6 +749,7 @@ impl LockScreen {
             time,
             submitted: None,
             checking: None,
+            answer_needed: true,
             shake_from: None,
             now: Instant::now(),
             backdrop: None,
@@ -771,7 +773,7 @@ impl LockScreen {
             let mut model = submitted.borrow_mut();
             let now = model.now;
             if model.checking.is_none()
-                && !answer.is_empty()
+                && (!answer.is_empty() || !model.answer_needed)
                 && model.backoff.waiting(now).is_none()
             {
                 model.checking = Some(now);
@@ -1000,9 +1002,24 @@ impl LockScreen {
         if let Some(field) = self.ui.widget_as::<SecureField>(self.field) {
             field.set_placeholder(&placeholder);
             field.set_revealed(visible);
+            field.set_optional(false);
         }
         self.clear_field();
-        self.model.borrow_mut().checking = None;
+        let mut model = self.model.borrow_mut();
+        model.checking = None;
+        model.answer_needed = true;
+    }
+
+    /// Asks for nothing but Return, or the field's button, from someone who has no password.
+    pub fn ask_to_continue(&mut self) {
+        self.ask(Some(&Prompt {
+            text: tr!("Press Return to Sign In"),
+            visible: false,
+        }));
+        if let Some(field) = self.ui.widget_as::<SecureField>(self.field) {
+            field.set_optional(true);
+        }
+        self.model.borrow_mut().answer_needed = false;
     }
 
     pub fn is_checking(&self) -> bool {

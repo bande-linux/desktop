@@ -54,6 +54,7 @@ mod overview;
 mod pacing;
 mod pointing;
 mod popup;
+mod progress;
 mod recall;
 mod release;
 mod remote_input;
@@ -110,11 +111,12 @@ pub use keyboard_monitor::{
 pub use keymap::KeyboardSettings;
 pub use logind::{
     SessionReport, SessionRequest, Shutdown, Sleep, follow_lid, follow_session, follow_shutdown,
-    follow_sleep, handle_power_key, raise_priority,
+    follow_sleep, handle_power_key, lid_closed, raise_priority,
 };
 pub use material::{MaterialPicture, MaterialRequest, render_material};
 pub use night::NightTick;
 pub use pointing::PointerSettings;
+pub use progress::Progress;
 pub use render::{FrameStats, Renderer, Snapshot, background};
 pub use reveal::{Awaited, ShownFrame};
 pub use screen::{OutputConfig, OutputMode, OutputSettings, automatic_scale};

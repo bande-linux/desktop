@@ -31,11 +31,15 @@ memory settings stay the system's own.
   `MemoryLow=`: when nothing else can be reclaimed, the kernel breaks `MemoryLow=` and the desktop
   stalls. A level where the administrator set a value is left alone. `bande-login` sets
   the values back to 0 when the session ends, `user.slice` only when no other Bande session is left.
-- `app.slice` gets `MemoryHigh=` all memory but 15 % of it, at most 1.5 GiB. Apps together above
+- `app.slice` gets `MemoryHigh=` all memory but a fifth of it, at most 3 GiB: the desktop's guarantee, the
+  system and free memory. Apps together above
   that are reclaimed and slowed, so the desktop and the system still find free memory at once.
-- Each app's scope gets `MemoryLow=256M`. When `app.slice` is reclaimed at its limit that keeps the
-  other apps' pages, so a build in a Terminal tab does not swap out the windows on screen; a
-  tab's own scope has none.
+- Each app's scope gets `MemoryMin=128M` and `MemoryLow=512M`. When `app.slice` is reclaimed at its
+  limit that keeps the other apps' pages, so a build in a Terminal tab does not swap out the windows
+  on screen; a tab's own scope has neither. systemd-oomd picks the scope the kernel scans most: with
+  `MemoryLow=` alone it picked small apps the kernel scanned when the build's pages were hard to
+  free. These guarantees hold only inside `app.slice`, which has none itself, so they take nothing
+  from the rest of the system.
 - `bande-session` removes the runtime properties it set when the session ends.
 
 ### 1. Kill domain: `app.slice`

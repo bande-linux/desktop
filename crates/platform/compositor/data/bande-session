@@ -67,7 +67,7 @@ set_limits() {
     total=$(sed -n 's/^MemTotal: *\([0-9]*\) kB$/\1/p' /proc/meminfo)
     [ -n "$total" ] || return 0
     desktop=$((total / 10 < 524288 ? total / 10 : 524288))
-    reserve=$((total * 15 / 100 < 1572864 ? total * 15 / 100 : 1572864))
+    reserve=$((total / 5 < 3145728 ? total / 5 : 3145728))
     systemctl --user set-property --runtime session.slice MemoryMin="${desktop}K"
     systemctl --user set-property --runtime app.slice MemoryHigh="$((total - reserve))K"
 }

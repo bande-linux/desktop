@@ -1559,7 +1559,8 @@ impl DrmBackend {
             Err(error)
                 if conversion.is_some()
                     && !self.renderer.is_lost()
-                    && !self.renderer.out_of_memory() =>
+                    && !self.renderer.out_of_memory()
+                    && buffers_at_fault(&error) =>
             {
                 tracing::warn!("{output} shows colours unconverted: {error}");
                 if let Some((_, conversion)) = &mut head.output_colour {

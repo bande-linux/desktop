@@ -84,14 +84,13 @@ fn composed(
         1.0,
     )?;
     frame.finish()?.wait()?;
-    drop(framebuffer);
     Ok(compositor.read_target(&target)?)
 }
 
 fn wrong_pixels(found: &[u8], (width, height): (u32, u32), turn: u32) -> usize {
     (0..height)
         .flat_map(|y| (0..width).map(move |x| (x, y)))
-        .zip(found.chunks_exact(4))
+        .zip(found.as_chunks::<4>().0)
         .filter(|(at, pixel)| pixel[..3] != colour(*at, turn).to_le_bytes()[..3])
         .count()
 }

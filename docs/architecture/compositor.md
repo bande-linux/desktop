@@ -196,7 +196,8 @@ when they reach the screen is Bande's own.
   connectors again, so plugging a display in or out takes effect without restarting the session. A
   connector that goes away is held as lost for three seconds before it counts as gone, so a
   monitor's own hotplug pulse (many pulse it about 0.6 s after waking, which makes the kernel mark
-  the link bad and costs a second mode-set) moves nothing. A mode is tested with the driver before
+  the link bad and costs a second mode-set) moves nothing; a display that comes back with another EDID of
+  its own (HDR or deep colour switched in its menu) is asked for frames anew. A mode is tested with the driver before
   it is used. A refused mode falls back to the next that passes, nearest size first, without
   touching the saved settings; with none left the display waits for the next change event. The link
   is set good again in the frame path, after any pending flip. A display gets 10-bit
@@ -608,7 +609,6 @@ Status is what `crates/platform/compositor` serves on `main`.
 | `wp_tearing_control_v1` | Tearing page flips for games | not served: needs async page flips in Smithay's `DrmCompositor` |
 | `xdg_toplevel_icon_v1` | A window's own icon | not served: the taskbar shows the app's desktop entry icon, and `bande_shell_v1` has no way to pass a client icon |
 | `wp_drm_lease_v1` | Lease a VR headset's connector | not served |
-| `wp_color_management_v1` | HDR and wide-gamut client content | not served (see the colour paragraph above) |
 | `ext-session-lock-v1` | Screen locking | implemented, `bande-lock` only |
 | `wl_data_device_manager` | Clipboard and drag and drop | implemented |
 | `zwp_primary_selection_v1` | Middle-click paste | implemented |

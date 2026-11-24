@@ -24,13 +24,12 @@ use smithay::reexports::wayland_server::{
 };
 use smithay::wayland::compositor::{Cacheable, with_states};
 
+use crate::colour::{DISPLAY_PEAK, REFERENCE_WHITE};
 use crate::screen::Screen;
 use crate::state::{Compositor, State};
 
 const VERSION: u32 = 1;
 const BRIGHTEST: u32 = 10_000;
-const REFERENCE_WHITE: u32 = 203;
-const DISPLAY_PEAK: u32 = 1_000;
 const LATE_BINDS: Duration = Duration::from_secs(10);
 const SRGB_WHITE: u32 = 80;
 const CHROMATICITY: f64 = 1_000_000.0;
@@ -139,7 +138,7 @@ pub(crate) fn commit(state: &mut State, surface: &WlSurface) {
 fn light_of(screen: &Screen) -> Option<Description> {
     let hdr = screen.config.hdr.filter(|_| screen.hdr)?;
     Some(Description::Pq {
-        max_nits: hdr.max.map_or(DISPLAY_PEAK, |max| max.round() as u32),
+        max_nits: hdr.max.unwrap_or(DISPLAY_PEAK).round() as u32,
         darkest: hdr.min.map_or(0, |min| (min * LUMINANCE).round() as u32),
     })
 }
@@ -226,10 +225,14 @@ impl Compositor {
         self.state.needs_redraw = true;
     }
 
-    pub fn redraw_hdr_displays(&mut self) {
+    pub fn redraw_hdr_displays(&mut self) -> bool {
+        let mut redrawn = false;
         for screen in &mut self.state.screens {
-            screen.redraw |= screen.hdr && screen.config.hdr.is_some();
+            let hdr = screen.hdr && screen.config.hdr.is_some();
+            screen.redraw |= hdr;
+            redrawn |= hdr;
         }
+        redrawn
     }
 }
 
@@ -572,7 +575,7 @@ fn describe(information: &WpImageDescriptionInfoV1, description: Description) {
             BT2020,
             Primaries::Bt2020,
             TransferFunction::St2084Pq,
-            (BRIGHTEST, REFERENCE_WHITE),
+            (BRIGHTEST, REFERENCE_WHITE.round() as u32),
         ),
     };
     let [red, green, blue, white] =

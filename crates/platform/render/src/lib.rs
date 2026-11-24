@@ -63,7 +63,7 @@ const TARGET_FORMATS: [vk::Format; 4] = [
     vk::Format::A2R10G10B10_UNORM_PACK32,
     vk::Format::A2B10G10R10_UNORM_PACK32,
 ];
-const SDR_WHITE: f32 = 203.0;
+pub const SDR_WHITE: f32 = 203.0;
 const EXTENDED_FORMAT: vk::Format = vk::Format::R16G16B16A16_SFLOAT;
 const PREPARED_FORMATS: [vk::Format; 2] = [vk::Format::B8G8R8A8_UNORM, vk::Format::R8G8B8A8_UNORM];
 const PREPARED_PROGRAMS: [Program; 8] = [

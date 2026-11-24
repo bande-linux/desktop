@@ -180,8 +180,12 @@ impl BehindBootScreen {
             let mut renderer = VulkanRenderer::new(Some(node.dev_id()))?;
             let gbm = render
                 .dev_path()
-                .and_then(|path| Card::open(&path).ok())
-                .and_then(|card| GbmDevice::new(card).ok());
+                .map(|path| Card::open(&path).and_then(GbmDevice::new))
+                .transpose()
+                .unwrap_or_else(|error| {
+                    tracing::warn!("cannot allocate buffers before taking the display: {error}");
+                    None
+                });
             prove_with_gbm(&mut renderer, gbm);
             let feedback =
                 DmabufFeedbackBuilder::new(render.dev_id(), renderer.dmabuf_formats()).build()?;
@@ -238,6 +242,7 @@ pub struct HeadChanges {
 }
 
 const SWITCH_PATIENCE: Duration = Duration::from_millis(500);
+const EDID: &[u8] = b"EDID";
 const MAX_BPC: &[u8] = b"max bpc";
 const COLORSPACE: &[u8] = b"Colorspace";
 const DEFAULT_COLORSPACE: &[u8] = b"Default";
@@ -265,7 +270,7 @@ fn rescanned(present: bool, another_display: bool, lost_for: Duration) -> Rescan
 }
 
 fn connector_property(
-    device: &DrmDevice,
+    device: &impl ControlDevice,
     handle: connector::Handle,
     name: &[u8],
 ) -> Option<(property::Handle, u64, property::Info)> {
@@ -609,17 +614,11 @@ fn modes_of(info: &connector::Info, first: Option<Mode>) -> Vec<Mode> {
 }
 
 fn edid_of(device: &impl ControlDevice, handle: connector::Handle) -> Option<bande_edid::Edid> {
-    let properties = device.get_properties(handle).ok()?;
-    properties.iter().find_map(|(property, value)| {
-        let info = device.get_property(*property).ok()?;
-        if info.name().to_bytes() != b"EDID" {
-            return None;
-        }
-        let property::Value::Blob(blob) = info.value_type().convert_value(*value) else {
-            return None;
-        };
-        bande_edid::parse(&device.get_property_blob(blob).ok()?)
-    })
+    let (_, value, info) = connector_property(device, handle, EDID)?;
+    let property::Value::Blob(blob) = info.value_type().convert_value(value) else {
+        return None;
+    };
+    bande_edid::parse(&device.get_property_blob(blob).ok()?)
 }
 
 fn shows_another_display(known: &OutputConfig, edid: Option<bande_edid::Edid>) -> bool {
@@ -1038,6 +1037,50 @@ impl DrmBackend {
         )
     }
 
+    fn sink_of(
+        &self,
+        info: &connector::Info,
+        edid: Option<&bande_edid::Edid>,
+        hdr_signal: bool,
+    ) -> Sink {
+        let over_hdmi = matches!(
+            info.interface(),
+            connector::Interface::HDMIA | connector::Interface::HDMIB
+        );
+        match self.renderer.device_info().software {
+            true => Sink::default(),
+            false => Sink::new(edid, over_hdmi, hdr_signal),
+        }
+    }
+
+    fn shows_hdr(&self, sink: Sink, scanout: &FormatSet) -> bool {
+        let rendered = self.renderer.render_formats();
+        sink.takes_hdr()
+            && scanout
+                .iter()
+                .any(|format| output_format::is_deep(format.code) && rendered.contains(format))
+    }
+
+    fn follow_edid(&mut self, index: usize, info: &connector::Info) -> bool {
+        let Some(edid) = edid_of(&self.device, info.handle()) else {
+            return false;
+        };
+        let head = &self.heads[index];
+        let sink = self.sink_of(info, Some(&edid), head.signal.is_some());
+        let shows_hdr = head.formats.starts_tiled()
+            && self.shows_hdr(sink, &head.compositor.surface().plane_info().formats);
+        let hdr = edid.hdr.filter(|_| shows_hdr);
+        let head = &mut self.heads[index];
+        if !head.formats.follow(sink) && head.config.hdr == hdr {
+            return false;
+        }
+        tracing::info!("{} takes other frames than before", head.config.name);
+        head.display_profile = crate::colour::edid_profile(&edid);
+        head.output_colour = None;
+        head.config.hdr = hdr;
+        true
+    }
+
     fn create_head(&mut self, info: &connector::Info) -> Result<Option<Head>, DrmBackendError> {
         let on_screen = current_crtc(&self.device, info.handle())
             .inspect_err(|error| {
@@ -1056,15 +1099,8 @@ impl DrmBackend {
             return Ok(None);
         };
         let edid = edid_of(&self.device, info.handle());
-        let over_hdmi = matches!(
-            info.interface(),
-            connector::Interface::HDMIA | connector::Interface::HDMIB
-        );
         let signal = hdr_signal(&self.device, info.handle());
-        let sink = match self.renderer.device_info().software {
-            true => Sink::default(),
-            false => Sink::new(edid.as_ref(), over_hdmi, signal.is_some()),
-        };
+        let sink = self.sink_of(info, edid.as_ref(), signal.is_some());
         let (compositor, buffers) = self.buffered_compositor(
             (crtc, mode, info.handle()),
             self.first_buffers(),
@@ -1077,12 +1113,7 @@ impl DrmBackend {
         };
         let formats = OutputFormat::new(sink, buffers);
         let scanout_formats = compositor.surface().plane_info().formats.clone();
-        let render_formats = self.renderer.render_formats();
-        let hdr = buffers == Buffers::Tiled
-            && sink.takes_hdr()
-            && scanout_formats.iter().any(|format| {
-                output_format::is_deep(format.code) && render_formats.contains(format)
-            });
+        let hdr = buffers == Buffers::Tiled && self.shows_hdr(sink, &scanout_formats);
         let variable_refresh = matches!(
             compositor.vrr_supported(info.handle()),
             Ok(VrrSupport::Supported)
@@ -1145,6 +1176,7 @@ impl DrmBackend {
                     let modes = info
                         .map(|info| modes_of(info, head.kept_mode))
                         .unwrap_or_default();
+                    let takes_other_frames = info.is_some_and(|info| self.follow_edid(index, info));
                     let head = &mut self.heads[index];
                     head.relink_wanted |= link == Some(LINK_BAD);
                     if head.lost_at.take().is_some() || head.relink_wanted {
@@ -1153,6 +1185,9 @@ impl DrmBackend {
                     }
                     if modes != head.modes || head.refused {
                         settle_modes(head, modes, &mut changes);
+                    }
+                    if takes_other_frames && !changes.refitted.contains(&head.config) {
+                        changes.refitted.push(head.config.clone());
                     }
                     index += 1;
                     continue;
@@ -1849,11 +1884,6 @@ where
 
 impl DrmBackend {
     fn try_shape(&mut self, index: usize, shape: Shape) -> Result<bool, DrmBackendError> {
-        let head = &mut self.heads[index];
-        if (head.shape.buffers, head.shape.format) == (shape.buffers, shape.format) {
-            head.shape = shape;
-            return Ok(true);
-        }
         let prepared = match (shape.is_deep(), shape.hdr) {
             (true, true) => self
                 .renderer
@@ -1867,6 +1897,11 @@ impl DrmBackend {
                 true => Err(error.into()),
                 false => Ok(false),
             };
+        }
+        let head = &mut self.heads[index];
+        if (head.shape.buffers, head.shape.format) == (shape.buffers, shape.format) {
+            head.shape = shape;
+            return Ok(true);
         }
         let allocator = self.allocator(shape.buffers);
         let modifiers: Vec<Modifier> = self
@@ -1906,7 +1941,13 @@ impl DrmBackend {
         if bits.is_none() && hdr.is_none() {
             return Ok(());
         }
-        set_link(&self.device, head, LinkChange { bits, hdr })?;
+        if let Err(error) = set_link(&self.device, head, LinkChange { bits, hdr }) {
+            if hdr == Some(true) {
+                head.shape.hdr = false;
+                head.signal = hdr_signal(&self.device, head.connector).or(head.signal);
+            }
+            return Err(error);
+        }
         if let (Some(link), Some(current)) = (&mut head.link, bits) {
             link.current = current;
             tracing::info!(

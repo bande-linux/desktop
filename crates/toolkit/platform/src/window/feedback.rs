@@ -37,8 +37,6 @@ impl Feedback {
         formats
     }
 
-    /// The modifiers of `fourcc` in the tranches whose device passes `ours`, scan-out tranches
-    /// first, in the compositor's order of preference.
     pub(crate) fn modifiers(&self, fourcc: u32, ours: impl Fn(u64) -> bool) -> Vec<Vec<u64>> {
         let (scanout, rest): (Vec<&Tranche>, Vec<&Tranche>) = self
             .tranches

@@ -33,7 +33,6 @@ pub(crate) struct Shape {
     pub(crate) hdr: bool,
 }
 
-/// What a display's owner asks of it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Wanted {
     pub(crate) deep: bool,
@@ -87,7 +86,6 @@ pub(crate) fn fallback(buffers: Buffers) -> Option<Buffers> {
     }
 }
 
-/// What a display says it takes over its connector.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Sink {
     depth: Option<u8>,
@@ -170,9 +168,6 @@ enum Whole {
     Committed,
 }
 
-/// The frames a display gets: the best shape it, its mode and its buffers have not refused. A shape
-/// refused at a flip is committed once as a whole, with a mode-set allowed and nothing else on the
-/// planes, before it counts as refused.
 #[derive(Debug, Clone)]
 pub(crate) struct OutputFormat<M> {
     sink: Sink,
@@ -199,6 +194,19 @@ impl<M: Copy + PartialEq> OutputFormat<M> {
             kept: None,
             whole: None,
         }
+    }
+
+    pub(crate) fn starts_tiled(&self) -> bool {
+        self.start == Buffers::Tiled
+    }
+
+    pub(crate) fn follow(&mut self, sink: Sink) -> bool {
+        let changed = self.sink != sink;
+        if changed {
+            self.sink = sink;
+            self.forget_refusals();
+        }
+        changed
     }
 
     pub(crate) fn needs_choice(&self, mode: M, wanted: Wanted) -> bool {
@@ -342,7 +350,6 @@ impl<M: Copy + PartialEq> OutputFormat<M> {
     }
 }
 
-/// A connector's `max bpc`: what it was when the display was found, and what it is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct LinkDepth {
     pub(crate) found: u64,
@@ -351,7 +358,6 @@ pub(crate) struct LinkDepth {
 }
 
 impl LinkDepth {
-    /// The value to set for frames of `bits`, if it has to change.
     pub(crate) fn change(self, bits: u8, deep: bool) -> Option<u64> {
         let (lowest, highest) = self.range;
         let wanted = match deep {
@@ -363,7 +369,6 @@ impl LinkDepth {
     }
 }
 
-/// What is known of the HDR signal on a connector: set by this process, or left by another one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Signalled {
     ours: bool,
@@ -375,7 +380,6 @@ impl Signalled {
         Self { ours: false, left }
     }
 
-    /// The signal to set for frames that are HDR or not, if it has to change.
     pub(crate) fn change(self, hdr: bool) -> Option<bool> {
         (self.ours != hdr || self.left).then_some(hdr)
     }

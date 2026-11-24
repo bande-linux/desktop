@@ -72,12 +72,30 @@ impl GpuDevice {
         let adapters =
             futures_lite::future::block_on(instance().enumerate_adapters(wgpu::Backends::VULKAN));
         let adapter = match node {
-            Some(node) => adapters
-                .into_iter()
-                .find(|adapter| drm_nodes(adapter).contains(&node))
-                .ok_or_else(|| {
-                    DrawError::Gpu("no Vulkan device draws on the compositor's GPU".to_owned())
-                })?,
+            Some(node) => {
+                let software = adapters.first().map(wgpu::Adapter::get_info).filter(|_| {
+                    adapters
+                        .iter()
+                        .all(|adapter| is_software(&adapter.get_info()))
+                });
+                match adapters
+                    .into_iter()
+                    .find(|adapter| drm_nodes(adapter).contains(&node))
+                {
+                    Some(adapter) => adapter,
+                    None => {
+                        return Err(match software {
+                            Some(info) if !allow_software => {
+                                SOFTWARE_ONLY.store(true, Ordering::Relaxed);
+                                DrawError::Software(info.name)
+                            }
+                            _ => DrawError::Gpu(
+                                "no Vulkan device draws on the compositor's GPU".to_owned(),
+                            ),
+                        });
+                    }
+                }
+            }
             None => {
                 let (software, mut hardware): (Vec<_>, Vec<_>) = adapters
                     .into_iter()

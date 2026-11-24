@@ -2,13 +2,13 @@ use std::sync::Arc;
 
 use bande_colour::{Curve, DISPLAY, DISPLAY_P3, Profile, SRGB, UNMANAGED, conversion as convert};
 use bande_edid::{Edid, Hdr};
-use bande_render::{Encode, OutputColour};
+use bande_render::{Encode, OutputColour, SDR_WHITE};
 
 const COORDINATE_SCALE: f64 = 1024.0;
 const SRGB_PRIMARIES: [(f64, f64); 3] = [(0.64, 0.33), (0.30, 0.60), (0.15, 0.06)];
 const SAME_AS_SRGB: f64 = 0.02;
-const REFERENCE_WHITE: f64 = 203.0;
-const DISPLAY_PEAK: f64 = 1000.0;
+pub(crate) const REFERENCE_WHITE: f64 = SDR_WHITE as f64;
+pub(crate) const DISPLAY_PEAK: f64 = 1000.0;
 const GAMMA: f64 = 2.2;
 const SRGB_TO_BT2020: [[f64; 3]; 3] = [
     [0.627_403_9, 0.329_283_0, 0.043_313_1],

@@ -1415,9 +1415,10 @@ where
             .watchdog_tick(now())
             .map(|at| at.saturating_sub(now()));
         let night = compositor.night_light_tick(now());
+        let mut hdr_wait = None;
         if let Some(kelvin) = night.kelvin {
             output.set_color_temperature(kelvin);
-            compositor.redraw_hdr_displays();
+            hdr_wait = compositor.redraw_hdr_displays().then_some(Duration::ZERO);
         }
         let night_wait = night.wake_at.map(|at| at.saturating_sub(now()));
         let tint_wait = output.retry_tint();
@@ -1430,6 +1431,7 @@ where
             .chain(snap_wait)
             .chain(watchdog_wait)
             .chain(night_wait)
+            .chain(hdr_wait)
             .chain(tint_wait)
             .chain(reveal_wait)
             .chain(menu_wait)

@@ -100,7 +100,11 @@ impl Fence for GpuFence {
     }
 
     fn export(&self) -> Option<OwnedFd> {
-        self.0.as_fd().try_clone_to_owned().ok()
+        self.0
+            .as_fd()
+            .try_clone_to_owned()
+            .inspect_err(|error| tracing::warn!("cannot pass on a frame's fence: {error}"))
+            .ok()
     }
 }
 

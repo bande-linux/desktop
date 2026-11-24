@@ -13,8 +13,6 @@ const ENTRY: usize = 8;
 const RETRIES: u32 = 5;
 const FIRST_RETRY: Duration = Duration::from_millis(250);
 
-/// How a CRTC is tinted: with a table of its own size, with a legacy ramp where that is all there
-/// is, with a matrix, or not at all.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Tint {
     Table(Table),
@@ -41,15 +39,12 @@ pub(crate) struct Table {
     before: Vec<property::Handle>,
 }
 
-/// A legacy ramp. Where it stands in for a table the kernel keeps it in that table, and only the
-/// table's property says whether one is shown.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Ramp {
     size: usize,
     within: Option<Table>,
 }
 
-/// When a tint that failed is tried again by itself: a few times, each after twice the wait.
 #[derive(Debug, Default, Clone, Copy)]
 pub(crate) struct TintRetry {
     tries: u32,
@@ -131,8 +126,6 @@ impl Tint {
         }
     }
 
-    /// Shows `kelvin`, or takes every tint away when it is neutral, doing nothing when there is
-    /// none to take away.
     pub(crate) fn show(
         &self,
         device: &DrmDevice,

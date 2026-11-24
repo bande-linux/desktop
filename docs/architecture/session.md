@@ -404,7 +404,9 @@ PipeWire's socket.
 ### Session startup
 
 - Before starting any shell client, the compositor exports `WAYLAND_DISPLAY`,
-  `XDG_SESSION_TYPE` and `XDG_CURRENT_DESKTOP` to the user manager and D-Bus activation.
+  `XDG_SESSION_TYPE`, `XDG_CURRENT_DESKTOP` and `XDG_MENU_PREFIX` to the user manager and D-Bus
+  activation. `bande-shell` ships `bande-applications.menu` and a `desktop-directories` folder, without
+  which packages that register themselves with `xdg-desktop-menu` get no entry in Search.
 - `bande-session` sets `ELECTRON_OZONE_PLATFORM_HINT=auto`, `GTK_USE_PORTAL=1` and
   `QT_QPA_PLATFORMTHEME` (each unless already set), and takes the language and formats from
   `/etc/locale.conf` (or Debian's `/etc/default/locale` where there is none), then

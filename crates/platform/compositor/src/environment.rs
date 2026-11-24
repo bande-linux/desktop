@@ -35,10 +35,11 @@ pub fn cursor_environment(cursor: &CursorTheme) -> [(&'static str, String); 2] {
     ]
 }
 
-pub(crate) fn desktop_environment() -> [(&'static str, &'static str); 2] {
+pub(crate) fn desktop_environment() -> [(&'static str, &'static str); 3] {
     [
         ("XDG_CURRENT_DESKTOP", bande_xdg::CURRENT_DESKTOP),
         ("XDG_SESSION_TYPE", "wayland"),
+        ("XDG_MENU_PREFIX", "bande-"),
     ]
 }
 

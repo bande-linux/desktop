@@ -6,7 +6,7 @@ use bande_test_wayland::keys::{
     BTN_LEFT, KEY_DOWN, KEY_ENTER, KEY_ESC, KEY_LEFT, KEY_LEFTMETA, KEY_LEFTSHIFT, KEY_RIGHT,
     KEY_UP,
 };
-use bande_test_wayland::{Anchor, TestClient, chord, headless, roundtrip};
+use bande_test_wayland::{Anchor, Bar, TestClient, chord, headless, roundtrip};
 
 type Frame = (i32, i32, i32, i32);
 
@@ -31,7 +31,8 @@ fn bar_anchor(edge: Anchor) -> Anchor {
 
 struct Desktop {
     server: Compositor,
-    _bar: TestClient,
+    shell: TestClient,
+    bar: Bar,
     behind: TestClient,
     front: TestClient,
 }
@@ -46,13 +47,14 @@ impl Desktop {
         };
         server.set_display_config(config);
         server.set_output_scale(scale);
-        let mut bar = TestClient::connect_as_shell(&mut server);
-        bar.show_bar(&mut server, bar_anchor(edge), THICKNESS + 2 * gap);
+        let mut shell = TestClient::connect_as_shell(&mut server);
+        let bar = shell.show_bar(&mut server, bar_anchor(edge), THICKNESS + 2 * gap);
         let behind = TestClient::window(&mut server, "org.example.Behind");
         let front = TestClient::window(&mut server, "org.example.Front");
         let mut desktop = Self {
             server,
-            _bar: bar,
+            shell,
+            bar,
             behind,
             front,
         };
@@ -190,6 +192,25 @@ fn a_live_change_lays_out_a_maximized_window_again_and_leaves_a_floating_one() {
     desktop.server.set_display_config(config(false, 16));
     assert_eq!(desktop.front_frame(), (0, 0, 1200, 836));
     assert_eq!(desktop.frame(BEHIND), floating);
+}
+
+#[test]
+fn a_maximized_window_leaving_full_screen_stays_clear_of_the_bar_that_returns() {
+    let mut desktop = Desktop::new((1200, 900), 1.0, Anchor::Left, config(true, 8));
+    desktop.front.maximize(&mut desktop.server, 0);
+    let area = desktop.front_frame();
+    desktop.front.make_full_screen(&mut desktop.server, 0);
+    assert_eq!(desktop.front_frame(), (0, 0, 1200, 900));
+    desktop
+        .shell
+        .set_bar_zone(&mut desktop.server, &desktop.bar, 0);
+    desktop.settle();
+
+    desktop.front.leave_full_screen(&mut desktop.server, 0);
+    desktop
+        .shell
+        .set_bar_zone(&mut desktop.server, &desktop.bar, THICKNESS + 16);
+    assert_eq!(desktop.front_frame(), area);
 }
 
 #[test]

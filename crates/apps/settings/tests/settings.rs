@@ -29,7 +29,7 @@ fn search(query: &str) -> SettingsView {
         trackpad: false,
     });
     view.set_displays(vec![Display::default()]);
-    view.set_value(SettingId::BarFloating, Value::Flag(true));
+    view.set_value(SettingId::BarFloating, Value::Flag(false));
     view.set_value(SettingId::NightLight, Value::Flag(false));
     view.scene(SIZE.0, SIZE.1);
     for character in query.chars() {
@@ -48,7 +48,7 @@ fn moved_settings_are_found_in_their_pane_and_absent_devices_are_not() {
         ("saved passwords", PaneId::Passwords),
         ("automatic updates", PaneId::SoftwareUpdate),
         ("primary button", PaneId::Pointing),
-        ("spacing", PaneId::BarMore),
+        ("spacing", PaneId::Bar),
         ("variable refresh", PaneId::Displays),
         ("warmth", PaneId::Displays),
     ] {
@@ -61,6 +61,9 @@ fn moved_settings_are_found_in_their_pane_and_absent_devices_are_not() {
     let mut warmth = search("warmth");
     press(&mut warmth, Key::Enter);
     assert_eq!(warmth.focused_setting(), Some(SettingId::NightLight));
+    let mut spacing = search("spacing");
+    press(&mut spacing, Key::Enter);
+    assert_eq!(spacing.focused_setting(), Some(SettingId::BarFloating));
     let mut panes = bande_settings_panes::panes();
     bande_settings_panes::with_pointers(&mut panes, true, false);
     assert!(

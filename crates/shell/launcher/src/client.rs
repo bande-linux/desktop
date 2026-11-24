@@ -11,7 +11,7 @@ use crate::{
     Request, SettingInfo, SystemCommand, Target,
 };
 use accesskit::TreeUpdate;
-use bande_config::{Bar, Config, SearchCategory, config_path};
+use bande_config::{Config, SearchCategory, config_path};
 use bande_content::{Preview, preview};
 use bande_fs::Entry;
 use bande_inbox::Inbox;
@@ -214,7 +214,6 @@ pub struct LauncherShell {
     cannot_sleep: Option<Inbox<()>>,
     sleeps: bool,
     hardware: Hardware,
-    floating: bool,
     apps: Rc<RefCell<Apps>>,
     recently_used: Option<RecentlyUsed>,
     config: Option<PathBuf>,
@@ -258,10 +257,6 @@ impl LauncherShell {
             .and_then(|source| Config::load(&source).ok())
             .map(|(config, _)| config)
             .unwrap_or_default();
-        if config.bar.floating != self.floating {
-            self.floating = config.bar.floating;
-            self.refresh_panes();
-        }
         let search = config.search;
         let excluded = search.excluded(Some(&self.home));
         let recents = search.shows(SearchCategory::RecentDocuments);
@@ -278,7 +273,7 @@ impl LauncherShell {
 
     fn refresh_panes(&mut self) {
         self.launcher
-            .set_panes(settings_panes(self.sleeps, self.hardware, self.floating));
+            .set_panes(settings_panes(self.sleeps, self.hardware));
     }
 
     fn ask(&self, request: Request) {
@@ -613,7 +608,7 @@ fn folder_stamps(data_dirs: &[PathBuf]) -> Vec<Option<SystemTime>> {
         .collect()
 }
 
-fn settings_panes(sleeps: bool, hardware: Hardware, floating: bool) -> Vec<PaneInfo> {
+fn settings_panes(sleeps: bool, hardware: Hardware) -> Vec<PaneInfo> {
     let mut panes = bande_settings_panes::panes();
     if !sleeps {
         bande_settings_panes::without_sleep(&mut panes);
@@ -626,7 +621,6 @@ fn settings_panes(sleeps: bool, hardware: Hardware, floating: bool) -> Vec<PaneI
     panes.retain(|pane| match pane.id {
         PaneId::Wifi => hardware.wifi,
         PaneId::Bluetooth => hardware.bluetooth,
-        PaneId::BarMore => floating,
         _ => true,
     });
     panes
@@ -700,7 +694,7 @@ impl LauncherShell {
         let hardware = Hardware::scan();
         let mut launcher = Launcher::new(
             apps,
-            settings_panes(true, hardware, Bar::default().floating),
+            settings_panes(true, hardware),
             Box::new(library),
             home.clone(),
             usage,
@@ -726,7 +720,6 @@ impl LauncherShell {
                 .ok(),
             sleeps: true,
             hardware,
-            floating: Bar::default().floating,
             apps: apps_by_type,
             recently_used,
             config: config_path(),

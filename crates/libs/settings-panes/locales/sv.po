@@ -34,10 +34,6 @@ msgstr "Utseende"
 msgid "Taskbar"
 msgstr "Aktivitetsfält"
 
-msgctxt "taskbar"
-msgid "More"
-msgstr "Mer"
-
 msgid "Notifications"
 msgstr "Notiser"
 
@@ -131,9 +127,6 @@ msgstr "Ljust, mörkt eller automatiskt, dekorfärg, skrivbordsbild och textstor
 msgid "Where the taskbar sits and how it behaves"
 msgstr "Var aktivitetsfältet sitter och hur det beter sig"
 
-msgid "Spacing around a floating taskbar"
-msgstr "Avstånd runt ett flytande aktivitetsfält"
-
 msgid "Banners and Notifications"
 msgstr "Banners och Notiser"
 
@@ -226,9 +219,6 @@ msgstr "tema, look, färg, skrivbordsbild, bakgrund, bild, foto"
 
 msgid "bar, dock, launcher, taskbar, panel, favourites, favorites"
 msgstr "fält, dock, startare, aktivitetsfält, panel, favoriter"
-
-msgid "taskbar, spacing, gap, margin, floating"
-msgstr "aktivitetsfält, avstånd, mellanrum, marginal, flytande"
 
 msgid "alerts, banners"
 msgstr "aviseringar, banners"
@@ -561,12 +551,6 @@ msgstr "Fäst"
 msgid "Floating"
 msgstr "Flytande"
 
-msgid "Automatically hide and show the taskbar"
-msgstr "Dölj och visa aktivitetsfältet automatiskt"
-
-msgid "autohide, hide, show, reveal, dock"
-msgstr "dölj automatiskt, dölj, visa, avslöja, dock"
-
 msgid "Spacing"
 msgstr "Avstånd"
 
@@ -579,6 +563,12 @@ msgstr "Inget"
 
 msgid "Wide"
 msgstr "Stort"
+
+msgid "Automatically hide and show the taskbar"
+msgstr "Dölj och visa aktivitetsfältet automatiskt"
+
+msgid "autohide, hide, show, reveal, dock"
+msgstr "dölj automatiskt, dölj, visa, avslöja, dock"
 
 msgid "Do Not Disturb"
 msgstr "Stör ej"

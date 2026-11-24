@@ -1142,7 +1142,6 @@ impl SettingsView {
             PaneId::Notifications => self.values.contains_key(&SettingId::DoNotDisturb),
             PaneId::Sound => self.audio.is_some(),
             PaneId::Displays => !self.displays.is_empty(),
-            PaneId::BarMore => self.values.get(&SettingId::BarFloating) == Some(&Value::Flag(true)),
             PaneId::About => self.about.is_some(),
             PaneId::Appearance
             | PaneId::Accessibility
@@ -1536,9 +1535,20 @@ impl SettingsView {
         self.ui.handle(event)
     }
 
+    pub(crate) fn revealed(&self, id: SettingId) -> SettingId {
+        match id {
+            SettingId::BarGap
+                if self.values.get(&SettingId::BarFloating) != Some(&Value::Flag(true)) =>
+            {
+                SettingId::BarFloating
+            }
+            _ => self.night_revealed(id),
+        }
+    }
+
     fn focus_best_match(&mut self) {
         if let Some(best) = self.hit(self.pane).and_then(PaneHit::best) {
-            self.focus_next = Some(Anchor::Setting(self.night_revealed(best.setting), None));
+            self.focus_next = Some(Anchor::Setting(self.revealed(best.setting), None));
             self.invalidate();
         }
     }

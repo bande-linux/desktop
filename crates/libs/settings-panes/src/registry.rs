@@ -26,7 +26,6 @@ pub enum PaneId {
     Network,
     Appearance,
     Bar,
-    BarMore,
     Notifications,
     Search,
     Accessibility,
@@ -56,13 +55,12 @@ pub enum PaneId {
 }
 
 impl PaneId {
-    const KEYWORDS: [(Self, &'static str); 32] = [
+    const KEYWORDS: [(Self, &'static str); 31] = [
         (Self::Wifi, "wifi"),
         (Self::Bluetooth, "bluetooth"),
         (Self::Network, "network"),
         (Self::Appearance, "appearance"),
         (Self::Bar, "bar"),
-        (Self::BarMore, "bar-more"),
         (Self::Notifications, "notifications"),
         (Self::Search, "search"),
         (Self::Accessibility, "accessibility"),
@@ -112,8 +110,7 @@ impl PaneId {
             | Self::SoftwareUpdate
             | Self::Backup
             | Self::About => Some(Group::System),
-            Self::BarMore
-            | Self::KeyboardShortcuts
+            Self::KeyboardShortcuts
             | Self::Passwords
             | Self::Camera
             | Self::Microphone
@@ -131,7 +128,7 @@ impl PaneId {
             Self::Bluetooth => "bluetooth-symbolic",
             Self::Network => "network-wired-symbolic",
             Self::Appearance => "weather-clear-night-symbolic",
-            Self::Bar | Self::BarMore => "view-sidebar-start-symbolic",
+            Self::Bar => "view-sidebar-start-symbolic",
             Self::Notifications => "preferences-system-notifications-symbolic",
             Self::Search => "system-search-symbolic",
             Self::Accessibility => "avatar-default-symbolic",
@@ -167,7 +164,6 @@ impl PaneId {
             Self::Network => tr!("Network"),
             Self::Appearance => tr!("Appearance"),
             Self::Bar => tr!("Taskbar"),
-            Self::BarMore => tr!(context = "taskbar", "More"),
             Self::Notifications => tr!("Notifications"),
             Self::Search => tr!("Search"),
             Self::Accessibility => tr!("Accessibility"),
@@ -206,7 +202,6 @@ impl PaneId {
                 tr!("Light, dark or automatic, accent color, wallpaper and text size")
             }
             Self::Bar => tr!("Where the taskbar sits and how it behaves"),
-            Self::BarMore => tr!("Spacing around a floating taskbar"),
             Self::Notifications => tr!("Banners and Notifications"),
             Self::Search => tr!("What the launcher finds and which folders it leaves out"),
             Self::Accessibility => {
@@ -257,7 +252,6 @@ impl PaneId {
             Self::Bar => {
                 tr!("bar, dock, launcher, taskbar, panel, favourites, favorites")
             }
-            Self::BarMore => tr!("taskbar, spacing, gap, margin, floating"),
             Self::Notifications => tr!("alerts, banners"),
             Self::Search => tr!("launcher, super, results, recents, privacy"),
             Self::Accessibility => tr!("a11y, disability, assistive, vision, hearing, motor"),
@@ -340,7 +334,6 @@ impl PaneId {
             Self::Storage => Some(Self::About),
             Self::Diagnostics => Some(Self::PrivacySecurity),
             Self::Passwords => Some(Self::Users),
-            Self::BarMore => Some(Self::Bar),
             Self::KeyboardShortcuts => Some(Self::Keyboard),
             Self::Camera
             | Self::Microphone
@@ -409,7 +402,6 @@ pub enum SettingId {
     BarAutoHide,
     BarFloating,
     BarGap,
-    BarMorePage,
     DisplayUse,
     DisplayResolution,
     DisplayScale,
@@ -1144,72 +1136,63 @@ fn desktop_panes() -> Vec<Pane> {
         ),
         pane(
             PaneId::Bar,
-            vec![
-                section(
-                    None,
-                    vec![
-                        setting(
-                            SettingId::BarEdge,
-                            tr!("Position on screen"),
-                            tr!("panel, taskbar, dock, edge, left, right, bottom, top"),
-                            Kind::Choices(keyword_choices(vec![
-                                (tr!("Left"), "left"),
-                                (tr!("Bottom"), "bottom"),
-                                (tr!("Right"), "right"),
-                                (tr!("Top"), "top"),
-                            ])),
-                        ),
-                        setting(
-                            SettingId::BarIconSize,
-                            tr!("Size"),
-                            tr!("icon size, bigger, smaller, large, small, width"),
-                            Kind::Range {
-                                range: BAR_SIZES,
-                                step: 4,
-                                low: tr!("Small"),
-                                high: tr!("Large"),
-                            },
-                        ),
-                        setting(
-                            SettingId::BarFloating,
-                            tr!(context = "taskbar", "Style"),
-                            tr!("floating, float, attached, dock, margin, edge, rounded"),
-                            Kind::Choices(vec![
-                                Choice {
-                                    label: tr!("Attached"),
-                                    value: Value::Flag(false),
-                                },
-                                Choice {
-                                    label: tr!("Floating"),
-                                    value: Value::Flag(true),
-                                },
-                            ]),
-                        ),
-                        switch(
-                            SettingId::BarAutoHide,
-                            tr!("Automatically hide and show the taskbar"),
-                            tr!("autohide, hide, show, reveal, dock"),
-                        ),
-                    ],
-                ),
-                section(None, vec![page(SettingId::BarMorePage, PaneId::BarMore)]),
-            ],
-        ),
-        pane(
-            PaneId::BarMore,
             vec![section(
                 None,
-                vec![setting(
-                    SettingId::BarGap,
-                    tr!("Spacing"),
-                    tr!("gap, margin, space, distance, edge, floating, maximized"),
-                    Kind::Range {
-                        range: BAR_GAPS,
-                        step: 2,
-                        low: tr!(context = "gap", "None"),
-                        high: tr!("Wide"),
-                    },
-                )],
+                vec![
+                    setting(
+                        SettingId::BarEdge,
+                        tr!("Position on screen"),
+                        tr!("panel, taskbar, dock, edge, left, right, bottom, top"),
+                        Kind::Choices(keyword_choices(vec![
+                            (tr!("Left"), "left"),
+                            (tr!("Bottom"), "bottom"),
+                            (tr!("Right"), "right"),
+                            (tr!("Top"), "top"),
+                        ])),
+                    ),
+                    setting(
+                        SettingId::BarIconSize,
+                        tr!("Size"),
+                        tr!("icon size, bigger, smaller, large, small, width"),
+                        Kind::Range {
+                            range: BAR_SIZES,
+                            step: 4,
+                            low: tr!("Small"),
+                            high: tr!("Large"),
+                        },
+                    ),
+                    setting(
+                        SettingId::BarFloating,
+                        tr!(context = "taskbar", "Style"),
+                        tr!("floating, float, attached, dock, margin, edge, rounded"),
+                        Kind::Choices(vec![
+                            Choice {
+                                label: tr!("Attached"),
+                                value: Value::Flag(false),
+                            },
+                            Choice {
+                                label: tr!("Floating"),
+                                value: Value::Flag(true),
+                            },
+                        ]),
+                    ),
+                    setting(
+                        SettingId::BarGap,
+                        tr!("Spacing"),
+                        tr!("gap, margin, space, distance, edge, floating, maximized"),
+                        Kind::Range {
+                            range: BAR_GAPS,
+                            step: 2,
+                            low: tr!(context = "gap", "None"),
+                            high: tr!("Wide"),
+                        },
+                    ),
+                    switch(
+                        SettingId::BarAutoHide,
+                        tr!("Automatically hide and show the taskbar"),
+                        tr!("autohide, hide, show, reveal, dock"),
+                    ),
+                ],
             )],
         ),
         pane(

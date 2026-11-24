@@ -711,7 +711,7 @@ impl SettingsView {
                 vec![self.page_row(setting, child, matched)]
             }
             Kind::Page(_) => Vec::new(),
-            _ if self.night_revealed(setting.id) != setting.id => Vec::new(),
+            _ if self.revealed(setting.id) != setting.id => Vec::new(),
             Kind::Text
                 if matches!(setting.id, SettingId::FocusFrom | SettingId::FocusTo)
                     && self.values.get(&SettingId::FocusScheduled) != Some(&Value::Flag(true)) =>

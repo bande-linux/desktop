@@ -105,8 +105,11 @@ fn a_report_is_described_while_the_pane_updates_and_sent_from_the_keyboard() {
     assert!(shows(&view, "Couldn’t prepare the report. Try again."));
     view.take_commands();
     press(&mut view, Key::Tab);
-    press(&mut view, Key::Tab);
     press(&mut view, Key::Enter);
+    let commands = format!("{:?}", view.take_commands());
+    assert!(!commands.contains("Create"), "{commands}");
+    press(&mut view, Key::Tab);
+    press(&mut view, Key::Space);
     let commands = format!("{:?}", view.take_commands());
     assert!(commands.contains("Create(\"It hung\", Send)"), "{commands}");
     assert!(shows(&view, "Preparing the report…"));

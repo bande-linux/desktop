@@ -244,7 +244,10 @@ impl Screen {
 
     pub(crate) fn usable_area(&self) -> Rectangle<i32, Logical> {
         let zone = layer_map_for_output(&self.output).non_exclusive_zone();
-        Rectangle::new(self.settings.position + zone.loc, zone.size)
+        Rectangle::new(
+            self.settings.position + zone.loc,
+            (zone.size.w.max(0), zone.size.h.max(0)).into(),
+        )
     }
 
     fn bar_anchor(&self) -> Anchor {

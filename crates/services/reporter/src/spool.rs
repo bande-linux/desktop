@@ -288,10 +288,14 @@ impl Spool {
     }
 
     pub fn queue(&self, id: &str) -> io::Result<()> {
-        if self.outbox().join(id).exists() {
+        if self.is_queued(id) {
             return Ok(());
         }
         self.mark(id, b"")
+    }
+
+    pub fn is_queued(&self, id: &str) -> bool {
+        self.outbox().join(id).exists()
     }
 
     pub fn queue_by_hand(&self, id: &str) -> io::Result<()> {

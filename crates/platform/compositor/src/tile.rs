@@ -421,6 +421,7 @@ impl State {
             return rect;
         };
         let gap = self.window_gap(self.screen_of(&self.windows[index]));
+        let own = self.windows[index].clamp_size((1, 1).into());
         let neighbors = self.tiled_neighbors(index);
         let dragged: Vec<Side> = moved_sides(old, rect).collect();
         for (neighbor, side) in &neighbors {
@@ -431,18 +432,24 @@ impl State {
             let least = window.clamp_size((1, 1).into());
             match side {
                 Side::Right => {
-                    rect.size.w = rect.size.w.min(right(theirs) - least.w - gap - rect.loc.x)
+                    let room = right(theirs) - least.w - gap - rect.loc.x;
+                    rect.size.w = rect.size.w.min(room.max(own.w));
                 }
                 Side::Bottom => {
-                    rect.size.h = rect.size.h.min(bottom(theirs) - least.h - gap - rect.loc.y)
+                    let room = bottom(theirs) - least.h - gap - rect.loc.y;
+                    rect.size.h = rect.size.h.min(room.max(own.h));
                 }
                 Side::Left => {
-                    let beyond = (theirs.loc.x + least.w + gap - rect.loc.x).max(0);
+                    let beyond = (theirs.loc.x + least.w + gap - rect.loc.x)
+                        .min(rect.size.w - own.w)
+                        .max(0);
                     rect.loc.x += beyond;
                     rect.size.w -= beyond;
                 }
                 Side::Top => {
-                    let beyond = (theirs.loc.y + least.h + gap - rect.loc.y).max(0);
+                    let beyond = (theirs.loc.y + least.h + gap - rect.loc.y)
+                        .min(rect.size.h - own.h)
+                        .max(0);
                     rect.loc.y += beyond;
                     rect.size.h -= beyond;
                 }
@@ -467,6 +474,7 @@ impl State {
                 }
                 Side::Top => shared.size.h = rect.loc.y - gap - theirs.loc.y,
             }
+            shared.size = (shared.size.w.max(1), shared.size.h.max(1)).into();
             window.tile = Some((their_tile, shared));
             window.request_size(Some(shared.size));
             window.move_with_next_configure(shared.loc);

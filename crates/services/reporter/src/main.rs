@@ -57,6 +57,9 @@ fn pause_for(outcome: Outcome, retry: Duration) -> Pause {
 
 fn check_in(spool: &Spool, sender: &mut Sender, retry: Duration) -> Option<Pause> {
     for day in checkin::due_days(spool.root()) {
+        if !spool.checkin_waiting() {
+            return None;
+        }
         let payload = match checkin::payload(day) {
             Ok(payload) => payload,
             Err(error) => {
@@ -136,6 +139,9 @@ fn send_waiting(
         let mut mains = None;
         let mut held = (false, false);
         for id in batch {
+            if !spool.is_queued(id) {
+                continue;
+            }
             let Ok(report) = spool.read(id) else {
                 settle(spool, id, Some(Status::Rejected));
                 continue;

@@ -352,7 +352,7 @@ impl State {
         if !self.windows[index].toplevel.is_initial_configure_sent() {
             self.windows[index].toplevel.with_pending_state(|state| {
                 let bar = title_bar_height(state.decoration_mode, false);
-                state.bounds = Some((area.size.w, area.size.h - bar).into());
+                state.bounds = Some((area.size.w, (area.size.h - bar).max(0)).into());
             });
             if !self.resume_placement(index) {
                 self.recall_frame(index);

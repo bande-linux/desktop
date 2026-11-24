@@ -66,12 +66,12 @@ fn free_half(
         let x = tiled.loc.x + tiled.size.w + gap;
         Rectangle::new(
             (x, area.loc.y).into(),
-            (area.loc.x + area.size.w - x, area.size.h).into(),
+            ((area.loc.x + area.size.w - x).max(1), area.size.h).into(),
         )
     } else {
         Rectangle::new(
             area.loc,
-            (tiled.loc.x - gap - area.loc.x, area.size.h).into(),
+            ((tiled.loc.x - gap - area.loc.x).max(1), area.size.h).into(),
         )
     }
 }
@@ -107,7 +107,7 @@ impl State {
             })
             .map(|(_, window)| window.surface().clone())
             .collect();
-        if taken || candidates.is_empty() || free.size.w <= 2 * INSET as i32 {
+        if taken || candidates.is_empty() || free.size.w.min(free.size.h) <= 2 * INSET as i32 {
             return;
         }
         let panel: Frame = Rectangle::new(

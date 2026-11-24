@@ -2159,6 +2159,9 @@ impl SettingsView {
         if self.pane == PaneId::Passwords {
             self.password_command(PasswordCommand::Lock);
         }
+        if self.pane == PaneId::Diagnostics && self.report_form.progress != Progress::Preparing {
+            self.report_form.progress = Progress::Idle;
+        }
         match pane {
             PaneId::Displays => self
                 .commands

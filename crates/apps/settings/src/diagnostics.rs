@@ -33,6 +33,8 @@ const HEADER_SYMBOL: f32 = 32.0;
 pub(crate) const SENT_REPORTS: &str = "sent-reports";
 pub(crate) const DESCRIPTION: &str = "report-description";
 const REVIEW_REPORT: &str = "report-review";
+const SEND_REPORT: &str = "report-send";
+const DESCRIPTION_LIMIT: usize = 8192;
 const DESCRIPTION_LINES: u16 = 4;
 const WAITING: &str = "waiting";
 const SENT: &str = "sent";
@@ -210,10 +212,20 @@ fn follow_sending(updates: &Updates) {
     });
 }
 
-fn create(description: &str, after: After) -> io::Result<(Diagnostics, String)> {
+fn create(description: &str, after: After) -> io::Result<String> {
     let send = after == After::Send;
+    let description: String = description.chars().take(DESCRIPTION_LIMIT).collect();
     let created = ask(&json!({"op": "diagnose", "description": description, "send": send}))?;
-    Ok((load()?, text_of(&created, "id")))
+    Ok(text_of(&created, "id"))
+}
+
+fn publish_reports(updates: &Updates) {
+    match load() {
+        Ok(diagnostics) => {
+            updates.send(Update::Diagnostics(diagnostics));
+        }
+        Err(error) => tracing::debug!("cannot list the reports: {error}"),
+    }
 }
 
 pub fn follow_diagnostics(updates: Updates) -> Sender<DiagnosticsCommand> {
@@ -248,8 +260,8 @@ pub fn follow_diagnostics(updates: Updates) -> Sender<DiagnosticsCommand> {
                 }
                 DiagnosticsCommand::Create(description, after) => {
                     match create(&description, after) {
-                        Ok((diagnostics, id)) => {
-                            updates.send(Update::Diagnostics(diagnostics));
+                        Ok(id) => {
+                            publish_reports(&updates);
                             updates.send(Update::ReportCreated(id, after));
                             if after == After::Send {
                                 follow_sending(&updates);
@@ -283,12 +295,7 @@ pub fn follow_diagnostics(updates: Updates) -> Sender<DiagnosticsCommand> {
             if let Err(error) = result {
                 failed(error);
             }
-            match load() {
-                Ok(diagnostics) => {
-                    updates.send(Update::Diagnostics(diagnostics));
-                }
-                Err(error) => tracing::debug!("cannot list the reports: {error}"),
-            }
+            publish_reports(&updates);
         }
     });
     sender
@@ -453,12 +460,16 @@ impl SettingsView {
                     .iter()
                     .find(|report| report.id == *id);
                 match report.map(|report| report.status.as_str()) {
+                    None => (
+                        tr!("Includes system logs. You can review it before sending."),
+                        Tone::Muted,
+                    ),
                     Some(SENT) => (tr!("Report sent. Thank you."), Tone::Muted),
                     Some(WAITING) => (
                         tr!("The report is sent when the server can be reached."),
                         Tone::Muted,
                     ),
-                    _ => (tr!("The report wasn’t sent."), Tone::Danger),
+                    Some(_) => (tr!("The report wasn’t sent."), Tone::Danger),
                 }
             }
         };
@@ -467,24 +478,30 @@ impl SettingsView {
 
     pub(crate) fn send_report_rows(&mut self) -> Vec<Box<dyn Widget>> {
         let mut draft = intent(&self.intents, Intent::DraftReportDescription);
-        let description = TextView::new(
+        let preparing = self.report_form.progress == Progress::Preparing;
+        let mut description = TextView::new(
             &tr!("What happened? (optional)"),
             &self.report_form.description,
             move |text| draft(text.to_owned()),
         )
         .visible_lines(DESCRIPTION_LINES);
-        self.anchors
-            .push((Anchor::Item(DESCRIPTION.to_owned()), description.id()));
-        let preparing = self.report_form.progress == Progress::Preparing;
+        description.set_read_only(preparing);
+        self.anchors.extend([
+            (Anchor::Item(DESCRIPTION.to_owned()), description.id()),
+            (
+                Anchor::Setting(SettingId::SendReport, None),
+                description.id(),
+            ),
+        ]);
         let mut review = intent(&self.intents, |()| Intent::CreateReport(After::Review));
         let mut review = Button::new(&tr!("Review…"), move || review(()));
         review.set_enabled(!preparing);
         let mut send = intent(&self.intents, |()| Intent::CreateReport(After::Send));
-        let mut send = Button::new(&tr!("Send"), move || send(())).primary();
+        let mut send = Button::new(&tr!("Send"), move || send(()));
         send.set_enabled(!preparing);
         self.anchors.extend([
-            (Anchor::Setting(SettingId::SendReport, None), send.id()),
             (Anchor::Item(REVIEW_REPORT.to_owned()), review.id()),
+            (Anchor::Item(SEND_REPORT.to_owned()), send.id()),
         ]);
         let mut controls: Vec<Box<dyn Widget>> = vec![boxed(review), boxed(send)];
         if preparing {
@@ -541,17 +558,21 @@ impl SettingsView {
         let copied = text.clone();
         let mut save = intent(&self.intents, Intent::SaveReport);
         let saved = (id.clone(), text.clone());
+        let mut copy = Button::new(&tr!("Copy"), move || copy(copied.clone()));
+        copy.set_enabled(!text.is_empty());
+        let mut save = Button::new(&tr!("Save"), move || save(saved.clone()));
+        save.set_enabled(!text.is_empty());
         let mut buttons: Vec<Box<dyn Widget>> = vec![
             boxed(Button::new(&tr!("Delete"), move || delete(target.clone()))),
-            boxed(Button::new(&tr!("Copy"), move || copy(copied.clone()))),
-            boxed(Button::new(&tr!("Save"), move || save(saved.clone()))),
+            boxed(copy),
+            boxed(save),
         ];
         if report.status != SENT {
             let mut send = intent(&self.intents, Intent::SendReport);
             let target = id.clone();
-            let mut send = Button::new(&tr!("Send"), move || send(target.clone())).primary();
-            send.set_enabled(report.status != WAITING);
-            buttons.push(boxed(send));
+            buttons.push(boxed(Button::new(&tr!("Send"), move || {
+                send(target.clone());
+            })));
         }
         let saved = match &self.report_form.saved {
             Some(path) => tr!("Saved as {path}", path = path.clone()),

@@ -155,8 +155,21 @@ fn serve(
     pam.set_tty(&format!("tty{GREETER_VT}"))
         .map_err(|code| Failure::pam("pam_set_item", code))?;
     if class == Class::User {
+        if let Ok(account) = Account::named(username) {
+            let name = account.name.to_string_lossy().into_owned();
+            tell(links.socket, &FromWorker::Account { name });
+        }
         pam.authenticate()
             .map_err(|code| Failure::pam("pam_authenticate", code))?;
+        tell(links.socket, &FromWorker::Accepted);
+        match read_message(&mut &*links.socket) {
+            Ok(ToWorker::Proceed) => {}
+            Ok(_) => return Err(Failure::other("told something else than to proceed")),
+            Err(error) => {
+                tracing::info!("signing in was called off: {error}");
+                return Ok(());
+            }
+        }
     }
     match pam.check_account() {
         Ok(()) => {}
@@ -357,12 +370,11 @@ fn run_session(
         tracing::warn!("cannot take tty{} back: {error}", terminal.number());
     }
     if class == Class::User
-        && !matches!(followed, Ok(true))
         && let Err(error) = terminal.leave_to(GREETER_VT)
     {
         tracing::warn!("cannot bring the login window back: {error}");
     }
-    followed.map(|_| ())
+    followed
 }
 
 fn launch(
@@ -371,7 +383,7 @@ fn launch(
     terminal: &Terminal,
     environment: &[(OsString, OsString)],
     links: Links<'_>,
-) -> Result<bool, Failure> {
+) -> Result<(), Failure> {
     let marked = match class {
         Class::User => {
             variable(environment, "XDG_RUNTIME_DIR").map(|runtime| (runtime, DESKTOP_SHOWN))
@@ -401,7 +413,7 @@ fn launch(
         true => Err(Failure::other(
             "the desktop stopped starting before it appeared",
         )),
-        false => Ok(shown),
+        false => Ok(()),
     }
 }
 

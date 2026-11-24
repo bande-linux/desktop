@@ -16,7 +16,10 @@ pub const GREETER_USER: &str = "_bande-greeter";
 pub const SETTLED: Duration = Duration::from_secs(60);
 const FAILURES_ALLOWED: u32 = 3;
 const USERNAME_LIMIT: usize = 256;
-const REMEMBERED_NAMES: usize = 256;
+/// How long the login manager waits before it starts a login window again that was never shown.
+pub const RESPAWN_PAUSE: Duration = Duration::from_secs(2);
+/// How long workers that are ending may hold up the console once the login window has failed.
+pub const FAILED_EXIT_LIMIT: Duration = Duration::from_secs(15);
 
 pub type WorkerId = u64;
 
@@ -54,9 +57,10 @@ enum Phase {
 #[derive(Debug)]
 struct Login {
     worker: WorkerId,
-    username: String,
+    account: Option<String>,
     phase: Phase,
     answered: bool,
+    accepted: bool,
 }
 
 #[derive(Debug)]
@@ -82,12 +86,14 @@ pub struct Manager {
     attempts: HashMap<String, Backoff>,
     ending: bool,
     failed: bool,
+    respawn_at: Option<Instant>,
+    exit_by: Option<Instant>,
 }
 
 fn valid_username(username: &str) -> bool {
     !username.is_empty()
         && username.len() <= USERNAME_LIMIT
-        && !username.starts_with('-')
+        && !username.starts_with(['-', '+'])
         && !username.chars().any(char::is_control)
 }
 
@@ -149,33 +155,23 @@ impl Manager {
         }
     }
 
-    fn attempt_failed(&mut self, username: &str, now: Instant) {
-        if self.attempts.len() >= REMEMBERED_NAMES && !self.attempts.contains_key(username) {
-            let oldest = self
-                .attempts
-                .iter()
-                .min_by_key(|(_, backoff)| backoff.until())
-                .map(|(name, _)| name.clone());
-            if let Some(oldest) = oldest {
-                self.attempts.remove(&oldest);
-            }
+    fn attempt_failed(&mut self, login: &Login, now: Instant) {
+        if login.answered
+            && !login.accepted
+            && let Some(account) = &login.account
+        {
+            self.attempts.entry(account.clone()).or_default().fail(now);
         }
-        self.attempts
-            .entry(username.to_owned())
-            .or_default()
-            .fail(now);
     }
 
     fn abandon(&mut self, login: Login, now: Instant) -> Action {
         let worker = login.worker;
         let action = match login.phase {
-            Phase::Authenticating => {
-                if login.answered {
-                    self.attempt_failed(&login.username, now);
-                }
+            Phase::Authenticating if !login.accepted => {
+                self.attempt_failed(&login, now);
                 Action::Kill(worker)
             }
-            Phase::Authenticated | Phase::Starting => Action::Stop(worker),
+            _ => Action::Stop(worker),
         };
         self.abandoned.push(login);
         action
@@ -207,10 +203,12 @@ impl Manager {
         };
         let mut actions = Vec::new();
         if std::mem::take(&mut self.asked) {
-            let throttled = self
-                .attempts
-                .get(&login.username)
-                .is_some_and(|backoff| backoff.waiting(now).is_some());
+            let throttled = !login.accepted
+                && login
+                    .account
+                    .as_ref()
+                    .and_then(|account| self.attempts.get(account))
+                    .is_some_and(|backoff| backoff.waiting(now).is_some());
             if throttled {
                 let mut actions = self.drop_conversation(now);
                 actions.push(Action::Reply(Response::error(
@@ -269,9 +267,10 @@ impl Manager {
                 let (worker, spawn) = self.spawn(Class::User, &username);
                 self.login = Some(Login {
                     worker,
-                    username,
+                    account: None,
                     phase: Phase::Authenticating,
                     answered: false,
+                    accepted: false,
                 });
                 actions.push(spawn);
                 actions.extend(self.await_worker());
@@ -331,6 +330,17 @@ impl Manager {
             return Vec::new();
         };
         match (login.phase, said) {
+            (Phase::Authenticating, FromWorker::Account { name }) => {
+                login.account = Some(name);
+                Vec::new()
+            }
+            (Phase::Authenticating, FromWorker::Accepted) => {
+                login.accepted = true;
+                if let Some(account) = &login.account {
+                    self.attempts.remove(account);
+                }
+                vec![Action::Tell(worker, ToWorker::Proceed)]
+            }
             (Phase::Authenticating, FromWorker::Ask { text, visible }) => {
                 let auth_message_type = match visible {
                     true => AuthMessageType::Visible,
@@ -353,8 +363,6 @@ impl Manager {
             }
             (Phase::Authenticating, FromWorker::Authenticated) => {
                 login.phase = Phase::Authenticated;
-                let username = login.username.clone();
-                self.attempts.remove(&username);
                 self.respond(Response::Success)
             }
             (
@@ -364,11 +372,12 @@ impl Manager {
                     description,
                 },
             ) => {
-                if error_type == ErrorType::AuthError && login.answered {
-                    let username = login.username.clone();
-                    self.attempt_failed(&username, now);
+                if let Some(login) = self.login.take() {
+                    if error_type == ErrorType::AuthError {
+                        self.attempt_failed(&login, now);
+                    }
+                    self.abandoned.push(login);
                 }
-                self.abandoned.extend(self.login.take());
                 self.respond(Response::Error {
                     error_type,
                     description,
@@ -422,6 +431,9 @@ impl Manager {
         if self.failures >= FAILURES_ALLOWED && self.login.is_none() && self.sessions.is_empty() {
             self.ending = true;
             self.failed = true;
+            self.exit_by = Some(now + FAILED_EXIT_LIMIT);
+        } else if greeter.shown.is_none() {
+            self.respawn_at = Some(now + RESPAWN_PAUSE);
         }
         actions
     }
@@ -439,9 +451,7 @@ impl Manager {
         if let Some(greeter) = self.greeter.take_if(|greeter| greeter.worker == worker) {
             actions.extend(self.greeter_ended(&greeter, now));
         } else if let Some(login) = self.login.take_if(|login| login.worker == worker) {
-            if login.phase == Phase::Authenticating && login.answered {
-                self.attempt_failed(&login.username, now);
-            }
+            self.attempt_failed(&login, now);
             if self.gives_the_screen_back(&login) {
                 actions.push(Action::ShowGreeter);
             }
@@ -462,11 +472,27 @@ impl Manager {
         } else {
             self.sessions.retain(|session| *session != worker);
         }
-        if self.needs_greeter() {
-            actions.push(self.spawn_greeter());
-        }
-        actions.extend(self.exit_when_finished());
+        actions.extend(self.tick(now));
         actions
+    }
+
+    /// When [`Self::tick`] has something to do although nothing else happens.
+    pub fn wake_at(&self) -> Option<Instant> {
+        let respawn = self.respawn_at.filter(|_| self.needs_greeter());
+        respawn.into_iter().chain(self.exit_by).min()
+    }
+
+    /// Does what is due at `now`.
+    pub fn tick(&mut self, now: Instant) -> Vec<Action> {
+        if self.needs_greeter() && self.respawn_at.is_none_or(|at| now >= at) {
+            self.respawn_at = None;
+            return vec![self.spawn_greeter()];
+        }
+        if self.exit_by.is_some_and(|at| now >= at) {
+            self.exit_by = None;
+            return vec![Action::Exit { success: false }];
+        }
+        self.exit_when_finished().into_iter().collect()
     }
 
     fn exit_when_finished(&self) -> Option<Action> {

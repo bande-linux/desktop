@@ -76,6 +76,7 @@ pub enum Class {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ToWorker {
     Begin { class: Class, username: String },
+    Proceed,
     Answer { response: Option<Zeroizing<String>> },
     Launch { env: Vec<String> },
 }
@@ -84,6 +85,13 @@ pub enum ToWorker {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum FromWorker {
+    /// The account signing in, under its own name; nothing is said of a name that is no account.
+    Account {
+        name: String,
+    },
+    /// PAM has accepted the person. The worker goes on only once it is told to [`ToWorker::Proceed`],
+    /// since it must not be killed from then on.
+    Accepted,
     Ask {
         text: String,
         visible: bool,

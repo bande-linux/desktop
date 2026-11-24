@@ -6,7 +6,7 @@ use std::path::Path;
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
-use bande_login::manager::{Action, GREETER_USER, Manager};
+use bande_login::manager::{Action, FAILED_EXIT_LIMIT, GREETER_USER, Manager, RESPAWN_PAUSE};
 use bande_login::protocol::{
     AuthMessageType, Class, Deadline, ErrorType, FromWorker, Request, Response, ToWorker,
     read_message, write_message,
@@ -82,6 +82,13 @@ fn signed_in(manager: &mut Manager) {
             auth_message: "Password:".to_owned(),
         })],
         "acknowledging a message is never passed to PAM as an answer"
+    );
+    manager.worker_said(
+        ADA,
+        FromWorker::Account {
+            name: "ada".to_owned(),
+        },
+        at(2),
     );
     let secret = Some(Zeroizing::new("hunter2".to_owned()));
     let answered = manager.request(
@@ -194,6 +201,10 @@ fn give_up_after(lives: &[(u64, Option<u64>)]) -> Option<usize> {
             return Some(index + 1);
         }
         assert!(reaped.is_empty(), "{reaped:?}");
+        if shown.is_none() {
+            now += RESPAWN_PAUSE.as_secs();
+            actions = manager.tick(at(now));
+        }
     }
     None
 }
@@ -225,21 +236,32 @@ fn a_login_window_that_keeps_failing_hands_over_to_the_console_however_slowly_it
         manager.worker_ended(ADA, at(4000)),
         vec![greeter_spawned(3)]
     );
-    assert_eq!(manager.worker_ended(3, at(4001)), vec![greeter_spawned(4)]);
-    assert_eq!(
-        manager.worker_ended(4, at(4002)),
-        vec![greeter_spawned(5)],
-        "signing in starts the count again"
-    );
+    for (worker, second) in [(3, 4001), (4, 4004)] {
+        assert!(manager.worker_ended(worker, at(second)).is_empty());
+        assert_eq!(
+            manager.tick(at(second + 2)),
+            vec![greeter_spawned(worker + 1)],
+            "signing in starts the count again"
+        );
+    }
 }
 
-fn tried(manager: &mut Manager, worker: u64, now: Instant) -> Vec<Action> {
+fn tried_as(
+    manager: &mut Manager,
+    worker: u64,
+    (typed, account): (&str, Option<&str>),
+    now: Instant,
+) -> Vec<Action> {
     manager.request(
         Request::CreateSession {
-            username: "ada".to_owned(),
+            username: typed.to_owned(),
         },
         now,
     );
+    if let Some(account) = account {
+        let name = account.to_owned();
+        manager.worker_said(worker, FromWorker::Account { name }, now);
+    }
     let prompt = FromWorker::Ask {
         text: "Password:".to_owned(),
         visible: false,
@@ -251,6 +273,10 @@ fn tried(manager: &mut Manager, worker: u64, now: Instant) -> Vec<Action> {
         },
         now,
     )
+}
+
+fn tried(manager: &mut Manager, worker: u64, now: Instant) -> Vec<Action> {
+    tried_as(manager, worker, ("ada", Some("ada")), now)
 }
 
 fn is_answer(action: &Action) -> bool {
@@ -300,14 +326,88 @@ fn guessing_is_slowed_down_whether_the_answer_is_waited_for_or_cancelled() {
             later.iter().any(is_answer),
             "{how}: the wait ends: {later:?}"
         );
-        manager.worker_said(8, FromWorker::Authenticated, at(120));
-        manager.request(Request::CancelSession, at(120));
+        assert_eq!(
+            manager.worker_said(8, FromWorker::Accepted, at(120)),
+            vec![Action::Tell(8, ToWorker::Proceed)]
+        );
+        let cancelled = manager.request(Request::CancelSession, at(120));
+        assert!(
+            cancelled.contains(&Action::Stop(8)),
+            "{how}: a worker PAM has accepted is let go, never killed: {cancelled:?}"
+        );
         let after = tried(&mut manager, 9, at(120));
         assert!(
             after.iter().any(is_answer),
             "{how}: signing in forgets the attempts"
         );
     }
+}
+
+#[test]
+fn guesses_are_counted_for_accounts_under_their_own_name_and_never_forgotten() {
+    let mut manager = Manager::default();
+    manager.start();
+    let mut worker = 1;
+    let mut guess = |manager: &mut Manager, names: (&str, Option<&str>), now| {
+        worker += 1;
+        let actions = tried_as(manager, worker, names, now);
+        manager.request(Request::CancelSession, now);
+        actions.iter().any(is_answer)
+    };
+    for typed in ["ada", "Ada", "ada@example.org", "ADA", "ada"] {
+        assert!(guess(&mut manager, (typed, Some("ada")), at(0)), "{typed}");
+    }
+    for round in 0..5 {
+        for number in 0..300 {
+            let name = format!("nobody{number}");
+            assert!(guess(&mut manager, (&name, None), at(0)), "{round} {name}");
+            let name = format!("someone{number}");
+            guess(&mut manager, (&name, Some(&name)), at(0));
+        }
+    }
+    assert!(
+        !guess(&mut manager, ("Ada", Some("ada")), at(1)),
+        "no number of other names makes the wait go away"
+    );
+    for name in ["-x", "+x"] {
+        assert_eq!(
+            manager.request(
+                Request::CreateSession {
+                    username: name.to_owned()
+                },
+                at(2)
+            ),
+            vec![Action::Reply(Response::error(
+                ErrorType::AuthError,
+                "pam_start: USER_UNKNOWN"
+            ))]
+        );
+    }
+}
+
+#[test]
+fn the_console_does_not_wait_forever_for_a_worker_that_hangs() {
+    let mut manager = Manager::default();
+    let mut started = manager.start();
+    let mut now = at(0);
+    for _ in 0..2 {
+        let Some(Action::Spawn { worker, .. }) = started.pop() else {
+            panic!("no login window was started: {started:?}");
+        };
+        assert!(
+            manager.worker_ended(worker, now).is_empty(),
+            "a login window that was never shown is not started again at once"
+        );
+        now += RESPAWN_PAUSE;
+        assert_eq!(manager.wake_at(), Some(now));
+        started = manager.tick(now);
+    }
+    tried(&mut manager, 4, now);
+    manager.worker_said(4, FromWorker::Accepted, now);
+    assert_eq!(manager.worker_ended(3, now), vec![Action::Stop(4)]);
+    now += FAILED_EXIT_LIMIT;
+    assert_eq!(manager.wake_at(), Some(now));
+    assert_eq!(manager.tick(now), vec![Action::Exit { success: false }]);
 }
 
 #[test]

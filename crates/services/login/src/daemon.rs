@@ -12,7 +12,7 @@ use bande_login::manager::{Action, GREETER_USER, Manager, WorkerId};
 use bande_login::protocol::{
     Class, Deadline, FromWorker, Request, ToWorker, read_message, write_message,
 };
-use rustix::event::{PollFd, PollFlags, poll};
+use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use rustix::process::{Pid, PidfdFlags, pidfd_open};
 
 use crate::account::Account;
@@ -170,7 +170,13 @@ impl Daemon {
             .iter()
             .map(|(_, fd)| PollFd::from_borrowed_fd(*fd, PollFlags::IN))
             .collect();
-        match poll(&mut fds, None) {
+        let timeout = self
+            .manager
+            .wake_at()
+            .map(|at| Timespec::try_from(at.saturating_duration_since(Instant::now())))
+            .transpose()
+            .map_err(io::Error::other)?;
+        match poll(&mut fds, timeout.as_ref()) {
             Ok(_) => {}
             Err(rustix::io::Errno::INTR) => return Ok(()),
             Err(error) => return Err(error.into()),
@@ -199,6 +205,8 @@ impl Daemon {
             };
             self.act(actions);
         }
+        let due = self.manager.tick(Instant::now());
+        self.act(due);
         Ok(())
     }
 

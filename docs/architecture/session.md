@@ -613,7 +613,8 @@ part of login small and the UI unprivileged:
    peer `bande-login` checks again. People's wallpapers and account pictures are decoded in a
    confined process for each (`bande_lock::serve_picture_worker`: the program run again, with only
    computing left after it has read the file), as on the lock screen, so a picture someone made
-   cannot reach the process that reads passwords or end it. It shows the lock screen's layout (`bande_lock::LockScreen`,
+   cannot reach the process that reads passwords or end it. It shows the lock screen's layout
+   (`bande_lock::LockScreen`,
    announced as "Sign in") with battery, Wi-Fi or cable or Offline, input source, and Sleep,
    Restart and Shut Down. Logind's answers are asked again when the devices change or the screen
    wakes, so a dock that changes them is followed.
@@ -647,9 +648,10 @@ answer starts a new conversation at once; one before any prompt (`pam_nologin`, 
 load) waits for the next answer, Escape or another person. After four wrong answers for the same
 login name each further one waits 5 s, doubling to a minute, with a countdown under the field;
 the login window keeps the count per name across switching people, and `bande-login` keeps its
-own (`bande_pam::Backoff`), which also counts an answer whose conversation was cancelled, cut off
-or crashed and refuses answers until the wait is over, so a login window that does not wait gains
-nothing. A typed name is logged only when it is an account's. While a session is starting,
+own for each account, under the account's own name (`bande_pam::Backoff`), which also counts an
+answer whose conversation was cancelled, cut off or crashed and refuses answers until the wait is
+over, so a login window that does not wait guesses no faster. A typed name is logged only when it
+is an account's. While a session is starting,
 the field holds text or a power confirmation is open, Up and Down do not switch people. At login
 `bande-login` changes an expired password with `pam_chauthtok` through the same conversation (the
 `password` stack of `bande-greeter`). The lock screen cannot change one, as it runs as the user
@@ -709,13 +711,14 @@ desktop has drawn its first frame, then the desktop fades in over it:
 When the session ends before its first frame (`bande-session` failing, the compositor
 crashing), or its compositor has hung (the worker ends it when, after the compositor opened its
 Wayland socket, nothing new has appeared in the runtime directory for 30 s, or after 5 minutes
-in all, so a slow first login or `~/.profile` is waited for), the worker brings VT 1 back (the kernel hung up every descriptor
-on its terminal when the session's leader exited, so it opens the terminal again first, to
-acknowledge the switch) and `bande-login`
-answers `start_session` with an error and accepts a new `create_session`;
+in all, so a slow first login or `~/.profile` is waited for), the worker brings VT 1 back and
+`bande-login` answers `start_session` with an error and accepts a new `create_session`;
 the login window, still running, comes back with its content and the reason `bande-session` left
-for it (above). Logging out ends the session: logind gives the terminal back to the console,
-which shows only `deep`, and `bande-login` starts the login window again on VT 1, set to
+for it (above). Whenever a session ends, the worker brings VT 1 to the front before it closes the session,
+so logind never finds the session's terminal on screen without one and starts no `getty` there. The
+kernel hung up every descriptor on that terminal when the session's leader exited, so the worker
+opens it again first, to acknowledge the switch. Logging out ends the session: logind gives the
+terminal back to the console, VT 1 shows only `deep`, and `bande-login` starts the login window again on VT 1, set to
 graphics mode before it comes to the front, which fades in from that colour. A compositor
 leaving the screen closes its framebuffers with `DRM_IOCTL_MODE_CLOSEFB`, which leaves them on
 their planes until something else is shown, so the login window imports what is on screen only
@@ -728,7 +731,8 @@ there (which would conflict with `bande-greeter.service`); `Ctrl+Alt+F3` and abo
 console at any time. When the login window ends three times in a row without anyone having signed
 in or its having stayed on screen for a minute (its compositor marks its first frame with `shown`
 in `/run/bande-greeter`), while no session runs, `bande-login` exits with status 69, which
-`RestartPreventExitStatus=` makes final, and
+`RestartPreventExitStatus=` makes final (waiting at most 15 s for workers that are still ending;
+a login window that was never shown is started again after 2 s), and
 `bande-console-fallback.service` quits Plymouth, gives VT 1 back to the console
 (`bande-login --console`: text mode and automatic switching, whoever left it in graphics mode,
 the keyboard in Unicode mode, then a reset), starts `getty@tty1` and brings the console

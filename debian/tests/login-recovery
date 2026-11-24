@@ -68,6 +68,7 @@ time.sleep(3600)
 GREETER
 cat > /usr/bin/bande-session <<'SESSION'
 #!/bin/sh
+env > /run/login-recovery/environment
 case $(cat /run/login-recovery/session) in
 exit) exit 3 ;;
 esac
@@ -96,8 +97,11 @@ wait_for() {
     journalctl --no-pager --boot --unit bande-greeter.service --identifier bande-login --lines 60
     exit 1
 }
+trap 'echo "login-recovery: line $LINENO failed"' ERR
 on_screen() { [ "$(cat /sys/class/tty/tty0/active)" = "tty$1" ]; }
-given_back() { [ "$(terminal 2)" = "text auto" ]; }
+session_tty() { sed -n "s/^XDG_VTNR=//p" "$state/environment"; }
+given_back() { [ "$(terminal "$(session_tty)")" = "text auto" ]; }
+session_on_screen() { on_screen "$(session_tty)"; }
 said() { [ -s "$state/said" ]; }
 has_session() { loginctl list-sessions --no-legend | awk -v user="$1" -v class="$2" '$3 == user && $6 == class { found = 1 } END { exit !found }'; }
 signed_in() { has_session ada user; }
@@ -123,19 +127,20 @@ echo "a session that ends at once gives the screen back"
 restart sign-in show
 wait_for 30 signed_in
 wait_for 30 no_login_window
-on_screen 2
+wait_for 5 session_on_screen
 echo sit > "$state/mode"
 touch "$state/leave"
 wait_for 20 has_login_window
 wait_for 10 on_screen 1
 wait_for 5 given_back
 wait_for 10 signed_out
+[ -z "$(systemctl list-units --plain --no-legend 'getty@*' 'autovt@*')" ] || { systemctl list-units 'getty@*' 'autovt@*'; exit 1; }
 echo "logging out brings the login window back"
 
 restart sign-in show
 wait_for 30 signed_in
 wait_for 30 no_login_window
-on_screen 2
+wait_for 5 session_on_screen
 systemctl stop bande-greeter.service
 wait_for 5 given_back
 wait_for 10 signed_out

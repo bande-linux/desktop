@@ -196,7 +196,7 @@ echo "== bande-desktop recommends only packages built here at $version, the brow
 relation Recommends bande-browser
 desktop Recommends | tr ',' '\n' | sed 's/^ *//' | grep '^bande-\|^libpam-bande-' | grep -vx bande-browser | while read -r package relation; do
     [ "$relation" = "(>= $version)" ] || { echo "bande-desktop recommends $package $relation"; exit 1; }
-    printf '%s\n' "${packages[@]}" "${independent[@]}" | grep -qxF "$package" || { echo "$package is not built here"; exit 1; }
+    printf '%s\n' "${packages[@]}" "${independent[@]}" | grep -xF "$package" > /dev/null || { echo "$package is not built here"; exit 1; }
 done
 
 echo "== a language pack holds only catalogs, one per program"

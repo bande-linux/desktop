@@ -83,7 +83,7 @@ pub use app_states::{AppStatesHandle, serve_app_states};
 pub use appearance::{SystemAppearance, follow_appearance};
 pub use assistive::follow_alerts;
 pub use bande_render::{DeviceInfo, RenderError};
-pub use boot_screen::{boot_screen_shown, take_display_from_boot_screen};
+pub use boot_screen::{boot_screen_has_display, boot_screen_shown, take_display_from_boot_screen};
 pub use clock::{
     FrameClock, FrameOutput, FrameRecovery, FrameScheduler, Poll, RecoveryStep, Submission, Vblank,
 };
@@ -91,7 +91,8 @@ pub use colour::edid_profile;
 pub use cursor::{CursorTheme, write_cursor_theme};
 pub use display_bus::{DisplaysHandle, serve_displays};
 pub use drm::{
-    DrmBackend, DrmBackendError, DrmNotifiers, FirstMode, HeadChanges, refresh_of, sorted_modes,
+    BehindBootScreen, DrmBackend, DrmBackendError, DrmNotifiers, FirstMode, HeadChanges,
+    refresh_of, sorted_modes,
 };
 pub use element::{ScreenElement, SurfaceElement};
 pub use environment::{

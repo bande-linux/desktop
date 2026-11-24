@@ -6,10 +6,11 @@ use std::process::{Child, ExitCode};
 use std::time::{Duration, Instant};
 
 use bande_compositor::{
-    Awaited, CLIPBOARD_DAEMON, Compositor, CursorTheme, DisplaysHandle, DrmBackend, DrmNotifiers,
-    FirstMode, FrameClock, FrameOutput, FrameRecovery, FrameScheduler, GREETER, InputSettings,
-    REFRESH, REVIEW, RecoveryStep, Renderer, SCREENSHOT, SESSION_CLIENT_RESTART_THROTTLE, SHELL,
-    SessionRequest, SessionRole, SessionUpkeep, Shutdown, Sleep, boot_screen_shown,
+    Awaited, BehindBootScreen, CLIPBOARD_DAEMON, Compositor, CursorTheme, DisplaysHandle,
+    DrmBackend, DrmNotifiers, FirstMode, FrameClock, FrameOutput, FrameRecovery, FrameScheduler,
+    GREETER, InputSettings, OutputConfig, REFRESH, REVIEW, RecoveryStep, Renderer, SCREENSHOT,
+    SESSION_CLIENT_RESTART_THROTTLE, SHELL, ScanoutDevice, SessionRequest, SessionRole,
+    SessionUpkeep, Shutdown, Sleep, boot_screen_has_display, boot_screen_shown,
     export_session_environment, follow_alerts, follow_appearance, follow_input_settings,
     follow_lid, follow_login_settings, follow_session, follow_shutdown, follow_sleep,
     handle_power_key, notify_service_manager, raise_priority, render_material, serve_app_states,
@@ -45,6 +46,7 @@ use zbus::blocking::fdo::PropertiesProxy;
 
 const HEADLESS_SIZE: (i32, i32) = (1920, 1080);
 const SHELL_READY_TIMEOUT: Duration = Duration::from_millis(2500);
+const BEHIND_BOOT_SCREEN_LIMIT: Duration = Duration::from_secs(10);
 const COMPOSITOR_STALL: &str = "compositor-stall";
 const STALL_LIMIT: Duration = Duration::from_secs(6);
 const GREETER_HANG_LIMIT_SECONDS: u32 = 20;
@@ -219,6 +221,13 @@ impl Greeter {
             started: Instant::now(),
         }
     }
+
+    fn is_running(&mut self) -> io::Result<bool> {
+        match self.child.as_mut() {
+            Some(child) => Ok(child.try_wait()?.is_none()),
+            None => Ok(false),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -288,7 +297,7 @@ fn run_headless(session: Session, started: Duration, buses: Buses) -> Result<(),
         lid: Lid::default(),
         asked_to_stop: false,
     };
-    serve(&mut event_loop, app, session).map(drop)
+    serve(&mut event_loop, app, session, None).map(drop)
 }
 
 fn window_memory() -> Option<PathBuf> {
@@ -471,14 +480,129 @@ fn page_flipped(app: &mut App<DrmBackend>, crtc: crtc::Handle, metadata: Option<
 fn open_display(
     device: Option<&Path>,
     first_mode: FirstMode,
+    mut behind: Option<BehindBootScreen>,
 ) -> Result<(DrmBackend, DrmNotifiers), Box<dyn Error>> {
     let mut retrying = false;
     loop {
         DrmBackend::wait_for_display(retrying)?;
-        if let Some(opened) = DrmBackend::open(device, first_mode)? {
+        if let Some(opened) = DrmBackend::open(device, first_mode, &mut behind)? {
             return Ok(opened);
         }
         retrying = true;
+    }
+}
+
+fn compositor_on(
+    outputs: Vec<OutputConfig>,
+    scanout: ScanoutDevice,
+) -> Result<Compositor, Box<dyn Error>> {
+    let mut outputs = outputs.into_iter();
+    let first = outputs.next().ok_or("no display is connected")?;
+    let mut compositor = Compositor::on_device(first, Some(scanout))?;
+    for output in outputs {
+        compositor.add_output(output);
+    }
+    compositor.set_display_config(user_config().unwrap_or_default());
+    Ok(compositor)
+}
+
+struct LoginWindow {
+    socket: ListeningSocketSource,
+    greeter: Greeter,
+}
+
+struct DrawnBehind {
+    display: BehindBootScreen,
+    compositor: Compositor,
+    login: LoginWindow,
+}
+
+impl DrawnBehind {
+    fn start(device: Option<&Path>, buses: &Buses) -> Result<Option<Self>, Box<dyn Error>> {
+        let Some(display) = BehindBootScreen::open(device)? else {
+            return Ok(None);
+        };
+        let mut compositor = compositor_on(display.outputs().to_vec(), display.scanout_device())?;
+        let socket = open_socket(&mut compositor, buses)?;
+        prepare_login_window(&mut compositor);
+        let greeter = Greeter::start(&mut compositor);
+        Ok(Some(Self {
+            display,
+            compositor,
+            login: LoginWindow { socket, greeter },
+        }))
+    }
+
+    fn wait(&mut self, started: Duration) -> Result<(), Box<dyn Error>> {
+        let mut event_loop: EventLoop<Compositor> = EventLoop::try_new()?;
+        for fd in [self.compositor.poll_fd()?, self.compositor.fence_fd()?] {
+            event_loop.handle().insert_source(
+                Generic::new(fd, Interest::READ, Mode::Level),
+                |_, _, compositor: &mut Compositor| {
+                    compositor.dispatch()?;
+                    Ok(PostAction::Continue)
+                },
+            )?;
+        }
+        let deadline = started + BEHIND_BOOT_SCREEN_LIMIT;
+        self.compositor
+            .hold_frames_until(Awaited::LoginWindow, started, deadline);
+        while self.login.greeter.is_running()? {
+            let waited = now().saturating_sub(started).as_millis();
+            if self.compositor.awaited_drawable() {
+                tracing::info!(
+                    "the login window is drawn behind the boot screen after {waited} ms"
+                );
+                break;
+            }
+            let left = deadline.saturating_sub(now());
+            if left.is_zero() {
+                tracing::warn!("the login window drew nothing in {waited} ms; taking the display");
+                break;
+            }
+            self.compositor.flush_clients()?;
+            event_loop.dispatch(Some(left), &mut self.compositor)?;
+            self.compositor.import_awaited(self.display.renderer());
+        }
+        Ok(())
+    }
+}
+
+fn draw_behind_boot_screen(
+    device: Option<&Path>,
+    started: Duration,
+    buses: &Buses,
+) -> Option<DrawnBehind> {
+    if !boot_screen_has_display() {
+        return None;
+    }
+    let mut drawn = match DrawnBehind::start(device, buses) {
+        Ok(drawn) => drawn?,
+        Err(error) => {
+            tracing::warn!("cannot draw behind the boot screen: {error}");
+            return None;
+        }
+    };
+    if let Err(error) = drawn.wait(started) {
+        tracing::warn!("cannot wait for the login window behind the boot screen: {error}");
+    }
+    Some(drawn)
+}
+
+fn adopt_outputs(compositor: &mut Compositor, known: &[OutputConfig], found: Vec<OutputConfig>) {
+    let gone: Vec<&OutputConfig> = known
+        .iter()
+        .filter(|known| found.iter().all(|output| output.name != known.name))
+        .collect();
+    for output in found {
+        match known.iter().find(|known| known.name == output.name) {
+            Some(known) if *known == output => {}
+            Some(_) => compositor.refit_output(output),
+            None => compositor.add_output(output),
+        }
+    }
+    for output in gone {
+        compositor.remove_output(&output.name);
     }
 }
 
@@ -491,22 +615,35 @@ fn run_drm(
     if let Some(system) = &buses.system {
         raise_priority(system);
     }
-    let first_mode = match session {
+    let (first_mode, drawn) = match session {
         Session::Greeter => {
+            let drawn = draw_behind_boot_screen(device, started, &buses);
             take_display_from_boot_screen();
-            FirstMode::OnScreen
+            (FirstMode::OnScreen, drawn)
         }
-        Session::User => FirstMode::Preferred,
+        Session::User => (FirstMode::Preferred, None),
     };
-    let (backend, notifiers) = open_display(device, first_mode)?;
+    let (display, behind) = match drawn {
+        Some(drawn) => (Some(drawn.display), Some((drawn.compositor, drawn.login))),
+        None => (None, None),
+    };
+    let known = display
+        .as_ref()
+        .map(|display| display.outputs().to_vec())
+        .unwrap_or_default();
+    let (backend, notifiers) = open_display(device, first_mode, display)?;
     tracing::info!("driving {}", backend.path().display());
-    let mut outputs = backend.outputs().into_iter();
-    let first = outputs.next().ok_or("no display is connected")?;
-    let mut compositor = Compositor::on_device(first, Some(backend.scanout_device()))?;
-    for output in outputs {
-        compositor.add_output(output);
-    }
-    compositor.set_display_config(user_config().unwrap_or_default());
+    let (mut compositor, login) = match behind {
+        Some((mut compositor, login)) => {
+            adopt_outputs(&mut compositor, &known, backend.outputs());
+            compositor.use_scanout_device(backend.scanout_device());
+            (compositor, Some(login))
+        }
+        None => (
+            compositor_on(backend.outputs(), backend.scanout_device())?,
+            None,
+        ),
+    };
     if !compositor.enable_explicit_sync(backend.device_fd()) {
         tracing::warn!(
             "{} has no syncobj eventfd; explicit sync is off",
@@ -611,37 +748,51 @@ fn run_drm(
     }
     let App {
         compositor, output, ..
-    } = serve(&mut event_loop, app, session)?;
+    } = serve(&mut event_loop, app, session, login)?;
     drop(compositor);
     tracing::info!("leaving the last frame on screen for the session that follows");
     output.leave_on_screen();
     Ok(())
 }
 
-fn listen<O: 'static>(
-    handle: &LoopHandle<'static, App<O>>,
-    app: &mut App<O>,
-) -> Result<(), Box<dyn Error>> {
+fn open_socket(
+    compositor: &mut Compositor,
+    buses: &Buses,
+) -> Result<ListeningSocketSource, Box<dyn Error>> {
     let socket = ListeningSocketSource::new_auto()?;
     println!("WAYLAND_DISPLAY={}", socket.socket_name().to_string_lossy());
-    app.compositor.set_socket_name(socket.socket_name());
-    app.compositor
-        .use_cursor_theme(CursorTheme::from_environment());
+    compositor.set_socket_name(socket.socket_name());
+    compositor.use_cursor_theme(CursorTheme::from_environment());
     if let Some(path) = window_memory() {
-        app.compositor.remember_windows_in(path);
+        compositor.remember_windows_in(path);
     }
     if let Some(path) = layer_places() {
-        app.compositor.remember_layer_places_in(path);
+        compositor.remember_layer_places_in(path);
     }
     let socket_name = socket.socket_name().to_string_lossy().into_owned();
-    if let Some(session) = &app.buses.session {
-        app.compositor.use_session_bus(session.clone());
+    if let Some(session) = &buses.session {
+        compositor.use_session_bus(session.clone());
         if let Err(error) =
-            export_session_environment(session, &socket_name, app.compositor.cursor_theme())
+            export_session_environment(session, &socket_name, compositor.cursor_theme())
         {
             tracing::warn!("cannot export the session environment: {error}");
         }
     }
+    Ok(socket)
+}
+
+fn prepare_login_window(compositor: &mut Compositor) {
+    compositor.serve_login_window();
+    if let Some(runtime) = bande_xdg::runtime_dir() {
+        compositor.record_accessibility_in(login_accessibility_file(&runtime));
+    }
+}
+
+fn listen<O: 'static>(
+    handle: &LoopHandle<'static, App<O>>,
+    app: &mut App<O>,
+    socket: ListeningSocketSource,
+) -> Result<(), Box<dyn Error>> {
     handle.insert_source(socket, |stream, _, app| {
         if let Err(error) = app.compositor.insert_client(stream) {
             tracing::warn!("rejected client: {error}");
@@ -955,6 +1106,7 @@ fn serve<O>(
     event_loop: &mut EventLoop<'static, App<O>>,
     mut app: App<O>,
     session: Session,
+    login: Option<LoginWindow>,
 ) -> Result<App<O>, Box<dyn Error>>
 where
     O: FrameOutput + 'static,
@@ -963,7 +1115,11 @@ where
     if let Err(error) = stop_on_signals(&event_loop.handle()) {
         tracing::warn!("a request to stop ends the session as a crash: {error}");
     }
-    listen(&event_loop.handle(), &mut app)?;
+    let (socket, started_greeter) = match login {
+        Some(LoginWindow { socket, greeter }) => (socket, Some(greeter)),
+        None => (open_socket(&mut app.compositor, &app.buses)?, None),
+    };
+    listen(&event_loop.handle(), &mut app, socket)?;
     if let (Session::User, Some(system)) = (&session, &app.buses.system) {
         let (presses, received) = std::sync::mpsc::channel();
         match handle_power_key(system, received) {
@@ -990,10 +1146,8 @@ where
         }
         Session::Greeter => {
             end_greeter_when_hung(&event_loop.handle())?;
-            app.compositor.serve_login_window();
-            if let Some(runtime) = bande_xdg::runtime_dir() {
-                app.compositor
-                    .record_accessibility_in(login_accessibility_file(&runtime));
+            if started_greeter.is_none() {
+                prepare_login_window(&mut app.compositor);
             }
             if let Some(bus) = &app.buses.session {
                 match serve_keyboard_monitor(bus) {
@@ -1026,7 +1180,8 @@ where
             };
             app.compositor.fade_in_over(shown);
             app.first_frame_marker = Some(PathBuf::from(LOGIN_WINDOW_SHOWN));
-            (Some(Greeter::start(&mut app.compositor)), None)
+            let greeter = started_greeter.unwrap_or_else(|| Greeter::start(&mut app.compositor));
+            (Some(greeter), None)
         }
     };
     match StallWatch::start(COMPOSITOR_STALL, STALL_LIMIT) {

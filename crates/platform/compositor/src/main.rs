@@ -46,7 +46,8 @@ use zbus::blocking::fdo::PropertiesProxy;
 
 const HEADLESS_SIZE: (i32, i32) = (1920, 1080);
 const SHELL_READY_TIMEOUT: Duration = Duration::from_millis(2500);
-const BEHIND_BOOT_SCREEN_LIMIT: Duration = Duration::from_secs(10);
+const BEHIND_BOOT_SCREEN_LIMIT: Duration = Duration::from_secs(5);
+const LOGIN_WINDOW_LIMIT: Duration = Duration::from_secs(10);
 const COMPOSITOR_STALL: &str = "compositor-stall";
 const STALL_LIMIT: Duration = Duration::from_secs(6);
 const GREETER_HANG_LIMIT_SECONDS: u32 = 20;
@@ -239,6 +240,9 @@ fn main() -> ExitCode {
     let started = now();
     bande_log::init("bande-compositor");
     let result = parse_args().and_then(|(backend, session)| {
+        if session == Session::Greeter {
+            end_greeter_when_hung_for(GREETER_HANG_LIMIT_SECONDS);
+        }
         let buses = Buses::connect();
         match backend {
             Backend::Headless => run_headless(session, started, buses),
@@ -478,12 +482,19 @@ fn page_flipped(app: &mut App<DrmBackend>, crtc: crtc::Handle, metadata: Option<
 
 fn open_display(
     device: Option<&Path>,
+    session: Session,
     first_mode: FirstMode,
     mut behind: Option<BehindBootScreen>,
 ) -> Result<(DrmBackend, DrmNotifiers), Box<dyn Error>> {
     let mut retrying = false;
     loop {
+        if session == Session::Greeter {
+            end_greeter_when_hung_for(0);
+        }
         DrmBackend::wait_for_display(retrying)?;
+        if session == Session::Greeter {
+            end_greeter_when_hung_for(GREETER_HANG_LIMIT_SECONDS);
+        }
         if let Some(opened) = DrmBackend::open(device, first_mode, &mut behind)? {
             return Ok(opened);
         }
@@ -630,7 +641,7 @@ fn run_drm(
         .as_ref()
         .map(|display| display.outputs().to_vec())
         .unwrap_or_default();
-    let (backend, notifiers) = open_display(device, first_mode, display)?;
+    let (backend, notifiers) = open_display(device, session, first_mode, display)?;
     tracing::info!("driving {}", backend.path().display());
     let (mut compositor, login) = match behind {
         Some((mut compositor, login)) => {
@@ -878,12 +889,16 @@ fn restart_the_computer(system: Option<&Connection>) {
     }
 }
 
+fn end_greeter_when_hung_for(seconds: u32) {
+    // SAFETY: alarm takes only a number of seconds and touches no memory.
+    unsafe { libc::alarm(seconds) };
+}
+
 fn end_greeter_when_hung<O: 'static>(
     handle: &LoopHandle<'static, App<O>>,
 ) -> Result<(), Box<dyn Error>> {
     handle.insert_source(Timer::immediate(), |_, _, _| {
-        // SAFETY: alarm takes only a number of seconds and touches no memory.
-        unsafe { libc::alarm(GREETER_HANG_LIMIT_SECONDS) };
+        end_greeter_when_hung_for(GREETER_HANG_LIMIT_SECONDS);
         TimeoutAction::ToDuration(GREETER_HANG_CHECK)
     })?;
     Ok(())
@@ -1171,7 +1186,7 @@ where
             app.compositor.hold_frames_until(
                 Awaited::LoginWindow,
                 app.started,
-                now() + SHELL_READY_TIMEOUT,
+                now() + LOGIN_WINDOW_LIMIT,
             );
             let shown = match boot_screen_shown() {
                 true => app.output.frames_on_screen(),
@@ -1260,6 +1275,9 @@ where
         }
         if let Some(number) = compositor.take_virtual_terminal() {
             output.switch_virtual_terminal(number);
+        }
+        if session == Session::Greeter && compositor.awaited_never_appeared(now()) {
+            return Err("the login window did not appear".into());
         }
         let reveal_wait = compositor
             .reveal_wake(now())

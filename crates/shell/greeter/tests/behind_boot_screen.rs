@@ -36,6 +36,7 @@ fn the_login_window_is_ready_before_a_display_is_taken_and_starts_no_portal() {
     let mut renderer = VulkanRenderer::new(None).expect("Vulkan renderer");
     server.serve_login_window();
     server.hold_frames_until(Awaited::LoginWindow, Duration::ZERO, Duration::MAX);
+    assert!(server.awaited_never_appeared(Duration::MAX));
     let (compositor_end, greeter_end) = UnixStream::pair().expect("socket pair");
     server
         .insert_session_client(compositor_end, SessionRole::Shell)
@@ -59,9 +60,11 @@ fn the_login_window_is_ready_before_a_display_is_taken_and_starts_no_portal() {
         thread::sleep(Duration::from_millis(5));
     }
     let drawn = server.awaited_drawable();
+    let appeared = !server.awaited_never_appeared(Duration::MAX);
     greeter.kill().expect("the greeter runs until it is ended");
     greeter.wait().expect("the greeter ends");
 
     assert!(drawn, "the login window drew nothing");
+    assert!(appeared, "a login window that is there is not given up");
     assert_eq!(questions.try_iter().next(), None, "the portal was asked");
 }

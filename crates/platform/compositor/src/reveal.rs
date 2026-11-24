@@ -268,6 +268,12 @@ impl Compositor {
         matches!(self.state.reveal, Reveal::Holding { drawable: true, .. })
     }
 
+    /// Whether held frames have waited until their deadline for something no client has shown.
+    pub fn awaited_never_appeared(&self, now: Duration) -> bool {
+        matches!(self.state.reveal, Reveal::Holding { deadline, ready, .. }
+            if now >= deadline && self.state.awaited(ready).is_none())
+    }
+
     pub fn reveal_wake(&mut self, now: Duration) -> Option<Duration> {
         let Reveal::Holding {
             since,

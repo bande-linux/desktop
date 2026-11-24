@@ -751,7 +751,7 @@ quit it. The login window runs on VT 1, Plymouth's terminal, so nothing switches
 the start of the compositor and the login window: the compositor opens the card without becoming
 its master, only to read which displays there are, their modes and what is on them, closes it,
 starts Vulkan on the same device, starts `bande-greeter` and imports its first buffer
-(`BehindBootScreen`). When the login window ends, fails, or draws nothing within 10 s, or the
+(`BehindBootScreen`). When the login window ends, fails, or draws nothing within 5 s, or the
 card cannot be read, the compositor goes on as without this and takes the display. Then it sets
 its terminal to graphics mode, so the kernel's console cannot draw once Plymouth lets go, and asks
 for the display: only root may talk to Plymouth, so it creates `handover` in
@@ -771,11 +771,15 @@ buffer), which is Plymouth's last frame, and once the login window can be drawn 
 out over it with the `standard` spring (`fade` with Reduce Motion). When the framebuffer cannot
 be read while Plymouth runs, the frame is the boot screen's own background and mark at
 Plymouth's scale, drawn by `bande-splash`. The compositor holds its frames until the login
-window's buffer is imported for its renderer, not merely attached (at most 2.5 s), as the
-session's compositor does for the wallpaper and the Taskbar. Once a frame in which every element
-was drawn and the login window was among them is on screen, the compositor creates `shown`
+window's buffer is imported for its renderer, not merely attached, as the session's compositor
+does for the wallpaper and the Taskbar (there at most 2.5 s). When no login window has appeared
+10 s after the display was taken, the compositor ends instead of showing an empty screen, and one
+that hangs anywhere on the way, except while no display is connected, is ended by `alarm(20)`, so
+`bande-login` starts it again or, the third time, brings the console. Once a frame in which every
+element was drawn and the login window was among them is on screen, the compositor creates
+`shown`
 there and the root `bande-greeter-splash.path` runs `plymouth quit --retain-splash`. Plymouth
-is not dismissed onto a frame that left the login window out, except that once the 2.5 s are up
+is not dismissed onto a frame that left the login window out, except that once the 10 s are up
 the compositor creates `shown` anyway and logs which surfaces were not drawn, so boot always
 finishes. When the handover does not come within 3 s (the unit failed or is missing), the
 compositor logs it and takes the display anyway. The background is Datum's `deep`,

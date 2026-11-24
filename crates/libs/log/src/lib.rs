@@ -26,6 +26,7 @@ const UNPREFIXED_TARGETS: [&str; 2] = ["pam_bande_secrets", "xdg_desktop_portal_
 const DBUS_TARGET: &str = "zbus";
 const PACKAGED: &str = "/usr";
 const LOCALLY_BUILT: &str = "/usr/local";
+const MOST_FREED_BYTES_KEPT: libc::c_int = 1 << 20;
 const OWN_PROGRAM: &str = "/proc/self/exe";
 
 pub fn is_installed_program(path: &Path) -> bool {
@@ -47,8 +48,19 @@ fn name_process(identifier: &str) {
     }
 }
 
+fn return_freed_memory_to_the_system() -> bool {
+    [libc::M_MMAP_THRESHOLD, libc::M_TRIM_THRESHOLD]
+        .into_iter()
+        .all(|threshold| {
+            // SAFETY: mallopt only sets a parameter of the allocator; it has no preconditions.
+            unsafe { libc::mallopt(threshold, MOST_FREED_BYTES_KEPT) == 1 }
+        })
+}
+
+/// Starts a Bande process: names it, has its allocator give freed memory back and sets up its logs.
 pub fn init(identifier: &str) {
     name_process(identifier);
+    let frugal = return_freed_memory_to_the_system();
     let filter = targets(std::env::var(FILTER_VARIABLE).ok().as_deref());
     let in_memory = (runs_installed() && !HOLDS_PASSWORDS.contains(&identifier))
         .then(|| ring::Ring::open(identifier).ok())
@@ -84,6 +96,9 @@ pub fn init(identifier: &str) {
         && journaled
     {
         journal_panics(!stderr_is_journal);
+    }
+    if !frugal {
+        tracing::warn!("the allocator keeps freed memory");
     }
 }
 

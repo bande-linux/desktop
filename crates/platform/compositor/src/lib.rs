@@ -84,7 +84,7 @@ pub use app_states::{AppStatesHandle, serve_app_states};
 pub use appearance::{SystemAppearance, follow_appearance};
 pub use assistive::follow_alerts;
 pub use bande_render::{DeviceInfo, RenderError};
-pub use boot_screen::{blank_console, take_display_from_boot_screen};
+pub use boot_screen::{boot_screen_shown, take_display_from_boot_screen};
 pub use clock::{
     FrameClock, FrameOutput, FrameRecovery, FrameScheduler, Poll, RecoveryStep, Submission, Vblank,
 };

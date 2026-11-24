@@ -105,9 +105,7 @@ impl State {
         }
     }
 
-    fn show_login_window(&mut self, now: Duration, since: Duration, over: Vec<ShownFrame>) {
-        let waited = now.saturating_sub(since).as_millis();
-        tracing::info!("the login window is shown {waited} ms after the compositor started");
+    fn fade_out(&mut self, over: Vec<ShownFrame>) {
         let spring = match self.reduce_motion {
             true => Spring::FADE,
             false => Spring::STANDARD,
@@ -132,13 +130,23 @@ impl State {
         self.needs_redraw = true;
     }
 
-    fn begin_reveal(&mut self, now: Duration, since: Duration, ready: bool) {
+    fn show_login_window(&mut self, now: Duration, since: Duration, over: Vec<ShownFrame>) {
+        let waited = now.saturating_sub(since).as_millis();
+        tracing::info!("the login window is shown {waited} ms after the compositor started");
+        self.fade_out(over);
+    }
+
+    fn begin_reveal(&mut self, now: Duration, since: Duration, ready: bool, over: Vec<ShownFrame>) {
         let waited = now.saturating_sub(since).as_millis();
         match ready {
             true => tracing::info!("the desktop is shown {waited} ms after the session started"),
             false => tracing::warn!(
                 "the desktop is shown after {waited} ms without waiting any longer for the shell"
             ),
+        }
+        if !over.is_empty() {
+            self.fade_out(over);
+            return;
         }
         self.reveal = match self.reduce_motion {
             true => Reveal::Shown,
@@ -269,15 +277,13 @@ impl Compositor {
         if !ready && now < deadline {
             return Some(deadline);
         }
+        let over = match &mut self.state.reveal {
+            Reveal::Holding { over, .. } => std::mem::take(over),
+            _ => Vec::new(),
+        };
         match awaited {
-            Awaited::Shell => self.state.begin_reveal(now, since, ready),
-            Awaited::LoginWindow => {
-                let over = match &mut self.state.reveal {
-                    Reveal::Holding { over, .. } => std::mem::take(over),
-                    _ => Vec::new(),
-                };
-                self.state.show_login_window(now, since, over);
-            }
+            Awaited::Shell => self.state.begin_reveal(now, since, ready, over),
+            Awaited::LoginWindow => self.state.show_login_window(now, since, over),
         }
         None
     }

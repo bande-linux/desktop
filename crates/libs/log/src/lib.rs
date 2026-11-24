@@ -13,10 +13,11 @@ use tracing_subscriber::util::SubscriberInitExt;
 const FILTER_VARIABLE: &str = "RUST_LOG";
 const PANIC_TARGET: &str = "panic";
 const OWN_TARGETS: &str = "bande";
-const HOLDS_PASSWORDS: [&str; 6] = [
+const HOLDS_PASSWORDS: [&str; 7] = [
     "bande-clipboard",
     "bande-greeter",
     "bande-lock",
+    "bande-login",
     "bande-polkit-agent",
     "bande-secrets",
     "bande-secrets-prompt",

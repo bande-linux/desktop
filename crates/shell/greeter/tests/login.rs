@@ -1,9 +1,8 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use bande_greeter::{
-    AuthMessageType, ErrorType, Login, Request, Response, Step, read_message, write_message,
-};
+use bande_greeter::{Login, Step};
 use bande_lock::{Prompt, Refusal};
+use bande_login::protocol::{AuthMessageType, ErrorType, Request, Response};
 
 fn message(kind: AuthMessageType, text: &str) -> Response {
     Response::AuthMessage {
@@ -20,7 +19,7 @@ fn failure(error_type: ErrorType, description: &str) -> Response {
 }
 
 #[test]
-fn every_pam_step_reaches_the_person_and_greetd_codes_become_refusals() {
+fn every_pam_step_reaches_the_person_and_pam_codes_become_refusals() {
     let (mut login, created) = Login::begin("ada");
     assert_eq!(
         created,
@@ -60,16 +59,5 @@ fn every_pam_step_reaches_the_person_and_greetd_codes_become_refusals() {
     assert_eq!(
         login.respond(failure(ErrorType::Error, "pam_acct_mgmt: NEW_AUTHTOK_REQD"))[0],
         Step::Refused(Refusal::PasswordExpired)
-    );
-
-    let mut oversized = Vec::new();
-    oversized.extend_from_slice(&(1u32 << 20).to_ne_bytes());
-    let refused = read_message::<Response>(&mut oversized.as_slice());
-    assert!(refused.is_err(), "a frame longer than the limit is refused");
-    let mut framed = Vec::new();
-    write_message(&mut framed, &Response::Success).unwrap();
-    assert_eq!(
-        read_message::<Response>(&mut framed.as_slice()).unwrap(),
-        Response::Success
     );
 }

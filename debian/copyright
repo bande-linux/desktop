@@ -1525,6 +1525,10 @@ Copyright: Maciej Hirsz <hello@maciej.codes>
  Jérome Eertmans (maintainer) <jeertmans@icloud.com>
 License: MIT or Apache-2.0
 
+Files: vendor/lzma-rust2-0.19.0/*
+Copyright: the lzma-rust2 authors
+License: Apache-2.0
+
 Files: vendor/lzma-rust2-0.23.0/*
 Copyright: the lzma-rust2 authors
 License: Apache-2.0
@@ -2252,7 +2256,7 @@ Files: vendor/serde_spanned-1.1.2/*
 Copyright: the serde_spanned authors
 License: MIT or Apache-2.0
 
-Files: vendor/sevenz-rust2-0.24.2/*
+Files: vendor/sevenz-rust2-0.21.6/*
 Copyright: the sevenz-rust2 authors
 License: Apache-2.0
 

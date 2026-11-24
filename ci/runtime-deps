@@ -68,11 +68,13 @@ flatpak flatpak optional
 /usr/bin/bande-clipboard bande-clipboard depends
 /usr/bin/bande-greeter bande-greeter depends
 /usr/bin/bande-lock bande-lock depends
+/proc/self/exe bande-greeter depends
 /usr/bin/bande-review bande-review optional
 /usr/bin/bande-screenshot bande-screenshot depends
 /usr/bin/bande-shell bande-shell depends
 /usr/libexec/bande-backupd bande-backup optional
 /usr/libexec/bande-boot-screen-helper bande-settings depends
+/usr/libexec/bande-greeter-session bande-greeter depends
 /usr/libexec/bande-consent bande-settings depends
 /usr/libexec/bande-file-chooser bande-file-chooser depends
 /usr/libexec/bande-locale-helper bande-settings depends

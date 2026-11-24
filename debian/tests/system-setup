@@ -2,7 +2,7 @@
 # Installing every Bande package with its recommends brings no package that takes over system-wide
 # setup, and leaves /etc/resolv.conf, /etc/nsswitch.conf and /etc/network/interfaces as they were
 # on a Debian system booted with systemd (systemd-sysv and its libnss-systemd).
-# bande-greeter (with greetd) is Bande's login window, which the display-manager test shows is
+# bande-greeter is Bande's login window, which the display-manager test shows is
 # offered, not imposed.
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
@@ -10,7 +10,7 @@ takes_over=(
     systemd-resolved systemd-networkd resolvconf openresolv netplan.io connman iwd
     firewalld ufw apparmor-profiles apparmor-profiles-extra x-display-manager
 )
-allowed=(bande-greeter greetd)
+allowed=(bande-greeter)
 candidate() {
     apt-cache policy "$1" | sed -n 's/^ *Candidate: //p'
 }

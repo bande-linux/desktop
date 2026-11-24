@@ -98,10 +98,10 @@ Build-Depends: debhelper-compat (= 14),
  librust-libc-0.2+default-dev (>= 0.2.186-~~) <!pkg.bande.vendor>,
  librust-libloading-0.8-dev (>= 0.8.9-~~) <!pkg.bande.vendor>,
  librust-libloading-0.8+default-dev (>= 0.8.9-~~) <!pkg.bande.vendor>,
- librust-lzma-rust2-0.23-dev (>= 0.23.0-~~) <!pkg.bande.vendor>,
- librust-lzma-rust2-0.23+encoder-dev (>= 0.23.0-~~) <!pkg.bande.vendor>,
- librust-lzma-rust2-0.23+std-dev (>= 0.23.0-~~) <!pkg.bande.vendor>,
- librust-lzma-rust2-0.23+xz-dev (>= 0.23.0-~~) <!pkg.bande.vendor>,
+ librust-lzma-rust2-0.19-dev (>= 0.19.0-~~) <!pkg.bande.vendor>,
+ librust-lzma-rust2-0.19+encoder-dev (>= 0.19.0-~~) <!pkg.bande.vendor>,
+ librust-lzma-rust2-0.19+std-dev (>= 0.19.0-~~) <!pkg.bande.vendor>,
+ librust-lzma-rust2-0.19+xz-dev (>= 0.19.0-~~) <!pkg.bande.vendor>,
  librust-mailparse-0.16-dev (>= 0.16.0-~~) <!pkg.bande.vendor>,
  librust-mailparse-0.16+default-dev (>= 0.16.0-~~) <!pkg.bande.vendor>,
  librust-md-5-0.10-dev (>= 0.10.6-~~) <!pkg.bande.vendor>,
@@ -192,11 +192,11 @@ Build-Depends: debhelper-compat (= 14),
  librust-serde-json-1+default-dev (>= 1.0.154-~~) <!pkg.bande.vendor>,
  librust-serde-norway-0.9-dev (>= 0.9.42-~~) <!pkg.bande.vendor>,
  librust-serde-norway-0.9+default-dev (>= 0.9.42-~~) <!pkg.bande.vendor>,
- librust-sevenz-rust2-0.24-dev (>= 0.24.0-~~) <!pkg.bande.vendor>,
- librust-sevenz-rust2-0.24+aes256-dev (>= 0.24.0-~~) <!pkg.bande.vendor>,
- librust-sevenz-rust2-0.24+bzip2-dev (>= 0.24.0-~~) <!pkg.bande.vendor>,
- librust-sevenz-rust2-0.24+deflate-dev (>= 0.24.0-~~) <!pkg.bande.vendor>,
- librust-sevenz-rust2-0.24+ppmd-dev (>= 0.24.0-~~) <!pkg.bande.vendor>,
+ librust-sevenz-rust2-0.21-dev (>= 0.21.0-~~) <!pkg.bande.vendor>,
+ librust-sevenz-rust2-0.21+aes256-dev (>= 0.21.0-~~) <!pkg.bande.vendor>,
+ librust-sevenz-rust2-0.21+bzip2-dev (>= 0.21.0-~~) <!pkg.bande.vendor>,
+ librust-sevenz-rust2-0.21+deflate-dev (>= 0.21.0-~~) <!pkg.bande.vendor>,
+ librust-sevenz-rust2-0.21+ppmd-dev (>= 0.21.0-~~) <!pkg.bande.vendor>,
  librust-sha2-0.11-dev (>= 0.11.1-~~) <!pkg.bande.vendor>,
  librust-signal-hook-0.4-dev (>= 0.4.5-~~) <!pkg.bande.vendor>,
  librust-skrifa-0.44-dev (>= 0.44.0-~~) <!pkg.bande.vendor>,
@@ -927,23 +927,25 @@ Depends: ${shlibs:Depends},
  fonts-inter,
  fonts-manrope,
  fonts-jetbrains-mono,
- greetd (>= 0.10.3-6),
  bande-compositor (= ${binary:Version}),
  kbd,
+ libpam0g,
+ libpam-runtime,
+ libpam-systemd,
  locales,
  ${misc:Depends}
 Provides: x-display-manager
-Description: Bande login window: signs users in through greetd
- The login window of the Bande desktop: greetd runs it as its greeter
- inside bande-compositor --greeter, and it lists the people who can sign
- in, asks for the chosen person's password and has greetd start their
- Bande session.
+Description: Bande login window and login manager
+ The login window of the Bande desktop and bande-login, the login manager
+ that runs it. bande-login runs the login window inside
+ bande-compositor --greeter, opens the session of the person who signs in
+ through PAM and logind, and keeps the login window on screen until their
+ desktop has drawn its first frame. The login window lists the people who
+ can sign in and asks for the chosen person's password.
  .
- It is a display manager of its own, bande-greeter.service, which runs
- greetd with Bande's configuration and leaves greetd.service and
- /etc/greetd/config.toml alone. When several display managers are
- installed, debconf asks which one starts; dpkg-reconfigure bande-greeter
- changes the choice.
+ It is a display manager of its own, bande-greeter.service. When several
+ display managers are installed, debconf asks which one starts;
+ dpkg-reconfigure bande-greeter changes the choice.
 
 Package: bande-terminal
 Architecture: any
@@ -1318,8 +1320,8 @@ Description: Bande desktop environment
  .
  This metapackage installs a complete Bande session: the compositor, the
  shell and lock screen, the keyring, the portal backend, PipeWire for
- sound and a way to log in (the Bande login window under greetd, or the
- display manager the system already has). It recommends the Bande apps,
+ sound and a way to log in (the Bande login window, or the display
+ manager the system already has). It recommends the Bande apps,
  the boot screen, fault reporting and systemd-oomd, which closes an app
  when memory stays under pressure.
 

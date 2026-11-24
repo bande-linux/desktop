@@ -16,9 +16,8 @@ use bande_config::{
 use bande_datetime::daylight::{Sky, place_of, sky};
 use bande_datetime::{DateFormats, MinuteTimer};
 use bande_greeter::{
-    Login, Request, Step, account_users, failed_session, last_user_file, login_accessibility,
-    login_look, login_picture, login_users, read_message, remember_user, remembered_user,
-    write_message,
+    Login, Step, account_users, failed_session, last_user_file, login_accessibility, login_look,
+    login_picture, login_users, remember_user, remembered_user,
 };
 use bande_keyboard::Layouts;
 use bande_l10n::tr;
@@ -27,6 +26,7 @@ use bande_lock::{
     PICTURE_PIXELS, Peer, PowerAction, Prompt, Purpose, Refusal, User, Variant, load_backdrop,
     load_pictures, night,
 };
+use bande_login::protocol::{Request, SOCKET_VARIABLE, read_message, write_message};
 use bande_status::devices::{powers, use_power};
 use bande_status::session::Ending;
 use bande_toolkit::ui::{Event, Key, frame_time};
@@ -56,7 +56,7 @@ enum Source {
     Backdrop,
     Sharp,
     Pictures,
-    Greetd,
+    Login,
     Powers,
     OtherBackdrop(usize),
 }
@@ -77,7 +77,8 @@ struct Greeter {
     other: Option<String>,
     peers: Vec<Option<usize>>,
     screen: LockScreen,
-    greetd: Option<UnixStream>,
+    login_socket: PathBuf,
+    daemon: Option<UnixStream>,
     login: Option<Login>,
     awaiting: bool,
     asked: bool,
@@ -87,6 +88,7 @@ struct Greeter {
     next: Option<String>,
     refusal: Option<Refusal>,
     pending: Option<Zeroizing<String>>,
+    leaving: bool,
     started: bool,
     caps_lock: bool,
     minutes: MinuteTimer,
@@ -316,7 +318,7 @@ impl Greeter {
     }
 
     fn is_starting(&self) -> bool {
-        self.started || self.login.as_ref().is_some_and(Login::is_starting)
+        self.started || self.leaving || self.login.as_ref().is_some_and(Login::is_starting)
     }
 
     fn switch_to(&mut self, index: usize) {
@@ -364,8 +366,9 @@ impl Greeter {
     }
 
     fn unavailable(&mut self, error: &std::io::Error) {
-        tracing::warn!("greetd: {error}");
-        self.greetd = None;
+        tracing::warn!("bande-login: {error}");
+        self.daemon = None;
+        self.leaving = false;
         self.login = None;
         self.awaiting = false;
         self.cancel_queued = false;
@@ -377,16 +380,14 @@ impl Greeter {
     }
 
     fn send(&mut self, request: &Request) {
-        let connected = match self.greetd.take() {
-            Some(greetd) => Ok(greetd),
-            None => std::env::var_os("GREETD_SOCK")
-                .ok_or_else(|| std::io::Error::other("GREETD_SOCK is not set"))
-                .and_then(UnixStream::connect),
+        let connected = match self.daemon.take() {
+            Some(daemon) => Ok(daemon),
+            None => UnixStream::connect(&self.login_socket),
         };
-        match connected.and_then(|mut greetd| write_message(&mut greetd, request).map(|()| greetd))
+        match connected.and_then(|mut daemon| write_message(&mut daemon, request).map(|()| daemon))
         {
-            Ok(greetd) => {
-                self.greetd = Some(greetd);
+            Ok(daemon) => {
+                self.daemon = Some(daemon);
                 self.awaiting = true;
             }
             Err(error) => self.unavailable(&error),
@@ -480,10 +481,10 @@ impl Greeter {
     }
 
     fn follow(&mut self) {
-        let Some(greetd) = self.greetd.as_mut() else {
+        let Some(daemon) = self.daemon.as_mut() else {
             return;
         };
-        let response = match read_message(greetd) {
+        let response = match read_message(daemon) {
             Ok(response) => response,
             Err(error) => {
                 self.unavailable(&error);
@@ -512,22 +513,11 @@ impl Greeter {
                 }
                 Step::Show(message) => self.screen.set_message(Some(message)),
                 Step::Refused(refusal) => self.refusal = Some(refusal),
-                Step::Authenticated => {
-                    let environment = self.carried_environment();
-                    if let Some(request) =
-                        self.login.as_mut().map(|login| login.start(&environment))
-                    {
-                        self.send(&request);
-                    }
-                }
+                Step::Authenticated => self.leave(),
                 Step::Started => self.started = true,
             }
         }
         if !self.login.as_ref().is_some_and(Login::is_idle) {
-            return;
-        }
-        if self.started {
-            self.leave();
             return;
         }
         if let Some(next) = self.next.take() {
@@ -542,6 +532,15 @@ impl Greeter {
     fn refused(&mut self, refusal: Refusal) {
         self.pending = None;
         let at = frame_time().on_screen();
+        if self.screen.has_left() {
+            self.rebuild_screen();
+            if let Some(user) = self.users.get(self.shown)
+                && failed_session(Path::new(LOGIN_SHARE), user.uid).is_some()
+            {
+                self.converse();
+                return;
+            }
+        }
         let login = self.current_login();
         self.screen.refuse(refusal, at);
         if let Some(login) = login {
@@ -558,8 +557,17 @@ impl Greeter {
         }
     }
 
+    fn start_session(&mut self) {
+        self.leaving = false;
+        let environment = self.carried_environment();
+        if let Some(request) = self.login.as_mut().map(|login| login.start(environment)) {
+            self.send(&request);
+        }
+    }
+
     fn leave(&mut self) {
         tracing::info!("signed in; handing the screen to the session");
+        self.leaving = true;
         self.screen.accepted();
         self.screen.leave(frame_time().on_screen());
         if let Some(file) = &self.last_user
@@ -682,9 +690,9 @@ impl Greeter {
                 .map(|inbox| (Source::Pictures, inbox.fd())),
         );
         sources.extend(
-            self.greetd
+            self.daemon
                 .as_ref()
-                .map(|greetd| (Source::Greetd, greetd.as_fd())),
+                .map(|daemon| (Source::Login, daemon.as_fd())),
         );
         sources.extend(
             self.power_answers
@@ -878,7 +886,7 @@ impl Surfaces for Greeter {
                     self.peers = listed;
                 }
             }
-            Source::Greetd => self.follow(),
+            Source::Login => self.follow(),
             Source::Powers => {
                 let answered = self
                     .power_answers
@@ -910,7 +918,8 @@ impl Surfaces for Greeter {
     }
 
     fn deadline(&self) -> Option<Instant> {
-        let finished = (self.started && self.screen.has_left()).then(Instant::now);
+        let finished =
+            ((self.started || self.leaving) && self.screen.has_left()).then(Instant::now);
         [self.screen.deadline(), self.sleeps_at(), finished]
             .into_iter()
             .flatten()
@@ -918,6 +927,9 @@ impl Surfaces for Greeter {
     }
 
     fn tick(&mut self, now: Instant) {
+        if self.leaving && self.screen.has_left() {
+            self.start_session();
+        }
         if self.screen.tick(now) {
             self.windows[0].request_redraw();
         }
@@ -963,6 +975,9 @@ fn listed_users(system: Option<&Connection>) -> Vec<User> {
 
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     set_dumpable_behavior(DumpableBehavior::NotDumpable)?;
+    let login_socket = std::env::var_os(SOCKET_VARIABLE)
+        .map(PathBuf::from)
+        .ok_or_else(|| format!("{SOCKET_VARIABLE} is not set: bande-login did not start me"))?;
     let system = bande_bus::system()
         .inspect_err(|error| tracing::warn!("no system bus: {error}"))
         .ok();
@@ -1018,7 +1033,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         other: None,
         peers: Vec::new(),
         screen: placeholder,
-        greetd: None,
+        login_socket,
+        daemon: None,
         login: None,
         awaiting: false,
         asked: false,
@@ -1028,6 +1044,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         next: None,
         refusal: None,
         pending: None,
+        leaving: false,
         started: false,
         caps_lock: false,
         minutes: MinuteTimer::new()?,

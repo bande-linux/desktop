@@ -100,9 +100,13 @@ override_dh_installsystemd:
 	dh_installsystemd -pbande-reporter bande-reporter-send.path bande-reporter.socket bande-reporter-resources.service
 	dh_installsystemd --remaining-packages
 
+override_dh_installpam:
+	dh_installpam
+	dh_installpam -pbande-greeter --name=bande-greeter-session
+
 override_dh_installsystemduser:
 	dh_installsystemduser -pbande-screen-sharing --no-enable
-	dh_installsystemduser --remaining-packages
+	dh_installsystemduser --remaining-packages -Nbande-compositor
 
 override_dh_installdocs:
 	dh_installdocs

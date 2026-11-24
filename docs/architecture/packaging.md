@@ -46,19 +46,22 @@ debhelper compat 14, built with Debian's `rustc` and `cargo` through dh-cargo's 
   `ci/copyright.d/*` for the third-party material in it, a paragraph per vendored crate with the
   authors and licence from its `Cargo.toml`, then each licence's text from `ci/licenses`.
 - **Units and maintainer scripts**: `dh_installsystemd` and `dh_installsystemduser` enable and
-  restart the units: the user units of the session services are enabled for every user and
+  restart the units, except `bande-compositor`'s, whose restart would end the session (an upgrade
+  takes effect at the next login): the user units of the session services are enabled for every user and
   never started from a package, except `bande-screen-sharing.service`, which only Settings
   enables; `bande-backup`'s timer and service are neither enabled nor
   started (Settings turns backups on; `postinst` restarts a running backup service), the
   login window's console fallback, its boot screen path unit and the fault reporter's
   socket-activated services are not started, and `bande-crash-reports@.service`, a template that `dh_installsystemd` skips, is
   enabled by its own `postinst`. `bande-reporter` and `bande-greeter` create their state
-  folders with `systemd-tmpfiles` (`debian/<package>.tmpfiles`); each person's login-window
+  folders with `systemd-tmpfiles` (`debian/<package>.tmpfiles`), `bande-greeter` after its
+  account `_bande-greeter` with `systemd-sysusers` (`debian/bande-greeter.sysusers`); each person's login-window
   folder below `/var/lib/bande-greeter/users` comes from the static template
   `bande-greeter-share@.service`, which a `user@.service` drop-in wants, so only its owner writes
-  it and only the login window reads it. `bande-greeter` ships its PAM service as the conffile
-  `/etc/pam.d/bande-greeter` (`debian/bande-greeter.pam`, after Debian's `gdm-password`), which
-  its greetd configuration names, so greetd's own `/etc/pam.d/greetd` stays untouched.
+  it and only the login window reads it. `bande-greeter` ships its PAM services as conffiles:
+  `/etc/pam.d/bande-greeter` for signing in (`debian/bande-greeter.pam`, after Debian's
+  `gdm-password`) and `/etc/pam.d/bande-greeter-session` for the login window's own session
+  (`debian/bande-greeter.bande-greeter-session.pam`, which admits only `_bande-greeter`).
   `/etc/bande` is created by `bande-reporter`'s tmpfiles entry, or by Settings' locale helper
   when it first writes the login window's `/etc/bande/login.kdl`; purging `bande-reporter` or
   `bande-settings` removes the file it wrote there, and the folder once it is empty. The other scripts purge state, restart nothing else and run
@@ -79,9 +82,9 @@ debhelper compat 14, built with Debian's `rustc` and `cargo` through dh-cargo's 
   binNMU-style build without the architecture-independent packages, so an sbuild build takes
   a source package with that entry.
 - **Tests**: `debian/tests` holds the autopkgtests: `desktop` (bande-desktop alone brings a
-  login window and sound, no X server, the login window as the display manager with greetd's
-  own service and configuration untouched and Bande's PAM service, its pictures and
-  failed-session folders, and purging it handing the display to greetd), `every-package` (the
+  login window and sound, no X server, the login window as the display manager with its account,
+  `bande-login`, Bande's PAM services, its pictures and failed-session folders, and purging it
+  leaving no display manager chosen), `every-package` (the
   one version, every program and file in
   `ci/runtime-deps` without recommends, the installed compositor serving Wayland clients),
   `boot-screen` (the boot screen is a `default.plymouth` alternative that only applies when no
@@ -95,6 +98,11 @@ debhelper compat 14, built with Debian's `rustc` and `cargo` through dh-cargo's 
   `/etc/nsswitch.conf` of a system booted with systemd as they were),
   `display-manager` (next to LightDM, the login window is offered and not imposed,
   `dpkg-reconfigure` switches both ways, and removing it gives the display back to LightDM),
+  `greetd-upgrade` (updating a login window that ran under greetd keeps it as the display
+  manager: the debconf choice and the `display-manager.service` link carry over and start
+  `bande-login`, greetd's configuration goes, the new account owns the runtime folder and reads
+  each person's folder, and `display-manager.service` starts again on a system booted with
+  systemd),
   `coexistence` (`bande-desktop` installs next to `gnome-core` without removing anything, and
   GNOME's keyring keeps its PAM profile, socket and activation, and Bande's keyring, started
   while logind (python-dbusmock's template) lists only a GNOME session of the user, exits
@@ -181,7 +189,7 @@ are in [performance.md](performance.md).
   Files (every app that opens files, with "Always open with"); on the desktop, it is revealed in
   Files. The autopkgtests install it without the third-party recommends and check that each of
   them has an installation candidate in Debian forky. Installing it adds "Bande" to the sessions a
-  display manager such as GDM, SDDM or greetd offers. With `--no-install-recommends` it brings
+  display manager such as GDM or SDDM offers. With `--no-install-recommends` it brings
   the desktop, a login and sound and nothing else.
 - **Language packs** (architecture `all`, section `localization`): `bande-desktop-l10n-<lang>`
   (`sv`, `en-gb`, a stanza in `debian/control` and a `.install` each) holds one catalog per
@@ -229,7 +237,7 @@ package for a while, and the feature says what is missing. `bande-desktop` itsel
 - `fonts-noto-core`, `fonts-noto-cjk` (recommended): the fallback faces for scripts Inter does not cover;
 - `pipewire`, `wireplumber`: the sound service, screen capture and recording;
 - `pipewire-pulse` (recommended): apps that play through PulseAudio (the session drop-ins start it).
-  The login window's user (`_greetd`) gets PipeWire and WirePlumber from the ordinary user units,
+  The login window's user (`_bande-greeter`) gets PipeWire and WirePlumber from the ordinary user units,
   so the screen reader can speak before anyone signs in; WirePlumber opens the sound card only for
   the session active on the seat, so it moves to the person's session at sign-in;
 - `libspa-0.2-bluetooth` (recommended): Bluetooth headphones, which the shell's Bluetooth menu connects;
@@ -283,7 +291,8 @@ depends on it) or the fonts, PackageKit, AppStream, UPower, UDisks, NetworkManag
   encrypted volume (without it a notification points to Disks), and `bolt`, which it asks to
   authorize Thunderbolt and USB4 devices;
 - `bande-automount` depends on UDisks, `bande-polkit` on `polkitd`, and `bande-greeter` on
-  `greetd (>= 0.10.3-6)`, which it runs from its own `bande-greeter.service`;
+  `libpam0g`, `libpam-runtime` and `libpam-systemd`, which `bande-login` opens sessions with
+  (`libpam.so.0` is loaded at run time, as the lock screen does);
 - `xdg-desktop-portal-bande` depends on `xdg-desktop-portal`, provides
   `xdg-desktop-portal-backend` and serves every interface itself (no `xdg-desktop-portal-gtk`);
 - `mesa-vulkan-drivers` and `libvulkan1` come with `bande-compositor`.

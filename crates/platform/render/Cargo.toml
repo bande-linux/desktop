@@ -19,5 +19,6 @@ naga.workspace = true
 workspace = true
 
 [dev-dependencies]
+bande-graphics = { workspace = true, features = ["gpu"] }
 smithay = { workspace = true, features = ["backend_gbm"] }
 tracing-subscriber.workspace = true

@@ -1,10 +1,10 @@
 #!/bin/bash
 # bande-desktop alone, without recommends, brings a login window and sound and no X server or
-# Plymouth; the Bande login window is the display manager through its own PAM service, each
-# person's folder for it is written by that person and read by it alone, its units hold without
-# Plymouth, and purging it hands the display to greetd.
+# Plymouth; the Bande login window is the display manager through its own PAM services and
+# account, each person's folder for it is written by that person and read by it alone, its units
+# hold without Plymouth, and purging it leaves no display manager chosen.
 set -euo pipefail
-for package in bande-greeter greetd pipewire wireplumber; do
+for package in bande-greeter pipewire wireplumber; do
     [ "$(dpkg-query -W -f '${db:Status-Status}' "$package")" = installed ] || { echo "$package is missing"; exit 1; }
 done
 
@@ -16,20 +16,22 @@ verified=$(systemd-analyze verify --man=no bande-greeter.service bande-greeter-h
     bande-greeter-handover.service bande-greeter-splash.path bande-greeter-splash.service \
     bande-console-fallback.service 2>&1)
 [ -z "$verified" ] || { echo "$verified"; exit 1; }
-[ "$(stat -c '%a %U %G' /run/bande-greeter)" = "755 _greetd _greetd" ]
-
-greetd_config=/usr/share/bande-greeter/greetd-config.toml
-grep -qx "ExecStart=/usr/sbin/greetd --config $greetd_config" /usr/lib/systemd/system/bande-greeter.service
-test -x "$(sed -n 's/^command = "\([^ "]*\).*/\1/p' "$greetd_config")"
+[ "$(stat -c '%a %U %G' /run/bande-greeter)" = "755 _bande-greeter _bande-greeter" ]
+[ "$(getent passwd _bande-greeter | cut -d: -f6,7)" = /var/lib/bande-greeter/home:/usr/sbin/nologin ]
+[ "$(stat -c '%a %U %G' /var/lib/bande-greeter/home)" = "700 _bande-greeter _bande-greeter" ]
+grep -qx "ExecStart=/usr/libexec/bande-login" /usr/lib/systemd/system/bande-greeter.service
+grep -qx "KillMode=mixed" /usr/lib/systemd/system/bande-greeter.service
+grep -qx "ExecStart=/usr/libexec/bande-login --console" /usr/lib/systemd/system/bande-console-fallback.service
+test -x /usr/libexec/bande-login
+test -x /usr/libexec/bande-greeter-session
 display_manager() {
     grep -qx "$1" /etc/X11/default-display-manager
     [ "$(basename "$(readlink /etc/systemd/system/display-manager.service)")" = "$(basename "$1").service" ]
 }
 display_manager /usr/bin/bande-greeter
-test ! -e /usr/lib/systemd/system/greetd.service.d
-grep -q agreety /etc/greetd/config.toml
-service=$(sed -n 's/^service = "\(.*\)"/\1/p' "$greetd_config")
-grep -q pam_loginuid "$(ls /etc/pam.d/"$service" /usr/lib/pam.d/"$service" 2>/dev/null | head -n 1)"
+grep -q pam_loginuid /etc/pam.d/bande-greeter
+grep -q pam_shells /etc/pam.d/bande-greeter
+grep -q pam_systemd /etc/pam.d/bande-greeter-session
 share=/var/lib/bande-greeter/users
 [ "$(stat -c '%a %U %G' "$share")" = "755 root root" ]
 unit=/usr/lib/systemd/system/bande-greeter-share@.service
@@ -43,9 +45,9 @@ if [ -d /run/systemd/system ]; then
 else
     install -d -o ada -g "$(sed -n 's/^Group=//p' "$unit")" -m "$(sed -n 's/^StateDirectoryMode=//p' "$unit")" "$folder"
 fi
-[ "$(stat -c '%a %U %G' "$folder")" = "2750 ada _greetd" ]
+[ "$(stat -c '%a %U %G' "$folder")" = "2750 ada _bande-greeter" ]
 runuser -u ada -- sh -c "umask 027; echo picture > $folder/picture"
-[ "$(runuser -u _greetd -- cat "$folder/picture")" = picture ]
+[ "$(runuser -u _bande-greeter -- cat "$folder/picture")" = picture ]
 refused() {
     if "$@" > /dev/null 2>&1; then
         echo "allowed: $*"
@@ -57,7 +59,8 @@ refused runuser -u alan -- ls "$folder"
 refused runuser -u alan -- touch "$folder/failed"
 refused runuser -u alan -- mkdir "$share/$(id -u alan)"
 test -e "$folder/picture"
-DEBIAN_FRONTEND=noninteractive dpkg --purge bande-greeter < /dev/null
-display_manager /usr/sbin/greetd
+DEBIAN_FRONTEND=noninteractive dpkg --purge --force-depends bande-greeter < /dev/null
+test ! -e /etc/X11/default-display-manager
+test ! -L /etc/systemd/system/display-manager.service
 test ! -e "$share"
 echo "bande-desktop brings a login window and sound"

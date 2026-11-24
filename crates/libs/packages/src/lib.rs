@@ -154,7 +154,7 @@ impl Class {
         let kernel = KERNEL_PACKAGES
             .iter()
             .find_map(|prefix| name.strip_prefix(prefix));
-        let login = name == "greetd" || name.starts_with("libpam");
+        let login = name == "bande-greeter" || name.starts_with("libpam");
         let core = OFFLINE_PACKAGES.contains(&name) || name.starts_with("dbus");
         if core
             || kernel == Some(release)

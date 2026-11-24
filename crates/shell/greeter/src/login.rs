@@ -1,94 +1,6 @@
-use std::io::{self, Read, Write};
-
 use bande_lock::{Prompt, Refusal, clip_message};
-use serde::{Deserialize, Serialize};
+use bande_login::protocol::{AuthMessageType, ErrorType, Request, Response};
 use zeroize::Zeroizing;
-
-pub const SESSION: &str = "bande-session";
-const MESSAGE_LIMIT: u32 = 64 << 10;
-pub const SESSION_ENVIRONMENT: [&str; 3] = [
-    "XDG_SESSION_TYPE=wayland",
-    "XDG_CURRENT_DESKTOP=X-Bande",
-    "XDG_SESSION_DESKTOP=bande",
-];
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum Request {
-    CreateSession { username: String },
-    PostAuthMessageResponse { response: Option<Zeroizing<String>> },
-    StartSession { cmd: Vec<String>, env: Vec<String> },
-    CancelSession,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ErrorType {
-    AuthError,
-    Error,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum AuthMessageType {
-    Visible,
-    Secret,
-    Info,
-    Error,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum Response {
-    Success,
-    Error {
-        error_type: ErrorType,
-        description: String,
-    },
-    AuthMessage {
-        auth_message_type: AuthMessageType,
-        auth_message: String,
-    },
-}
-
-pub fn write_message<T: Serialize>(stream: &mut impl Write, message: &T) -> io::Result<()> {
-    let mut counter = ByteCounter(0);
-    serde_json::to_writer(&mut counter, message)?;
-    let mut body = Zeroizing::new(Vec::with_capacity(counter.0));
-    serde_json::to_writer(&mut *body, message)?;
-    let length = u32::try_from(body.len()).map_err(io::Error::other)?;
-    stream.write_all(&length.to_ne_bytes())?;
-    stream.write_all(&body)?;
-    stream.flush()
-}
-
-struct ByteCounter(usize);
-
-impl Write for ByteCounter {
-    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
-        self.0 += bytes.len();
-        Ok(bytes.len())
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
-}
-
-pub fn read_message<T: for<'de> Deserialize<'de>>(stream: &mut impl Read) -> io::Result<T> {
-    let mut length = [0u8; 4];
-    stream.read_exact(&mut length)?;
-    let length = u32::from_ne_bytes(length);
-    if length > MESSAGE_LIMIT {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("greetd sent a message of {length} bytes"),
-        ));
-    }
-    let mut body = Zeroizing::new(vec![0u8; length as usize]);
-    stream.read_exact(&mut body)?;
-    Ok(serde_json::from_slice(&body)?)
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Step {
@@ -152,14 +64,9 @@ impl Login {
         }
     }
 
-    pub fn start(&mut self, environment: &[String]) -> Request {
+    pub fn start(&mut self, env: Vec<String>) -> Request {
         self.phase = Phase::Starting;
-        let mut env = SESSION_ENVIRONMENT.map(str::to_owned).to_vec();
-        env.extend_from_slice(environment);
-        Request::StartSession {
-            cmd: vec![SESSION.to_owned()],
-            env,
-        }
+        Request::StartSession { env }
     }
 
     pub fn cancel(&mut self) -> Request {
@@ -170,7 +77,7 @@ impl Login {
     pub fn respond(&mut self, response: Response) -> Vec<Step> {
         match (self.phase, response) {
             (Phase::Cancelling, Response::Error { description, .. }) => {
-                tracing::info!("greetd: {description}");
+                tracing::info!("bande-login: {description}");
                 self.phase = Phase::Idle;
                 Vec::new()
             }

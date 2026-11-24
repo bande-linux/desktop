@@ -137,7 +137,8 @@ cancels the older one, and `source` fails a tag whose commit is not on `main`.
   x-display-manager`, `pipewire` and `wireplumber`, recommends `bande-greeter`,
   `bande-reporter`, `bande-crash-reports`, `pipewire-pulse` and `bande-browser` and otherwise only
   Bande packages built here,
-  that `bande-greeter` provides `x-display-manager` from its own unit,
+  that `bande-greeter` provides `x-display-manager` from its own unit running `bande-login`,
+  with its account and PAM services,
   and that the language packs hold only catalogs; then `lintian --fail-on error,warning` on the
   `.changes` and the `.dsc`. The job uploads `bande-debs-<suite>-<arch>`, amd64 also
   `bande-debs-<suite>-all`, and the `-dbgsym` packages as `bande-debug-symbols-<suite>-<arch>`.
@@ -145,7 +146,8 @@ cancels the older one, and `source` fails a tag whose commit is not on `main`.
 - `install (<suite>, <arch>)`: in a clean `debian:<suite>` on the native runner, runs the
   autopkgtests of the source package against that architecture's and the `all` packages
   (`autopkgtest --no-built-binaries <dsc> <debs> -- null`): `desktop`, `every-package`,
-  `system-setup`, `display-manager`, `coexistence`, `services`, `portal` and `metadata` (see
+  `system-setup`, `display-manager`, `greetd-upgrade`, `coexistence`, `services`, `portal` and
+  `metadata` (see
   [packaging.md](packaging.md#the-source-package)). A Debian package that the release lacks is a
   warning: `bande-desktop` only recommends `bande-backup`, and `every-package` installs it only
   when its dependencies can be.

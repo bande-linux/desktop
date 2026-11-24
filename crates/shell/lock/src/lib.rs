@@ -30,7 +30,7 @@ use bande_toolkit::{
 use bande_xdg::{data_dirs, find_icon};
 use zeroize::Zeroizing;
 
-pub use backdrop::{BackdropSource, Look, load_backdrop, load_pictures};
+pub use backdrop::{BackdropSource, Look, load_backdrop, load_pictures, serve_picture_worker};
 pub use bande_inbox::Inbox;
 pub use bande_pam::Backoff;
 pub use bande_wallpaper::{Fit, Variant};

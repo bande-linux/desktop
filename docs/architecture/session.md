@@ -610,7 +610,10 @@ part of login small and the UI unprivileged:
    `greeter` (`/etc/pam.d/bande-greeter-session`, which admits only that account), inside
    `bande-compositor --greeter` on VT 1, and talks to `bande-login` over
    `/run/bande-login/greeter.sock` (`BANDE_LOGIN_SOCK`), which only that uid may open and whose
-   peer `bande-login` checks again. It shows the lock screen's layout (`bande_lock::LockScreen`,
+   peer `bande-login` checks again. People's wallpapers and account pictures are decoded in a
+   confined process for each (`bande_lock::serve_picture_worker`: the program run again, with only
+   computing left after it has read the file), as on the lock screen, so a picture someone made
+   cannot reach the process that reads passwords or end it. It shows the lock screen's layout (`bande_lock::LockScreen`,
    announced as "Sign in") with battery, Wi-Fi or cable or Offline, input source, and Sleep,
    Restart and Shut Down. Logind's answers are asked again when the devices change or the screen
    wakes, so a dock that changes them is followed.

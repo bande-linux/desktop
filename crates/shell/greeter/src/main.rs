@@ -1068,6 +1068,10 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 
 fn main() -> ExitCode {
     bande_log::init("bande-greeter");
+    let arguments: Vec<String> = std::env::args().skip(1).collect();
+    if let Some(served) = bande_lock::serve_picture_worker(&arguments) {
+        return served;
+    }
     match run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {

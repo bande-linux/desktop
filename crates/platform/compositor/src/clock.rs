@@ -748,7 +748,8 @@ mod tests {
     -> io::Result<()> {
         let refresh = Duration::from_secs_f64(1.0 / 60.0);
         let plain = |buffers| Shape::plain(buffers)[0];
-        let deep = OutputFormat::<u8>::new(Sink::of_depth(10), true).candidates(MODE, true)[0];
+        let deep =
+            OutputFormat::<u8>::new(Sink::of_depth(10), Buffers::Tiled).candidates(MODE, true)[0];
         for (start, converting, failure, wanted) in [
             (deep, true, Failure::Buffers, deep),
             (deep, false, Failure::Refused, plain(Buffers::Tiled)),
@@ -765,7 +766,7 @@ mod tests {
                 plain(Buffers::Dumb),
             ),
         ] {
-            let mut formats = OutputFormat::new(Sink::of_depth(10), true);
+            let mut formats = OutputFormat::new(Sink::of_depth(10), Buffers::Tiled);
             while formats.candidates(MODE, true)[0] != start {
                 let shape = formats.candidates(MODE, true)[0];
                 formats.after(Failure::Buffers, (MODE.0, shape), false);
@@ -774,7 +775,10 @@ mod tests {
                 formats,
                 shape: start,
                 converting,
-                failures: vec![failure],
+                failures: match failure {
+                    Failure::Refused => vec![failure; 2],
+                    _ => vec![failure],
+                },
                 shown: Vec::new(),
             };
             let mut compositor = Compositor::new(smithay::utils::Size::from((640, 480)))?;

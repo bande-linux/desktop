@@ -10,7 +10,7 @@ use smithay::backend::allocator::dumb::DumbAllocator;
 use smithay::backend::allocator::format::FormatSet;
 use smithay::backend::allocator::gbm::{GbmAllocator, GbmBufferFlags, GbmDevice};
 use smithay::backend::drm::compositor::{
-    DrmCompositor, FrameError, FrameFlags, PrimaryPlaneElement, RenderFrameError,
+    DrmCompositor, FrameError, FrameFlags, PrimaryPlaneElement, PrimarySwapchainElement, RenderFrameError,
 };
 use smithay::backend::drm::{
     DrmDevice, DrmDeviceFd, DrmDeviceNotifier, DrmError, DrmEventMetadata, DrmEventTime, DrmNode, NodeType,
@@ -42,7 +42,7 @@ use crate::element::drawing_everything;
 use crate::output_format::{self, Buffers, Failure, LinkDepth, OutputFormat, Shape, Sink, Step};
 use crate::render::{Snapshot, background};
 use crate::reveal::ShownFrame;
-use crate::scanout::{ScanoutAllocator, ScanoutExporter};
+use crate::scanout::{ScanoutAllocator, ScanoutBuffer, ScanoutExporter, ScanoutFramebuffer};
 use crate::screen::{OutputConfig, OutputMode};
 use crate::state::{Compositor, REFRESH, ScanoutDevice};
 use bande_colour::Profile;
@@ -50,6 +50,7 @@ use bande_render::OutputColour;
 
 pub type DrmBackendError = Box<dyn Error>;
 
+type OnPlane = PrimarySwapchainElement<ScanoutBuffer, ScanoutFramebuffer>;
 type OutputCompositor = DrmCompositor<ScanoutAllocator, ScanoutExporter, (), DrmDeviceFd>;
 
 const DRM_IOCTL_MODE_CLOSEFB: libc::c_ulong = 0xC008_64D0;
@@ -64,6 +65,7 @@ struct Head {
     shape: Shape,
     formats: OutputFormat<Mode>,
     link: Option<LinkDepth>,
+    on_screen: Option<OnPlane>,
     variable_refresh: bool,
     scanned_out: bool,
     dark: bool,
@@ -206,44 +208,35 @@ fn set_link_depth(device: &DrmDevice, head: &Head, value: u64) -> io::Result<()>
         return Err(io::Error::other("the display has no atomic modesetting"));
     }
     let (connector, crtc) = (head.connector, head.compositor.crtc());
-    let plane = head.compositor.plane();
     let max_bpc = property_of(device, connector, MAX_BPC)?;
     let value = property::Value::UnsignedRange(value);
-    let mode = device.create_property_blob(&head.compositor.pending_mode())?;
-    let tested = (|| {
-        let mut request = AtomicModeReq::new();
-        request.add_property(connector, max_bpc, value);
-        request.add_property(
-            connector,
-            property_of(device, connector, b"CRTC_ID")?,
-            property::Value::CRTC(Some(crtc)),
-        );
-        request.add_property(crtc, property_of(device, crtc, b"MODE_ID")?, mode);
-        request.add_property(
-            crtc,
-            property_of(device, crtc, b"ACTIVE")?,
-            property::Value::Boolean(true),
-        );
-        request.add_property(
-            plane,
-            property_of(device, plane, b"FB_ID")?,
-            property::Value::Framebuffer(None),
-        );
-        request.add_property(
-            plane,
-            property_of(device, plane, b"CRTC_ID")?,
-            property::Value::CRTC(None),
-        );
-        device.atomic_commit(
-            AtomicCommitFlags::ALLOW_MODESET | AtomicCommitFlags::TEST_ONLY,
-            request,
-        )
-    })();
+    let commit = |mode: Option<property::Value<'static>>| {
+        let request = || -> io::Result<AtomicModeReq> {
+            let mut request = AtomicModeReq::new();
+            request.add_property(connector, max_bpc, value);
+            if let Some(mode) = mode {
+                request.add_property(crtc, property_of(device, crtc, b"MODE_ID")?, mode);
+            }
+            Ok(request)
+        };
+        let flags = AtomicCommitFlags::ALLOW_MODESET;
+        device.atomic_commit(flags | AtomicCommitFlags::TEST_ONLY, request()?)?;
+        device.atomic_commit(flags, request()?)
+    };
+    let (pending, current) = (
+        head.compositor.pending_mode(),
+        head.compositor.current_mode(),
+    );
+    if pending == current || pending.size() != current.size() {
+        return commit(None);
+    }
+    let mode = device.create_property_blob(&pending)?;
+    let together = commit(Some(mode));
     device.destroy_property_blob(mode.into())?;
-    tested?;
-    let mut request = AtomicModeReq::new();
-    request.add_property(connector, max_bpc, value);
-    device.atomic_commit(AtomicCommitFlags::ALLOW_MODESET, request)
+    together.or_else(|error| {
+        tracing::debug!("setting the link and the mode apart: {error}");
+        commit(None)
+    })
 }
 
 fn relink(device: &DrmDevice, head: &mut Head) {
@@ -764,7 +757,7 @@ impl DrmBackend {
             buffers,
             format: compositor.format(),
         };
-        let formats = OutputFormat::new(sink, buffers == Buffers::Tiled);
+        let formats = OutputFormat::new(sink, buffers);
         let scanout_formats = compositor.surface().plane_info().formats.clone();
         let variable_refresh = matches!(
             compositor.vrr_supported(info.handle()),
@@ -781,6 +774,7 @@ impl DrmBackend {
             shape,
             formats,
             link: link_depth(&self.device, info.handle()),
+            on_screen: None,
             variable_refresh,
             scanned_out: false,
             dark: false,
@@ -984,6 +978,9 @@ impl DrmBackend {
         };
         head.flip_pending = false;
         head.compositor.frame_submitted()?;
+        head.on_screen = None;
+        head.formats
+            .flipped(head.compositor.current_mode(), head.shape);
         if let Some(kelvin) = self.kelvin {
             tint(&self.device, head, kelvin);
         }
@@ -1042,7 +1039,7 @@ impl DrmBackend {
             head.tone = None;
             head.dark = false;
             head.flip_pending = false;
-            head.formats.choose_again();
+            head.formats.forget_refusals();
             if let (Some(link), Some(read)) =
                 (&mut head.link, link_depth(&self.device, head.connector))
             {
@@ -1444,21 +1441,39 @@ fn prove_with_gbm(renderer: &mut VulkanRenderer, gbm: Option<&GbmDevice<DrmDevic
     });
 }
 
-fn refused<A, B, F>(error: &FrameError<A, B, F>, shape: Shape) -> bool
+fn kernel_refused(error: &DrmError) -> bool {
+    match error {
+        DrmError::TestFailed(_) => true,
+        DrmError::Access(access) => matches!(
+            access.source.kind(),
+            io::ErrorKind::InvalidInput | io::ErrorKind::StorageFull
+        ),
+        _ => false,
+    }
+}
+
+fn refused<A, B, F>(error: &FrameError<A, B, F>) -> bool
 where
     A: Error + Send + Sync + 'static,
     B: Error + Send + Sync + 'static,
     F: Error + Send + Sync + 'static,
 {
+    matches!(error, FrameError::DrmError(error) if kernel_refused(error))
+}
+
+fn shape_refused<B, F>(error: &FrameError<io::Error, B, F>) -> bool
+where
+    B: Error + Send + Sync + 'static,
+    F: Error + Send + Sync + 'static,
+{
     match error {
-        FrameError::DrmError(DrmError::TestFailed(_)) => true,
-        FrameError::DrmError(DrmError::Access(access)) => {
-            shape.is_deep()
-                && matches!(
-                    access.source.kind(),
-                    io::ErrorKind::InvalidInput | io::ErrorKind::StorageFull
-                )
-        }
+        FrameError::DrmError(error) => kernel_refused(error),
+        FrameError::Allocator(error) => error.kind() != io::ErrorKind::OutOfMemory,
+        FrameError::NoSupportedPlaneFormat
+        | FrameError::NoSupportedRendererFormat
+        | FrameError::NoFramebuffer
+        | FrameError::AsDmabufError(_)
+        | FrameError::FramebufferExport(_) => true,
         _ => false,
     }
 }
@@ -1485,9 +1500,17 @@ where
 }
 
 impl DrmBackend {
-    fn try_shape(&mut self, index: usize, shape: Shape) -> Result<(), DrmBackendError> {
-        if shape.is_deep() {
-            self.renderer.prepare(shape.format)?;
+    fn try_shape(&mut self, index: usize, shape: Shape) -> Result<bool, DrmBackendError> {
+        if self.heads[index].shape == shape {
+            return Ok(true);
+        }
+        if shape.is_deep()
+            && let Err(error) = self.renderer.prepare(shape.format)
+        {
+            return match error.is_transient() {
+                true => Err(error.into()),
+                false => Ok(false),
+            };
         }
         let allocator = self.allocator(shape.buffers);
         let modifiers: Vec<Modifier> = self
@@ -1497,12 +1520,20 @@ impl DrmBackend {
             .map(|format| format.modifier)
             .collect();
         let head = &mut self.heads[index];
-        if head.shape != shape {
-            head.compositor
-                .set_format(allocator, shape.format, modifiers)?;
-            head.shape = shape;
+        match head
+            .compositor
+            .set_format(allocator, shape.format, modifiers)
+        {
+            Ok(()) => {
+                head.shape = shape;
+                Ok(true)
+            }
+            Err(error) if shape_refused(&error) => {
+                tracing::warn!("{} cannot show {shape}: {error}", head.config.name);
+                Ok(false)
+            }
+            Err(error) => Err(error.into()),
         }
-        Ok(())
     }
 
     fn try_link(&mut self, index: usize, shape: Shape, deep: bool) -> io::Result<()> {
@@ -1525,6 +1556,27 @@ impl DrmBackend {
         Ok(())
     }
 
+    fn after_refusal(
+        &mut self,
+        index: usize,
+        compositor: &mut Compositor,
+        error: &dyn Error,
+    ) -> Submission {
+        let head = &mut self.heads[index];
+        let mode = head.compositor.pending_mode();
+        let step = head
+            .formats
+            .after(Failure::Refused, (mode, head.shape), false);
+        tracing::warn!("{} refuses {}: {error}", head.config.name, head.shape);
+        if step == Step::CommitWhole {
+            head.compositor.reset_buffers();
+        }
+        step.submission().unwrap_or_else(|| {
+            refuse_mode(head, mode, compositor);
+            after_refusal(head)
+        })
+    }
+
     fn choose_shape(&mut self, index: usize, deep: bool) -> Result<(), DrmBackendError> {
         let mode = self.heads[index].compositor.pending_mode();
         let name = self.heads[index].config.name.clone();
@@ -1532,8 +1584,7 @@ impl DrmBackend {
             .formats
             .candidates((mode, mode.clock()), deep)
         {
-            if let Err(error) = self.try_shape(index, shape) {
-                tracing::warn!("{name} cannot show {shape}: {error}");
+            if !self.try_shape(index, shape)? {
                 self.heads[index].formats.refuse(mode, shape);
                 continue;
             }
@@ -1548,6 +1599,7 @@ impl DrmBackend {
             self.heads[index].formats.chosen(mode, deep);
             return Ok(());
         }
+        self.heads[index].formats.forget_refusals();
         Err(format!("{name} shows no kind of buffer").into())
     }
 
@@ -1608,7 +1660,7 @@ impl DrmBackend {
         head.dark = false;
         if head.relink_wanted {
             if head.flip_pending {
-                return Ok(Submission::AwaitingFlip);
+                return Ok(Submission::Retry);
             }
             relink(&self.device, head);
         }
@@ -1629,7 +1681,7 @@ impl DrmBackend {
             .needs_choice(head.compositor.pending_mode(), deep)
         {
             if head.flip_pending {
-                return Ok(Submission::AwaitingFlip);
+                return Ok(Submission::Retry);
             }
             self.choose_shape(index, deep)?;
         }
@@ -1672,8 +1724,11 @@ impl DrmBackend {
             head.shown_colour.clone_from(&conversion);
             head.compositor.reset_buffers();
         }
+        let mode = head.compositor.pending_mode();
+        let whole = head.formats.commits_whole(mode, head.shape);
         let flags = match conversion {
             Some(_) => FrameFlags::empty(),
+            None if whole => FrameFlags::empty(),
             None => FrameFlags::DEFAULT | FrameFlags::ALLOW_PRIMARY_PLANE_SCANOUT_ANY,
         };
         let elements = compositor.render_elements_on(&mut self.renderer, output);
@@ -1708,7 +1763,7 @@ impl DrmBackend {
                         }
                     }
                     Step::ChangeShape => tracing::warn!("{output} leaves {}: {error}", head.shape),
-                    Step::LeaveMode | Step::Fail => {}
+                    Step::CommitWhole | Step::LeaveMode | Step::Fail => {}
                 }
                 return step.submission().ok_or_else(|| error.into());
             }
@@ -1720,6 +1775,10 @@ impl DrmBackend {
         }
         head.scanned_out = matches!(frame.primary_element, PrimaryPlaneElement::Element(_));
         let empty = frame.is_empty;
+        let on_screen = match frame.primary_element {
+            PrimaryPlaneElement::Swapchain(element) => Some(element),
+            PrimaryPlaneElement::Element(_) => None,
+        };
         let submitted = self.renderer.submitted();
         let fence = self.renderer.fence_of(submitted)?;
         compositor.keep_until_drawn(elements, (submitted, self.renderer.completed()), fence);
@@ -1728,27 +1787,26 @@ impl DrmBackend {
             return Ok(Submission::Unchanged);
         }
         head.shows_content = compositor.awaited_shown(&self.renderer, drew_everything);
+        if whole {
+            match head.compositor.commit_frame() {
+                Ok(()) => {
+                    head.on_screen = on_screen;
+                    head.formats.committed_whole(mode, head.shape);
+                    head.compositor.reset_state()?;
+                    return Ok(Submission::Retry);
+                }
+                Err(error) if refused(&error) => {
+                    return Ok(self.after_refusal(index, compositor, &error));
+                }
+                Err(error) => return Err(error.into()),
+            }
+        }
         match head.compositor.queue_frame(()) {
             Ok(()) => {
                 head.flip_pending = true;
                 Ok(Submission::AwaitingFlip)
             }
-            Err(error) if refused(&error, head.shape) => {
-                let mode = head.compositor.pending_mode();
-                let step = head
-                    .formats
-                    .after(Failure::Refused, (mode, head.shape), false);
-                match step.submission() {
-                    Some(submission) => {
-                        tracing::warn!("{output} leaves {} in this mode: {error}", head.shape);
-                        Ok(submission)
-                    }
-                    None => {
-                        refuse_mode(head, mode, compositor);
-                        Ok(after_refusal(head))
-                    }
-                }
-            }
+            Err(error) if refused(&error) => Ok(self.after_refusal(index, compositor, &error)),
             Err(error) => Err(error.into()),
         }
     }

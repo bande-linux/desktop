@@ -119,6 +119,7 @@ pub(crate) enum Failure {
 pub(crate) enum Step {
     ShowUnconverted,
     ChangeShape,
+    CommitWhole,
     LeaveMode,
     Fail,
 }
@@ -126,30 +127,46 @@ pub(crate) enum Step {
 impl Step {
     pub(crate) fn submission(self) -> Option<Submission> {
         match self {
-            Self::ShowUnconverted | Self::ChangeShape => Some(Submission::Retry),
+            Self::ShowUnconverted | Self::ChangeShape | Self::CommitWhole => {
+                Some(Submission::Retry)
+            }
             Self::LeaveMode | Self::Fail => None,
         }
     }
 }
 
-/// The frames a display gets: the best shape it, its mode and its buffers have not refused.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Whole {
+    Wanted,
+    Committed,
+}
+
+/// The frames a display gets: the best shape it, its mode and its buffers have not refused. A shape
+/// refused at a flip is committed once as a whole, with a mode-set allowed and nothing else on the
+/// planes, before it counts as refused.
 #[derive(Debug, Clone)]
 pub(crate) struct OutputFormat<M> {
     sink: Sink,
-    tiled: bool,
+    start: Buffers,
     unusable: Vec<Shape>,
     refused: Vec<(M, Shape)>,
     chosen_for: Option<(M, bool)>,
+    shown: Option<(M, Shape)>,
+    kept: Option<(M, bool, Shape)>,
+    whole: Option<(M, Shape, Whole)>,
 }
 
 impl<M: Copy + PartialEq> OutputFormat<M> {
-    pub(crate) fn new(sink: Sink, tiled: bool) -> Self {
+    pub(crate) fn new(sink: Sink, start: Buffers) -> Self {
         Self {
             sink,
-            tiled,
+            start,
             unusable: Vec::new(),
             refused: Vec::new(),
             chosen_for: None,
+            shown: None,
+            kept: None,
+            whole: None,
         }
     }
 
@@ -161,7 +178,19 @@ impl<M: Copy + PartialEq> OutputFormat<M> {
         self.chosen_for = Some((mode, deep));
     }
 
+    pub(crate) fn forget_refusals(&mut self) {
+        self.refused.clear();
+        self.kept = None;
+        self.whole = None;
+        self.chosen_for = None;
+    }
+
     pub(crate) fn candidates(&self, (mode, clock_khz): (M, u32), deep: bool) -> Vec<Shape> {
+        if let Some((kept_mode, kept_deep, shape)) = self.kept
+            && (kept_mode, kept_deep) == (mode, deep)
+        {
+            return vec![shape];
+        }
         let tiled = DEEP.into_iter().map(|format| Shape {
             buffers: Buffers::Tiled,
             format,
@@ -169,16 +198,13 @@ impl<M: Copy + PartialEq> OutputFormat<M> {
         tiled
             .filter(|shape| deep && self.sink.takes(shape.bits(), clock_khz))
             .chain(Shape::plain(Buffers::Tiled))
+            .filter(|_| self.start == Buffers::Tiled)
             .chain(Shape::plain(Buffers::Linear))
-            .filter(|_| self.tiled)
+            .filter(|_| self.start != Buffers::Dumb)
             .chain(Shape::plain(Buffers::Dumb))
             .filter(|shape| !self.unusable.contains(shape))
             .filter(|shape| !self.refused.contains(&(mode, *shape)))
             .collect()
-    }
-
-    pub(crate) fn choose_again(&mut self) {
-        self.chosen_for = None;
     }
 
     pub(crate) fn refuse_depth(&mut self, mode: M, shape: Shape) {
@@ -194,6 +220,20 @@ impl<M: Copy + PartialEq> OutputFormat<M> {
         self.chosen_for = None;
     }
 
+    pub(crate) fn commits_whole(&self, mode: M, shape: Shape) -> bool {
+        self.whole == Some((mode, shape, Whole::Wanted))
+    }
+
+    pub(crate) fn committed_whole(&mut self, mode: M, shape: Shape) {
+        self.whole = Some((mode, shape, Whole::Committed));
+        self.shown = Some((mode, shape));
+    }
+
+    pub(crate) fn flipped(&mut self, mode: M, shape: Shape) {
+        self.whole = None;
+        self.shown = Some((mode, shape));
+    }
+
     pub(crate) fn after(
         &mut self,
         failure: Failure,
@@ -203,7 +243,7 @@ impl<M: Copy + PartialEq> OutputFormat<M> {
         match failure {
             Failure::Other => Step::Fail,
             Failure::Buffers if converting => Step::ShowUnconverted,
-            Failure::Buffers if shape.buffers == Buffers::Dumb => Step::Fail,
+            Failure::Buffers if shape.buffers == Buffers::Dumb && !shape.is_deep() => Step::Fail,
             Failure::Buffers => {
                 let worse = match shape.is_deep() {
                     true => vec![shape],
@@ -213,11 +253,34 @@ impl<M: Copy + PartialEq> OutputFormat<M> {
                 self.chosen_for = None;
                 Step::ChangeShape
             }
-            Failure::Refused if shape.is_deep() => {
-                self.refuse_depth(mode, shape);
+            Failure::Refused => self.after_refusal(mode, shape),
+        }
+    }
+
+    fn after_refusal(&mut self, mode: M, shape: Shape) -> Step {
+        let tried_whole = self
+            .whole
+            .take()
+            .is_some_and(|(of, tried, _)| (of, tried) == (mode, shape));
+        if !tried_whole {
+            self.whole = Some((mode, shape, Whole::Wanted));
+            return Step::CommitWhole;
+        }
+        let deep = self.chosen_for.is_none_or(|(_, deep)| deep);
+        if shape.is_deep() {
+            self.refuse_depth(mode, shape);
+            return Step::ChangeShape;
+        }
+        self.refuse(mode, shape);
+        match self
+            .shown
+            .filter(|shown| shown.0 == mode && shown.1 != shape)
+        {
+            Some((_, working)) => {
+                self.kept = Some((mode, deep, working));
                 Step::ChangeShape
             }
-            Failure::Refused => Step::LeaveMode,
+            None => Step::LeaveMode,
         }
     }
 }
@@ -251,7 +314,7 @@ mod tests {
     const SLOW: (u8, u32) = (60, 243_480);
 
     fn deep(depth: u8) -> OutputFormat<u8> {
-        OutputFormat::new(Sink::of_depth(depth), true)
+        OutputFormat::new(Sink::of_depth(depth), Buffers::Tiled)
     }
 
     fn first(formats: &OutputFormat<u8>, mode: (u8, u32)) -> Shape {
@@ -274,21 +337,32 @@ mod tests {
             assert_eq!(first(&deep(depth), FAST), tiled(PLAIN[0]));
         }
         assert_eq!(deep(10).candidates(FAST, false)[0], tiled(PLAIN[0]));
-        let untiled = OutputFormat::<u8>::new(deep(10).sink, false);
-        assert_eq!(first(&untiled, FAST), Shape::plain(Buffers::Dumb)[0]);
+        for start in [Buffers::Linear, Buffers::Dumb] {
+            let untiled = OutputFormat::<u8>::new(deep(10).sink, start);
+            assert_eq!(first(&untiled, FAST), Shape::plain(start)[0]);
+        }
         let hdmi = OutputFormat::new(
             Sink {
                 depth: Some(12),
                 max_clock_khz: Some(600_000),
             },
-            true,
+            Buffers::Tiled,
         );
         assert_eq!(first(&hdmi, SLOW), tiled(DEEP[0]));
         assert_eq!(first(&hdmi, FAST), tiled(PLAIN[0]));
         assert_eq!(
-            first(&OutputFormat::new(Sink::default(), true), SLOW),
+            first(&OutputFormat::new(Sink::default(), Buffers::Tiled), SLOW),
             tiled(PLAIN[0])
         );
+    }
+
+    fn refuse(formats: &mut OutputFormat<u8>, mode: (u8, u32), shape: Shape) -> Step {
+        assert_eq!(
+            formats.after(Failure::Refused, (mode.0, shape), false),
+            Step::CommitWhole
+        );
+        assert!(formats.commits_whole(mode.0, shape));
+        formats.after(Failure::Refused, (mode.0, shape), false)
     }
 
     #[test]
@@ -296,16 +370,52 @@ mod tests {
         let mut formats = deep(10);
         formats.chosen(FAST.0, true);
         let deepest = first(&formats, FAST);
-        assert_eq!(
-            formats.after(Failure::Refused, (FAST.0, deepest), false),
-            Step::ChangeShape
-        );
+        assert_eq!(refuse(&mut formats, FAST, deepest), Step::ChangeShape);
         assert!(formats.needs_choice(FAST.0, true));
         assert_eq!(first(&formats, FAST), tiled(PLAIN[0]));
         assert_eq!(first(&formats, SLOW), tiled(DEEP[0]));
+        assert_eq!(refuse(&mut formats, FAST, tiled(PLAIN[0])), Step::LeaveMode);
+        formats.forget_refusals();
+        assert_eq!(first(&formats, FAST), tiled(DEEP[0]));
+    }
+
+    #[test]
+    fn a_shape_the_display_never_takes_leaves_the_one_it_shows_in_place() {
+        let mut formats = deep(10);
+        let (deepest, plain) = (tiled(DEEP[0]), tiled(PLAIN[0]));
+        formats.chosen(FAST.0, true);
+        formats.flipped(FAST.0, deepest);
+        formats.chosen(FAST.0, false);
+        assert_eq!(refuse(&mut formats, FAST, plain), Step::ChangeShape);
+        assert_eq!(formats.candidates(FAST, false), [deepest]);
+        formats.chosen(FAST.0, false);
+        assert!(!formats.needs_choice(FAST.0, false));
+        assert_eq!(formats.candidates(FAST, true)[0], deepest);
+        assert_eq!(formats.candidates(SLOW, false)[0], plain);
+    }
+
+    #[test]
+    fn a_shape_that_needs_a_mode_set_is_committed_whole_once_and_shown() {
+        let mut formats = deep(10);
+        let deepest = tiled(DEEP[0]);
+        formats.chosen(FAST.0, true);
         assert_eq!(
-            formats.after(Failure::Refused, (FAST.0, tiled(PLAIN[0])), false),
-            Step::LeaveMode
+            formats.after(Failure::Refused, (FAST.0, deepest), false),
+            Step::CommitWhole
+        );
+        formats.committed_whole(FAST.0, deepest);
+        assert!(!formats.commits_whole(FAST.0, deepest));
+        formats.flipped(FAST.0, deepest);
+        assert!(!formats.needs_choice(FAST.0, true));
+        assert_eq!(
+            formats.after(Failure::Refused, (FAST.0, deepest), false),
+            Step::CommitWhole
+        );
+        formats.committed_whole(FAST.0, deepest);
+        assert_eq!(
+            formats.after(Failure::Refused, (FAST.0, deepest), false),
+            Step::ChangeShape,
+            "refused again right after a whole commit"
         );
     }
 

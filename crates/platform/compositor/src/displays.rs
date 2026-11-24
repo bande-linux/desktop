@@ -524,11 +524,12 @@ impl State {
         for display in &arranged {
             if let Some(screen) = self.screen_named(&display.name) {
                 self.configure_screen(screen, display.settings);
-                self.screens[screen]
-                    .colour_profile
-                    .clone_from(&display.colour_profile);
-                self.screens[screen].variable_refresh = display.variable_refresh;
-                self.screens[screen].deep_colour = display.deep_colour;
+                let screen = &mut self.screens[screen];
+                screen.redraw |= screen.colour_profile != display.colour_profile
+                    || screen.deep_colour != display.deep_colour;
+                screen.colour_profile.clone_from(&display.colour_profile);
+                screen.variable_refresh = display.variable_refresh;
+                screen.deep_colour = display.deep_colour;
             }
         }
         if let Some(main) = arranged

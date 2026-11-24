@@ -20,6 +20,27 @@ enum Phase {
     Idle,
 }
 
+/// The requests `bande-login` has not answered yet. It answers each once, in order, so only the
+/// answer to the last one still matters.
+#[derive(Debug, Default)]
+pub struct Unanswered(u32);
+
+impl Unanswered {
+    pub fn sent(&mut self) {
+        self.0 += 1;
+    }
+
+    /// Counts an answer, telling whether it is the last request's.
+    pub fn answered(&mut self) -> bool {
+        self.0 = self.0.saturating_sub(1);
+        self.0 == 0
+    }
+
+    pub fn any(&self) -> bool {
+        self.0 > 0
+    }
+}
+
 #[derive(Debug)]
 pub struct Login {
     phase: Phase,
@@ -76,16 +97,13 @@ impl Login {
 
     pub fn respond(&mut self, response: Response) -> Vec<Step> {
         match (self.phase, response) {
-            (Phase::Cancelling, Response::Error { description, .. }) => {
-                tracing::info!("bande-login: {description}");
+            (Phase::Cancelling, response) => {
+                if let Response::Error { description, .. } = response {
+                    tracing::info!("bande-login: {description}");
+                }
                 self.phase = Phase::Idle;
                 Vec::new()
             }
-            (Phase::Cancelling, Response::Success) => {
-                self.phase = Phase::Idle;
-                Vec::new()
-            }
-            (Phase::Cancelling, Response::AuthMessage { .. }) => vec![Step::Send(self.cancel())],
             (
                 _,
                 Response::AuthMessage {

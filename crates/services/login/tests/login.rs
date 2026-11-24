@@ -3,6 +3,7 @@
 use std::io::Write;
 use std::os::unix::net::UnixStream;
 use std::path::Path;
+use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
 use bande_login::manager::{Action, GREETER_USER, Manager};
@@ -18,8 +19,16 @@ use zeroize::Zeroizing;
 const GREETER: u64 = 1;
 const ADA: u64 = 2;
 
-fn at(seconds: u64) -> Duration {
-    Duration::from_secs(seconds)
+fn at(seconds: u64) -> Instant {
+    static START: OnceLock<Instant> = OnceLock::new();
+    *START.get_or_init(Instant::now) + Duration::from_secs(seconds)
+}
+
+fn superseded() -> Action {
+    Action::Reply(Response::error(
+        ErrorType::Error,
+        "another request took its place",
+    ))
 }
 
 fn greeter_spawned(worker: u64) -> Action {
@@ -31,10 +40,13 @@ fn greeter_spawned(worker: u64) -> Action {
 }
 
 fn signed_in(manager: &mut Manager) {
-    assert_eq!(manager.start(at(0)), vec![greeter_spawned(GREETER)]);
-    let created = manager.request(Request::CreateSession {
-        username: "ada".to_owned(),
-    });
+    assert_eq!(manager.start(), vec![greeter_spawned(GREETER)]);
+    let created = manager.request(
+        Request::CreateSession {
+            username: "ada".to_owned(),
+        },
+        at(1),
+    );
     assert_eq!(
         created,
         vec![Action::Spawn {
@@ -48,7 +60,7 @@ fn signed_in(manager: &mut Manager) {
         error: false,
     };
     assert_eq!(
-        manager.worker_said(ADA, fingerprint),
+        manager.worker_said(ADA, fingerprint, at(2)),
         vec![Action::Reply(Response::AuthMessage {
             auth_message_type: AuthMessageType::Info,
             auth_message: "Place your finger on the reader".to_owned(),
@@ -59,10 +71,10 @@ fn signed_in(manager: &mut Manager) {
         visible: false,
     };
     assert!(
-        manager.worker_said(ADA, password).is_empty(),
+        manager.worker_said(ADA, password, at(2)).is_empty(),
         "the prompt waits until the login window has acknowledged the message before it"
     );
-    let acknowledged = manager.request(Request::PostAuthMessageResponse { response: None });
+    let acknowledged = manager.request(Request::PostAuthMessageResponse { response: None }, at(1));
     assert_eq!(
         acknowledged,
         vec![Action::Reply(Response::AuthMessage {
@@ -72,24 +84,30 @@ fn signed_in(manager: &mut Manager) {
         "acknowledging a message is never passed to PAM as an answer"
     );
     let secret = Some(Zeroizing::new("hunter2".to_owned()));
-    let answered = manager.request(Request::PostAuthMessageResponse {
-        response: secret.clone(),
-    });
+    let answered = manager.request(
+        Request::PostAuthMessageResponse {
+            response: secret.clone(),
+        },
+        at(1),
+    );
     assert_eq!(
         answered,
         vec![Action::Tell(ADA, ToWorker::Answer { response: secret })]
     );
     assert_eq!(
-        manager.worker_said(ADA, FromWorker::Authenticated),
+        manager.worker_said(ADA, FromWorker::Authenticated, at(2)),
         vec![Action::Reply(Response::Success)]
     );
-    let started = manager.request(Request::StartSession {
-        env: vec![
-            "BANDE_LOGIN_ACCESSIBILITY=screen-reader".to_owned(),
-            "LD_PRELOAD=/tmp/evil.so".to_owned(),
-            "XDG_SESSION_CLASS=manager".to_owned(),
-        ],
-    });
+    let started = manager.request(
+        Request::StartSession {
+            env: vec![
+                "BANDE_LOGIN_ACCESSIBILITY=screen-reader".to_owned(),
+                "LD_PRELOAD=/tmp/evil.so".to_owned(),
+                "XDG_SESSION_CLASS=manager".to_owned(),
+            ],
+        },
+        at(1),
+    );
     assert_eq!(
         started,
         vec![Action::Tell(
@@ -107,7 +125,7 @@ fn the_login_window_stays_until_the_desktop_is_shown_and_returns_after_logging_o
     let mut manager = Manager::default();
     signed_in(&mut manager);
     assert_eq!(
-        manager.worker_said(ADA, FromWorker::Shown),
+        manager.worker_said(ADA, FromWorker::Shown, at(2)),
         vec![Action::Reply(Response::Success), Action::Stop(GREETER)],
         "the login window is stopped only once the desktop's first frame is on screen"
     );
@@ -133,24 +151,214 @@ fn the_login_window_stays_until_the_desktop_is_shown_and_returns_after_logging_o
     );
 
     let mut manager = Manager::default();
-    manager.start(at(0));
-    manager.request(Request::CreateSession {
-        username: "ada".to_owned(),
-    });
+    manager.start();
+    manager.request(
+        Request::CreateSession {
+            username: "ada".to_owned(),
+        },
+        at(1),
+    );
     assert_eq!(
-        manager.request(Request::CancelSession),
-        vec![Action::Kill(ADA), Action::Reply(Response::Success)],
+        manager.request(Request::CancelSession, at(1)),
+        vec![
+            superseded(),
+            Action::Kill(ADA),
+            Action::Reply(Response::Success)
+        ],
         "cancelling ends a conversation at once, even while a PAM module is busy"
     );
+}
+
+fn give_up_after(lives: &[(u64, Option<u64>)]) -> Option<usize> {
+    let mut manager = Manager::default();
+    let mut actions = manager.start();
+    let mut now = 0;
+    for (index, (life, shown)) in lives.iter().enumerate() {
+        let Some(Action::Spawn { worker, .. }) = actions.pop() else {
+            panic!("no login window was started: {actions:?}");
+        };
+        manager.request(
+            Request::CreateSession {
+                username: "ada".to_owned(),
+            },
+            at(now),
+        );
+        let conversation = worker + 1;
+        if let Some(shown) = shown {
+            manager.worker_said(worker, FromWorker::Shown, at(now + shown));
+        }
+        now += life;
+        actions = manager.worker_ended(worker, at(now));
+        let reaped = manager.worker_ended(conversation, at(now));
+        if reaped == vec![Action::Exit { success: false }] {
+            return Some(index + 1);
+        }
+        assert!(reaped.is_empty(), "{reaped:?}");
+    }
+    None
+}
+
+#[test]
+fn a_login_window_that_keeps_failing_hands_over_to_the_console_however_slowly_it_fails() {
+    for life in [0, 1, 3, 9, 20, 300] {
+        assert_eq!(
+            give_up_after(&[(life, None); 5]),
+            Some(3),
+            "never shown, {life} s"
+        );
+    }
     assert_eq!(
-        manager.worker_ended(GREETER, at(1)),
+        give_up_after(&[(4, Some(2)); 5]),
+        Some(3),
+        "shown for an instant each time"
+    );
+    assert_eq!(
+        give_up_after(&[(3600, Some(2)); 5]),
+        None,
+        "one that stays on screen and ends now and then is brought back each time"
+    );
+    let mut manager = Manager::default();
+    signed_in(&mut manager);
+    manager.worker_said(ADA, FromWorker::Shown, at(10));
+    manager.worker_ended(GREETER, at(11));
+    assert_eq!(
+        manager.worker_ended(ADA, at(4000)),
         vec![greeter_spawned(3)]
     );
-    assert_eq!(manager.worker_ended(3, at(2)), vec![greeter_spawned(4)]);
+    assert_eq!(manager.worker_ended(3, at(4001)), vec![greeter_spawned(4)]);
     assert_eq!(
-        manager.worker_ended(4, at(3)),
-        vec![Action::Exit { success: false }],
-        "a login window that keeps failing hands over to the console fallback"
+        manager.worker_ended(4, at(4002)),
+        vec![greeter_spawned(5)],
+        "signing in starts the count again"
+    );
+}
+
+fn tried(manager: &mut Manager, worker: u64, now: Instant) -> Vec<Action> {
+    manager.request(
+        Request::CreateSession {
+            username: "ada".to_owned(),
+        },
+        now,
+    );
+    let prompt = FromWorker::Ask {
+        text: "Password:".to_owned(),
+        visible: false,
+    };
+    manager.worker_said(worker, prompt, now);
+    manager.request(
+        Request::PostAuthMessageResponse {
+            response: Some(Zeroizing::new("guess".to_owned())),
+        },
+        now,
+    )
+}
+
+fn is_answer(action: &Action) -> bool {
+    matches!(action, Action::Tell(_, ToWorker::Answer { .. }))
+}
+
+#[test]
+fn guessing_is_slowed_down_whether_the_answer_is_waited_for_or_cancelled() {
+    type End = fn(&mut Manager, u64);
+    let ends: [(&str, End); 4] = [
+        ("refused", |manager, worker| {
+            let refused = FromWorker::Failed {
+                error_type: ErrorType::AuthError,
+                description: "pam_authenticate: AUTH_ERR".to_owned(),
+            };
+            manager.worker_said(worker, refused, at(0));
+        }),
+        ("cancelled", |manager, _| {
+            manager.request(Request::CancelSession, at(0));
+        }),
+        ("disconnected", |manager, _| {
+            manager.disconnected(at(0));
+        }),
+        ("crashed", |manager, worker| {
+            manager.worker_ended(worker, at(0));
+        }),
+    ];
+    for (how, end) in ends {
+        let mut manager = Manager::default();
+        manager.start();
+        for worker in 2..7 {
+            let actions = tried(&mut manager, worker, at(0));
+            assert!(actions.iter().any(is_answer), "{how}: {actions:?}");
+            end(&mut manager, worker);
+        }
+        let throttled = tried(&mut manager, 7, at(1));
+        assert!(!throttled.iter().any(is_answer), "{how}: {throttled:?}");
+        assert!(
+            throttled.contains(&Action::Reply(Response::error(
+                ErrorType::AuthError,
+                "too many attempts: MAXTRIES"
+            ))),
+            "{how}: {throttled:?}"
+        );
+        let later = tried(&mut manager, 8, at(120));
+        assert!(
+            later.iter().any(is_answer),
+            "{how}: the wait ends: {later:?}"
+        );
+        manager.worker_said(8, FromWorker::Authenticated, at(120));
+        manager.request(Request::CancelSession, at(120));
+        let after = tried(&mut manager, 9, at(120));
+        assert!(
+            after.iter().any(is_answer),
+            "{how}: signing in forgets the attempts"
+        );
+    }
+}
+
+#[test]
+fn every_request_is_answered_once_and_cancelling_does_not_wait_for_pam() {
+    let mut manager = Manager::default();
+    manager.start();
+    tried(&mut manager, ADA, at(0));
+    let replies = |actions: &[Action]| {
+        actions
+            .iter()
+            .filter(|action| matches!(action, Action::Reply(_)))
+            .count()
+    };
+    let cancelled = manager.request(Request::CancelSession, at(1));
+    assert_eq!(
+        replies(&cancelled),
+        2,
+        "the answer's reply and the cancel's"
+    );
+    assert!(cancelled.contains(&Action::Kill(ADA)), "{cancelled:?}");
+    assert_eq!(cancelled.last(), Some(&Action::Reply(Response::Success)));
+    assert!(
+        manager
+            .worker_said(ADA, FromWorker::Authenticated, at(1))
+            .is_empty(),
+        "what the cancelled worker still says reaches no one"
+    );
+}
+
+#[test]
+fn a_session_called_off_while_starting_gives_the_screen_back_once_it_has_ended() {
+    let mut manager = Manager::default();
+    signed_in(&mut manager);
+    manager.request(Request::CancelSession, at(3));
+    assert_eq!(
+        manager.worker_ended(ADA, at(4)),
+        vec![Action::ShowGreeter],
+        "the screen is not asked for while the worker still holds the terminal"
+    );
+}
+
+#[test]
+fn stopping_waits_for_workers_that_are_still_cleaning_up() {
+    let mut manager = Manager::default();
+    signed_in(&mut manager);
+    manager.request(Request::CancelSession, at(3));
+    assert_eq!(manager.terminate(at(4)), vec![Action::Stop(GREETER)]);
+    assert!(manager.worker_ended(GREETER, at(5)).is_empty());
+    assert_eq!(
+        manager.worker_ended(ADA, at(6)),
+        vec![Action::Exit { success: true }]
     );
 }
 
@@ -159,36 +367,46 @@ fn letting_go_of_a_signed_in_person_deletes_their_credentials() {
     let mut manager = Manager::default();
     signed_in(&mut manager);
     assert_eq!(
-        manager.request(Request::CancelSession),
-        vec![Action::Stop(ADA), Action::Reply(Response::Success)],
+        manager.request(Request::CancelSession, at(1)),
+        vec![
+            superseded(),
+            Action::Stop(ADA),
+            Action::Reply(Response::Success)
+        ],
         "a session that is starting is ended in order"
     );
 
     let mut manager = Manager::default();
-    manager.start(at(0));
-    manager.request(Request::CreateSession {
-        username: "ada".to_owned(),
-    });
-    manager.worker_said(ADA, FromWorker::Authenticated);
+    manager.start();
+    manager.request(
+        Request::CreateSession {
+            username: "ada".to_owned(),
+        },
+        at(1),
+    );
+    manager.worker_said(ADA, FromWorker::Authenticated, at(2));
     assert_eq!(
-        manager.request(Request::CancelSession),
+        manager.request(Request::CancelSession, at(1)),
         vec![Action::Stop(ADA), Action::Reply(Response::Success)],
         "a worker that has established credentials is let go, so it deletes them, not killed"
     );
 
     let mut manager = Manager::default();
-    manager.start(at(0));
-    manager.request(Request::CreateSession {
-        username: "ada".to_owned(),
-    });
-    manager.worker_said(ADA, FromWorker::Authenticated);
+    manager.start();
+    manager.request(
+        Request::CreateSession {
+            username: "ada".to_owned(),
+        },
+        at(1),
+    );
+    manager.worker_said(ADA, FromWorker::Authenticated, at(2));
     assert_eq!(
-        manager.disconnected(),
+        manager.disconnected(at(5)),
         vec![Action::Stop(ADA)],
         "a login window that goes away after signing in lets the worker clean up too"
     );
     assert_eq!(
-        manager.terminate(),
+        manager.terminate(at(6)),
         vec![Action::Stop(GREETER)],
         "stopping the login manager ends the login window in order"
     );
@@ -203,25 +421,34 @@ fn a_desktop_that_never_appears_gives_the_screen_back_and_allows_signing_in_agai
         description: "the desktop stopped starting before it appeared".to_owned(),
     };
     assert_eq!(
-        manager.worker_said(ADA, gave_up),
-        vec![
-            Action::Reply(Response::error(
-                ErrorType::Error,
-                "the desktop stopped starting before it appeared"
-            )),
-            Action::ShowGreeter,
-        ]
+        manager.worker_said(ADA, gave_up.clone(), at(2)),
+        vec![Action::Reply(Response::error(
+            ErrorType::Error,
+            "the desktop stopped starting before it appeared"
+        )),]
     );
     assert_eq!(
-        manager.request(Request::CreateSession {
-            username: "ada".to_owned(),
-        }),
+        manager.request(
+            Request::CreateSession {
+                username: "ada".to_owned(),
+            },
+            at(1)
+        ),
         vec![Action::Spawn {
             worker: 3,
             class: Class::User,
             username: "ada".to_owned()
         }],
         "the login window accepts a new attempt while the old session is still ending"
+    );
+
+    let mut manager = Manager::default();
+    signed_in(&mut manager);
+    manager.worker_said(ADA, gave_up, at(2));
+    assert_eq!(
+        manager.worker_ended(ADA, at(3)),
+        vec![Action::ShowGreeter],
+        "the screen is asked for again once the worker has let go of its terminal"
     );
 }
 
@@ -324,7 +551,7 @@ fn the_desktops_first_frame_is_seen_but_a_mark_left_by_an_earlier_session_is_not
     let runtime = tempfile::tempdir().unwrap();
     let mark = runtime.path().join(DESKTOP_SHOWN);
     std::fs::write(&mark, b"").unwrap();
-    let watch = ShownWatch::new(runtime.path()).unwrap();
+    let watch = ShownWatch::new(runtime.path(), DESKTOP_SHOWN).unwrap();
     assert!(!mark.exists());
     assert!(!watch.progress().unwrap().shown);
     std::fs::write(&mark, b"").unwrap();

@@ -9,7 +9,8 @@ use std::time::{Duration, Instant};
 use bande_design::{Palette, Scheme};
 use libc::{c_char, c_int, c_short, c_ulong, c_ushort};
 
-use crate::signals;
+use crate::checked;
+use crate::signals::{self, keeping_errno};
 
 pub const GREETER_VT: u32 = 1;
 const CONSOLE: &str = "/dev/tty0";
@@ -48,19 +49,16 @@ struct VtStat {
 
 static HELD: AtomicI32 = AtomicI32::new(-1);
 
-fn checked(result: c_int) -> io::Result<()> {
-    match result {
-        -1 => Err(io::Error::last_os_error()),
-        _ => Ok(()),
-    }
-}
-
-fn console() -> io::Result<File> {
+fn device(path: &str) -> io::Result<File> {
     OpenOptions::new()
         .read(true)
         .write(true)
         .custom_flags(libc::O_NOCTTY | libc::O_CLOEXEC)
-        .open(CONSOLE)
+        .open(path)
+}
+
+fn console() -> io::Result<File> {
+    device(CONSOLE)
 }
 
 /// The virtual terminal on screen.
@@ -77,7 +75,8 @@ pub fn activate(number: u32) -> io::Result<()> {
     let console = console()?;
     let number = c_int::try_from(number).map_err(io::Error::other)?;
     // SAFETY: VT_ACTIVATE takes the terminal's number as a plain integer.
-    checked(unsafe { libc::ioctl(console.as_raw_fd(), VT_ACTIVATE, number) })
+    checked(unsafe { libc::ioctl(console.as_raw_fd(), VT_ACTIVATE, number) })?;
+    Ok(())
 }
 
 /// Brings `number` to the front and waits until it is there.
@@ -111,15 +110,20 @@ pub fn unused() -> io::Result<u32> {
         .ok_or_else(|| io::Error::other("every virtual terminal is in use"))
 }
 
+fn acknowledge(switch: c_int) {
+    keeping_errno(|| {
+        // SAFETY: VT_RELDISP takes a plain integer; ioctl is async-signal-safe and the fd stays
+        // open while it is held.
+        unsafe { libc::ioctl(HELD.load(Ordering::Relaxed), VT_RELDISP, switch) };
+    });
+}
+
 extern "C" fn released(_: c_int) {
-    // SAFETY: VT_RELDISP takes a plain integer; ioctl is async-signal-safe and the fd stays open
-    // while it is held.
-    unsafe { libc::ioctl(HELD.load(Ordering::Relaxed), VT_RELDISP, 1) };
+    acknowledge(1);
 }
 
 extern "C" fn acquired(_: c_int) {
-    // SAFETY: as in `released`.
-    unsafe { libc::ioctl(HELD.load(Ordering::Relaxed), VT_RELDISP, VT_ACKACQ) };
+    acknowledge(VT_ACKACQ);
 }
 
 /// A session's virtual terminal, kept open while the session runs so no one else takes it.
@@ -131,13 +135,8 @@ pub struct Terminal {
 
 impl Terminal {
     pub fn open(number: u32) -> io::Result<Self> {
-        let file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .custom_flags(libc::O_NOCTTY | libc::O_CLOEXEC)
-            .open(format!("/dev/tty{number}"))?;
         Ok(Self {
-            file,
+            file: device(&format!("/dev/tty{number}"))?,
             number,
             held: false,
         })
@@ -166,12 +165,14 @@ impl Terminal {
 
     fn ioctl(&self, request: c_ulong, value: c_int) -> io::Result<()> {
         // SAFETY: every request passed here takes a plain integer, not a pointer.
-        checked(unsafe { libc::ioctl(self.file.as_raw_fd(), request, value) })
+        checked(unsafe { libc::ioctl(self.file.as_raw_fd(), request, value) })?;
+        Ok(())
     }
 
     fn set_mode(&self, mode: &VtMode) -> io::Result<()> {
         // SAFETY: VT_SETMODE reads a struct vt_mode, which VtMode matches field for field.
-        checked(unsafe { libc::ioctl(self.file.as_raw_fd(), VT_SETMODE, mode) })
+        checked(unsafe { libc::ioctl(self.file.as_raw_fd(), VT_SETMODE, mode) })?;
+        Ok(())
     }
 
     /// Brings the terminal to the front in graphics mode, so the kernel's console never draws
@@ -198,8 +199,7 @@ impl Terminal {
         switch_to(self.number)
     }
 
-    fn restore(&self) -> io::Result<()> {
-        self.ioctl(KDSETMODE, KD_TEXT)?;
+    fn switch_freely(&self) -> io::Result<()> {
         self.set_mode(&VtMode {
             mode: VT_AUTO,
             waitv: 0,
@@ -207,6 +207,11 @@ impl Terminal {
             acqsig: 0,
             frsig: 0,
         })
+    }
+
+    fn restore(&self) -> io::Result<()> {
+        self.ioctl(KDSETMODE, KD_TEXT)?;
+        self.switch_freely()
     }
 
     /// Gives the terminal back to the kernel's console whoever left it in graphics mode or with

@@ -4,6 +4,7 @@ use std::io;
 use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::net::{UnixListener, UnixStream};
+use std::os::unix::process::CommandExt;
 use std::process::{Child, Command, ExitCode, Stdio};
 use std::time::{Duration, Instant};
 
@@ -19,6 +20,8 @@ use crate::vt::{self, GREETER_VT, Terminal};
 use crate::{GREETER_SOCKET, signals};
 
 const OWN_PROGRAM: &str = "/proc/self/exe";
+/// The status `RestartPreventExitStatus=` in `bande-greeter.service` names.
+const GAVE_UP: u8 = 69;
 const GREETER_PATIENCE: Duration = Duration::from_secs(1);
 
 struct Worker {
@@ -44,7 +47,6 @@ struct Daemon {
     greeter_uid: u32,
     signals: OwnedFd,
     _greeter_vt: Terminal,
-    started: Instant,
     pending: VecDeque<Action>,
     exit: Option<bool>,
 }
@@ -63,22 +65,32 @@ fn listen(account: &Account) -> io::Result<UnixListener> {
 
 fn start_worker(class: Class, username: String) -> io::Result<Worker> {
     let (ours, theirs) = UnixStream::pair()?;
-    let child = Command::new(OWN_PROGRAM)
+    let mut child = Command::new(OWN_PROGRAM)
+        .arg0(env!("CARGO_PKG_NAME"))
         .arg("--worker")
         .stdin(Stdio::from(OwnedFd::from(theirs)))
         .spawn()?;
-    let exited = pidfd_open(Pid::from_child(&child), PidfdFlags::empty())?;
-    write_message(&mut &ours, &ToWorker::Begin { class, username })?;
-    Ok(Worker {
-        child,
-        exited,
-        socket: Some(ours),
-    })
+    let begun = pidfd_open(Pid::from_child(&child), PidfdFlags::empty())
+        .map_err(io::Error::from)
+        .and_then(|exited| {
+            write_message(&mut &ours, &ToWorker::Begin { class, username }).map(|()| exited)
+        });
+    match begun {
+        Ok(exited) => Ok(Worker {
+            child,
+            exited,
+            socket: Some(ours),
+        }),
+        Err(error) => {
+            child.kill()?;
+            child.wait()?;
+            Err(error)
+        }
+    }
 }
 
 /// Runs the login manager until it is stopped or the login window keeps failing.
 pub fn run() -> ExitCode {
-    let started = Instant::now();
     let prepared = Account::named(GREETER_USER)
         .map_err(|error| format!("cannot look up {GREETER_USER}: {error}"))
         .and_then(|account| {
@@ -105,11 +117,10 @@ pub fn run() -> ExitCode {
         greeter_uid,
         signals,
         _greeter_vt: greeter_vt,
-        started,
         pending: VecDeque::new(),
         exit: None,
     };
-    let actions = daemon.manager.start(daemon.now());
+    let actions = daemon.manager.start();
     daemon.act(actions);
     loop {
         if let Some(success) = daemon.exit {
@@ -117,7 +128,7 @@ pub fn run() -> ExitCode {
                 true => ExitCode::SUCCESS,
                 false => {
                     tracing::error!("the login window keeps failing to start");
-                    ExitCode::FAILURE
+                    ExitCode::from(GAVE_UP)
                 }
             };
         }
@@ -129,10 +140,6 @@ pub fn run() -> ExitCode {
 }
 
 impl Daemon {
-    fn now(&self) -> Duration {
-        self.started.elapsed()
-    }
-
     fn sources(&self) -> Vec<(Source, BorrowedFd<'_>)> {
         let mut sources = vec![
             (Source::Signals, self.signals.as_fd()),
@@ -169,7 +176,13 @@ impl Daemon {
             .collect();
         drop(fds);
         drop(sources);
+        let accepting = ready
+            .iter()
+            .any(|source| matches!(source, Source::Listener));
         for source in ready {
+            if accepting && matches!(source, Source::Greeter) {
+                continue;
+            }
             let actions = match source {
                 Source::Signals => self.signalled(),
                 Source::Listener => self.accept(),
@@ -186,7 +199,7 @@ impl Daemon {
         match signals::arrived(&self.signals) {
             Ok(true) => {
                 tracing::info!("stopping: ending every session");
-                self.manager.terminate()
+                self.manager.terminate(Instant::now())
             }
             Ok(false) => Vec::new(),
             Err(error) => {
@@ -223,14 +236,14 @@ impl Daemon {
             return Vec::new();
         }
         match self.greeter.replace(stream) {
-            Some(_) => self.manager.disconnected(),
+            Some(_) => self.manager.disconnected(Instant::now()),
             None => Vec::new(),
         }
     }
 
     fn forget_greeter(&mut self) -> Vec<Action> {
         self.greeter = None;
-        self.manager.disconnected()
+        self.manager.disconnected(Instant::now())
     }
 
     fn hear_greeter(&mut self) -> Vec<Action> {
@@ -238,7 +251,7 @@ impl Daemon {
             return Vec::new();
         };
         match read_message::<Request>(&mut Deadline::within(greeter, GREETER_PATIENCE)) {
-            Ok(request) => self.manager.request(request),
+            Ok(request) => self.manager.request(request, Instant::now()),
             Err(error) => {
                 if error.kind() != io::ErrorKind::UnexpectedEof {
                     tracing::warn!("dropping the login window's connection: {error}");
@@ -256,8 +269,11 @@ impl Daemon {
             return Vec::new();
         };
         match read_message::<FromWorker>(socket) {
-            Ok(said) => self.manager.worker_said(id, said),
-            Err(_) => {
+            Ok(said) => self.manager.worker_said(id, said, Instant::now()),
+            Err(error) => {
+                if error.kind() != io::ErrorKind::UnexpectedEof {
+                    tracing::warn!("letting go of session worker {id}: {error}");
+                }
                 worker.socket = None;
                 Vec::new()
             }
@@ -273,7 +289,7 @@ impl Daemon {
             Ok(status) => tracing::info!("session worker {id} ended: {status}"),
             Err(error) => tracing::warn!("cannot reap session worker {id}: {error}"),
         }
-        self.manager.worker_ended(id, self.now())
+        self.manager.worker_ended(id, Instant::now())
     }
 
     fn act(&mut self, actions: Vec<Action>) {
@@ -297,7 +313,7 @@ impl Daemon {
                 }
                 Err(error) => {
                     tracing::error!("cannot start a session worker: {error}");
-                    self.manager.worker_ended(worker, self.now())
+                    self.manager.worker_ended(worker, Instant::now())
                 }
             },
             Action::Tell(id, message) => {

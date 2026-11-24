@@ -5,11 +5,19 @@ mod signals;
 mod vt;
 mod worker;
 
+use std::io;
 use std::process::ExitCode;
 
 use rustix::process::{DumpableBehavior, set_dumpable_behavior};
 
 const GREETER_SOCKET: &str = "/run/bande-login/greeter.sock";
+
+fn checked(result: libc::c_int) -> io::Result<libc::c_int> {
+    match result {
+        -1 => Err(io::Error::last_os_error()),
+        result => Ok(result),
+    }
+}
 
 fn main() -> ExitCode {
     bande_log::init("bande-login");

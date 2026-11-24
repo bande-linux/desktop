@@ -614,7 +614,8 @@ part of login small and the UI unprivileged:
    announced as "Sign in") with battery, Wi-Fi or cable or Offline, input source, and Sleep,
    Restart and Shut Down. Logind's answers are asked again when the devices change or the screen
    wakes, so a dock that changes them is followed.
-3. **The protocol**: length-prefixed JSON, one response for each request:
+3. **The protocol**: length-prefixed JSON, one response for each request, in order (a request that
+   arrives while an earlier one waits for PAM takes its place, so `cancel_session` never waits):
    `create_session`, `post_auth_message_response`, `start_session` and `cancel_session`
    (`bande_login::protocol`). Messages either way are refused above 64 KiB, each message to or
    from the login window must pass whole within a second (`Deadline`, on a non-blocking socket,
@@ -642,7 +643,10 @@ allowed, too many attempts, unavailable); the raw text goes to the journal. A re
 answer starts a new conversation at once; one before any prompt (`pam_nologin`, a PAM that cannot
 load) waits for the next answer, Escape or another person. After four wrong answers for the same
 login name each further one waits 5 s, doubling to a minute, with a countdown under the field;
-the login window keeps the count per name across switching people. While a session is starting,
+the login window keeps the count per name across switching people, and `bande-login` keeps its
+own (`bande_pam::Backoff`), which also counts an answer whose conversation was cancelled, cut off
+or crashed and refuses answers until the wait is over, so a login window that does not wait gains
+nothing. A typed name is logged only when it is an account's. While a session is starting,
 the field holds text or a power confirmation is open, Up and Down do not switch people. At login
 `bande-login` changes an expired password with `pam_chauthtok` through the same conversation (the
 `password` stack of `bande-greeter`). The lock screen cannot change one, as it runs as the user
@@ -716,8 +720,10 @@ session has ended. Unlocking is one compositor: the last lock frame
 fades out over the desktop, so input reaches the desktop at once. A session takes the first free
 virtual terminal, usually VT 2, and `bande-login` keeps VT 1 open, so logind starts no `getty`
 there (which would conflict with `bande-greeter.service`); `Ctrl+Alt+F3` and above reach a text
-console at any time. When the login window ends three times within 10 s of starting while no
-session runs, `bande-login` exits with a failure; after five failed starts in 30 s
+console at any time. When the login window ends three times in a row without anyone having signed
+in or its having stayed on screen for a minute (its compositor marks its first frame with `shown`
+in `/run/bande-greeter`), while no session runs, `bande-login` exits with status 69, which
+`RestartPreventExitStatus=` makes final, and
 `bande-console-fallback.service` quits Plymouth, gives VT 1 back to the console
 (`bande-login --console`: text mode and automatic switching, whoever left it in graphics mode,
 the keyboard in Unicode mode, then a reset), starts `getty@tty1` and brings the console

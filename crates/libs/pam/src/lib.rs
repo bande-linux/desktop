@@ -1,3 +1,5 @@
+mod backoff;
+
 use std::ffi::{CStr, CString, c_char, c_int, c_void};
 use std::fmt;
 use std::ptr;
@@ -5,12 +7,15 @@ use std::ptr;
 use libloading::Library;
 use zeroize::Zeroizing;
 
+pub use backoff::Backoff;
+
 const LIBRARY: &str = "libpam.so.0";
 
 const PROMPT_ECHO_OFF: c_int = 1;
 const PROMPT_ECHO_ON: c_int = 2;
 const ERROR_MSG: c_int = 3;
 const TEXT_INFO: c_int = 4;
+const MOST_MESSAGES: usize = 32;
 const ITEM_USER: c_int = 2;
 const ITEM_TTY: c_int = 3;
 
@@ -323,17 +328,22 @@ impl<'a> Transaction<'a> {
     }
 
     /// The user the modules settled on, which may differ from the name the transaction began with.
-    pub fn user(&self) -> Option<String> {
+    pub fn user(&self) -> Result<String, Code> {
         let mut value = ptr::null();
         // SAFETY: handle is open; PAM_USER is a NUL-terminated string PAM owns.
         let status = unsafe { (self.api.get_item)(self.handle, ITEM_USER, &mut value) };
-        if status != 0 || value.is_null() {
-            return None;
+        if status != 0 {
+            return Err(Code(status));
+        }
+        if value.is_null() {
+            return Err(Code::USER_UNKNOWN);
         }
         // SAFETY: a non-null PAM_USER item is a NUL-terminated string that lives until the next
         // change to it, and it is copied at once.
         let user = unsafe { CStr::from_ptr(value.cast::<c_char>()) };
-        user.to_str().ok().map(str::to_owned)
+        user.to_str()
+            .map(str::to_owned)
+            .map_err(|_| Code::USER_UNKNOWN)
     }
 
     /// The transaction's environment as `NAME=value` entries.
@@ -410,8 +420,11 @@ unsafe extern "C" fn converse(
     responses: *mut *mut Response,
     talk: *mut c_void,
 ) -> c_int {
-    let Ok(count) = usize::try_from(count) else {
-        return Code::BUF_ERR.0;
+    let Some(count) = usize::try_from(count)
+        .ok()
+        .filter(|count| (1..=MOST_MESSAGES).contains(count))
+    else {
+        return Code::CONV_ERR.0;
     };
     // SAFETY: talk is the Talk the transaction keeps alive until pam_end, and PAM calls the
     // conversation only from within a step on the transaction's own thread.
@@ -419,7 +432,7 @@ unsafe extern "C" fn converse(
     // SAFETY: calloc has no preconditions; the zeroed array is a valid [Response; count] (null
     // texts) that PAM takes ownership of and frees.
     let answers =
-        unsafe { libc::calloc(count.max(1), std::mem::size_of::<Response>()) }.cast::<Response>();
+        unsafe { libc::calloc(count, std::mem::size_of::<Response>()) }.cast::<Response>();
     if answers.is_null() {
         return Code::BUF_ERR.0;
     }
@@ -445,10 +458,76 @@ unsafe extern "C" fn converse(
                 unsafe { (*answers.add(index)).text = copy };
             }
             ERROR_MSG | TEXT_INFO => talk.show(&text, message.style == ERROR_MSG),
-            _ => {}
+            _ => {
+                // SAFETY: answers is this call's calloc and index entries were filled.
+                unsafe { free_answers(answers, index) };
+                return Code::CONV_ERR.0;
+            }
         }
     }
     // SAFETY: PAM passes a valid out pointer for the responses array.
     unsafe { *responses = answers };
     Code::SUCCESS.0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct Silent;
+
+    impl Conversation for Silent {
+        fn ask(&mut self, _: &str, _: bool) -> Option<Zeroizing<String>> {
+            Some(Zeroizing::new("hunter2".to_owned()))
+        }
+
+        fn show(&mut self, _: &str, _: bool) {}
+    }
+
+    fn converse_in(styles: &[c_int]) -> (c_int, Option<Vec<bool>>) {
+        let messages: Vec<Message> = styles
+            .iter()
+            .map(|style| Message {
+                style: *style,
+                text: c"text".as_ptr(),
+            })
+            .collect();
+        let mut pointers: Vec<*const Message> = messages.iter().map(ptr::from_ref).collect();
+        let mut silent = Silent;
+        let mut talk: Talk<'_> = &mut silent;
+        let mut answers = ptr::null_mut();
+        // SAFETY: the messages, the out pointer and the talk all live across the call.
+        let status = unsafe {
+            converse(
+                c_int::try_from(styles.len()).unwrap_or(c_int::MAX),
+                pointers.as_mut_ptr(),
+                &mut answers,
+                (&raw mut talk).cast(),
+            )
+        };
+        if answers.is_null() {
+            return (status, None);
+        }
+        let filled = (0..styles.len())
+            // SAFETY: a successful conversation hands over one response for each message.
+            .map(|index| unsafe { !(*answers.add(index)).text.is_null() })
+            .collect();
+        // SAFETY: answers is the conversation's calloc and is not used again.
+        unsafe { free_answers(answers, styles.len()) };
+        (status, Some(filled))
+    }
+
+    #[test]
+    fn only_known_messages_in_a_sane_number_are_answered() {
+        assert_eq!(
+            converse_in(&[TEXT_INFO, PROMPT_ECHO_OFF, ERROR_MSG]),
+            (0, Some(vec![false, true, false]))
+        );
+        assert_eq!(converse_in(&[PROMPT_ECHO_OFF, 7]), (Code::CONV_ERR.0, None));
+        assert_eq!(converse_in(&[]), (Code::CONV_ERR.0, None));
+        assert_eq!(
+            converse_in(&[TEXT_INFO; MOST_MESSAGES + 1]),
+            (Code::CONV_ERR.0, None)
+        );
+    }
 }

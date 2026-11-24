@@ -16,8 +16,8 @@ use bande_config::{
 use bande_datetime::daylight::{Sky, place_of, sky};
 use bande_datetime::{DateFormats, MinuteTimer};
 use bande_greeter::{
-    Login, Step, account_users, failed_session, last_user_file, login_accessibility, login_look,
-    login_picture, login_users, remember_user, remembered_user,
+    Login, Step, Unanswered, account_users, failed_session, last_user_file, login_accessibility,
+    login_look, login_picture, login_users, remember_user, remembered_user,
 };
 use bande_keyboard::Layouts;
 use bande_l10n::tr;
@@ -80,11 +80,10 @@ struct Greeter {
     login_socket: PathBuf,
     daemon: Option<UnixStream>,
     login: Option<Login>,
-    awaiting: bool,
+    unanswered: Unanswered,
     asked: bool,
     answered: bool,
     backoffs: HashMap<String, Backoff>,
-    cancel_queued: bool,
     next: Option<String>,
     refusal: Option<Refusal>,
     pending: Option<Zeroizing<String>>,
@@ -370,8 +369,7 @@ impl Greeter {
         self.daemon = None;
         self.leaving = false;
         self.login = None;
-        self.awaiting = false;
-        self.cancel_queued = false;
+        self.unanswered = Unanswered::default();
         self.next = None;
         self.asked = false;
         self.screen.ask(None);
@@ -388,7 +386,7 @@ impl Greeter {
         {
             Ok(daemon) => {
                 self.daemon = Some(daemon);
-                self.awaiting = true;
+                self.unanswered.sent();
             }
             Err(error) => self.unavailable(&error),
         }
@@ -404,10 +402,7 @@ impl Greeter {
             }));
             if let Some(current) = self.login.as_mut().filter(|login| !login.is_idle()) {
                 let cancel = current.cancel();
-                match self.awaiting {
-                    true => self.cancel_queued = true,
-                    false => self.send(&cancel),
-                }
+                self.send(&cancel);
             }
             return;
         };
@@ -416,10 +411,7 @@ impl Greeter {
                 self.next = Some(login);
                 if !current.is_cancelling() {
                     let cancel = current.cancel();
-                    match self.awaiting {
-                        true => self.cancel_queued = true,
-                        false => self.send(&cancel),
-                    }
+                    self.send(&cancel);
                 }
             }
             _ => {
@@ -469,7 +461,7 @@ impl Greeter {
             self.converse();
             return;
         }
-        if !self.asked || self.awaiting {
+        if !self.asked || self.unanswered.any() {
             self.pending = Some(answer);
             return;
         }
@@ -491,9 +483,7 @@ impl Greeter {
                 return;
             }
         };
-        self.awaiting = false;
-        if std::mem::take(&mut self.cancel_queued) {
-            self.send(&Request::CancelSession);
+        if !self.unanswered.answered() {
             return;
         }
         let steps = self
@@ -585,7 +575,7 @@ impl Greeter {
             self.switch_to(index.unwrap_or(self.users.len()));
             return;
         }
-        if self.screen.take_cancel() {
+        if self.screen.take_cancel() && !self.is_starting() {
             self.pending = None;
             if self.shown >= self.users.len() && self.other.is_some() {
                 self.other = None;
@@ -1036,11 +1026,10 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         login_socket,
         daemon: None,
         login: None,
-        awaiting: false,
+        unanswered: Unanswered::default(),
         asked: false,
         answered: false,
         backoffs: HashMap::new(),
-        cancel_queued: false,
         next: None,
         refusal: None,
         pending: None,

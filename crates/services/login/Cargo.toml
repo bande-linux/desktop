@@ -14,7 +14,7 @@ bande-log.workspace = true
 bande-pam.workspace = true
 bande-xdg.workspace = true
 libc.workspace = true
-rustix = { workspace = true, features = ["fs", "net"] }
+rustix = { workspace = true, features = ["fs", "net", "stdio"] }
 serde.workspace = true
 serde_json.workspace = true
 tracing.workspace = true

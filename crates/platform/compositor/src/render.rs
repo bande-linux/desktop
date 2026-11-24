@@ -127,6 +127,7 @@ impl Renderer {
         };
         self.frames += 1;
         let elements = compositor.render_elements_on(&mut self.vulkan, name);
+        self.vulkan.measure_frames_of(Some(name));
         let rendered = self
             .vulkan
             .bind(&mut output.target)
@@ -153,6 +154,7 @@ impl Renderer {
                     })
                     .map_err(rendering_error)
             });
+        self.vulkan.measure_frames_of(None);
         self.outputs.insert(name.to_owned(), output);
         self.vulkan.finish_uploads()?;
         let submitted = self.vulkan.submitted();
@@ -201,10 +203,7 @@ impl FrameOutput for Renderer {
     }
 
     fn gpu_time(&self, output: &str) -> std::time::Duration {
-        self.outputs
-            .get(output)
-            .and_then(|output| self.vulkan.gpu_frame_time((output.size.w, output.size.h)))
-            .unwrap_or_default()
+        self.vulkan.gpu_frame_time(output).unwrap_or_default()
     }
 
     fn renew_failed_renderer(&mut self) -> Result<bool, RenderError> {

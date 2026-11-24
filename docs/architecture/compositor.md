@@ -25,8 +25,8 @@ when they reach the screen is Bande's own.
   hasvk's Haswell and Broadwell GPUs qualify); every device left out is logged with the reason. Each
   sampled image view (with its chroma plane or colour table) gets one descriptor set, made at its
   first draw and freed with the image; sets come from pools of 64, any pool with room, and a pool
-  is destroyed once its last set is freed. It implements Smithay's `Renderer`, `Frame`, `ImportMemWl`,
-  `ImportDmaWl`, `Offscreen` and `Bind<Dmabuf>`. Both outputs compose the same Wayland surface
+  is destroyed once its last set is freed. It implements Smithay's `Renderer`, `Frame`,
+  `ImportMemWl`, `ImportDmaWl`, `Offscreen` and `Bind<Dmabuf>`. Both outputs compose the same Wayland surface
   elements through Smithay: the headless output with `OutputDamageTracker` into a persistent
   offscreen image (read back only for tests), the DRM output with `DrmCompositor`. Each surface
   keeps a texture for its lifetime and an import uploads only the buffer's damaged rows; the damage
@@ -46,15 +46,17 @@ when they reach the screen is Bande's own.
   that submission finishes. A frame hands the display a sync file of its submission
   (`VK_KHR_external_semaphore_fd`, the plane's `IN_FENCE_FD` on DRM); when the extension is missing,
   a sync file cannot be exported (the slot then gets a new semaphore), or no GPU time is known yet
-  for frames of that size, the frame is waited for, and on DRM the CPU waits before queueing
+  for that display, the frame is waited for, and on DRM the CPU waits before queueing
   whenever the plane cannot take the fence (`needs_sync`: no `IN_FENCE_FD`, older NVIDIA drivers,
   virtio-gpu without syncobj), so a buffer is never scanned out while it is drawn. Completion is
-  taken to follow submission order on the one queue, as every driver's ring does. The render elements of a frame, and with them the client buffers they hold,
-  are kept until its submission finishes (`drawing.rs`, woken by the sync file), so no buffer goes
+  taken to follow submission order on the one queue, as every driver's ring does. A submission the
+  driver refuses drops every kept blur and has the renderer made again, as its uploads are lost.
+  Staging memory unused for two seconds is freed. The render elements of a frame, and with them the
+  client buffers they hold, are kept until its submission finishes (`drawing.rs`, woken by the sync file), so no buffer goes
   back to a client while the GPU still reads it. The scheduler prices a frame at its CPU time plus
-  the longest GPU time of the last four frames of that size (each display, not captures, which have
-  their own sizes), measured with timestamps masked to the queue's valid bits. Client fences are waited for before a commit
-  applies (`sync.rs`: the dma-buf's implicit fences, or the `linux-drm-syncobj-v1` acquire point).
+  the longest GPU time of the last four frames of its display (captures do not count), plus that of
+  the frames of other displays the GPU has yet to finish, measured with timestamps masked to the
+  queue's valid bits. Client fences are waited for before a commit applies (`sync.rs`: the dma-buf's implicit fences, or the `linux-drm-syncobj-v1` acquire point).
 - **Window shape and depth.** Every window that is not full screen is clipped to its
   `xdg_surface` window geometry with 16 pt rounded corners (antialiased in the fragment shader)
   and casts a soft shadow drawn analytically (a Gaussian-blurred rounded box): the focused window's

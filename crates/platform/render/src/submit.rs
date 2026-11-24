@@ -9,11 +9,12 @@ use ash::vk;
 use smithay::backend::renderer::sync::{Fence, Interrupted, SyncPoint};
 use smithay::reexports::rustix::event::{PollFd, PollFlags, Timespec, poll};
 
-use crate::{GPU_HANG_NANOS, RenderError, Staging, VulkanRenderer};
+use crate::{GPU_HANG_NANOS, MIN_STAGING_BYTES, RenderError, Staging, VulkanRenderer};
 
 const IN_FLIGHT: usize = 3;
 const SPARE_STAGING: usize = IN_FLIGHT + 1;
-const TIMED_FRAMES: usize = 64;
+const TIMED_FRAMES: usize = 4;
+const KEEP_SPARE: Duration = Duration::from_secs(2);
 
 static LAST_SERIAL: AtomicU64 = AtomicU64::new(0);
 
@@ -23,7 +24,7 @@ pub(crate) struct Slot {
     signal: Option<vk::Semaphore>,
     timestamps: vk::QueryPool,
     serial: u64,
-    frame: Option<(i32, i32)>,
+    frame: Option<Arc<str>>,
     stale_signal: bool,
     staging: Vec<Staging>,
     sync_file: Option<Arc<OwnedFd>>,
@@ -47,8 +48,9 @@ pub(crate) struct Submissions {
     submitted: u64,
     completed: u64,
     spare: Vec<Staging>,
-    frame_times: HashMap<(i32, i32), VecDeque<Duration>>,
-    measured: Vec<Duration>,
+    measuring: Option<Arc<str>>,
+    frame_times: HashMap<Arc<str>, VecDeque<Duration>>,
+    measured: Option<Vec<Duration>>,
 }
 
 impl Submissions {
@@ -60,8 +62,9 @@ impl Submissions {
             submitted: last,
             completed: last,
             spare: Vec::new(),
+            measuring: None,
             frame_times: HashMap::new(),
-            measured: Vec::new(),
+            measured: None,
         }
     }
 }
@@ -267,7 +270,7 @@ impl VulkanRenderer {
         Ok(())
     }
 
-    pub(crate) fn submit(&mut self, frame: Option<(i32, i32)>) -> Result<u64, RenderError> {
+    pub(crate) fn submit(&mut self, frame: Option<Arc<str>>) -> Result<u64, RenderError> {
         let index = self
             .submissions
             .recording
@@ -300,8 +303,9 @@ impl VulkanRenderer {
                 })
         };
         if let Err(error) = submitted {
-            if error == vk::Result::ERROR_DEVICE_LOST {
-                self.lost.store(true, Ordering::Relaxed);
+            match error {
+                vk::Result::ERROR_DEVICE_LOST => self.lost.store(true, Ordering::Relaxed),
+                _ => self.exhausted.store(true, Ordering::Relaxed),
             }
             return Err(error.into());
         }
@@ -362,10 +366,32 @@ impl VulkanRenderer {
         }
     }
 
+    fn free_unused_staging(&mut self) {
+        let (kept, unused) = std::mem::take(&mut self.submissions.spare)
+            .into_iter()
+            .partition(|staging| staging.last_used.elapsed() < KEEP_SPARE);
+        self.submissions.spare = kept;
+        let unused: Vec<Staging> = unused;
+        for staging in &unused {
+            self.destroy_staging(staging);
+        }
+    }
+
+    pub(crate) fn reserved_staging(&self) -> impl Iterator<Item = &Staging> + Clone {
+        self.submissions
+            .slots
+            .iter()
+            .flat_map(|slot| &slot.staging)
+            .chain(&self.submissions.spare)
+    }
+
     pub(crate) fn take_spare_staging(&mut self, bytes: usize) -> Option<Staging> {
         let spare = &mut self.submissions.spare;
-        let index = spare.iter().position(|staging| staging.capacity >= bytes)?;
-        Some(spare.swap_remove(index))
+        let index = spare
+            .iter()
+            .rposition(|staging| staging.capacity >= bytes)
+            .filter(|&index| spare[index].capacity <= 2 * bytes.max(MIN_STAGING_BYTES))?;
+        Some(spare.remove(index))
     }
 
     pub(crate) fn submit_and_wait(&mut self) -> Result<(), RenderError> {
@@ -423,13 +449,15 @@ impl VulkanRenderer {
             if stale_signal {
                 self.renew_signal(index);
             }
-            if let (Some(size), Some(time)) = (frame, timed) {
-                let times = self.submissions.frame_times.entry(size).or_default();
+            if let (Some(output), Some(time)) = (frame, timed) {
+                let times = self.submissions.frame_times.entry(output).or_default();
                 times.push_back(time);
                 if times.len() > TIMED_FRAMES {
                     times.pop_front();
                 }
-                self.submissions.measured.push(time);
+                if let Some(measured) = &mut self.submissions.measured {
+                    measured.push(time);
+                }
             }
             self.spare_staging(staging);
         }
@@ -454,6 +482,7 @@ impl VulkanRenderer {
         for (_, garbage) in due {
             self.destroy_now(garbage);
         }
+        self.free_unused_staging();
     }
 
     fn slot_time(&self, index: usize) -> Option<Duration> {
@@ -500,19 +529,40 @@ impl VulkanRenderer {
             .and_then(|fd| fd.as_fd().try_clone_to_owned().ok())
     }
 
-    pub fn gpu_frame_time(&self, size: (i32, i32)) -> Option<Duration> {
-        self.submissions
-            .frame_times
-            .get(&size)?
+    pub fn measure_frames_of(&mut self, output: Option<&str>) {
+        self.submissions.measuring = output.map(Arc::from);
+    }
+
+    pub(crate) fn measuring(&self) -> Option<Arc<str>> {
+        self.submissions.measuring.clone()
+    }
+
+    fn longest_frame(&self, output: &str) -> Option<Duration> {
+        let times = self.submissions.frame_times.get(output)?;
+        times.iter().max().copied()
+    }
+
+    pub fn gpu_frame_time(&self, output: &str) -> Option<Duration> {
+        let own = self.longest_frame(output)?;
+        let queued: Duration = self
+            .submissions
+            .slots
             .iter()
-            .rev()
-            .take(4)
-            .max()
-            .copied()
+            .filter(|slot| slot.serial != 0)
+            .filter_map(|slot| Some((slot, slot.frame.as_deref()?)))
+            .filter(|(_, other)| *other != output)
+            // SAFETY: the fence belongs to this device; a status query has no side effect.
+            .filter(|(slot, _)| unsafe { self.device.get_fence_status(slot.fence) } == Ok(false))
+            .filter_map(|(_, other)| self.longest_frame(other))
+            .sum();
+        Some(own + queued)
     }
 
     pub fn take_gpu_frame_times(&mut self) -> Vec<Duration> {
-        std::mem::take(&mut self.submissions.measured)
+        self.submissions
+            .measured
+            .replace(Vec::new())
+            .unwrap_or_default()
     }
 
     pub(crate) fn sync_point(&mut self, serial: u64) -> Result<SyncPoint, RenderError> {
@@ -523,7 +573,8 @@ impl VulkanRenderer {
             .find(|slot| slot.serial == serial)
             .filter(|slot| {
                 slot.frame
-                    .is_some_and(|size| self.gpu_frame_time(size).is_some())
+                    .as_deref()
+                    .is_none_or(|output| self.longest_frame(output).is_some())
             })
             .and_then(|slot| slot.sync_file.clone());
         match file {

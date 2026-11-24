@@ -1322,15 +1322,7 @@ impl FrameOutput for DrmBackend {
     }
 
     fn gpu_time(&self, output: &str) -> Duration {
-        self.heads
-            .iter()
-            .find(|head| head.config.name == output)
-            .map(|head| head.compositor.pending_mode().size())
-            .and_then(|(width, height)| {
-                self.renderer
-                    .gpu_frame_time((i32::from(width), i32::from(height)))
-            })
-            .unwrap_or_default()
+        self.renderer.gpu_frame_time(output).unwrap_or_default()
     }
 
     fn refresh(&self, output: &str) -> Option<Duration> {
@@ -1529,10 +1521,12 @@ impl DrmBackend {
             None => FrameFlags::DEFAULT | FrameFlags::ALLOW_PRIMARY_PLANE_SCANOUT_ANY,
         };
         let elements = compositor.render_elements_on(&mut self.renderer, output);
+        self.renderer.measure_frames_of(Some(output));
         let (rendered, drew_everything) = drawing_everything(|| {
             head.compositor
                 .render_frame(&mut self.renderer, &elements, background(), flags)
         });
+        self.renderer.measure_frames_of(None);
         let frame = match rendered {
             Ok(frame) => frame,
             Err(error)

@@ -486,6 +486,11 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
 
     fn finish_frame(&mut self) -> Result<u64, RenderError> {
         self.finished = true;
+        self.end_frame()
+            .inspect_err(|_| self.renderer.forget_blurs())
+    }
+
+    fn end_frame(&mut self) -> Result<u64, RenderError> {
         // SAFETY: the frame holds the renderer mutably from `begin_commands` until `finish_frame`
         // ends the buffer, so `command_buffer` is recording and only this frame records into it,
         // and the rendering begun on the target is still open.
@@ -534,9 +539,7 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
         if verifying {
             self.mark_output(&readbacks)?;
         }
-        let serial = self
-            .renderer
-            .submit(Some((self.bounds.width, self.bounds.height)))?;
+        let serial = self.renderer.submit(self.renderer.measuring())?;
         self.renderer.retire_unused_blur_chains();
         if let Some(target) = self.renderer.targets.get_mut(&self.target) {
             target.rendered = true;
@@ -574,7 +577,7 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
             renderer.queue_family,
             (false, DRAWING),
         );
-        let serial = renderer.submit(Some((self.bounds.width, self.bounds.height)))?;
+        let serial = renderer.submit(renderer.measuring())?;
         renderer.retire_unused_blur_chains();
         renderer.hand_staging_to(serial);
         if let Some(target) = renderer.targets.get_mut(&self.target) {

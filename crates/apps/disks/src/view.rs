@@ -1452,20 +1452,21 @@ impl DisksView {
     }
 
     fn tools(&self) -> Vec<Box<dyn Widget>> {
-        let tool = |title: String, command: &'static str| {
+        let button = |title: &str, command: &'static str| {
             let intents = Rc::clone(&self.intents);
             let mut button =
-                Button::new(&title, move || push(&intents, Intent::Command(command))).quiet();
+                Button::new(title, move || push(&intents, Intent::Command(command))).quiet();
             button.set_enabled(self.can(command));
-            boxed(button)
+            button
         };
+        let tool = |title: String, command| boxed(button(&title, command));
         let partition = match self.selection() {
             Some(Selected::Disk(_)) => ADD_PARTITION,
             _ => RESIZE,
         };
         vec![
-            tool(tr!("+"), ADD_PARTITION),
-            tool(tr!("−"), DELETE_PARTITION),
+            boxed(button(&tr!("+"), ADD_PARTITION).tooltip(&tr!("Add Partition…"))),
+            boxed(button(&tr!("−"), DELETE_PARTITION).tooltip(&tr!("Delete Partition…"))),
             tool(tr!("Repair"), REPAIR),
             tool(tr!("Partition"), partition),
             tool(tr!("Erase"), ERASE),

@@ -1229,7 +1229,7 @@ fn desktop_panes() -> Vec<Pane> {
                             tr!("preview, body, text, content, privacy, hide"),
                         )
                         .described(tr!(
-                            "Off shows each notification's title without its text or picture"
+                            "Off shows each notification’s title without its text or picture"
                         )),
                         switch(
                             SettingId::FocusScheduled,

@@ -56,6 +56,8 @@ fn load(path: &Path, chosen: Option<&'static encoding_rs::Encoding>) -> Result<L
     read_bounded(path, MAX_FILE_BYTES)
         .map_err(|error| match error.kind() {
             std::io::ErrorKind::FileTooLarge => tr!("The file is larger than 512 MB."),
+            std::io::ErrorKind::NotFound => tr!("It no longer exists."),
+            std::io::ErrorKind::PermissionDenied => tr!("You don’t have permission to open it."),
             _ => error.to_string(),
         })
         .and_then(|bytes| open(path, bytes, chosen))

@@ -143,7 +143,7 @@ pub fn follow_default_apps(updates: Updates) -> Sender<DefaultAppCommand> {
             {
                 updates.send(pane_failed(
                     PaneId::Apps,
-                    text!("Couldn't change the default app."),
+                    text!("Couldn’t change the default app."),
                     error,
                 ));
             }

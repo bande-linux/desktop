@@ -82,6 +82,9 @@ msgstr "Mata ut"
 msgid "File"
 msgstr "Arkiv"
 
+msgid "Disk"
+msgstr "Skiva"
+
 msgid "Untitled"
 msgstr "Namnlös"
 
@@ -425,9 +428,6 @@ msgstr "Typ:"
 
 msgid "Solid state"
 msgstr "Halvledarlagring"
-
-msgid "Disk"
-msgstr "Skiva"
 
 msgid "Model:"
 msgstr "Modell:"

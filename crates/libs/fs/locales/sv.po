@@ -167,3 +167,15 @@ msgstr "Arkiv"
 
 msgid "This disk can’t store links."
 msgstr "Den här skivan kan inte lagra länkar."
+
+msgid "An item can’t replace the folder that contains it."
+msgstr "Ett objekt kan inte ersätta mappen som innehåller det."
+
+msgid "A folder can’t be copied into itself."
+msgstr "En mapp kan inte kopieras till sig själv."
+
+msgid "Special files can’t be copied."
+msgstr "Specialfiler kan inte kopieras."
+
+msgid "A folder can’t be moved into itself."
+msgstr "En mapp kan inte flyttas till sig själv."

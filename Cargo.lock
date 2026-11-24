@@ -2018,6 +2018,8 @@ dependencies = [
  "bande-spring",
  "bande-taskbar-model",
  "bande-terminal-view",
+ "bande-test-bus",
+ "bande-test-wayland",
  "bande-toolkit",
  "bande-volumes",
  "bande-xdg",

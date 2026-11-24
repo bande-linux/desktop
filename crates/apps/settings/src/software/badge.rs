@@ -117,7 +117,7 @@ pub(crate) fn glance(every: Option<Duration>, restart_pending: bool) -> Glance {
     Glance::Known(match remembered {
         Remembered::RestartToUpdate if boot == boot_id() => Some(tr!("Restart to install updates")),
         Remembered::Interrupted if !packages_changed => {
-            Some(tr!("Updates didn't finish installing"))
+            Some(tr!("Updates didn’t finish installing"))
         }
         Remembered::Available(count) if !packages_changed => Some(trn!(
             "1 update is available",

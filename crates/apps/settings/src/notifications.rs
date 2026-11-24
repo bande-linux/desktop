@@ -76,7 +76,7 @@ pub fn follow_app_notifications(
             {
                 updates.send(pane_failed(
                     PaneId::Notifications,
-                    text!("Couldn't change the notification settings for this app."),
+                    text!("Couldn’t change the notification settings for this app."),
                     error,
                 ));
             }

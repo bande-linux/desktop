@@ -34,11 +34,12 @@ use crate::bus::Bus;
 
 const BADGE_GAP: Duration = Duration::from_millis(250);
 pub(crate) const FILES_APP_ID: &str = "org.bande.Files";
-const WINDOW_NODE: NodeId = NodeId(u64::MAX);
-const TERMINAL_NODE: NodeId = NodeId(u64::MAX - 1);
-const TAB_LIST_NODE: NodeId = NodeId(u64::MAX - 2);
-const NEW_TAB_NODE: NodeId = NodeId(u64::MAX - 3);
-const TAB_NODES: u64 = u64::MAX - 1024;
+const FIRST_NODE: u64 = u64::MAX - (1 << 20);
+const WINDOW_NODE: NodeId = NodeId(FIRST_NODE);
+const TERMINAL_NODE: NodeId = NodeId(FIRST_NODE + 1);
+const TAB_LIST_NODE: NodeId = NodeId(FIRST_NODE + 2);
+const NEW_TAB_NODE: NodeId = NodeId(FIRST_NODE + 3);
+const TAB_NODES: u64 = FIRST_NODE + 16;
 const VELOCITY_WINDOW: Duration = Duration::from_millis(100);
 const MIN_MOMENTUM: f64 = 30.0;
 const LONG_COMMAND: Duration = Duration::from_secs(10);

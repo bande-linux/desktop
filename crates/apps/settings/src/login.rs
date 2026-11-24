@@ -216,15 +216,15 @@ pub fn follow_login_items(updates: Updates) -> Sender<LoginCommand> {
             let (pane, failure) = match command {
                 LoginCommand::SetLanguage(..) => (
                     PaneId::LanguageTime,
-                    text!("Couldn't change the app's language."),
+                    text!("Couldn’t change the app’s language."),
                 ),
                 LoginCommand::SetShortcut(..) => (
                     PaneId::KeyboardShortcuts,
-                    text!("Couldn't change the app's shortcut."),
+                    text!("Couldn’t change the app’s shortcut."),
                 ),
                 _ => (
                     PaneId::Apps,
-                    text!("Couldn't change the apps that open at login."),
+                    text!("Couldn’t change the apps that open at login."),
                 ),
             };
             let language = match &command {

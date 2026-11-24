@@ -107,7 +107,7 @@ pub fn follow_security_status(system: Option<&Connection>, updates: &Updates) ->
             {
                 updates.send(pane_failed(
                     PaneId::PrivacySecurity,
-                    text!("Couldn't change sign-in page detection."),
+                    text!("Couldn’t change sign-in page detection."),
                     error,
                 ));
             }

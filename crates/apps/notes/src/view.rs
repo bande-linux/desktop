@@ -154,9 +154,9 @@ impl NotesView {
         );
         let list = host.insert(
             Table::new(vec![
-                Column::new(&tr!("Title"), 130.0),
+                Column::new(&tr!("Title"), 110.0),
                 Column::new(&tr!("Text"), 110.0).flexible(),
-                Column::new(&tr!("Modified"), 80.0),
+                Column::new(&tr!("Modified"), 130.0),
             ])
             .without_header()
             .label(&tr!("Notes"))

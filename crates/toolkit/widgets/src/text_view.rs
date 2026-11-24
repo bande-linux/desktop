@@ -285,6 +285,9 @@ impl Widget for TextView {
     fn access(&self, cx: &Context) -> Node {
         let mut node = Node::new(Role::MultilineTextInput);
         node.set_placeholder(self.placeholder.clone());
+        if !self.placeholder.is_empty() {
+            node.set_label(self.placeholder.clone());
+        }
         let runs = self.editor.runs(self.visible());
         self.editor.describe(&mut node, self.id, &runs);
         self.scroll.describe(cx, &mut node);

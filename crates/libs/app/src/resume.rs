@@ -295,13 +295,13 @@ impl ReopenPrompt {
         let answer = Rc::clone(&cx.resume.answer);
         let alert = Alert::new(
             &title,
-            &tr!("Reopen them again? If it keeps quitting, choose Don't Reopen."),
+            &tr!("Reopen them again? If it keeps quitting, choose Don’t Reopen."),
             move |action: &str| {
                 answer.set(Some(action == REOPEN));
             },
         )
         .primary(&tr!("Reopen"), REOPEN)
-        .cancel(&tr!("Don't Reopen"), DO_NOT_REOPEN);
+        .cancel(&tr!("Don’t Reopen"), DO_NOT_REOPEN);
         let appearance = Appearance::default();
         let mut ui = Ui::new(
             Box::new(alert),

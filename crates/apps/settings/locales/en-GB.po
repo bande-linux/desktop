@@ -42,5 +42,5 @@ msgstr "The update was cancelled."
 msgid "Capitalize words automatically"
 msgstr "Capitalise words automatically"
 
-msgid "Couldn't empty the Trash."
-msgstr "Couldn't empty the Bin."
+msgid "Couldn’t empty the Trash."
+msgstr "Couldn’t empty the Bin."

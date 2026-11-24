@@ -102,7 +102,7 @@ impl BatchRename {
                 tr!("Two items would both be named “{name}”.", name = name)
             }
             BatchProblem::Exists(name) => tr!(
-                "The name “{name}” is already taken. Please choose a different name.",
+                "The name “{name}” is already taken. Choose a different name.",
                 name = name
             ),
         })

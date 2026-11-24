@@ -162,7 +162,7 @@ pub fn follow_storage(updates: Updates) -> Sender<StorageCommand> {
             {
                 updates.send(pane_failed(
                     PaneId::Storage,
-                    text!("Couldn't empty the Trash."),
+                    text!("Couldn’t empty the Trash."),
                     error,
                 ));
             }

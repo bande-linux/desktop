@@ -595,7 +595,7 @@ msgstr "Visa förhandsvisningar"
 msgid "preview, body, text, content, privacy, hide"
 msgstr "förhandsvisning, innehåll, text, integritet, dölj"
 
-msgid "Off shows each notification's title without its text or picture"
+msgid "Off shows each notification’s title without its text or picture"
 msgstr "Av visar varje notis rubrik utan text eller bild"
 
 msgid "Turn on by schedule"

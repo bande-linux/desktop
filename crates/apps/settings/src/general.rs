@@ -67,7 +67,6 @@ impl SettingsView {
                 0 => tr!(context = "count", "None"),
                 count => trn!("One report", "{count} reports", count = count),
             }),
-            PaneId::NightLight => self.night_light_summary(),
             PaneId::Camera
             | PaneId::Microphone
             | PaneId::Screenshots

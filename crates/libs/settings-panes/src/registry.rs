@@ -31,8 +31,6 @@ pub enum PaneId {
     Search,
     Accessibility,
     Displays,
-    DisplaysAdvanced,
-    NightLight,
     Sound,
     Keyboard,
     KeyboardShortcuts,
@@ -58,7 +56,7 @@ pub enum PaneId {
 }
 
 impl PaneId {
-    const KEYWORDS: [(Self, &'static str); 34] = [
+    const KEYWORDS: [(Self, &'static str); 32] = [
         (Self::Wifi, "wifi"),
         (Self::Bluetooth, "bluetooth"),
         (Self::Network, "network"),
@@ -69,8 +67,6 @@ impl PaneId {
         (Self::Search, "search"),
         (Self::Accessibility, "accessibility"),
         (Self::Displays, "displays"),
-        (Self::DisplaysAdvanced, "displays-advanced"),
-        (Self::NightLight, "night-light"),
         (Self::Sound, "sound"),
         (Self::Keyboard, "keyboard"),
         (Self::KeyboardShortcuts, "keyboard-shortcuts"),
@@ -117,9 +113,7 @@ impl PaneId {
             | Self::Backup
             | Self::About => Some(Group::System),
             Self::BarMore
-            | Self::DisplaysAdvanced
             | Self::KeyboardShortcuts
-            | Self::NightLight
             | Self::Passwords
             | Self::Camera
             | Self::Microphone
@@ -141,8 +135,7 @@ impl PaneId {
             Self::Notifications => "preferences-system-notifications-symbolic",
             Self::Search => "system-search-symbolic",
             Self::Accessibility => "avatar-default-symbolic",
-            Self::Displays | Self::DisplaysAdvanced => "video-display-symbolic",
-            Self::NightLight => "night-light-symbolic",
+            Self::Displays => "video-display-symbolic",
             Self::Sound => "audio-volume-high-symbolic",
             Self::Keyboard | Self::KeyboardShortcuts => "input-keyboard-symbolic",
             Self::Pointing => "input-mouse-symbolic",
@@ -179,8 +172,6 @@ impl PaneId {
             Self::Search => tr!("Search"),
             Self::Accessibility => tr!("Accessibility"),
             Self::Displays => tr!("Displays"),
-            Self::DisplaysAdvanced => tr!(context = "displays", "Advanced"),
-            Self::NightLight => tr!("Night Light"),
             Self::Sound => tr!("Sound"),
             Self::Keyboard => tr!("Keyboard"),
             Self::KeyboardShortcuts => tr!("Keyboard Shortcuts"),
@@ -222,10 +213,6 @@ impl PaneId {
                 tr!("Make the screen, sound, keyboard and pointer easier to use")
             }
             Self::Displays => tr!("Arrangement, resolution and size of each display"),
-            Self::DisplaysAdvanced => {
-                tr!("Refresh rate and variable refresh rate of each display")
-            }
-            Self::NightLight => tr!("Warmer colors after dark"),
             Self::Sound => tr!("Output, input and sound effects"),
             Self::Keyboard => tr!("Input sources, key repeat and modifier keys"),
             Self::KeyboardShortcuts => tr!("The keys that work everywhere on the desktop"),
@@ -275,12 +262,6 @@ impl PaneId {
             Self::Search => tr!("launcher, super, results, recents, privacy"),
             Self::Accessibility => tr!("a11y, disability, assistive, vision, hearing, motor"),
             Self::Displays => tr!("monitor, screen, resolution, brightness, night light"),
-            Self::DisplaysAdvanced => {
-                tr!("advanced, monitor, refresh rate, hertz, hz, variable refresh, vrr")
-            }
-            Self::NightLight => tr!(
-                "night shift, blue light, warm, redshift, colour temperature, color temperature, eye strain"
-            ),
             Self::Sound => tr!("audio, speakers, headphones, microphone"),
             Self::Keyboard => tr!("keys, typing"),
             Self::KeyboardShortcuts => {
@@ -360,9 +341,7 @@ impl PaneId {
             Self::Diagnostics => Some(Self::PrivacySecurity),
             Self::Passwords => Some(Self::Users),
             Self::BarMore => Some(Self::Bar),
-            Self::DisplaysAdvanced => Some(Self::Displays),
             Self::KeyboardShortcuts => Some(Self::Keyboard),
-            Self::NightLight => Some(Self::Displays),
             Self::Camera
             | Self::Microphone
             | Self::Screenshots
@@ -435,7 +414,6 @@ pub enum SettingId {
     DisplayResolution,
     DisplayScale,
     RefreshRate,
-    DisplaysAdvancedPage,
     DisplayRotation,
     VariableRefresh,
     ScreenSaverAfter,
@@ -516,7 +494,6 @@ pub enum SettingId {
     SecurityStatus,
     DefaultApps,
     Brightness,
-    NightLightPage,
     NightLight,
     NightSchedule,
     NightFrom,
@@ -1464,8 +1441,6 @@ fn accessibility_pane() -> Pane {
 fn device_panes() -> Vec<Pane> {
     vec![
         displays_pane(),
-        displays_advanced_pane(),
-        night_light_pane(),
         sound_pane(),
         keyboard_pane(),
         pane(
@@ -1540,61 +1515,35 @@ fn displays_pane() -> Pane {
                         Kind::Resolutions,
                     ),
                     setting(
+                        SettingId::RefreshRate,
+                        tr!("Refresh rate"),
+                        tr!("hertz, hz, smooth, frame rate"),
+                        Kind::RefreshRates,
+                    ),
+                    setting(
                         SettingId::DisplayRotation,
                         tr!("Rotation"),
                         tr!("rotate, portrait, landscape, orientation, turn"),
                         choice(rotation_choices()),
                     ),
+                    switch(
+                        SettingId::VariableRefresh,
+                        tr!("Variable refresh rate"),
+                        tr!("vrr, adaptive sync, freesync, games, video, smooth"),
+                    )
+                    .described(tr!("In full-screen games and videos")),
                 ],
             ),
             section(
-                None,
+                Some(tr!("Night Light")),
                 vec![
-                    page(SettingId::NightLightPage, PaneId::NightLight),
-                    page(SettingId::DisplaysAdvancedPage, PaneId::DisplaysAdvanced),
-                ],
-            ),
-        ],
-    )
-}
-
-fn displays_advanced_pane() -> Pane {
-    pane(
-        PaneId::DisplaysAdvanced,
-        vec![section(
-            None,
-            vec![
-                setting(
-                    SettingId::RefreshRate,
-                    tr!("Refresh rate"),
-                    tr!("hertz, hz, smooth, frame rate"),
-                    Kind::RefreshRates,
-                ),
-                switch(
-                    SettingId::VariableRefresh,
-                    tr!("Variable refresh rate in full screen"),
-                    tr!("vrr, adaptive sync, freesync, games, video, smooth"),
-                ),
-            ],
-        )],
-    )
-}
-
-fn night_light_pane() -> Pane {
-    pane(
-        PaneId::NightLight,
-        vec![
-            section(
-                None,
-                vec![switch(
-                    SettingId::NightLight,
-                    tr!("Night Light"),
-                    tr!("on, off, night shift, blue light"),
-                )],
-            ),
-            section(
-                None,
-                vec![
+                    switch(
+                        SettingId::NightLight,
+                        tr!("Night Light"),
+                        tr!(
+                            "on, off, night shift, blue light, warm, redshift, colour temperature, color temperature, eye strain"
+                        ),
+                    ),
                     setting(
                         SettingId::NightSchedule,
                         tr!("Schedule"),
@@ -1616,25 +1565,23 @@ fn night_light_pane() -> Pane {
                         tr!("start, end, evening, morning, schedule times"),
                         Kind::Text,
                     ),
+                    setting(
+                        SettingId::NightWarmth,
+                        tr!("Warmth"),
+                        tr!(
+                            "colour temperature, color temperature, warm, kelvin, intensity, strength"
+                        ),
+                        Kind::Range {
+                            range: NIGHT_WARMTH,
+                            step: 5,
+                            low: tr!("Less warm"),
+                            high: tr!("More warm"),
+                        },
+                    ),
                 ],
-            ),
-            section(
-                None,
-                vec![setting(
-                    SettingId::NightWarmth,
-                    tr!("Warmth"),
-                    tr!("colour temperature, color temperature, warm, kelvin, intensity, strength"),
-                    Kind::Range {
-                        range: NIGHT_WARMTH,
-                        step: 5,
-                        low: tr!("Less warm"),
-                        high: tr!("More warm"),
-                    },
-                )],
             ),
         ],
     )
-    .with_master(SettingId::NightLight)
 }
 
 fn sound_pane() -> Pane {

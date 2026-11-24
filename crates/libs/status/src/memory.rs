@@ -5,7 +5,8 @@ use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use bande_xdg::{DesktopEntry, find_app, unit_app_ids};
+use bande_l10n::tr;
+use bande_xdg::{DesktopEntry, find_app, is_tab, unit_app_ids};
 use rustix::event::epoll::{self, CreateFlags, EventData, EventFlags};
 use zbus::blocking::Connection;
 
@@ -134,12 +135,26 @@ pub fn footprint(smaps_rollup: &str) -> Option<u64> {
     Some((anonymous + swapped) * 1024)
 }
 
+fn heaviest_program(folder: &Path) -> Option<String> {
+    let pids = fs::read_to_string(folder.join("cgroup.procs")).ok()?;
+    let (_, pid) = pids
+        .lines()
+        .filter_map(|pid| Some((process_footprint(pid)?, pid)))
+        .max_by_key(|(bytes, _)| *bytes)?;
+    let name = fs::read_to_string(format!("/proc/{}/comm", pid.trim())).ok()?;
+    Some(name.trim_end().to_owned())
+}
+
+fn process_footprint(pid: &str) -> Option<u64> {
+    let rollup = fs::read_to_string(format!("/proc/{}/smaps_rollup", pid.trim())).ok()?;
+    footprint(&rollup)
+}
+
 fn cgroup_footprint(folder: &Path) -> u64 {
     let own: u64 = fs::read_to_string(folder.join("cgroup.procs"))
         .unwrap_or_default()
         .lines()
-        .filter_map(|pid| fs::read_to_string(format!("/proc/{}/smaps_rollup", pid.trim())).ok())
-        .filter_map(|rollup| footprint(&rollup))
+        .filter_map(process_footprint)
         .sum();
     let nested: u64 = fs::read_dir(folder)
         .into_iter()
@@ -170,11 +185,22 @@ pub fn heaviest_apps(app_slice: &Path, entries: &[DesktopEntry], limit: usize) -
             continue;
         };
         let bytes = cgroup_footprint(&unit.path());
-        let position = *positions.entry(app_id.clone()).or_insert_with(|| {
+        let app_name = entry.map_or_else(|| app_id.clone(), |entry| entry.name.clone());
+        let (key, shown) = match is_tab(&name) {
+            true => {
+                let Some(program) = heaviest_program(&unit.path()) else {
+                    continue;
+                };
+                let shown = tr!("{program} in {app}", program = program, app = app_name);
+                (name.clone(), shown)
+            }
+            false => (app_id, app_name),
+        };
+        let position = *positions.entry(key.clone()).or_insert_with(|| {
             apps.push(AppMemory {
-                name: entry.map_or_else(|| app_id.clone(), |entry| entry.name.clone()),
+                name: shown,
                 icon: entry.and_then(|entry| entry.icon.clone()),
-                app_id,
+                app_id: key,
                 units: Vec::new(),
                 bytes: 0,
             });

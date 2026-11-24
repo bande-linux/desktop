@@ -6,7 +6,11 @@ use std::time::{Duration, Instant};
 
 use alacritty_terminal::event::{Event as TermEvent, OnResize};
 use alacritty_terminal::tty::{self, Options, Pty, Shell};
+use bande_l10n::tr;
+use bande_xdg::TERMINAL_APP_ID;
 use rustix::event::epoll::{self, CreateFlags, EventData, EventFlags};
+use rustix::io::Errno;
+use rustix::process::{Pid, Signal, WaitId, WaitIdOptions, kill_process, waitid};
 
 use crate::process::{self, Report, Reports};
 use bande_terminal_view::{GridSize, Terminal, Theme};
@@ -14,6 +18,10 @@ use bande_terminal_view::{GridSize, Terminal, Theme};
 const READ_BUFFER: usize = 65536;
 const READS_PER_WAKE: usize = 16;
 const UNREAD_INPUT_CAP: usize = 1 << 20;
+const DEFAULT_SHELL: &str = "/bin/sh";
+const ENTER: u8 = b'\r';
+const LEAVE_PROGRAM: &[u8] =
+    b"\x1b[?1049l\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?2004l\x1b[?25l\x1b[0m\r\n";
 const TITLE_SEPARATOR: &str = " — ";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -45,9 +53,79 @@ pub struct Session {
     command: Option<(Instant, String)>,
     notices: Vec<Notice>,
     exited: bool,
+    stopped: bool,
 }
 
 pub type ShellCommand = (String, Vec<String>);
+
+const END_PATIENCE: Duration = Duration::from_millis(200);
+const END_POLL: Duration = Duration::from_millis(2);
+const SCOPE_PATIENCE: Duration = Duration::from_secs(2);
+const STOPPED_UNTIL_PLACED: &str = r#"kill -STOP $$; exec "$@""#;
+
+fn stopped_until_placed(shell: Option<ShellCommand>) -> ShellCommand {
+    let (program, arguments) = shell.unwrap_or_else(|| {
+        let shell = std::env::var("SHELL")
+            .ok()
+            .filter(|shell| !shell.is_empty());
+        (
+            shell.unwrap_or_else(|| DEFAULT_SHELL.to_owned()),
+            Vec::new(),
+        )
+    });
+    let mut wrapped = vec![
+        "-c".to_owned(),
+        STOPPED_UNTIL_PLACED.to_owned(),
+        "sh".to_owned(),
+        program,
+    ];
+    wrapped.extend(arguments);
+    (DEFAULT_SHELL.to_owned(), wrapped)
+}
+
+fn place_and_start(shell: u32) {
+    let Some(pid) = i32::try_from(shell).ok().and_then(Pid::from_raw) else {
+        return;
+    };
+    let stopped = waitid(
+        WaitId::Pid(pid),
+        WaitIdOptions::STOPPED | WaitIdOptions::EXITED | WaitIdOptions::NOWAIT,
+    );
+    match stopped {
+        Ok(Some(status)) if status.stopped() => {}
+        Ok(_) => return,
+        Err(error) => tracing::warn!("cannot tell whether the shell started: {error}"),
+    }
+    match bande_xdg::place_tab_in_scope(TERMINAL_APP_ID, shell, SCOPE_PATIENCE) {
+        Ok(true) => {}
+        Ok(false) => tracing::warn!("the tab's scope was not ready in time"),
+        Err(error) => tracing::debug!("the tab shares the app's scope: {error}"),
+    }
+    match kill_process(pid, Signal::CONT) {
+        Ok(()) | Err(Errno::SRCH) => {}
+        Err(error) => tracing::warn!("cannot start the shell: {error}"),
+    }
+}
+
+fn force_stopped(shell: u32) -> bool {
+    let Some(pid) = i32::try_from(shell).ok().and_then(Pid::from_raw) else {
+        return false;
+    };
+    let deadline = Instant::now() + END_PATIENCE;
+    loop {
+        let ended = waitid(
+            WaitId::Pid(pid),
+            WaitIdOptions::EXITED | WaitIdOptions::NOWAIT | WaitIdOptions::NOHANG,
+        );
+        match ended {
+            Ok(Some(status)) => {
+                return status.terminating_signal() == Some(Signal::KILL.as_raw());
+            }
+            Ok(None) if Instant::now() < deadline => std::thread::sleep(END_POLL),
+            Ok(None) | Err(_) => return false,
+        }
+    }
+}
 
 fn enter_server_folder_in_the_shell(
     shell: Option<ShellCommand>,
@@ -85,8 +163,9 @@ impl Session {
         directory: Option<PathBuf>,
     ) -> io::Result<Self> {
         let (shell, directory) = enter_server_folder_in_the_shell(shell, directory);
+        let (program, arguments) = stopped_until_placed(shell);
         let options = Options {
-            shell: shell.map(|(program, arguments)| Shell::new(program, arguments)),
+            shell: Some(Shell::new(program, arguments)),
             working_directory: directory,
             drain_on_exit: true,
             env: HashMap::from([
@@ -97,6 +176,9 @@ impl Session {
         };
         let pty = tty::new(&options, terminal.window_size(), 0)?;
         let shell = pty.child().id();
+        std::thread::Builder::new()
+            .name("tab-scope".to_owned())
+            .spawn(move || place_and_start(shell))?;
         let readiness = epoll::create(CreateFlags::CLOEXEC)?;
         epoll::add(
             &readiness,
@@ -118,6 +200,7 @@ impl Session {
             command: None,
             notices: Vec::new(),
             exited: false,
+            stopped: false,
         };
         session.refresh_foreground();
         Ok(session)
@@ -140,6 +223,10 @@ impl Session {
     }
 
     pub fn send(&mut self, bytes: &[u8]) -> bool {
+        if self.stopped {
+            self.exited = bytes.contains(&ENTER);
+            return true;
+        }
         if self.output.len() >= UNREAD_INPUT_CAP {
             return false;
         }
@@ -164,7 +251,7 @@ impl Session {
     }
 
     fn await_room(&mut self, wanted: bool) {
-        if wanted == self.awaiting_room {
+        if self.stopped || wanted == self.awaiting_room {
             return;
         }
         let events = match wanted {
@@ -183,12 +270,15 @@ impl Session {
     }
 
     pub fn read(&mut self, theme: &Theme) -> Vec<Notice> {
+        if self.stopped {
+            return Vec::new();
+        }
         let mut buffer = [0u8; READ_BUFFER];
         for _ in 0..READS_PER_WAKE {
             let mut master = self.pty.file();
             match master.read(&mut buffer) {
                 Ok(0) => {
-                    self.exited = true;
+                    self.shell_ended();
                     break;
                 }
                 Ok(read) => {
@@ -204,15 +294,39 @@ impl Session {
                 Err(error) if error.kind() == io::ErrorKind::WouldBlock => break,
                 Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
                 Err(_) => {
-                    self.exited = true;
+                    self.shell_ended();
                     break;
                 }
             }
         }
-        self.refresh_foreground();
+        if !self.stopped {
+            self.refresh_foreground();
+        }
         let notices = self.take_notices(theme);
         self.flush();
         notices
+    }
+
+    fn shell_ended(&mut self) {
+        if !force_stopped(self.shell) {
+            self.exited = true;
+            return;
+        }
+        if let Err(error) = epoll::delete(&self.readiness, self.pty.file()) {
+            tracing::warn!("cannot leave the stopped shell's terminal: {error}");
+            self.exited = true;
+            return;
+        }
+        self.stopped = true;
+        self.output.clear();
+        self.foreground = None;
+        self.finish_command(None);
+        let notice = tr!(
+            "Everything in this tab was stopped, by Force Quit or because memory ran low. Press Return to close it."
+        );
+        self.terminal.feed(LEAVE_PROGRAM);
+        self.terminal
+            .feed(format!("\x1b[1m{notice}\x1b[0m").as_bytes());
     }
 
     fn reported(&mut self, report: Report) {

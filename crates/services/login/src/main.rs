@@ -1,6 +1,7 @@
 mod account;
 mod daemon;
 mod journal;
+mod protection;
 mod signals;
 mod vt;
 mod worker;

@@ -23,6 +23,7 @@ use zbus::proxy::CacheProperties;
 
 use crate::account::Account;
 use crate::journal::JournalStream;
+use crate::protection::Protection;
 use crate::vt::{self, GREETER_VT, Terminal};
 use crate::{GREETER_SOCKET, checked, signals};
 
@@ -365,7 +366,9 @@ fn run_session(
         },
         None => tracing::warn!("pam_systemd registered no session"),
     }
+    let protection = (class == Class::User).then(|| Protection::of(account.uid));
     let followed = launch(class, account, terminal, &environment, links);
+    drop(protection);
     if let Err(error) = terminal.reclaim() {
         tracing::warn!("cannot take tty{} back: {error}", terminal.number());
     }

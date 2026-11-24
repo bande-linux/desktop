@@ -20,7 +20,7 @@ use crate::entry::{
 };
 use crate::identity::{app_name, find_app};
 use crate::mimeapps::config_dirs;
-use crate::units::{scope_name, unit_app_ids, unit_of_object_path};
+use crate::units::{is_tab, scope_name, tab_instance, unit_app_ids, unit_of_object_path};
 use crate::uri::{file_uri, path_from_file_uri};
 use bande_inbox::{Inbox, Outbox};
 use bande_notify::Urgency;
@@ -599,9 +599,10 @@ impl<C: Fn() -> zbus::Result<Connection>> Watcher<C> {
             app.program = std::fs::read_link(format!("/proc/{}/exe", child.id()))
                 .ok()
                 .and_then(|path| path.file_name()?.to_str().map(str::to_owned));
-            let placed = self
-                .bus()
-                .and_then(|bus| place_in_scope(&bus, &app.app_id, child.id()));
+            let placed = self.bus().and_then(|bus| {
+                let pid = child.id();
+                place_in_scope(&bus, &app.app_id, &pid.to_string(), pid)
+            });
             if let Err(error) = placed {
                 tracing::debug!("{} runs outside its own scope: {error}", app.app_id);
             }
@@ -649,6 +650,7 @@ enum Failure {
     Quit,
     Crashed,
     OutOfMemory,
+    TabOutOfMemory,
 }
 
 const OPENING: Duration = Duration::from_secs(5);
@@ -674,6 +676,7 @@ const SHOW_REPORT_ACTION: &str = "show-report";
 const SETTINGS_APP: &str = "org.bande.Settings";
 const SETTINGS_PROGRAM: &str = "bande-settings";
 const DIAGNOSTICS_PANE: &str = "diagnostics";
+const PLACED_POLL: Duration = Duration::from_millis(2);
 const APP_STOP_TIMEOUT_USEC: u64 = 5_000_000;
 const COMPOSITOR_UNIT: &str = "bande-compositor.service";
 
@@ -690,8 +693,9 @@ fn failure(status: ExitStatus, ran: Duration) -> Option<Failure> {
     })
 }
 
-fn place_in_scope(bus: &Connection, app_id: &str, pid: u32) -> zbus::Result<()> {
-    let properties = vec![
+fn place_in_scope(bus: &Connection, app_id: &str, instance: &str, pid: u32) -> zbus::Result<()> {
+    let scope = scope_name(app_id, instance);
+    let mut properties = vec![
         ("PIDs", Value::from(vec![pid])),
         ("Slice", Value::from("app.slice")),
         ("CollectMode", Value::from("inactive-or-failed")),
@@ -699,19 +703,41 @@ fn place_in_scope(bus: &Connection, app_id: &str, pid: u32) -> zbus::Result<()> 
         ("Before", Value::from(vec![COMPOSITOR_UNIT])),
         ("TimeoutStopUSec", Value::from(APP_STOP_TIMEOUT_USEC)),
     ];
+    if is_tab(&scope) {
+        properties.push(("OOMPolicy", Value::from("continue")));
+    }
     bus.call_method(
         Some(SYSTEMD),
         SYSTEMD_PATH,
         Some(SYSTEMD_MANAGER),
         "StartTransientUnit",
         &(
-            scope_name(app_id, pid),
+            scope,
             "fail",
             properties,
             Vec::<(&str, Vec<(&str, Value)>)>::new(),
         ),
     )?;
     Ok(())
+}
+
+/// Moves the process `pid` of one tab of the app into a scope of its own, so that running out of
+/// memory ends that tab alone, and waits until it is there, for at most `patience`.
+pub fn place_tab_in_scope(app_id: &str, pid: u32, patience: Duration) -> zbus::Result<bool> {
+    let instance = tab_instance(pid);
+    let scope = scope_name(app_id, &instance);
+    place_in_scope(&bande_bus::session()?, app_id, &instance, pid)?;
+    let deadline = Instant::now() + patience;
+    loop {
+        let cgroup = std::fs::read_to_string(format!("/proc/{pid}/cgroup")).unwrap_or_default();
+        if cgroup.trim_end().ends_with(&scope) {
+            return Ok(true);
+        }
+        if Instant::now() >= deadline {
+            return Ok(false);
+        }
+        thread::sleep(PLACED_POLL);
+    }
 }
 
 fn notice_signals(bus: &Connection) -> zbus::Result<MessageIterator> {
@@ -779,7 +805,7 @@ fn tell(
     let entry = find_app(&entries, app_id);
     let app = app_name(&entries, app_id);
     let needs_x11 = opening
-        && failure != Failure::OutOfMemory
+        && !matches!(failure, Failure::OutOfMemory | Failure::TabOutOfMemory)
         && entry.is_some_and(|entry| bande_packages::x11::installed_needs_x11(&entry.path));
     let (summary, body) = match failure {
         _ if needs_x11 => (
@@ -794,6 +820,15 @@ fn tell(
         Failure::Crashed => (
             tr!("{app} quit unexpectedly", app = app),
             tr!("Click to open it again."),
+        ),
+        Failure::TabOutOfMemory => (
+            tr!(
+                "A tab in {app} was stopped because memory ran low",
+                app = app
+            ),
+            tr!(
+                "Your computer ran out of memory and stopped what ran in the tab to keep everything else working."
+            ),
         ),
         Failure::OutOfMemory => (
             tr!("{app} was closed because memory ran low", app = app),
@@ -911,7 +946,13 @@ fn watch_oom_kills(bus: &Connection) -> zbus::Result<()> {
             .or(ids.last().map(String::as_str));
         bande_log::fault::report_oom(&unit, app_id);
         match app_id {
-            Some(app_id) => tell(Ok(bus.clone()), app_id, Failure::OutOfMemory, false, None),
+            Some(app_id) => {
+                let failure = match is_tab(&unit) {
+                    true => Failure::TabOutOfMemory,
+                    false => Failure::OutOfMemory,
+                };
+                tell(Ok(bus.clone()), app_id, failure, false, None);
+            }
             None => tell_task_stopped(bus, &unit),
         }
     }

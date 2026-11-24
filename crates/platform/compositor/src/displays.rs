@@ -128,6 +128,10 @@ impl State {
     ) {
         let to = self.screen_rect(screen);
         let area = self.usable_area(screen);
+        let maximized = self.placement_area(screen);
+        let tiled = self.windows[index]
+            .tile
+            .map(|(tile, _)| (tile, self.tile_rect(screen, tile)));
         let window = &mut self.windows[index];
         window.motion = None;
         window.resize = None;
@@ -137,13 +141,10 @@ impl State {
         let placed = if window.has_state(xdg_toplevel::State::Fullscreen) {
             Some(to)
         } else if window.has_state(xdg_toplevel::State::Maximized) {
-            Some(area)
-        } else if let Some((tile, _)) = window.tile {
-            let rect = tile.rect(area);
-            window.tile = Some((tile, rect));
-            Some(rect)
+            Some(maximized)
         } else {
-            None
+            window.tile = tiled;
+            tiled.map(|(_, rect)| rect)
         };
         let Some(geometry) = window.geometry() else {
             return;
@@ -701,6 +702,7 @@ impl Compositor {
         self.state.night_light.configure(config.night_light);
         self.state.display_config = config;
         self.state.arrange_screens();
+        self.state.fit_to_placement_areas();
     }
 
     pub fn configure_output(&mut self, output: &str, settings: OutputSettings) {

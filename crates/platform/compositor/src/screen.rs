@@ -1,15 +1,17 @@
 use std::time::Duration;
 
 use smithay::backend::renderer::utils::Buffer;
-use smithay::desktop::layer_map_for_output;
+use smithay::desktop::{LayerSurface as MappedLayer, layer_map_for_output};
 use smithay::output::{Mode, Output, PhysicalProperties, Scale as OutputScale, Subpixel};
 use smithay::reexports::calloop::RegistrationToken;
 use smithay::reexports::wayland_server::DisplayHandle;
 use smithay::reexports::wayland_server::backend::GlobalId;
 use smithay::utils::{Clock, Logical, Monotonic, Physical, Point, Raw, Rectangle, Size, Transform};
 use smithay::wayland::presentation::PresentationFeedbackCallback;
+use smithay::wayland::shell::wlr_layer::{Anchor, ExclusiveZone};
 
 use crate::frame_callbacks::{DueCallback, LatchedCallback};
+use crate::motion::BAR_NAMESPACE;
 use crate::state::{REFRESH, State};
 use crate::timing::LatchedBarrier;
 use crate::window::Window;
@@ -18,6 +20,7 @@ use crate::workspace::Workspaces;
 const REFERENCE_PIXELS_PER_INCH: f64 = 110.0;
 const SCALE_STEP: f64 = 0.25;
 const HIGH_DENSITY_HEIGHT: i32 = 1600;
+const MOST_GAPS_ACROSS: i32 = 4;
 
 pub fn automatic_scale(size: Size<i32, Physical>, physical_size_mm: Size<i32, Raw>) -> f64 {
     if physical_size_mm.w > 0 && physical_size_mm.h > 0 {
@@ -244,6 +247,15 @@ impl Screen {
         Rectangle::new(self.settings.position + zone.loc, zone.size)
     }
 
+    fn bar_anchor(&self) -> Anchor {
+        layer_map_for_output(&self.output)
+            .layers()
+            .filter(|layer| layer.namespace() == BAR_NAMESPACE)
+            .map(MappedLayer::cached_state)
+            .find(|bar| matches!(bar.exclusive_zone, ExclusiveZone::Exclusive(_)))
+            .map_or(Anchor::empty(), |bar| bar.anchor)
+    }
+
     pub(crate) fn origin_in_pixels(&self, scale: f64) -> Point<i32, Physical> {
         self.settings
             .position
@@ -305,6 +317,30 @@ impl State {
 
     pub(crate) fn usable_area(&self, screen: usize) -> Rectangle<i32, Logical> {
         self.screens[screen].usable_area()
+    }
+
+    pub(crate) fn window_gap(&self, screen: usize) -> i32 {
+        let area = self.usable_area(screen).size;
+        let gap = i32::try_from(self.display_config.bar.window_gap()).unwrap_or(i32::MAX);
+        gap.min(area.w.min(area.h) / MOST_GAPS_ACROSS)
+    }
+
+    pub(crate) fn placement_area(&self, screen: usize) -> Rectangle<i32, Logical> {
+        let area = self.usable_area(screen);
+        let gap = self.window_gap(screen);
+        let bar = self.screens[screen].bar_anchor();
+        let inset = |side, opposite| match bar.contains(side) && !bar.contains(opposite) {
+            true => 0,
+            false => gap,
+        };
+        let left = inset(Anchor::LEFT, Anchor::RIGHT);
+        let right = inset(Anchor::RIGHT, Anchor::LEFT);
+        let top = inset(Anchor::TOP, Anchor::BOTTOM);
+        let bottom = inset(Anchor::BOTTOM, Anchor::TOP);
+        Rectangle::new(
+            area.loc + Point::from((left, top)),
+            (area.size.w - left - right, area.size.h - top - bottom).into(),
+        )
     }
 
     pub(crate) fn nearest_on_screens(&self, point: Point<f64, Logical>) -> Point<f64, Logical> {

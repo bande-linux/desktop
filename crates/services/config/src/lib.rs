@@ -763,6 +763,13 @@ pub struct Bar {
     pub icon_size: u32,
 }
 
+impl Bar {
+    /// The gap kept around and between placed windows, in points.
+    pub const fn window_gap(&self) -> u32 {
+        if self.floating { self.gap } else { 0 }
+    }
+}
+
 impl Default for Bar {
     fn default() -> Self {
         Self {

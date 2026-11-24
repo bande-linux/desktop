@@ -96,7 +96,7 @@ impl State {
             .then(|| layer.layer());
         drop(map);
         self.follow_panel_zones();
-        self.fit_to_usable_areas();
+        self.fit_to_placement_areas();
         self.follow_exclusive_layer(surface, exclusive);
         let keyless = layer.cached_state().keyboard_interactivity == KeyboardInteractivity::None;
         if keyless
@@ -497,7 +497,7 @@ impl WlrLayerShellHandler for State {
         }
         self.needs_redraw = true;
         self.follow_panel_zones();
-        self.fit_to_usable_areas();
+        self.fit_to_placement_areas();
         self.follow_exclusive_layer(surface.wl_surface(), None);
         let lost = surface.wl_surface();
         if self.focused().is_some_and(|focused| {

@@ -91,18 +91,24 @@ impl Tile {
         }
     }
 
-    pub(crate) fn rect(self, area: Rectangle<i32, Logical>) -> Rectangle<i32, Logical> {
-        let left_width = area.size.w / 2;
-        let top_height = area.size.h / 2;
+    pub(crate) fn rect(self, area: Rectangle<i32, Logical>, gap: i32) -> Rectangle<i32, Logical> {
+        let left_width = (area.size.w - gap) / 2;
+        let top_height = (area.size.h - gap) / 2;
         let (x, width) = if self.on_left() {
             (area.loc.x, left_width)
         } else {
-            (area.loc.x + left_width, area.size.w - left_width)
+            (
+                area.loc.x + left_width + gap,
+                area.size.w - left_width - gap,
+            )
         };
         let (y, height) = match self.row() {
             Row::Whole => (area.loc.y, area.size.h),
             Row::Top => (area.loc.y, top_height),
-            Row::Bottom => (area.loc.y + top_height, area.size.h - top_height),
+            Row::Bottom => (
+                area.loc.y + top_height + gap,
+                area.size.h - top_height - gap,
+            ),
         };
         Rectangle::new((x, y).into(), (width, height).into())
     }
@@ -119,30 +125,32 @@ fn bottom(rect: Rectangle<i32, Logical>) -> i32 {
 fn shared_side(
     (tile, ours): (Tile, Rectangle<i32, Logical>),
     (their_tile, theirs): (Tile, Rectangle<i32, Logical>),
+    gap: i32,
 ) -> Option<Side> {
     let within_height = theirs.loc.y >= ours.loc.y && bottom(theirs) <= bottom(ours);
     let within_width = theirs.loc.x >= ours.loc.x && right(theirs) <= right(ours);
     let same_column = tile.on_left() == their_tile.on_left();
-    if tile.on_left() && !their_tile.on_left() && within_height && theirs.loc.x == right(ours) {
+    if tile.on_left() && !their_tile.on_left() && within_height && theirs.loc.x == right(ours) + gap
+    {
         Some(Side::Right)
     } else if !tile.on_left()
         && their_tile.on_left()
         && within_height
-        && right(theirs) == ours.loc.x
+        && right(theirs) + gap == ours.loc.x
     {
         Some(Side::Left)
     } else if same_column
         && tile.row() == Row::Top
         && their_tile.row() == Row::Bottom
         && within_width
-        && theirs.loc.y == bottom(ours)
+        && theirs.loc.y == bottom(ours) + gap
     {
         Some(Side::Bottom)
     } else if same_column
         && tile.row() == Row::Bottom
         && their_tile.row() == Row::Top
         && within_width
-        && bottom(theirs) == ours.loc.y
+        && bottom(theirs) + gap == ours.loc.y
     {
         Some(Side::Top)
     } else {
@@ -233,11 +241,14 @@ pub(crate) struct Preview {
 
 impl State {
     fn snap_rect(&self, (screen, snap): Target) -> Rectangle<i32, Logical> {
-        let area = self.usable_area(screen);
         match snap {
-            Snap::Tile(tile) => tile.rect(area),
-            Snap::Maximize => area,
+            Snap::Tile(tile) => self.tile_rect(screen, tile),
+            Snap::Maximize => self.placement_area(screen),
         }
+    }
+
+    pub(crate) fn tile_rect(&self, screen: usize, tile: Tile) -> Rectangle<i32, Logical> {
+        tile.rect(self.placement_area(screen), self.window_gap(screen))
     }
 
     pub(crate) fn set_tile(&mut self, index: usize, tile: Option<(Tile, Rectangle<i32, Logical>)>) {
@@ -258,7 +269,7 @@ impl State {
     }
 
     pub(crate) fn tile_window(&mut self, index: usize, tile: Tile, spring: Spring) {
-        let target = tile.rect(self.usable_area(self.screen_of(&self.windows[index])));
+        let target = self.tile_rect(self.screen_of(&self.windows[index]), tile);
         self.tile_window_into(index, tile, target, spring);
     }
 
@@ -390,13 +401,14 @@ impl State {
             return Vec::new();
         };
         let screen = self.screen_of(&self.windows[index]);
+        let gap = self.window_gap(screen);
         self.windows
             .iter()
             .enumerate()
             .filter(|(other, window)| {
                 *other != index && self.present(window) && self.screen_of(window) == screen
             })
-            .filter_map(|(other, window)| Some((other, shared_side(ours, window.tile?)?)))
+            .filter_map(|(other, window)| Some((other, shared_side(ours, window.tile?, gap)?)))
             .collect()
     }
 
@@ -408,6 +420,7 @@ impl State {
         let Some((tile, old)) = self.windows[index].tile else {
             return rect;
         };
+        let gap = self.window_gap(self.screen_of(&self.windows[index]));
         let neighbors = self.tiled_neighbors(index);
         let dragged: Vec<Side> = moved_sides(old, rect).collect();
         for (neighbor, side) in &neighbors {
@@ -417,17 +430,19 @@ impl State {
             };
             let least = window.clamp_size((1, 1).into());
             match side {
-                Side::Right => rect.size.w = rect.size.w.min(right(theirs) - least.w - rect.loc.x),
+                Side::Right => {
+                    rect.size.w = rect.size.w.min(right(theirs) - least.w - gap - rect.loc.x)
+                }
                 Side::Bottom => {
-                    rect.size.h = rect.size.h.min(bottom(theirs) - least.h - rect.loc.y)
+                    rect.size.h = rect.size.h.min(bottom(theirs) - least.h - gap - rect.loc.y)
                 }
                 Side::Left => {
-                    let beyond = (theirs.loc.x + least.w - rect.loc.x).max(0);
+                    let beyond = (theirs.loc.x + least.w + gap - rect.loc.x).max(0);
                     rect.loc.x += beyond;
                     rect.size.w -= beyond;
                 }
                 Side::Top => {
-                    let beyond = (theirs.loc.y + least.h - rect.loc.y).max(0);
+                    let beyond = (theirs.loc.y + least.h + gap - rect.loc.y).max(0);
                     rect.loc.y += beyond;
                     rect.size.h -= beyond;
                 }
@@ -442,15 +457,15 @@ impl State {
             let mut shared = theirs;
             match side {
                 Side::Right => {
-                    shared.loc.x = right(rect);
-                    shared.size.w = right(theirs) - right(rect);
+                    shared.loc.x = right(rect) + gap;
+                    shared.size.w = right(theirs) - shared.loc.x;
                 }
-                Side::Left => shared.size.w = rect.loc.x - theirs.loc.x,
+                Side::Left => shared.size.w = rect.loc.x - gap - theirs.loc.x,
                 Side::Bottom => {
-                    shared.loc.y = bottom(rect);
-                    shared.size.h = bottom(theirs) - bottom(rect);
+                    shared.loc.y = bottom(rect) + gap;
+                    shared.size.h = bottom(theirs) - shared.loc.y;
                 }
-                Side::Top => shared.size.h = rect.loc.y - theirs.loc.y,
+                Side::Top => shared.size.h = rect.loc.y - gap - theirs.loc.y,
             }
             window.tile = Some((their_tile, shared));
             window.request_size(Some(shared.size));

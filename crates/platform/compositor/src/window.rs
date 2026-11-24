@@ -342,6 +342,7 @@ impl State {
         }
         let screen = self.screen_of(&self.windows[index]);
         let area = self.usable_area(screen);
+        let maximized_at = self.placement_area(screen).loc;
         let output = self.screen_rect(screen);
         let siblings = if self.windows[index].size.is_none() {
             self.sibling_locations(index)
@@ -384,7 +385,7 @@ impl State {
                 window.location = if window.has_state(xdg_toplevel::State::Fullscreen) {
                     output.loc
                 } else if window.has_state(xdg_toplevel::State::Maximized) {
-                    area.loc
+                    maximized_at
                 } else if let Some(at) = over_parent {
                     at
                 } else if let Some(at) = window.recalled.take() {
@@ -568,14 +569,14 @@ impl State {
             .window_index(surface)
             .filter(|index| !self.windows[*index].fixed_size())
         {
-            let area = self.usable_area(self.screen_of(&self.windows[index]));
+            let area = self.placement_area(self.screen_of(&self.windows[index]));
             self.place(index, xdg_toplevel::State::Maximized, Some(area));
         }
     }
 
-    pub(crate) fn fit_to_usable_areas(&mut self) {
+    pub(crate) fn fit_to_placement_areas(&mut self) {
         for screen in 0..self.screens.len() {
-            let area = self.usable_area(screen);
+            let area = self.placement_area(screen);
             let workspaces = &self.screens[screen].workspaces;
             let full_screen = workspaces
                 .id_at(workspaces.active())
@@ -593,7 +594,7 @@ impl State {
                     continue;
                 }
                 let (fitted, target) = match window.tile {
-                    Some((tile, rect)) => (rect == tile.rect(area), Some(tile)),
+                    Some((tile, rect)) => (rect == self.tile_rect(screen, tile), Some(tile)),
                     None if window.has_state(xdg_toplevel::State::Maximized) => {
                         (window.geometry() == Some(area), None)
                     }
@@ -658,7 +659,7 @@ impl State {
             .toplevel
             .with_pending_state(|pending| pending.states.contains(xdg_toplevel::State::Maximized));
         if stays_maximized {
-            let area = self.usable_area(self.screen_of(&self.windows[index]));
+            let area = self.placement_area(self.screen_of(&self.windows[index]));
             self.place(index, xdg_toplevel::State::Maximized, Some(area));
         } else {
             self.place(index, xdg_toplevel::State::Fullscreen, None);

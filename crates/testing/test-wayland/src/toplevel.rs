@@ -4,9 +4,9 @@ use wayland_protocols::xdg::shell::client::xdg_popup::{self, XdgPopup};
 use wayland_protocols::xdg::shell::client::xdg_positioner::{
     Anchor, ConstraintAdjustment, Gravity, XdgPositioner,
 };
-use wayland_protocols::xdg::shell::client::xdg_toplevel::XdgToplevel;
+use wayland_protocols::xdg::shell::client::xdg_toplevel::{self, XdgToplevel};
 
-use crate::{Compositor, Globals, ShmImage, TestClient};
+use crate::{Compositor, Globals, RED, ShmImage, TestClient};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PopupRequest {
@@ -21,6 +21,7 @@ pub struct PopupRequest {
 #[derive(Default)]
 pub(crate) struct Toplevels {
     popups: Vec<(XdgPopup, bool)>,
+    configured: (i32, i32),
 }
 
 impl TestClient {
@@ -68,6 +69,26 @@ impl TestClient {
         self.globals.toplevels.popups.len() - 1
     }
 
+    pub fn maximize(&mut self, server: &mut Compositor, index: usize) {
+        self.windows[index].2.set_maximized();
+        self.exchange(server);
+    }
+
+    pub fn fill_configured_size(&mut self, server: &mut Compositor, index: usize) {
+        self.exchange(server);
+        let (width, height) = self.globals.toplevels.configured;
+        let bytes = RED.repeat(usize::try_from(width * height).expect("buffer size"));
+        let image = ShmImage {
+            width,
+            height,
+            stride: width * 4,
+            format: Format::Xrgb8888,
+            bytes: &bytes,
+        };
+        self.commit_buffer(index, &image, (0, 0, width, height));
+        self.exchange(server);
+    }
+
     pub fn popup_dismissed(&self, index: usize) -> bool {
         self.globals.toplevels.popups[index].1
     }
@@ -95,4 +116,18 @@ impl Dispatch<XdgPopup, ()> for Globals {
 }
 
 delegate_noop!(Globals: ignore XdgPositioner);
-delegate_noop!(Globals: ignore XdgToplevel);
+
+impl Dispatch<XdgToplevel, ()> for Globals {
+    fn event(
+        globals: &mut Self,
+        _: &XdgToplevel,
+        event: xdg_toplevel::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        if let xdg_toplevel::Event::Configure { width, height, .. } = event {
+            globals.toplevels.configured = (width, height);
+        }
+    }
+}

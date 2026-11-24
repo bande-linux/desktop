@@ -1,7 +1,6 @@
 use std::path::Path;
 
 const DEFAULT_SHELL: &str = "/bin/sh";
-const SHELLS_WHEN_UNLISTED: [&str; 2] = ["/bin/sh", "/bin/csh"];
 
 /// The shell an account logs in with: its own, or `/bin/sh` when it names none.
 pub fn login_shell(shell: &Path) -> &Path {
@@ -25,9 +24,7 @@ pub fn refusal(uid: u32, shell: &Path, shells: Option<&str>) -> Option<&'static 
             .map(str::trim)
             .filter(|line| !line.is_empty() && !line.starts_with('#'))
             .any(|line| Path::new(line) == shell),
-        None => SHELLS_WHEN_UNLISTED
-            .iter()
-            .any(|listed| Path::new(listed) == shell),
+        None => shell == Path::new(DEFAULT_SHELL),
     };
     match listed {
         true => None,

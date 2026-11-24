@@ -117,7 +117,7 @@ fn send_waiting(
     };
     let mut stuck = false;
     if !config.send {
-        for id in waiting.iter().filter(|id| !asked.contains(id)) {
+        for id in waiting.iter().filter(|id| !spool.asked(id)) {
             stuck |= !settle(spool, id, None);
         }
         if let Err(error) = spool.unqueue_checkin() {
@@ -159,7 +159,7 @@ fn send_waiting(
                     .unwrap_or("")
             };
             let kind = field("kind").to_owned();
-            let by_hand = asked.contains(&id);
+            let by_hand = spool.asked(id);
             let counts_only = match policy.choose(&kind, field("signature"), id) {
                 Choice::KeepHere if !by_hand => {
                     stuck |= !settle(spool, id, None);

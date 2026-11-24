@@ -689,7 +689,11 @@ impl Ui {
         self.sync_event_clock();
         self.cancel_capture();
         self.end_input_capture();
-        let previous_focus = self.cx.focus.take();
+        let focus = self.cx.focus.take();
+        let previous_focus = match self.sheet.take() {
+            Some(open) if !open.closing => open.previous_focus,
+            _ => focus,
+        };
         let mut shown = Animated::new(0.0);
         self.cx.animate(&mut shown, 1.0, Spring::QUICK);
         self.sheet = Some(Sheet {

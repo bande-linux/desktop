@@ -739,6 +739,12 @@ impl MailView {
         self.focus = Pane::List;
     }
 
+    fn leave_reader(&mut self) {
+        if std::mem::take(&mut self.single_reader) && self.focus == Pane::Reader {
+            self.focus = Pane::List;
+        }
+    }
+
     pub(crate) fn unread_here(&self) -> usize {
         self.sidebar
             .iter()
@@ -798,15 +804,21 @@ impl MailView {
         }
     }
 
+    pub(crate) fn finish_release(&mut self) {
+        self.releasing = false;
+        let Some((id, _, quick)) = self.release.take() else {
+            return;
+        };
+        self.swipe_shown = None;
+        if let Some(quick) = quick {
+            self.quick(id, quick);
+            self.refresh_toolbar();
+        }
+    }
+
     pub fn tick(&mut self, now: Instant) {
-        if !self.releasing
-            && let Some((id, _, quick)) = self.release.take()
-        {
-            self.swipe_shown = None;
-            if let Some(quick) = quick {
-                self.quick(id, quick);
-                self.refresh_toolbar();
-            }
+        if !self.releasing {
+            self.finish_release();
         }
         let (due, later) = std::mem::take(&mut self.read_later)
             .into_iter()
@@ -983,6 +995,24 @@ impl MailView {
                 all
             }
         };
+        self.group_by_day();
+        let messages = &self.messages;
+        self.also
+            .retain(|id| messages.iter().any(|summary| summary.id == *id));
+        if self
+            .selected
+            .is_some_and(|id| !self.messages.iter().any(|summary| summary.id == id))
+        {
+            self.selected = None;
+            self.also.clear();
+            self.reader.thread = None;
+            self.reader.layout = None;
+            self.leave_reader();
+        }
+        self.refresh_thread();
+    }
+
+    fn group_by_day(&mut self) {
         self.groups = match self.settings.sort {
             SortBy::Date => {
                 let now = Timestamp::now();
@@ -997,19 +1027,6 @@ impl MailView {
             }
             _ => Vec::new(),
         };
-        let messages = &self.messages;
-        self.also
-            .retain(|id| messages.iter().any(|summary| summary.id == *id));
-        if self
-            .selected
-            .is_some_and(|id| !self.messages.iter().any(|summary| summary.id == id))
-        {
-            self.selected = None;
-            self.also.clear();
-            self.reader.thread = None;
-            self.reader.layout = None;
-        }
-        self.refresh_thread();
     }
 
     fn conversation_of(&self, summary: &Summary) -> Vec<Summary> {
@@ -1095,6 +1112,7 @@ impl MailView {
     }
 
     pub fn choose_place(&mut self, place: Place) {
+        self.leave_reader();
         if place == self.place && !self.everywhere {
             return;
         }
@@ -1501,6 +1519,12 @@ impl MailView {
             .iter()
             .position(|summary| ids.contains(&summary.id));
         self.messages.retain(|summary| !ids.contains(&summary.id));
+        self.also.retain(|id| !ids.contains(id));
+        self.group_by_day();
+        self.refresh_sidebar();
+        if self.selected.is_none_or(|id| !ids.contains(&id)) {
+            return;
+        }
         self.selected = None;
         self.also.clear();
         self.reader.thread = None;
@@ -1514,10 +1538,10 @@ impl MailView {
                 })
             })
             .map(|summary| summary.id);
-        if let Some(next) = next {
-            self.select(next);
+        match next {
+            Some(next) => self.select(next),
+            None => self.leave_reader(),
         }
-        self.refresh_sidebar();
     }
 
     fn leave_targets(&mut self, gone: &[MessageId]) {
@@ -1557,6 +1581,7 @@ impl MailView {
                 thread.reveal = true;
             }
         }
+        let (single_reader, focus) = (self.single_reader, self.focus);
         self.reload();
         let conversations = &self.conversations;
         self.selected = self
@@ -1573,6 +1598,8 @@ impl MailView {
             })
             .map(|summary| summary.id);
         if self.selected.is_some() {
+            self.single_reader = single_reader;
+            self.focus = focus;
             self.reader.thread = thread;
             self.reader.layout = None;
             self.refresh_thread();
@@ -2943,6 +2970,9 @@ impl MailView {
         };
         self.focus = Pane::List;
         self.choose_place(place);
+        if self.overlay {
+            self.set_overlay(false);
+        }
         true
     }
 

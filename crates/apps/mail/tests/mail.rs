@@ -114,7 +114,8 @@ fn the_setup_guide_asks_before_signing_in_off_domain_and_shows_each_problem_at_i
     };
 
     assert!(!names(&mut ui).contains(&"Cancel".to_owned()));
-    for text in ["Ann", USER, "wrong"] {
+    ui.handle(&Input::Commit("Ann".to_owned()));
+    for text in [USER, "wrong"] {
         key(&mut ui, Key::Tab);
         ui.handle(&Input::Commit(text.to_owned()));
     }
@@ -168,7 +169,6 @@ fn the_setup_guide_asks_before_signing_in_off_domain_and_shows_each_problem_at_i
     );
 
     guide.added(&mut ui, USER.to_owned());
-    key(&mut ui, Key::Tab);
     ui.handle(&Input::Commit("Work".to_owned()));
     click(&mut ui, "Done");
     let Some(Done::Finished {

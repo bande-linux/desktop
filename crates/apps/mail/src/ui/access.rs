@@ -361,8 +361,9 @@ impl MailView {
                     _ => return Some(false),
                 };
                 self.focus = Pane::Sidebar;
-                if place != self.place {
-                    self.choose_place(place);
+                self.choose_place(place);
+                if request.action == Action::Click && self.overlay {
+                    self.set_overlay(false);
                 }
             }
             Part::Offline(index) => {

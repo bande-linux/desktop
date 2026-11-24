@@ -183,7 +183,8 @@ impl Guide {
             .borrow()
             .problem
             .as_ref()
-            .and_then(|(field, _)| sheet.field(*field));
+            .and_then(|(field, _)| sheet.field(*field))
+            .or_else(|| sheet.first_field().filter(|_| inline));
         let id = sheet.id();
         match self.host {
             Host::Sheet if ui.widget_ref::<AccountSheet>(self.widget).is_some() => {
@@ -205,8 +206,10 @@ impl Guide {
         }
         self.widget = id;
         self.mode = mode;
-        if let Some(field) = focus {
-            ui.set_focus(field);
+        match focus {
+            Some(field) => ui.set_focus(field),
+            None if inline => ui.clear_focus(),
+            None => {}
         }
     }
 
@@ -225,6 +228,7 @@ impl Guide {
             && let Some(layout) = ui.widget_as::<FreeLayout>(layout)
         {
             layout.remove(self.widget);
+            ui.clear_focus();
         }
     }
 

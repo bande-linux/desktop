@@ -1423,7 +1423,7 @@ impl SettingsView {
         let Some(id) = self.checking.take() else {
             return;
         };
-        self.status = Some(match outcome {
+        let status = match outcome {
             Outcome::Ready(servers) => {
                 if let Some(account) = self.accounts.iter_mut().find(|account| account.id == id) {
                     account.user = servers.user;
@@ -1434,7 +1434,10 @@ impl SettingsView {
             }
             Outcome::Failed(_, problem) => (problem.message(), true),
             Outcome::Stopped => return,
-        });
+        };
+        if self.page == Page::Account(id) {
+            self.status = Some(status);
+        }
     }
 
     fn confirm_removal(&mut self) {

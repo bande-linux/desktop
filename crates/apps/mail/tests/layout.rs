@@ -176,29 +176,39 @@ fn every_pane_keeps_clear_of_the_window_buttons_and_the_list_acts_by_swipe_and_k
     assert!(panel(&mut view), "choosing both offers Mark as Read");
     press(&mut view, Key::Escape, false);
 
-    let row = named(&view, "Plan 8")
-        .and_then(|node| node.bounds())
-        .unwrap();
-    let row = Point::new(row.x0 as f32 + 100.0, (row.y0 + row.y1) as f32 / 2.0);
-    view.handle(&Event::PointerMove(Pointer::at(row)));
-    for (delta, phase) in [
-        (-50.0, ScrollPhase::Began),
-        (-60.0, ScrollPhase::Changed),
-        (0.0, ScrollPhase::Ended),
-    ] {
-        view.handle(&Event::Scroll(Scroll {
-            position: row,
-            delta: Point::new(delta, 0.0),
-            source: ScrollSource::Finger,
-            phase,
-            ..Scroll::default()
-        }));
-        view.scene(1280, 800);
-    }
+    let swipe = |view: &mut MailView, subject: &str| {
+        let row = named(view, subject).and_then(|node| node.bounds()).unwrap();
+        let row = Point::new(row.x0 as f32 + 100.0, (row.y0 + row.y1) as f32 / 2.0);
+        view.handle(&Event::PointerMove(Pointer::at(row)));
+        for (delta, phase) in [
+            (-50.0, ScrollPhase::Began),
+            (-60.0, ScrollPhase::Changed),
+            (0.0, ScrollPhase::Ended),
+        ] {
+            view.handle(&Event::Scroll(Scroll {
+                position: row,
+                delta: Point::new(delta, 0.0),
+                source: ScrollSource::Finger,
+                phase,
+                ..Scroll::default()
+            }));
+            view.scene(1280, 800);
+        }
+    };
+    press(&mut view, Key::Character('2'), true);
+    press(&mut view, Key::Character('1'), true);
+    swipe(&mut view, "Plan 7");
     view.tick(Instant::now());
     assert_eq!(view.messages().len(), 1, "a swipe to the right archives");
+    assert_eq!(view.selected(), None, "and opens no other message");
     press(&mut view, Key::Character('z'), true);
     assert_eq!(view.messages().len(), 2, "Ctrl+Z brings it back");
+    swipe(&mut view, "Plan 8");
+    swipe(&mut view, "Plan 7");
+    view.tick(Instant::now());
+    assert!(view.messages().is_empty(), "swipes in a row all count");
+    press(&mut view, Key::Character('z'), true);
+    press(&mut view, Key::Character('z'), true);
 
     let ids = view.messages().iter().map(|summary| summary.id);
     let ids = ids.collect::<Vec<_>>();
@@ -232,6 +242,13 @@ fn every_pane_keeps_clear_of_the_window_buttons_and_the_list_acts_by_swipe_and_k
     let place = view.place().clone();
     press(&mut view, Key::Character('2'), true);
     assert_ne!(*view.place(), place, "Ctrl+2 goes to the second mailbox");
+    view.scene(600, 800);
+    view.show_message(ids[0]);
+    view.scene(600, 800);
+    assert!(named(&view, "Sort by").is_none(), "the reader stands alone");
+    press(&mut view, Key::Character('2'), true);
+    view.scene(600, 800);
+    assert!(named(&view, "Sort by").is_some(), "Ctrl+2 shows the list");
     press(&mut view, Key::Character('?'), false);
     assert!(view.has_sheet(), "? lists the shortcuts");
 }

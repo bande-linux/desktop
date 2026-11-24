@@ -125,6 +125,17 @@ impl MailView {
         });
     }
 
+    fn clip_hits(&mut self, from: usize, frame: Rect) {
+        let added = self.hits.split_off(from);
+        self.hits
+            .extend(added.into_iter().filter_map(|(rect, hit)| {
+                let top = rect.y.max(frame.y);
+                let bottom = (rect.y + rect.height).min(frame.y + frame.height);
+                let shown = Rect::new(rect.x, top, rect.width, bottom - top);
+                (bottom > top).then_some((shown, hit))
+            }));
+    }
+
     pub(crate) fn list_header_frame(&self) -> Rect {
         let sheet = self.sheet_frame();
         let width = match (self.panes(), self.single_reader) {
@@ -362,6 +373,7 @@ impl MailView {
             scroll.offset(self.ui.context())
         };
         let sidebar = std::mem::take(&mut self.sidebar);
+        let first_hit = self.hits.len();
         let mut drawn = Vec::new();
         let mut y = frame.y + SIDEBAR_INSET / 2.0 - offset;
         for (index, row) in sidebar.iter().enumerate() {
@@ -464,6 +476,7 @@ impl MailView {
             }
         }
         self.sidebar = sidebar;
+        self.clip_hits(first_hit, frame);
         items.push(Item::Clip {
             shape: Shape::rect(frame),
             items: drawn,
@@ -541,7 +554,10 @@ impl MailView {
     fn paint_list_header(&mut self, items: &mut Vec<Item>) {
         let palette = self.palette;
         let frame = self.list_header_frame();
-        let unread = self.unread_here();
+        let unread = match self.searching_everywhere() {
+            true => 0,
+            false => self.unread_here(),
+        };
         let count = match unread {
             0 => String::new(),
             unread => trn!("{count} unread", "{count} unread", count = unread),
@@ -660,6 +676,7 @@ impl MailView {
         if self.messages.is_empty() && frame.width > 0.0 {
             self.paint_empty_list(&mut drawn, frame);
         }
+        let first_hit = self.hits.len();
         let first = self.first_row_after(offset, row_height);
         let visible = (frame.height / row_height).ceil() as usize + 1;
         let now = self.now.unwrap_or_else(Timestamp::now);
@@ -730,6 +747,7 @@ impl MailView {
                 None => self.paint_row(&mut drawn, &summary, rect, now),
             }
         }
+        self.clip_hits(first_hit, frame);
         items.push(Item::Clip {
             shape: Shape::rect(frame),
             items: drawn,
@@ -1111,6 +1129,10 @@ impl MailView {
             Some(Hit::Message(id) | Hit::Quick(id, _)) => Some(id),
             _ => None,
         };
+        if scroll.phase == ScrollPhase::Began {
+            self.swipe = None;
+            self.finish_release();
+        }
         match (self.swipe, scroll.phase) {
             (Some((id, moved)), ScrollPhase::Ended) => {
                 self.swipe = None;

@@ -518,6 +518,10 @@ impl AccountSheet {
             .map(|index| self.children[index].id())
     }
 
+    pub fn first_field(&self) -> Option<WidgetId> {
+        self.fields.first().and_then(|field| self.field(*field))
+    }
+
     fn rows(&self) -> Vec<Vec<usize>> {
         let mut rows = Vec::new();
         let mut index = 0;

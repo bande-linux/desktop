@@ -567,7 +567,7 @@ impl SettingsView {
                     let label = if others.len() == 1 {
                         tr!("Mirror")
                     } else {
-                        tr!("Mirror {display}", display = other.name())
+                        tr!("Mirror {display}", display = self.display_name(other))
                     };
                     choices.push((label, format!("{MIRROR_PREFIX}{}", other.identity)));
                 }
@@ -662,7 +662,7 @@ impl SettingsView {
         })?;
         let note = match id {
             SettingId::ScreenSaverAfter => (display_off > 0 && display_off <= seconds(id)?)
-                .then_some(text!("The display turns off first, so the screen saver doesn't start.")),
+                .then_some(text!("The display turns off first, so the screen saver doesn’t start.")),
             SettingId::SleepAfter | SettingId::BatterySleepAfter => {
                 let sleep = seconds(id)?;
                 (sleep > 0 && sleep < display_off).then_some(text!("The computer stays awake until the display turns off."))
@@ -1495,10 +1495,16 @@ impl SettingsView {
         ])
     }
 
-    fn arrangement_card(&mut self) -> Option<Widgets> {
-        if self.displays.len() < 2 {
-            return None;
+    fn display_name(&self, display: &Display) -> String {
+        let name = display.name();
+        let same_name = self.displays.iter().filter(|other| other.name() == name);
+        match same_name.count() > 1 {
+            true => format!("{name} ({})", display.connector),
+            false => name,
         }
+    }
+
+    fn arrangement_card(&mut self) -> Option<Widgets> {
         let placements = self.placements();
         let shown: Vec<(Display, bool)> = self
             .displays
@@ -1507,12 +1513,15 @@ impl SettingsView {
             .filter(|(_, placement)| placement.mirror.is_none())
             .map(|(display, placement)| (display.clone(), placement.main))
             .collect();
+        if shown.len() < 2 {
+            return None;
+        }
         let screens = shown
             .iter()
             .map(|(display, main)| {
                 let (width, height) = display.logical_size();
                 Screen {
-                    label: display.name(),
+                    label: self.display_name(display),
                     area: Area {
                         x: display.position.0,
                         y: display.position.1,
@@ -1539,9 +1548,7 @@ impl SettingsView {
             boxed(Caption::new(Text::label(&tr!("Arrangement")))),
             boxed(Card::new(vec![boxed(canvas)])),
             boxed(Caption::new(Text::new(
-                &tr!(
-                    "Drag the displays to match how they stand on your desk. The white bar marks the main display."
-                ),
+                &tr!("Drag the displays to match your desk. The bar marks the main display."),
                 Tone::Muted,
             ))),
         ])
@@ -1554,7 +1561,7 @@ impl SettingsView {
     ) -> Widgets {
         let mut page = self.arrangement_card().unwrap_or_default();
         for display in self.displays.clone() {
-            let title = display.name();
+            let title = self.display_name(&display);
             page.push(boxed(Caption::new(Text::label(&title))));
             let rows: Widgets = section
                 .settings

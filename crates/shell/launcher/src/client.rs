@@ -4,7 +4,7 @@ use std::os::fd::BorrowedFd;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::mpsc::{Sender, channel};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use crate::{
     Action, AppInfo, Catalog, Clips, Hit, ICON_SIZE, Kind, Launcher, Loaded, Mode, PaneInfo, Reply,
@@ -565,6 +565,15 @@ impl App for LauncherShell {
             self.launcher.cannot_sleep();
             self.refresh_panes();
         }
+        self.sync(window);
+    }
+
+    fn deadline(&self) -> Option<Instant> {
+        self.launcher.held_until()
+    }
+
+    fn tick(&mut self, window: &mut Window, _now: Instant) {
+        self.launcher.stop_holding();
         self.sync(window);
     }
 

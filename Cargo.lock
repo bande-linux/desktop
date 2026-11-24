@@ -1882,6 +1882,7 @@ dependencies = [
  "bande-notifications",
  "bande-protocols",
  "bande-quick-settings",
+ "bande-search",
  "bande-status",
  "bande-test-bus",
  "bande-test-wayland",

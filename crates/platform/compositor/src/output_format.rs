@@ -151,6 +151,7 @@ pub(crate) struct OutputFormat<M> {
     unusable: Vec<Shape>,
     refused: Vec<(M, Shape)>,
     chosen_for: Option<(M, bool)>,
+    asked: Option<bool>,
     shown: Option<(M, Shape)>,
     kept: Option<(M, bool, Shape)>,
     whole: Option<(M, Shape, Whole)>,
@@ -164,6 +165,7 @@ impl<M: Copy + PartialEq> OutputFormat<M> {
             unusable: Vec::new(),
             refused: Vec::new(),
             chosen_for: None,
+            asked: None,
             shown: None,
             kept: None,
             whole: None,
@@ -172,6 +174,12 @@ impl<M: Copy + PartialEq> OutputFormat<M> {
 
     pub(crate) fn needs_choice(&self, mode: M, deep: bool) -> bool {
         self.chosen_for != Some((mode, deep))
+    }
+
+    pub(crate) fn ask(&mut self, deep: bool) {
+        if self.asked.replace(deep).is_some_and(|asked| asked != deep) {
+            self.forget_refusals();
+        }
     }
 
     pub(crate) fn chosen(&mut self, mode: M, deep: bool) {
@@ -392,8 +400,10 @@ mod tests {
     fn a_shape_the_display_never_takes_leaves_the_one_it_shows_in_place() {
         let mut formats = deep(10);
         let (deepest, plain) = (tiled(DEEP[0]), tiled(PLAIN[0]));
+        formats.ask(true);
         formats.chosen(FAST.0, true);
         formats.flipped(FAST.0, deepest);
+        formats.ask(false);
         formats.chosen(FAST.0, false);
         assert_eq!(refuse(&mut formats, FAST, plain), Step::ChangeShape);
         assert_eq!(formats.candidates(FAST, false), [deepest]);
@@ -401,6 +411,10 @@ mod tests {
         assert!(!formats.needs_choice(FAST.0, false));
         assert_eq!(formats.candidates(FAST, true)[0], deepest);
         assert_eq!(formats.candidates(SLOW, false)[0], plain);
+        let mut asked_again = formats.clone();
+        asked_again.ask(true);
+        asked_again.ask(false);
+        assert_eq!(asked_again.candidates(FAST, false)[0], plain);
         assert_eq!(
             refuse(&mut formats, FAST, deepest),
             Step::LeaveMode,

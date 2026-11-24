@@ -1580,6 +1580,7 @@ impl DrmBackend {
     fn choose_shape(&mut self, index: usize, deep: bool) -> Result<(), DrmBackendError> {
         let mode = self.heads[index].compositor.pending_mode();
         let name = self.heads[index].config.name.clone();
+        self.heads[index].formats.ask(deep);
         for shape in self.heads[index]
             .formats
             .candidates((mode, mode.clock()), deep)

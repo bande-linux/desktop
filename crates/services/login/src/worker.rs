@@ -1,6 +1,7 @@
 use std::ffi::{OsStr, OsString};
+use std::fs::File;
 use std::io;
-use std::os::fd::{FromRawFd, OwnedFd};
+use std::os::fd::{AsFd, OwnedFd};
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::net::UnixStream;
 use std::os::unix::process::CommandExt;
@@ -15,6 +16,7 @@ use bande_login::protocol::{
 };
 use bande_login::{FirstFrame, Relay, ShownWatch, Unattended, login_shell, refusal};
 use bande_pam::{Code, Conversation, DELETE_CRED, ESTABLISH_CRED, REINITIALIZE_CRED, Transaction};
+use bande_xdg::{DESKTOP_SHOWN, LOGIN_WINDOW_FOLDER, LOGIN_WINDOW_SHOWN};
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use rustix::process::{Pid, PidfdFlags, Signal, pidfd_open};
 use zbus::proxy::CacheProperties;
@@ -22,7 +24,7 @@ use zbus::proxy::CacheProperties;
 use crate::account::Account;
 use crate::journal::JournalStream;
 use crate::vt::{self, GREETER_VT, Terminal};
-use crate::{GREETER_SOCKET, signals};
+use crate::{GREETER_SOCKET, checked, signals};
 
 const USER_SERVICE: &str = "bande-greeter";
 const GREETER_SERVICE: &str = "bande-greeter-session";
@@ -67,6 +69,12 @@ fn tell(socket: &UnixStream, said: &FromWorker) {
     }
 }
 
+fn take_socket() -> io::Result<UnixStream> {
+    let socket = io::stdin().as_fd().try_clone_to_owned()?;
+    rustix::stdio::dup2_stdin(File::open("/dev/null")?)?;
+    Ok(UnixStream::from(socket))
+}
+
 /// Runs one session worker: the conversation, the session's PAM transaction and the session's
 /// processes, on the socket bande-login handed it as standard input.
 pub fn run() -> ExitCode {
@@ -77,9 +85,13 @@ pub fn run() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    // SAFETY: bande-login starts every worker with its socket as standard input, and nothing
-    // else in this process owns descriptor 0.
-    let socket = UnixStream::from(unsafe { OwnedFd::from_raw_fd(0) });
+    let socket = match take_socket() {
+        Ok(socket) => socket,
+        Err(error) => {
+            tracing::error!("a session worker cannot reach bande-login: {error}");
+            return ExitCode::FAILURE;
+        }
+    };
     let (class, username) = match read_message(&mut &socket) {
         Ok(ToWorker::Begin { class, username }) => (class, username),
         Ok(other) => {
@@ -102,7 +114,10 @@ pub fn run() -> ExitCode {
     match ended {
         Ok(()) => ExitCode::SUCCESS,
         Err(failure) => {
-            tracing::info!("no session for {username}: {}", failure.description);
+            match Account::named(&username) {
+                Ok(_) => tracing::info!("no session for {username}: {}", failure.description),
+                Err(_) => tracing::info!("no session for an unknown name: {}", failure.description),
+            }
             tell(
                 &socket,
                 &FromWorker::Failed {
@@ -126,13 +141,6 @@ struct Ending {
     gave_up: bool,
 }
 
-fn checked(result: libc::c_int) -> io::Result<()> {
-    match result {
-        -1 => Err(io::Error::last_os_error()),
-        _ => Ok(()),
-    }
-}
-
 fn serve(
     class: Class,
     username: &str,
@@ -144,9 +152,24 @@ fn serve(
         Class::Greeter => GREETER_SERVICE,
     };
     let mut pam = Transaction::start(service, username, conversation).map_err(Failure::other)?;
+    pam.set_tty(&format!("tty{GREETER_VT}"))
+        .map_err(|code| Failure::pam("pam_set_item", code))?;
     if class == Class::User {
+        if let Ok(account) = Account::named(username) {
+            let name = account.name.to_string_lossy().into_owned();
+            tell(links.socket, &FromWorker::Account { name });
+        }
         pam.authenticate()
             .map_err(|code| Failure::pam("pam_authenticate", code))?;
+        tell(links.socket, &FromWorker::Accepted);
+        match read_message(&mut &*links.socket) {
+            Ok(ToWorker::Proceed) => {}
+            Ok(_) => return Err(Failure::other("told something else than to proceed")),
+            Err(error) => {
+                tracing::info!("signing in was called off: {error}");
+                return Ok(());
+            }
+        }
     }
     match pam.check_account() {
         Ok(()) => {}
@@ -155,15 +178,17 @@ fn serve(
             .map_err(|code| Failure::pam("pam_chauthtok", code))?,
         Err(code) => return Err(Failure::pam("pam_acct_mgmt", code)),
     }
-    let user = pam.user().unwrap_or_else(|| username.to_owned());
+    let user = pam
+        .user()
+        .map_err(|code| Failure::pam("pam_get_item", code))?;
     let account = Account::named(&user)
-        .map_err(|error| Failure::other(format!("cannot look up {user}: {error}")))?;
+        .map_err(|error| Failure::other(format!("cannot look up the account: {error}")))?;
     if class == Class::User {
         admit(&account)?;
     }
     // SAFETY: groups holds groups.len() group ids.
     checked(unsafe { libc::setgroups(account.groups.len(), account.groups.as_ptr()) })
-        .map_err(|error| Failure::other(format!("cannot take {user}'s groups: {error}")))?;
+        .map_err(|error| Failure::other(format!("cannot take the account's groups: {error}")))?;
     pam.credentials(ESTABLISH_CRED)
         .map_err(|code| Failure::pam("pam_setcred", code))?;
     let ran = with_credentials(class, &mut pam, &account, links);
@@ -341,13 +366,15 @@ fn run_session(
         None => tracing::warn!("pam_systemd registered no session"),
     }
     let followed = launch(class, account, terminal, &environment, links);
+    if let Err(error) = terminal.reclaim() {
+        tracing::warn!("cannot take tty{} back: {error}", terminal.number());
+    }
     if class == Class::User
-        && !matches!(followed, Ok(true))
         && let Err(error) = terminal.leave_to(GREETER_VT)
     {
         tracing::warn!("cannot bring the login window back: {error}");
     }
-    followed.map(|_| ())
+    followed
 }
 
 fn launch(
@@ -356,21 +383,26 @@ fn launch(
     terminal: &Terminal,
     environment: &[(OsString, OsString)],
     links: Links<'_>,
-) -> Result<bool, Failure> {
-    let watch = match (class, variable(environment, "XDG_RUNTIME_DIR")) {
-        (Class::User, Some(runtime)) => ShownWatch::new(runtime.as_ref())
-            .inspect_err(|error| tracing::warn!("cannot wait for the desktop: {error}"))
-            .ok(),
-        _ => None,
+) -> Result<(), Failure> {
+    let marked = match class {
+        Class::User => {
+            variable(environment, "XDG_RUNTIME_DIR").map(|runtime| (runtime, DESKTOP_SHOWN))
+        }
+        Class::Greeter => Some((LOGIN_WINDOW_FOLDER.into(), LOGIN_WINDOW_SHOWN)),
     };
+    let watch = marked.and_then(|(folder, mark)| {
+        ShownWatch::new(folder.as_ref(), mark)
+            .inspect_err(|error| tracing::warn!("cannot wait for the first frame: {error}"))
+            .ok()
+    });
     let mut child = spawn(class, account, terminal, environment)
         .map_err(|error| Failure::other(format!("cannot start the session: {error}")))?;
-    let mut shown = class == Class::Greeter;
+    let mut shown = false;
     if class == Class::User && watch.is_none() {
         tell(links.socket, &FromWorker::Shown);
         shown = true;
     }
-    let ending = follow(&mut child, links, watch.as_ref(), &mut shown)
+    let ending = follow(class, &mut child, links, watch.as_ref(), &mut shown)
         .map_err(|error| Failure::other(format!("cannot follow the session: {error}")))?;
     tracing::info!(
         "the session of {} ended: {}",
@@ -381,7 +413,7 @@ fn launch(
         true => Err(Failure::other(
             "the desktop stopped starting before it appeared",
         )),
-        false => Ok(shown),
+        false => Ok(()),
     }
 }
 
@@ -412,6 +444,7 @@ fn spawn(
     let uid = account.uid;
     let gid = account.gid;
     let home = account.home.clone();
+    let worker = std::process::id();
     // SAFETY: the closure runs in the forked child before exec and makes only async-signal-safe
     // system calls on values prepared before the fork.
     unsafe {
@@ -421,6 +454,9 @@ fn spawn(
             checked(libc::setgid(gid))?;
             checked(libc::setuid(uid))?;
             checked(libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGTERM))?;
+            if std::os::unix::process::parent_id() != worker {
+                return Err(io::ErrorKind::NotConnected.into());
+            }
             if libc::chdir(home.as_ptr()) == -1 {
                 checked(libc::chdir(c"/".as_ptr()))?;
             }
@@ -429,7 +465,8 @@ fn spawn(
                 3,
                 libc::c_uint::MAX,
                 libc::CLOSE_RANGE_CLOEXEC as libc::c_int,
-            ))
+            ))?;
+            Ok(())
         });
     }
     let child = command.spawn()?;
@@ -441,6 +478,7 @@ fn spawn(
 }
 
 fn follow(
+    class: Class,
     child: &mut Child,
     links: Links<'_>,
     watch: Option<&ShownWatch>,
@@ -467,7 +505,9 @@ fn follow(
         });
         let deadline = match stopping {
             Some(since) => Some(since + STOP_LIMIT),
-            None => watching.map(|_| first_frame.deadline()),
+            None => watching
+                .filter(|_| class == Class::User)
+                .map(|_| first_frame.deadline()),
         };
         let timeout = deadline
             .map(|deadline| Timespec::try_from(deadline.saturating_duration_since(Instant::now())))
@@ -502,7 +542,10 @@ fn follow(
             }
         }
         let asked_to_stop = signalled && signals::arrived(links.signals)?;
-        let too_late = watching.is_some() && !*shown && Instant::now() >= first_frame.deadline();
+        let too_late = class == Class::User
+            && watching.is_some()
+            && !*shown
+            && Instant::now() >= first_frame.deadline();
         if stopping.is_none() && (hung_up || asked_to_stop || too_late) {
             if too_late {
                 tracing::warn!(

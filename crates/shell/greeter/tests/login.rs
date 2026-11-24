@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use bande_greeter::{Login, Step};
+use bande_greeter::{Login, Step, Unanswered};
 use bande_lock::{Prompt, Refusal};
 use bande_login::protocol::{AuthMessageType, ErrorType, Request, Response};
 
@@ -60,4 +60,21 @@ fn every_pam_step_reaches_the_person_and_pam_codes_become_refusals() {
         login.respond(failure(ErrorType::Error, "pam_acct_mgmt: NEW_AUTHTOK_REQD"))[0],
         Step::Refused(Refusal::PasswordExpired)
     );
+}
+
+#[test]
+fn cancelling_while_pam_is_busy_is_sent_at_once_and_ends_with_its_own_answer() {
+    let mut unanswered = Unanswered::default();
+    let (mut login, _) = Login::begin("ada");
+    unanswered.sent();
+    assert_eq!(login.cancel(), Request::CancelSession);
+    unanswered.sent();
+    assert!(
+        !unanswered.answered(),
+        "the cancelled request's answer is passed over, whatever it says"
+    );
+    assert!(unanswered.any() && !login.is_idle());
+    assert!(unanswered.answered());
+    assert!(login.respond(Response::Success).is_empty());
+    assert!(login.is_idle() && !unanswered.any());
 }

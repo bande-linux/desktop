@@ -48,16 +48,17 @@ pub enum WorkerFailure {
     Failed,
 }
 
-/// Runs this program again with `arguments` as a confined worker and returns what it wrote to
-/// standard output, up to `most` bytes, when it succeeds within `time`.
+/// Runs this program again with `arguments` as a confined worker that reads `stdin` and returns
+/// what it wrote to standard output, up to `most` bytes, when it succeeds within `time`.
 pub fn run_worker(
     arguments: &[&OsStr],
+    stdin: Stdio,
     most: u64,
     time: Duration,
 ) -> Result<Vec<u8>, WorkerFailure> {
     let mut child = Command::new(worker_program())
         .args(arguments)
-        .stdin(Stdio::null())
+        .stdin(stdin)
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
         .spawn()
@@ -241,11 +242,13 @@ pub fn decode_confined(path: &Path, longest: u32) -> Result<Decoded, Failure> {
         path.as_os_str(),
     ];
     let out =
-        run_worker(&arguments, PICTURE_BYTES, PICTURE_TIME).map_err(|failure| match failure {
-            WorkerFailure::NotStarted => Failure::Unreadable,
-            WorkerFailure::TimedOut => Failure::TimedOut,
-            WorkerFailure::MissingDecoder => Failure::MissingDecoder,
-            WorkerFailure::Failed => Failure::Damaged,
+        run_worker(&arguments, Stdio::null(), PICTURE_BYTES, PICTURE_TIME).map_err(|failure| {
+            match failure {
+                WorkerFailure::NotStarted => Failure::Unreadable,
+                WorkerFailure::TimedOut => Failure::TimedOut,
+                WorkerFailure::MissingDecoder => Failure::MissingDecoder,
+                WorkerFailure::Failed => Failure::Damaged,
+            }
         })?;
     let mut input = out.as_slice();
     let reply: Reply = protocol::read(&mut input)

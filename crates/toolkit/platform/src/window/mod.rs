@@ -487,6 +487,22 @@ impl Window {
         )
     }
 
+    /// Opens a window that keeps `appearance` instead of following the session's settings, for
+    /// the login window, where no one's session runs.
+    pub fn open_fixed(
+        appearance: Appearance,
+        role: Role,
+        size: (u32, u32),
+    ) -> Result<Self, WindowError> {
+        Self::on(
+            Connection::connect_to_env().map_err(WindowError::Connect)?,
+            role,
+            size,
+            Some(Rc::new(RefCell::new(AppearanceWatch::fixed(appearance)?))),
+            crate::lock::wanted_output(),
+        )
+    }
+
     pub fn open_on(stream: UnixStream, role: Role, size: (u32, u32)) -> Result<Self, WindowError> {
         Self::on(
             Connection::from_socket(stream).map_err(WindowError::Connect)?,

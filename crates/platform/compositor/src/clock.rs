@@ -441,6 +441,20 @@ impl FrameScheduler {
         self.stalled_since
     }
 
+    /// Whether frames have failed for longer than one that only raced with losing the display.
+    pub fn keeps_failing(&self, now: Duration) -> bool {
+        self.stalled_since
+            .is_some_and(|since| now.saturating_sub(since) >= FAILED_FRAME_RETRY)
+    }
+
+    /// When to try again after [`Self::poll`] failed.
+    pub fn retry_at(&self, now: Duration) -> Duration {
+        match self.phase {
+            Phase::Backoff(until) => until,
+            _ => now + FAILED_FRAME_RETRY,
+        }
+    }
+
     pub fn poll<O: FrameOutput>(
         &mut self,
         clock: impl Fn() -> Duration,
@@ -842,5 +856,38 @@ mod tests {
             assert!(clock.latest_start(frame) >= now, "{render} ms");
             assert!(frame.time < now + refresh * 2 + Duration::from_millis(render));
         }
+    }
+
+    struct Refusing;
+
+    impl FrameOutput for Refusing {
+        type Error = io::Error;
+
+        fn submit(&mut self, _: &mut Compositor, _: &str) -> io::Result<Submission> {
+            Err(io::ErrorKind::PermissionDenied.into())
+        }
+    }
+
+    #[test]
+    fn a_failed_frame_waits_before_it_is_tried_again() -> io::Result<()> {
+        let mut compositor = Compositor::new(smithay::utils::Size::from((640, 480)))?;
+        let refresh = Duration::from_secs_f64(1.0 / 60.0);
+        let mut scheduler =
+            FrameScheduler::new(FrameClock::classic(Duration::from_secs(1), refresh));
+        let mut now = Duration::from_secs(1);
+        let mut failed_at = Vec::new();
+        while failed_at.len() < 2 && now < Duration::from_secs(3) {
+            now = match scheduler.poll(|| now, &mut compositor, &mut Refusing) {
+                Ok(poll) => poll.wake_at.map_or(now + refresh, |wake| wake.max(now)),
+                Err(_) => {
+                    failed_at.push(now);
+                    assert_eq!(scheduler.keeps_failing(now), failed_at.len() > 1);
+                    scheduler.retry_at(now)
+                }
+            };
+        }
+        assert_eq!(failed_at.len(), 2);
+        assert!(failed_at[1] - failed_at[0] >= FAILED_FRAME_RETRY);
+        Ok(())
     }
 }

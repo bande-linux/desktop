@@ -1,6 +1,8 @@
 use std::io;
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 
+use crate::checked;
+
 const STDOUT_SOCKET: &[u8] = b"/run/systemd/journal/stdout";
 const INFO: u8 = 6;
 
@@ -16,13 +18,6 @@ pub struct JournalStream {
 /// Where a child that could not reach the journal says why, read by the parent once the child
 /// has run its program.
 pub struct Failures(OwnedFd);
-
-fn checked(result: libc::c_int) -> io::Result<libc::c_int> {
-    match result {
-        -1 => Err(io::Error::last_os_error()),
-        result => Ok(result),
-    }
-}
 
 impl JournalStream {
     pub fn new(identifier: &str) -> io::Result<(Self, Failures)> {

@@ -58,9 +58,6 @@ msgstr "Dölj kön"
 msgid "Show Queue"
 msgstr "Visa kön"
 
-msgid "Full Screen"
-msgstr "Helskärm"
-
 msgid "Move Up in Queue"
 msgstr "Flytta upp i kön"
 

@@ -136,17 +136,14 @@ msgstr "Bilder och PDF-dokument"
 msgid "Save Rotated Copy"
 msgstr "Spara roterad kopia"
 
-msgid "Info"
-msgstr "Info"
+msgid "Properties"
+msgstr "Egenskaper"
 
 msgid "Open…"
 msgstr "Öppna…"
 
 msgid "Show in Files"
 msgstr "Visa i Filer"
-
-msgid "Properties"
-msgstr "Egenskaper"
 
 msgid "Move to Trash"
 msgstr "Flytta till papperskorgen"

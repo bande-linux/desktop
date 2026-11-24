@@ -209,8 +209,13 @@ pub enum WindowEvent {
     PastedTransfer(Transfer),
     ClipboardChanged,
     Drag(DragEvent),
-    ShowLauncher,
-    PressedOutside,
+    /// `pressed` is the serial of the press that asked, 0 when no press did.
+    ShowLauncher {
+        pressed: u32,
+    },
+    PressedOutside {
+        pressed: u32,
+    },
     OpenLauncher {
         mode: LauncherMode,
         text_field: bool,

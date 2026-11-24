@@ -1888,6 +1888,7 @@ dependencies = [
  "bande-test-wayland",
  "bande-toolkit",
  "bande-xdg",
+ "smithay",
  "tracing",
  "zbus",
 ]

@@ -244,6 +244,12 @@ impl App for Notifications {
                 self.screen.make_way(now);
                 self.carry_out(window);
             }
+            WindowEvent::ShowLauncher { .. } | WindowEvent::OpenLauncher { .. }
+                if self.screen.is_open() =>
+            {
+                self.screen.toggle(now);
+                self.carry_out(window);
+            }
             WindowEvent::FullScreen {
                 output,
                 full_screen,

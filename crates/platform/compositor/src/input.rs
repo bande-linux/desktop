@@ -231,7 +231,7 @@ impl State {
             Action::ZoomIn => self.step_magnifier(true),
             Action::ZoomOut => self.step_magnifier(false),
             Action::ToggleScreenReader => self.toggle_screen_reader(),
-            Action::ShowLauncher => self.show_launcher(),
+            Action::ShowLauncher => self.show_launcher(0),
             Action::ShowClipboardHistory => self.open_launcher(LauncherMode::Clipboard),
             Action::ShowEmojiPicker => self.open_launcher(LauncherMode::Emoji),
             Action::OpenTerminal => self.open_terminal(),
@@ -525,12 +525,13 @@ impl Compositor {
             state.overview_button(button, pressed);
             return;
         }
+        let serial = SERIAL_COUNTER.next_serial();
         if pressed {
             if state.dismisses_popups(under.as_ref().map(|(surface, _)| surface)) {
                 state.swallowed_button = Some(button);
                 return;
             }
-            state.press_outside(under.as_ref().map(|(surface, _)| surface));
+            state.press_outside(under.as_ref().map(|(surface, _)| surface), serial);
             if state.popup_grab.is_none() {
                 match target.as_ref().and_then(Target::frame) {
                     Some(pointed) => {
@@ -577,7 +578,7 @@ impl Compositor {
         pointer.button(
             state,
             &ButtonEvent {
-                serial: SERIAL_COUNTER.next_serial(),
+                serial,
                 time,
                 button,
                 state: if pressed {

@@ -220,6 +220,7 @@ pub struct LauncherShell {
     home: PathBuf,
     skin_tone: PathBuf,
     input_region: Option<Rect>,
+    closed_by: Option<(u32, Mode)>,
 }
 
 fn load_skin_tone(path: &Path) -> Option<usize> {
@@ -489,9 +490,19 @@ impl App for LauncherShell {
 
     fn event(&mut self, window: &mut Window, event: WindowEvent) {
         match event {
-            WindowEvent::ShowLauncher => self.toggle(window, Mode::Search, false),
+            WindowEvent::ShowLauncher { pressed } => {
+                if pressed == 0 || self.closed_by != Some((pressed, Mode::Search)) {
+                    self.toggle(window, Mode::Search, false);
+                }
+            }
+            WindowEvent::TogglePanel(_) => self.close(window),
             WindowEvent::OpenTerminal => self.open_terminal(window),
-            WindowEvent::PressedOutside => self.close(window),
+            WindowEvent::PressedOutside { pressed } => {
+                if window.is_visible() {
+                    self.closed_by = Some((pressed, self.launcher.mode()));
+                }
+                self.close(window);
+            }
             WindowEvent::OpenLauncher { mode, text_field } => {
                 let mode = match mode {
                     LauncherMode::Clipboard => Mode::Clipboard,
@@ -730,6 +741,7 @@ impl LauncherShell {
             home,
             skin_tone,
             input_region: None,
+            closed_by: None,
         };
         shell.follow_config();
         Ok(shell)

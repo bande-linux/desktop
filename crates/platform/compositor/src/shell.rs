@@ -91,8 +91,8 @@ impl State {
         self.shell_resources.iter().for_each(send);
     }
 
-    pub(crate) fn show_launcher(&mut self) {
-        self.each_shell(|shell| shell.show_launcher());
+    pub(crate) fn show_launcher(&mut self, pressed: u32) {
+        self.each_shell(|shell| shell.show_launcher(pressed));
     }
 
     pub(crate) fn open_terminal(&mut self) {
@@ -103,7 +103,7 @@ impl State {
         });
     }
 
-    pub(crate) fn press_outside(&self, under: Option<&WlSurface>) {
+    pub(crate) fn press_outside(&self, under: Option<&WlSurface>, serial: Serial) {
         let root = under.and_then(|surface| self.root_of(surface));
         for screen in &self.screens {
             let map = layer_map_for_output(&screen.output);
@@ -117,7 +117,7 @@ impl State {
                 }
                 for shell in &self.shell_resources {
                     if shell.client() == surface.client() {
-                        shell.pressed_outside(surface);
+                        shell.pressed_outside(surface, serial.into());
                     }
                 }
             }
@@ -527,7 +527,7 @@ impl Dispatch<BandeShellV1, ()> for State {
             bande_shell_v1::Request::TogglePanel {
                 panel: WEnum::Value(panel),
             } => state.toggle_panel(panel),
-            bande_shell_v1::Request::ShowLauncher => state.show_launcher(),
+            bande_shell_v1::Request::ShowLauncher { serial } => state.show_launcher(serial),
             bande_shell_v1::Request::SetIconRect {
                 app_id,
                 surface,

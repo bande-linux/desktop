@@ -63,6 +63,13 @@ fn listen(account: &Account) -> io::Result<UnixListener> {
     Ok(listener)
 }
 
+fn gone(error: &io::Error) -> bool {
+    matches!(
+        error.kind(),
+        io::ErrorKind::UnexpectedEof | io::ErrorKind::ConnectionReset
+    )
+}
+
 fn start_worker(class: Class, username: String) -> io::Result<Worker> {
     let (ours, theirs) = UnixStream::pair()?;
     let mut child = Command::new(OWN_PROGRAM)
@@ -253,7 +260,7 @@ impl Daemon {
         match read_message::<Request>(&mut Deadline::within(greeter, GREETER_PATIENCE)) {
             Ok(request) => self.manager.request(request, Instant::now()),
             Err(error) => {
-                if error.kind() != io::ErrorKind::UnexpectedEof {
+                if !gone(&error) {
                     tracing::warn!("dropping the login window's connection: {error}");
                 }
                 self.forget_greeter()
@@ -271,10 +278,7 @@ impl Daemon {
         match read_message::<FromWorker>(socket) {
             Ok(said) => self.manager.worker_said(id, said, Instant::now()),
             Err(error) => {
-                if !matches!(
-                    error.kind(),
-                    io::ErrorKind::UnexpectedEof | io::ErrorKind::ConnectionReset
-                ) {
+                if !gone(&error) {
                     tracing::warn!("letting go of session worker {id}: {error}");
                 }
                 worker.socket = None;

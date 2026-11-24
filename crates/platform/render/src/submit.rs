@@ -516,6 +516,7 @@ impl VulkanRenderer {
                 vk::QueryResultFlags::TYPE_64,
             )
         }
+        .inspect_err(|error| tracing::debug!("cannot read how long a frame took: {error}"))
         .ok()?;
         let mask = match self.timestamp_bits {
             64.. => u64::MAX,

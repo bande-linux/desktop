@@ -324,6 +324,9 @@ struct HdrSignal {
 }
 
 fn hdr_signal(device: &DrmDevice, handle: connector::Handle) -> Option<HdrSignal> {
+    if !device.is_atomic() {
+        return None;
+    }
     let (colorspace, shown, info) = connector_property(device, handle, COLORSPACE)?;
     let property::ValueType::Enum(values) = info.value_type() else {
         return None;
@@ -884,7 +887,9 @@ impl DrmBackend {
     ) -> Result<Self, DrmBackendError> {
         let fd = device.device_fd().clone();
         let node = DrmNode::from_file(&fd)?;
-        let gbm = GbmDevice::new(fd).ok();
+        let gbm = GbmDevice::new(fd)
+            .inspect_err(|error| tracing::warn!("cannot allocate buffers to render to: {error}"))
+            .ok();
         let renderer = match behind.filter(|behind| behind.node == node) {
             Some(behind) => behind.renderer,
             None => {
@@ -1070,14 +1075,22 @@ impl DrmBackend {
         let shows_hdr = head.formats.starts_tiled()
             && self.shows_hdr(sink, &head.compositor.surface().plane_info().formats);
         let hdr = edid.hdr.filter(|_| shows_hdr);
+        let profile = crate::colour::edid_profile(&edid);
         let head = &mut self.heads[index];
-        if !head.formats.follow(sink) && head.config.hdr == hdr {
+        let takes_others = head.formats.follow(sink) | (head.config.hdr != hdr);
+        if !takes_others && head.display_profile == profile {
             return false;
         }
-        tracing::info!("{} takes other frames than before", head.config.name);
-        head.display_profile = crate::colour::edid_profile(&edid);
+        head.display_profile = profile;
         head.output_colour = None;
-        head.config.hdr = hdr;
+        if takes_others {
+            tracing::info!("{} takes other frames than before", head.config.name);
+            head.config.hdr = hdr;
+            head.formats.forget_refusals();
+            if let Some(signal) = &mut head.signal {
+                signal.state.renew();
+            }
+        }
         true
     }
 
@@ -1176,7 +1189,7 @@ impl DrmBackend {
                     let modes = info
                         .map(|info| modes_of(info, head.kept_mode))
                         .unwrap_or_default();
-                    let takes_other_frames = info.is_some_and(|info| self.follow_edid(index, info));
+                    let described_anew = info.is_some_and(|info| self.follow_edid(index, info));
                     let head = &mut self.heads[index];
                     head.relink_wanted |= link == Some(LINK_BAD);
                     if head.lost_at.take().is_some() || head.relink_wanted {
@@ -1186,7 +1199,7 @@ impl DrmBackend {
                     if modes != head.modes || head.refused {
                         settle_modes(head, modes, &mut changes);
                     }
-                    if takes_other_frames && !changes.refitted.contains(&head.config) {
+                    if described_anew && !changes.refitted.contains(&head.config) {
                         changes.refitted.push(head.config.clone());
                     }
                     index += 1;
@@ -2017,10 +2030,14 @@ impl DrmBackend {
         let mode = self.heads[index].compositor.pending_mode();
         let name = self.heads[index].config.name.clone();
         self.heads[index].formats.ask(wanted);
+        let mut unlinked: Option<Shape> = None;
         for shape in self.heads[index]
             .formats
             .candidates((mode, mode.clock()), wanted)
         {
+            if unlinked.is_some_and(|unlinked| shape.needs_link_of(unlinked)) {
+                continue;
+            }
             if !self.try_shape(index, shape)? {
                 self.heads[index].formats.refuse(mode, shape);
                 continue;
@@ -2033,9 +2050,10 @@ impl DrmBackend {
                 {
                     return Err(error.into());
                 }
-                tracing::warn!("{name} keeps its bits per channel: {error}");
+                tracing::warn!("{name} keeps its link as it is instead of {shape}: {error}");
                 if shape.is_deep() {
                     self.heads[index].formats.refuse_depth(mode, shape);
+                    unlinked = Some(shape);
                     continue;
                 }
             }

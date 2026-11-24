@@ -58,6 +58,10 @@ impl Shape {
     pub(crate) fn is_deep(self) -> bool {
         self.bits() > PLAIN_BITS
     }
+
+    pub(crate) fn needs_link_of(self, other: Self) -> bool {
+        (self.bits(), self.hdr) == (other.bits(), other.hdr)
+    }
 }
 
 impl fmt::Display for Shape {
@@ -201,12 +205,7 @@ impl<M: Copy + PartialEq> OutputFormat<M> {
     }
 
     pub(crate) fn follow(&mut self, sink: Sink) -> bool {
-        let changed = self.sink != sink;
-        if changed {
-            self.sink = sink;
-            self.forget_refusals();
-        }
-        changed
+        std::mem::replace(&mut self.sink, sink) != sink
     }
 
     pub(crate) fn needs_choice(&self, mode: M, wanted: Wanted) -> bool {
@@ -391,6 +390,10 @@ impl Signalled {
         };
     }
 
+    pub(crate) fn renew(&mut self) {
+        self.left = self.is_on();
+    }
+
     pub(crate) fn is_ours(self) -> bool {
         self.ours
     }
@@ -414,6 +417,15 @@ mod tests {
         assert!(signal.is_ours(), "a refused way back leaves it ours");
         signal.set(false);
         assert!(!signal.is_ours() && !signal.is_on());
+
+        signal.set(true);
+        signal.renew();
+        assert_eq!(signal.change(true), Some(true), "other luminances");
+        assert_eq!(signal.change(false), Some(false));
+        assert!(signal.is_ours());
+        signal.set(false);
+        signal.renew();
+        assert_eq!(signal.change(false), None);
 
         let left = Signalled::found(true);
         assert_eq!(left.change(true), Some(true));

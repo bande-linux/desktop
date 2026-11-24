@@ -1,8 +1,10 @@
+use std::ops::Deref;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Mutex, PoisonError};
 use std::time::Duration;
 
 use bande_render::{HdrContent, set_hdr_content};
+use smithay::backend::renderer::utils::RendererSurfaceStateUserData;
 use smithay::reexports::calloop::timer::{TimeoutAction, Timer};
 use smithay::reexports::wayland_protocols::wp::color_management::v1::server::{
     wp_color_management_output_v1::{self, WpColorManagementOutputV1},
@@ -22,7 +24,11 @@ use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::reexports::wayland_server::{
     Client, DataInit, Dispatch, DisplayHandle, GlobalDispatch, New, Resource, WEnum, Weak,
 };
-use smithay::wayland::compositor::{Cacheable, with_states};
+use smithay::utils::Rectangle;
+use smithay::wayland::compositor::{
+    BufferAssignment, Cacheable, Damage, SurfaceAttributes, SurfaceData, TraversalAction,
+    is_sync_subsurface, with_states, with_surface_tree_upward,
+};
 
 use crate::colour::{DISPLAY_PEAK, REFERENCE_WHITE};
 use crate::screen::Screen;
@@ -32,6 +38,7 @@ const VERSION: u32 = 1;
 const BRIGHTEST: u32 = 10_000;
 const LATE_BINDS: Duration = Duration::from_secs(10);
 const SRGB_WHITE: u32 = 80;
+const WHOLE_BUFFER: (i32, i32) = (i32::MAX, i32::MAX);
 const CHROMATICITY: f64 = 1_000_000.0;
 const LUMINANCE: f64 = 10_000.0;
 const SRGB: [(f64, f64); 4] = [(0.64, 0.33), (0.30, 0.60), (0.15, 0.06), (0.3127, 0.3290)];
@@ -124,15 +131,44 @@ pub(crate) fn commit(state: &mut State, surface: &WlSurface) {
     if !state.colour_management.offered {
         return;
     }
-    with_states(surface, |states| {
-        let described = states
-            .cached_state
-            .get::<SurfaceDescription>()
-            .current()
-            .0
-            .and_then(Description::content);
-        set_hdr_content(states, described);
-    });
+    if is_sync_subsurface(surface) {
+        return;
+    }
+    with_surface_tree_upward(
+        surface,
+        (),
+        |_, _, ()| TraversalAction::DoChildren(()),
+        |_, states, ()| follow_description(states),
+        |_, _, ()| true,
+    );
+}
+
+fn follow_description(states: &SurfaceData) {
+    let described = states
+        .cached_state
+        .get::<SurfaceDescription>()
+        .current()
+        .0
+        .and_then(Description::content);
+    if set_hdr_content(states, described) {
+        show_anew(states);
+    }
+}
+
+fn show_anew(states: &SurfaceData) {
+    let shown = states
+        .data_map
+        .get::<RendererSurfaceStateUserData>()
+        .and_then(|renderer| renderer.lock().ok()?.buffer().cloned())
+        .filter(|buffer| buffer.is_alive());
+    let mut attributes = states.cached_state.get::<SurfaceAttributes>();
+    let attributes = attributes.current();
+    if attributes.buffer.is_none() {
+        attributes.buffer = shown.map(|buffer| BufferAssignment::NewBuffer(buffer.deref().clone()));
+    }
+    attributes
+        .damage
+        .push(Damage::Buffer(Rectangle::from_size(WHOLE_BUFFER.into())));
 }
 
 fn light_of(screen: &Screen) -> Option<Description> {

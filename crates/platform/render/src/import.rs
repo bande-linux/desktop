@@ -213,12 +213,14 @@ struct ShownFormat(Cell<Option<Format>>);
 #[derive(Default)]
 struct SurfaceContent(Cell<Option<HdrContent>>);
 
-/// Reads the buffers imported for this surface from now on as `content`.
-pub fn set_hdr_content(states: &SurfaceData, content: Option<HdrContent>) {
+/// Reads the buffers imported for this surface from now on as `content`, telling whether they were
+/// read as something else before.
+pub fn set_hdr_content(states: &SurfaceData, content: Option<HdrContent>) -> bool {
     states.data_map.insert_if_missing(SurfaceContent::default);
-    if let Some(shown) = states.data_map.get::<SurfaceContent>() {
-        shown.0.set(content);
-    }
+    states
+        .data_map
+        .get::<SurfaceContent>()
+        .is_some_and(|shown| shown.0.replace(content) != content)
 }
 
 fn hdr_content(surface: Option<&SurfaceData>) -> Option<HdrContent> {

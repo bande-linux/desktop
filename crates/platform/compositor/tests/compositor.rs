@@ -458,12 +458,12 @@ fn hdr_content_is_taken_only_while_a_display_shows_hdr_and_stays_visible_elsewhe
     assert_eq!(shown(&mut server), (false, 1), "a plain buffer for a plane");
     assert_eq!(centre(&mut server), 148, "plain content as it is");
     let described = client.describe_as_pq(&mut server, 0, 203);
-    client.commit_buffer(0, &image, (0, 0, 64, 64));
+    client.ask_for_frame(0);
     client.exchange(&mut server);
     assert_eq!(
         shown(&mut server),
         (true, 0),
-        "HDR content goes to no plane"
+        "a buffer already shown is read anew as HDR, which goes to no plane"
     );
     assert!(
         centre(&mut server) >= 253,

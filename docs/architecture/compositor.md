@@ -491,11 +491,14 @@ once the app names it with `Window::set_move_areas`.
 
 `night-light { on schedule from to warmth }` in `config.kdl`: the sun times come from the time
 zone's main city in `zone.tab` through `bande-datetime`'s `daylight`, or `schedule "custom"` with
-`from` and `to`. `warmth` 0–100 runs from 5000 K to 2700 K. Each CRTC's gamma ramp is set from a
-white point normalised to 6500 K, so it is the identity when off. Scheduled changes fade over a
+`from` and `to`. `warmth` 0–100 runs from 5000 K to 2700 K. Each CRTC's `GAMMA_LUT` is
+filled with the `GAMMA_LUT_SIZE` entries it asks for, from a white point normalised to 6500 K; a
+driver with only legacy gamma gets a ramp, and one with only a `CTM` a matrix. Without a tint
+there is no table at all (some drivers round to 8 bits with a legacy-size one): nothing is set on a
+display that has none, and a table, matrix or ramp another process left is taken away. Scheduled changes fade over a
 minute, switching fades in 1.5 s and a new warmth applies at once; it wakes every 50 ms only while
-fading. A display with no gamma ramp is left alone with one log line, and ramps are set again after
-a session switch or wake once the first frame has flipped.
+fading. A display that can do none of these is left alone with one log line, and the tint is looked at
+again after a session switch or wake once the first frame has flipped.
 
 ## Sleep and wake
 

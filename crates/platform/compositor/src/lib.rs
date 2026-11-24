@@ -30,6 +30,7 @@ mod family;
 mod force_quit;
 mod frame;
 mod frame_callbacks;
+mod gamma;
 mod gesture;
 mod global_shortcuts;
 mod grab;

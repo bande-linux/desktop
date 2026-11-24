@@ -964,6 +964,14 @@ impl PatternWindow {
         window
     }
 
+    fn change(&mut self, (x, y, width, height): (i32, i32, i32, i32), shift: i32) {
+        let changed = pattern(self.size, shift, u8::MAX);
+        for row in y..y + height {
+            let at = |column: i32| ((row * self.size.0 + column) * 4) as usize;
+            self.bytes[at(x)..at(x + width)].copy_from_slice(&changed[at(x)..at(x + width)]);
+        }
+    }
+
     fn commit(&mut self, server: &mut Compositor, damage: (i32, i32, i32, i32)) {
         self.client.commit_buffer(
             0,
@@ -1040,11 +1048,53 @@ fn blurred_backdrops_drawn_frame_by_frame_match_a_full_redraw() {
         output.draw(&mut server);
         output.assert_matches_a_full_redraw(&mut server, "the window below changed");
     }
+    for (shift, part) in [
+        (1, (140, 240, 40, 30)),
+        (2, (140, 240, 40, 30)),
+        (3, (140, 240, 40, 30)),
+        (4, (150, 180, 9, 120)),
+        (5, (180, 230, 60, 50)),
+        (6, (640, 470, 60, 30)),
+        (7, (400, 200, 76, 100)),
+    ] {
+        below.change(part, shift);
+        below.commit(&mut server, part);
+        output.vulkan.take_counters();
+        output.draw(&mut server);
+        let shaded = output.vulkan.take_counters().shaded_pixels;
+        assert!(
+            shift <= 2 || shaded < 600_000,
+            "{shaded} pixels shaded for a part"
+        );
+        output.assert_matches_a_full_redraw(&mut server, "a part of the window below changed");
+    }
     for _ in 0..20 {
         drag_window(&mut server, 3, (-4.0, 2.0));
         output.draw(&mut server);
     }
     output.assert_matches_a_full_redraw(&mut server, "an opaque window was dragged across");
+}
+
+#[test]
+fn something_shown_on_top_leaves_the_rest_of_the_display_alone() {
+    let mut server = headless(1000, 700);
+    let mut renderer = bande_compositor::Renderer::new().expect("a renderer");
+    let _below = PatternWindow::show(&mut server, "org.bande.Below", (700, 500), u8::MAX);
+    let _focused = PatternWindow::show(&mut server, "org.bande.Focused", (120, 90), u8::MAX);
+    server.move_pointer_to((5.0, 690.0).into(), 0);
+    for _ in 0..30 {
+        server.dispatch().expect("server dispatch");
+        renderer.render(&mut server).expect("render a frame");
+        thread::sleep(Duration::from_millis(16));
+    }
+    let _popup = PatternWindow::show(&mut server, "org.bande.Popup", (120, 90), 60);
+    let shown = renderer.render(&mut server).expect("render a frame");
+    assert!(shown.repainted_pixels > 0, "the new window was not drawn");
+    assert!(
+        shown.repainted_pixels < 1000 * 700 / 4,
+        "{} pixels repainted for a small window",
+        shown.repainted_pixels
+    );
 }
 
 #[test]

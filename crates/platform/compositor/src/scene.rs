@@ -8,7 +8,7 @@ use smithay::backend::renderer::utils::{
 };
 use smithay::backend::renderer::{ContextId, Renderer as _};
 use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
-use smithay::utils::{Buffer as BufferCoords, Physical, Point, Rectangle, Scale, Transform};
+use smithay::utils::{Buffer as BufferCoords, Physical, Point, Rectangle, Scale, Size, Transform};
 
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::Logical;
@@ -18,7 +18,7 @@ use smithay::wayland::compositor::{TraversalAction, get_role, with_surface_tree_
 use smithay::wayland::shell::xdg::XDG_POPUP_ROLE;
 
 use crate::effect::{backdrop_opacity, blur_rects, corner_radius, surface_opacity};
-use crate::element::SurfaceElement;
+use crate::element::{ScreenElement, SurfaceElement};
 use crate::material::MaterialTexture;
 use crate::motion::{Look, Motion};
 use crate::state::OutputElement;
@@ -29,7 +29,8 @@ use bande_graphics::{
     BackdropTone, Color, Elevation, Palette, Radius, Scheme, window_edge_opacity,
 };
 use bande_render::{
-    Backdrop, Blur, RenderError, RoundedRect, Shadow, VulkanFrame, VulkanRenderer, VulkanTexture,
+    Backdrop, Blur, Change, RenderError, RoundedRect, Shadow, VulkanFrame, VulkanRenderer,
+    VulkanTexture,
 };
 
 pub(crate) const CORNER_RADIUS: f64 = Radius::XL as f64;
@@ -169,72 +170,6 @@ pub(crate) fn rounded(area: Area, radius: f64) -> RoundedRect {
     }
 }
 
-fn rounded_distance(x: f64, y: f64, clip: &RoundedRect) -> f64 {
-    let (half_w, half_h) = (f64::from(clip.width) / 2.0, f64::from(clip.height) / 2.0);
-    let corner = f64::from(clip.radius).min(half_w).min(half_h);
-    let inset_x = (x - f64::from(clip.x) - half_w).abs() - half_w + corner;
-    let inset_y = (y - f64::from(clip.y) - half_h).abs() - half_h + corner;
-    inset_x.max(0.0).hypot(inset_y.max(0.0)) + inset_x.max(inset_y).min(0.0) - corner
-}
-
-const OPAQUE_DISTANCE: f64 = -0.5 - 1e-3;
-
-fn fully_covered(x: i32, y: i32, clip: &RoundedRect) -> bool {
-    rounded_distance(f64::from(x) + 0.5, f64::from(y) + 0.5, clip) <= OPAQUE_DISTANCE
-}
-
-pub(crate) fn uncovered_pixels(clip: &RoundedRect) -> Vec<Rectangle<i32, Physical>> {
-    let left = f64::from(clip.x).floor() as i32;
-    let top = f64::from(clip.y).floor() as i32;
-    let right = f64::from(clip.x + clip.width).ceil() as i32;
-    let bottom = f64::from(clip.y + clip.height).ceil() as i32;
-    let band = f64::from(clip.radius).ceil() as i32 + 1;
-    let rows = (top..(top + band).min(bottom))
-        .chain((bottom - band).max(top + band)..bottom)
-        .collect::<Vec<_>>();
-    let mut uncovered: Vec<Rectangle<i32, Physical>> = Vec::new();
-    let mut push = |rect: Rectangle<i32, Physical>| {
-        if rect.size.w <= 0 {
-            return;
-        }
-        match uncovered.last_mut() {
-            Some(last)
-                if last.loc.x == rect.loc.x
-                    && last.size.w == rect.size.w
-                    && last.loc.y + last.size.h == rect.loc.y =>
-            {
-                last.size.h += 1;
-            }
-            _ => uncovered.push(rect),
-        }
-    };
-    for &y in &rows {
-        let run = (left..right)
-            .take_while(|&x| !fully_covered(x, y, clip))
-            .count() as i32;
-        push(Rectangle::new((left, y).into(), (run, 1).into()));
-    }
-    for &y in &rows {
-        let run = (left..right)
-            .rev()
-            .take_while(|&x| !fully_covered(x, y, clip))
-            .count() as i32;
-        push(Rectangle::new((right - run, y).into(), (run, 1).into()));
-    }
-    let inner_left = f64::from(clip.x).ceil() as i32;
-    let inner_right = f64::from(clip.x + clip.width).floor() as i32;
-    for (x, width) in [
-        (left, inner_left - left),
-        (inner_right, right - inner_right),
-    ] {
-        push(Rectangle::new(
-            (x, top).into(),
-            (width, bottom - top).into(),
-        ));
-    }
-    uncovered
-}
-
 pub struct WindowElement<E> {
     inner: E,
     placement: Placement,
@@ -297,11 +232,19 @@ impl<E: Element> Element for WindowElement<E> {
                 Some(Rectangle::new(placed.loc - origin, placed.size))
             })
             .collect::<Vec<_>>();
-        let corners = uncovered_pixels(&self.clip)
-            .into_iter()
-            .map(|rect| Rectangle::new(rect.loc - origin, rect.size));
-        Rectangle::subtract_rects_many(opaque, corners)
-            .into_iter()
+        self.clip
+            .covered()
+            .iter()
+            .filter(|covered| !covered.is_empty())
+            .flat_map(|covered| {
+                let covered = Rectangle::new(
+                    Point::from((covered.x, covered.y)) - origin,
+                    (covered.width, covered.height).into(),
+                );
+                opaque
+                    .iter()
+                    .filter_map(move |rect| rect.intersection(covered))
+            })
             .collect()
     }
 
@@ -481,7 +424,6 @@ pub struct BlurElement {
     blur: Blur,
     backdrop: Option<Backdrop>,
     params: u64,
-    below: u64,
     commit: CommitCounter,
 }
 
@@ -528,14 +470,8 @@ impl BlurElement {
             blur,
             backdrop: None,
             params,
-            below: 0,
             commit: CommitCounter::from(params as usize),
         }
-    }
-
-    pub(crate) fn depend_on(&mut self, below: u64) {
-        self.below = below;
-        self.commit = CommitCounter::from((self.params ^ below) as usize);
     }
 
     pub(crate) fn reach(&self) -> i32 {
@@ -557,17 +493,45 @@ impl BlurElement {
         renderer: &mut VulkanRenderer,
         view: (&str, bool),
         covered: &[Rectangle<i32, Physical>],
+        (output, at): (Rectangle<i32, Physical>, Point<i32, Physical>),
+        below: &[&ScreenElement],
+        scale: Scale<f64>,
     ) {
         let mut owner = DefaultHasher::new();
         (view, &self.id).hash(&mut owner);
-        let mut below = DefaultHasher::new();
-        (self.below, self.blur.offset.to_bits(), self.blur.passes).hash(&mut below);
-        for rect in covered {
-            (rect.loc.x, rect.loc.y, rect.size.w, rect.size.h).hash(&mut below);
-        }
-        let backdrop = renderer.backdrop(owner.finish(), below.finish());
-        self.commit = CommitCounter::from((self.params ^ backdrop.drawing) as usize);
+        let shown = Blur {
+            region: self.blur.region.translated((at.x, at.y)),
+            ..self.blur
+        };
+        let bounds = shown.bounds();
+        let mut unchanging = DefaultHasher::new();
+        (
+            shown.offset.to_bits(),
+            shown.passes,
+            (bounds.x, bounds.y, bounds.width, bounds.height),
+        )
+            .hash(&mut unchanging);
+        (output.loc.x, output.loc.y, output.size.w, output.size.h).hash(&mut unchanging);
+        let layers = below.iter().map(|below| below.layer(scale)).collect();
+        let backdrop = renderer.backdrop(
+            (owner.finish(), &shown),
+            unchanging.finish(),
+            (layers, covered),
+            |index, commit| {
+                let at = below[index].geometry(scale).loc;
+                below[index]
+                    .damage_since(scale, Some(commit))
+                    .into_iter()
+                    .map(|rect| Rectangle::new(rect.loc + at, rect.size))
+                    .collect()
+            },
+        );
+        self.commit = self.commit_of(backdrop.drawing);
         self.backdrop = Some(backdrop);
+    }
+
+    fn commit_of(&self, drawing: u64) -> CommitCounter {
+        CommitCounter::from((self.params ^ drawing) as usize)
     }
 }
 
@@ -592,6 +556,37 @@ impl Element for BlurElement {
             (bounds.width, bounds.height).into(),
         )
     }
+
+    fn damage_since(
+        &self,
+        scale: Scale<f64>,
+        commit: Option<CommitCounter>,
+    ) -> DamageSet<i32, Physical> {
+        if commit == Some(self.commit) {
+            return DamageSet::default();
+        }
+        let bounds = self.geometry(scale);
+        let change = self.backdrop.as_ref().map(|backdrop| &backdrop.change);
+        match change {
+            Some(Change::Parts { since, parts }) if commit == Some(self.commit_of(*since)) => {
+                let mut shape = self.shape();
+                shape.loc -= bounds.loc;
+                let spread = self.blur.spread();
+                parts
+                    .iter()
+                    .flat_map(|part| {
+                        let spread = Rectangle::new(
+                            part.loc - Point::from((spread, spread)),
+                            part.size + Size::from((2 * spread, 2 * spread)),
+                        );
+                        [Some(*part), spread.intersection(shape)]
+                    })
+                    .flatten()
+                    .collect()
+            }
+            _ => DamageSet::from_slice(&[Rectangle::from_size(bounds.size)]),
+        }
+    }
 }
 
 impl RenderElement<VulkanRenderer> for BlurElement {
@@ -603,7 +598,7 @@ impl RenderElement<VulkanRenderer> for BlurElement {
         damage: &[Rectangle<i32, Physical>],
         _opaque_regions: &[Rectangle<i32, Physical>],
     ) -> Result<(), RenderError> {
-        let backdrop = self.backdrop.ok_or(RenderError::NothingRendered)?;
+        let backdrop = self.backdrop.as_ref().ok_or(RenderError::NothingRendered)?;
         frame.draw_blur(&self.blur, backdrop, damage)
     }
 }
@@ -710,40 +705,6 @@ pub(crate) fn surface_blurs(
             Some(behind(id, shape, scale, alpha, source))
         })
         .collect()
-}
-
-pub(crate) fn tie_blurs_to_what_lies_below(elements: &mut [OutputElement], scale: f64) {
-    let scale = Scale::from(scale);
-    for index in 0..elements.len() {
-        if !matches!(elements[index], OutputElement::Blur(_)) {
-            continue;
-        }
-        let reach = elements[index].geometry(scale);
-        let mut hasher = DefaultHasher::new();
-        for below in &elements[index + 1..] {
-            let geometry = below.geometry(scale);
-            if !geometry.overlaps(reach) {
-                continue;
-            }
-            below.id().hash(&mut hasher);
-            below
-                .current_commit()
-                .distance(Some(CommitCounter::default()))
-                .hash(&mut hasher);
-            (
-                geometry.loc.x,
-                geometry.loc.y,
-                geometry.size.w,
-                geometry.size.h,
-            )
-                .hash(&mut hasher);
-            below.alpha().to_bits().hash(&mut hasher);
-        }
-        let below = hasher.finish();
-        if let OutputElement::Blur(blur) = &mut elements[index] {
-            blur.depend_on(below);
-        }
-    }
 }
 
 pub struct FillElement {

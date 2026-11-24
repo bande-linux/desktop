@@ -29,7 +29,7 @@ use smithay::backend::renderer::{
 use smithay::reexports::rustix::mm;
 use smithay::utils::{Buffer as BufferCoords, Physical, Size, Transform};
 
-pub use frame::{Backdrop, Blur, RoundedRect, Shadow, VulkanFrame};
+pub use frame::{Backdrop, Blur, Change, Layer, RoundedRect, Shadow, VulkanFrame};
 pub use rect::{Rect, disjoint};
 
 const SPIRV: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/compose.spv"));
@@ -1083,10 +1083,7 @@ impl VulkanRenderer {
 
     fn forget_blurs(&mut self) {
         for chain in std::mem::take(&mut self.blur_chains).into_values() {
-            chain
-                .levels
-                .iter()
-                .for_each(|image| self.destroy_image(image));
+            chain.images().for_each(|image| self.destroy_image(image));
         }
     }
 
@@ -1095,10 +1092,7 @@ impl VulkanRenderer {
             .into_iter()
             .partition(|(_, chain)| chain.last_used.elapsed() < frame::KEEP_UNUSED);
         for chain in retired.values() {
-            chain
-                .levels
-                .iter()
-                .for_each(|image| self.destroy_image(image));
+            chain.images().for_each(|image| self.destroy_image(image));
         }
         self.blur_chains = kept;
     }
@@ -2271,10 +2265,7 @@ impl VulkanRenderer {
                 * u64::from(image.height.unsigned_abs())
                 * BYTES_PER_PIXEL as u64
         };
-        let levels = self
-            .blur_chains
-            .values()
-            .flat_map(|chain| chain.levels.iter());
+        let levels = self.blur_chains.values().flat_map(frame::BlurChain::images);
         let staging = self.staging.iter().chain(self.reserved_staging());
         MemoryUse {
             textures: (

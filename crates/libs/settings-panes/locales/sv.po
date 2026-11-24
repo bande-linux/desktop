@@ -55,8 +55,11 @@ msgstr "Tangentbord"
 msgid "Keyboard Shortcuts"
 msgstr "Kortkommandon"
 
-msgid "Mouse & Trackpad"
-msgstr "Mus och styrplatta"
+msgid "Mouse"
+msgstr "Mus"
+
+msgid "Trackpad"
+msgstr "Styrplatta"
 
 msgid "Printers"
 msgstr "Skrivare"
@@ -148,8 +151,11 @@ msgstr "Inmatningskällor, tangentupprepning och modifierartangenter"
 msgid "The keys that work everywhere on the desktop"
 msgstr "Tangenterna som fungerar överallt på skrivbordet"
 
-msgid "Buttons, tapping, scrolling, tracking speed and trackpad gestures"
-msgstr "Knappar, tryck, scrollning, pekarhastighet och gester på styrplattan"
+msgid "Primary button, scrolling and tracking speed"
+msgstr "Primär knapp, scrollning och pekarhastighet"
+
+msgid "Tapping, scrolling, tracking speed and gestures"
+msgstr "Tryck, scrollning, pekarhastighet och gester"
 
 msgid "Add printers, pick the default, see what is printing and scan"
 msgstr "Lägg till skrivare, välj standard, se vad som skrivs ut och skanna"
@@ -199,8 +205,8 @@ msgstr "Vad som fyller skivan och hur du frigör utrymme"
 msgid "Updates for Bande, Debian apps and firmware"
 msgstr "Uppdateringar för Bande, Debian-appar och fast programvara"
 
-msgid "What failed on this computer. Read each report, choose whether it is sent, or tell what went wrong."
-msgstr "Vad som har gått fel på den här datorn. Läs varje rapport, välj om den skickas eller berätta vad som gick fel."
+msgid "Problem reports from this computer"
+msgstr "Problemrapporter från den här datorn"
 
 msgid "Hourly encrypted versions on an external disk"
 msgstr "Krypterade versioner varje timme på en extern skiva"
@@ -241,8 +247,11 @@ msgstr "tangenter, skriva"
 msgid "hotkeys, shortcuts, keys, super, command, combinations"
 msgstr "snabbtangenter, kortkommandon, tangenter, super, kommando, kombinationer"
 
-msgid "mouse, trackpad, touchpad, pointer, cursor, click, tap, scroll, wheel, buttons, gestures"
-msgstr "mus, styrplatta, pekplatta, pekare, markör, klick, tryck, scrolla, hjul, knappar, gester"
+msgid "pointer, cursor, click, scroll, wheel, buttons"
+msgstr "pekare, markör, klick, scrolla, hjul, knappar"
+
+msgid "touchpad, pointer, cursor, click, tap, scroll, gestures"
+msgstr "pekplatta, pekare, markör, klick, tryck, scrolla, gester"
 
 msgid "print, printer, cups, queue, ipp, airprint, scan, scanner, escl"
 msgstr "skriv ut, skrivare, cups, kö, ipp, airprint, skanna, skanner, escl"
@@ -1095,9 +1104,6 @@ msgstr "acceleration, precision, platt, spel"
 msgid "Faster movements move the pointer farther"
 msgstr "Snabbare rörelser flyttar pekaren längre"
 
-msgid "Mouse"
-msgstr "Mus"
-
 msgid "Primary button"
 msgstr "Primär knapp"
 
@@ -1113,8 +1119,8 @@ msgstr "scrollriktning, omvänd, hjul"
 msgid "pointer, cursor, acceleration, mouse"
 msgstr "pekare, markör, acceleration, mus"
 
-msgid "Trackpad"
-msgstr "Styrplatta"
+msgid "Tap and click"
+msgstr "Tryck och klick"
 
 msgid "Tap to click"
 msgstr "Tryck för att klicka"
@@ -1152,8 +1158,8 @@ msgstr "Två fingrar"
 msgid "Bottom right corner"
 msgstr "Nedre högra hörnet"
 
-msgid "Trackpad scrolling"
-msgstr "Scrollning med styrplattan"
+msgid "Scrolling"
+msgstr "Scrollning"
 
 msgid "scroll direction, reverse, touchpad"
 msgstr "scrollriktning, omvänd, touchpad"
@@ -1167,8 +1173,8 @@ msgstr "scrolla, två fingrar, kantscrollning"
 msgid "One finger along the edge"
 msgstr "Ett finger längs kanten"
 
-msgid "Trackpad pointer"
-msgstr "Pekare på styrplattan"
+msgid "Pointer"
+msgstr "Pekare"
 
 msgid "pointer, cursor, acceleration, touchpad"
 msgstr "pekare, markör, acceleration, touchpad"
@@ -1179,8 +1185,8 @@ msgstr "Ignorera styrplattan medan du skriver"
 msgid "palm, touchpad, accidental"
 msgstr "handflata, touchpad, oavsiktlig"
 
-msgid "Trackpad gestures"
-msgstr "Gester på styrplattan"
+msgid "Gestures"
+msgstr "Gester"
 
 msgid "Swipe between workspaces"
 msgstr "Svep mellan arbetsytor"
@@ -1257,17 +1263,23 @@ msgstr "Appar som var öppna när du loggade ut eller startade om öppnas igen"
 msgid "back up, restore, disk, password, pause, oldest, versions"
 msgstr "säkerhetskopiera, återställ, skiva, lösenord, pausa, äldsta, versioner"
 
-msgid "Reports"
-msgstr "Rapporter"
+msgid "Send reports automatically"
+msgstr "Skicka rapporter automatiskt"
 
-msgid "crash, crashes, freeze, hang, quit unexpectedly, core dump, log, diagnostics, report, send, bug, analytics, privacy, delete"
-msgstr "krasch, kraschar, frysning, hänger sig, avslutades oväntat, core dump, logg, diagnostik, rapport, skicka, fel, analys, integritet, radera"
+msgid "automatic, privacy, analytics, telemetry, delete reports"
+msgstr "automatiskt, integritet, analys, telemetri, radera rapporter"
 
 msgid "Send Report"
 msgstr "Skicka rapport"
 
 msgid "bug, report, problem, freeze, crash, feedback, send, diagnose"
 msgstr "fel, rapport, problem, frysning, krasch, återkoppling, skicka, diagnos"
+
+msgid "Reports"
+msgstr "Rapporter"
+
+msgid "crash, crashes, freeze, hang, quit unexpectedly, core dump, log, diagnostics"
+msgstr "krasch, kraschar, frysning, hänger sig, avslutades oväntat, core dump, logg, diagnostik"
 
 msgid "disk space, free, used, available, full, capacity, trash, empty trash, apps, documents"
 msgstr "diskutrymme, ledigt, använt, tillgängligt, fullt, kapacitet, papperskorg, töm papperskorgen, appar, dokument"
@@ -1527,12 +1539,3 @@ msgstr "Om den här datorn"
 
 msgid "model, chip, processor, cpu, memory, ram, version, debian, bande, serial number"
 msgstr "modell, chip, processor, cpu, minne, ram, version, debian, bande, serienummer"
-
-msgid "Startup"
-msgstr "Uppstart"
-
-msgid "Show a boot screen"
-msgstr "Visa en startskärm"
-
-msgid "boot screen, splash, start up, startup, logo, plymouth, grub, boot messages"
-msgstr "startskärm, splash, uppstart, starta, logotyp, plymouth, grub, startmeddelanden"

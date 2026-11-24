@@ -25,13 +25,23 @@ impl State {
         self.window_index(&root).map(|_| root)
     }
 
-    pub(crate) fn focusable_layer_of(&self, surface: &WlSurface) -> Option<WlSurface> {
+    fn layer_of(&self, surface: &WlSurface) -> Option<(WlSurface, KeyboardInteractivity)> {
         let root = self.root_of(surface)?;
         let map = layer_map_for_output(&self.screens[self.layer_screen(&root)?].output);
         let layer = map.layer_for_surface(&root, WindowSurfaceType::TOPLEVEL)?;
+        let interactivity = layer.cached_state().keyboard_interactivity;
+        Some((root, interactivity))
+    }
 
-        (layer.cached_state().keyboard_interactivity == KeyboardInteractivity::OnDemand)
-            .then_some(root)
+    pub(crate) fn focusable_layer_of(&self, surface: &WlSurface) -> Option<WlSurface> {
+        self.layer_of(surface)
+            .filter(|(_, interactivity)| *interactivity == KeyboardInteractivity::OnDemand)
+            .map(|(root, _)| root)
+    }
+
+    fn on_keyless_layer(&self, surface: &WlSurface) -> bool {
+        self.layer_of(surface)
+            .is_some_and(|(_, interactivity)| interactivity == KeyboardInteractivity::None)
     }
 
     pub(crate) fn root_of(&self, surface: &WlSurface) -> Option<WlSurface> {
@@ -261,7 +271,10 @@ impl State {
             self.return_to_menu_owner(owner);
         } else if key.is_some() {
             self.focus(key);
-        } else if self.focused().is_some_and(|focused| !focused.is_alive()) {
+        } else if self
+            .focused()
+            .is_some_and(|focused| !focused.is_alive() || self.on_keyless_layer(&focused))
+        {
             self.focus_behind_layer();
         }
     }

@@ -1,5 +1,6 @@
 use std::error::Error;
 use std::os::fd::AsFd;
+use std::time::Duration;
 
 use bande_graphics::{
     Color, GpuDevice, GpuRenderer, Item, Paint, Rect, Region, Scene, Shape, SharedImage,
@@ -8,12 +9,14 @@ use bande_render::{OffscreenTarget, VulkanRenderer};
 use smithay::backend::allocator::dmabuf::{Dmabuf, DmabufFlags};
 use smithay::backend::allocator::{Fourcc, Modifier};
 use smithay::backend::renderer::{Bind, Frame, ImportDma, Offscreen, Renderer};
+use smithay::reexports::rustix::event::{PollFd, PollFlags, Timespec, poll};
 use smithay::utils::{Physical, Rectangle, Size, Transform};
 
 type Outcome<T = ()> = Result<T, Box<dyn Error>>;
 
 const CELL: u32 = 16;
-const SIZES: [(u32, u32); 3] = [(64, 48), (301, 203), (1400, 900)];
+const SIZES: [(u32, u32); 5] = [(64, 48), (301, 203), (1400, 900), (301, 203), (640, 480)];
+const FENCE_PATIENCE: Duration = Duration::from_secs(5);
 const FRAMES: u32 = 4;
 const CHANGED: Region = Region {
     x: CELL,
@@ -57,9 +60,20 @@ fn exported(image: &SharedImage, (width, height): (u32, u32)) -> Outcome<Dmabuf>
         Modifier::from(image.modifier),
         DmabufFlags::empty(),
     );
-    let fd = image.fd.as_fd().try_clone_to_owned()?;
-    builder.add_plane(fd, 0, image.offset, image.stride);
+    for (index, plane) in (0..).zip(&image.planes) {
+        let fd = image.fd.as_fd().try_clone_to_owned()?;
+        builder.add_plane(fd, index, plane.offset, plane.stride);
+    }
     Ok(builder.build().ok_or("no dma-buf")?)
+}
+
+fn wait_for_frame(image: &SharedImage) -> Outcome {
+    let timeout = Timespec::try_from(FENCE_PATIENCE)?;
+    let mut fds = [PollFd::new(&image.fd, PollFlags::IN)];
+    match poll(&mut fds, Some(&timeout))? {
+        0 => Err("the frame's fence never signalled".into()),
+        _ => Ok(()),
+    }
 }
 
 fn composed(
@@ -111,14 +125,16 @@ fn the_compositor_reads_every_pixel_of_a_toolkit_frame() -> Outcome {
         .collect();
     assert!(!modifiers.is_empty(), "no layout to check");
     for modifier in modifiers {
+        let mut renderer = GpuRenderer::with_device(toolkit.clone(), (256, 256));
         for size in SIZES {
-            let mut renderer = GpuRenderer::with_device(toolkit.clone(), (256, 256));
             let image = toolkit.shared_image(size, &[vec![modifier]])?;
+            println!("{modifier:#x} at {size:?} in {} planes", image.planes.len());
             let dmabuf = exported(&image, size)?;
             for turn in 0..FRAMES {
                 let damage = (turn > 0).then_some([CHANGED]);
                 let scene = pattern(size, turn);
                 renderer.present(&scene, 1.0, &image, damage.as_ref().map(<[_; 1]>::as_slice))?;
+                wait_for_frame(&image)?;
                 let found = composed(&mut compositor, &dmabuf, size)?;
                 assert_eq!(
                     wrong_pixels(&found, size, turn),

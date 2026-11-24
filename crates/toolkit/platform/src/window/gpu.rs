@@ -24,6 +24,13 @@ pub(super) struct GpuSurface {
     buffers: BufferPool<SharedImage>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Followed {
+    Same,
+    OtherLayouts,
+    OtherGpu,
+}
+
 pub(super) enum Gpu {
     Starting(Receiver<Result<GpuSurface, DrawError>>),
     Ready(Box<GpuSurface>),
@@ -39,23 +46,26 @@ pub(super) struct GpuTarget<'a> {
 }
 
 impl GpuSurface {
-    pub(super) fn follow(&mut self, state: &State) -> bool {
+    pub(super) fn follow(&mut self, state: &State) -> Followed {
         let offer = offer(state);
+        let modifiers = modifiers(&self.gpu, &offer);
         if offer
             .main_device
             .is_some_and(|device| !self.gpu.is_node(device))
+            || !self.gpu.shares_images(&modifiers)
         {
-            return false;
+            return Followed::OtherGpu;
         }
-        let modifiers = modifiers(&self.gpu, &offer);
-        if !self.gpu.shares_images(&modifiers) {
-            return false;
+        if modifiers == self.modifiers {
+            return Followed::Same;
         }
-        if modifiers != self.modifiers {
-            self.buffers.clear();
-            self.modifiers = modifiers;
-        }
-        true
+        self.buffers.clear();
+        self.modifiers = modifiers;
+        Followed::OtherLayouts
+    }
+
+    pub(super) fn is_lost(&self) -> bool {
+        self.gpu.is_lost()
     }
 
     pub(super) fn release_uploads(&mut self) {
@@ -75,11 +85,15 @@ impl GpuSurface {
             .buffers
             .next(size, damage, SharedImage::is_idle, |busy| {
                 let image = gpu.shared_image(size, modifiers)?;
-                let planes = [DmabufPlane {
-                    fd: image.fd.as_fd(),
-                    offset: image.offset,
-                    stride: image.stride,
-                }];
+                let planes: Vec<DmabufPlane<'_>> = image
+                    .planes
+                    .iter()
+                    .map(|plane| DmabufPlane {
+                        fd: image.fd.as_fd(),
+                        offset: plane.offset,
+                        stride: plane.stride,
+                    })
+                    .collect();
                 let dmabuf = Dmabuf {
                     planes: &planes,
                     width: size.0,

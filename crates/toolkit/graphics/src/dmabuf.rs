@@ -18,6 +18,12 @@ const DMA_BUF: vk::ExternalMemoryHandleTypeFlags = vk::ExternalMemoryHandleTypeF
 const SYNC_FD: vk::ExternalSemaphoreHandleTypeFlags = vk::ExternalSemaphoreHandleTypeFlags::SYNC_FD;
 const DMA_BUF_IOCTL_IMPORT_SYNC_FILE: libc::c_ulong = 0x4008_6203;
 const DMA_BUF_SYNC_WRITE: u32 = 2;
+const MEMORY_PLANES: [vk::ImageAspectFlags; 4] = [
+    vk::ImageAspectFlags::MEMORY_PLANE_0_EXT,
+    vk::ImageAspectFlags::MEMORY_PLANE_1_EXT,
+    vk::ImageAspectFlags::MEMORY_PLANE_2_EXT,
+    vk::ImageAspectFlags::MEMORY_PLANE_3_EXT,
+];
 const READERS_PATIENCE: Duration = Duration::from_secs(1);
 
 #[repr(C)]
@@ -32,6 +38,11 @@ pub struct SharedImage {
     handed_over: AtomicBool,
     pub fd: OwnedFd,
     pub modifier: u64,
+    pub planes: Vec<SharedPlane>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SharedPlane {
     pub offset: u32,
     pub stride: u32,
 }
@@ -60,7 +71,13 @@ pub(crate) struct Sharing {
     modifier_properties: ext::image_drm_format_modifier::Device,
     family: u32,
     fence: Mutex<Option<Fence>>,
-    renderable: Vec<u64>,
+    renderable: Vec<Layout>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct Layout {
+    modifier: u64,
+    planes: usize,
 }
 
 struct Fence {
@@ -119,7 +136,7 @@ impl Sharing {
             .map(|offered| {
                 self.renderable
                     .iter()
-                    .copied()
+                    .map(|layout| layout.modifier)
                     .filter(|modifier| offered.contains(modifier))
                     .collect::<Vec<u64>>()
             })
@@ -236,16 +253,29 @@ impl Sharing {
                 .get_image_drm_format_modifier_properties(image, &mut properties)
         }
         .map_err(failed("cannot read a shared image's layout"))?;
-        let plane = vk::ImageSubresource {
-            aspect_mask: vk::ImageAspectFlags::MEMORY_PLANE_0_EXT,
-            mip_level: 0,
-            array_layer: 0,
-        };
-        // SAFETY: image has DRM format modifier tiling with one memory plane.
-        let layout = unsafe { self.device.get_image_subresource_layout(image, plane) };
-        let too_large = || DrawError::Gpu("the shared image's layout is too large".to_owned());
-        let offset = u32::try_from(layout.offset).map_err(|_| too_large())?;
-        let stride = u32::try_from(layout.row_pitch).map_err(|_| too_large())?;
+        let count = self
+            .renderable
+            .iter()
+            .find(|layout| layout.modifier == properties.drm_format_modifier)
+            .map_or(0, |layout| layout.planes);
+        let planes = MEMORY_PLANES
+            .into_iter()
+            .take(count)
+            .map(|aspect_mask| {
+                let plane = vk::ImageSubresource {
+                    aspect_mask,
+                    mip_level: 0,
+                    array_layer: 0,
+                };
+                // SAFETY: image has DRM format modifier tiling with `count` memory planes.
+                let layout = unsafe { self.device.get_image_subresource_layout(image, plane) };
+                Some(SharedPlane {
+                    offset: u32::try_from(layout.offset).ok()?,
+                    stride: u32::try_from(layout.row_pitch).ok()?,
+                })
+            })
+            .collect::<Option<Vec<_>>>()
+            .ok_or_else(|| DrawError::Gpu("the shared image's layout is too large".to_owned()))?;
         let size = wgpu::Extent3d {
             width,
             height,
@@ -300,8 +330,7 @@ impl Sharing {
             handed_over: AtomicBool::new(false),
             fd,
             modifier: properties.drm_format_modifier,
-            offset,
-            stride,
+            planes,
         })
     }
 
@@ -554,7 +583,7 @@ fn attach_fence(dmabuf: &OwnedFd, fence: &OwnedFd) -> io::Result<()> {
     }
 }
 
-fn renderable_modifiers(instance: &ash::Instance, physical: vk::PhysicalDevice) -> Vec<u64> {
+fn renderable_modifiers(instance: &ash::Instance, physical: vk::PhysicalDevice) -> Vec<Layout> {
     let mut count = vk::DrmFormatModifierPropertiesListEXT::default();
     let mut properties = vk::FormatProperties2::default().push_next(&mut count);
     // SAFETY: properties and the list it chains live across the call.
@@ -576,12 +605,15 @@ fn renderable_modifiers(instance: &ash::Instance, physical: vk::PhysicalDevice) 
         vk::FormatFeatureFlags::COLOR_ATTACHMENT | vk::FormatFeatureFlags::COLOR_ATTACHMENT_BLEND;
     entries
         .iter()
-        .filter(|entry| {
-            entry.drm_format_modifier_plane_count == 1
-                && entry.drm_format_modifier_tiling_features.contains(needed)
+        .filter(|entry| entry.drm_format_modifier_tiling_features.contains(needed))
+        .map(|entry| Layout {
+            modifier: entry.drm_format_modifier,
+            planes: entry.drm_format_modifier_plane_count as usize,
         })
-        .map(|entry| entry.drm_format_modifier)
-        .filter(|&modifier| exportable(instance, physical, modifier))
+        .filter(|layout| {
+            (1..=MEMORY_PLANES.len()).contains(&layout.planes)
+                && exportable(instance, physical, layout.modifier)
+        })
         .collect()
 }
 

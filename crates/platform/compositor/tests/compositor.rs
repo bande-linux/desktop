@@ -467,9 +467,9 @@ fn drag_over_scanout_buffers(colour: Option<bande_render::OutputColour>) {
                 damage
                     .render_output(vulkan, &mut framebuffer, age, &elements, background())
                     .expect("render into the scanout buffer")
+                    .sync
             })
             .expect("the conversion table loads")
-            .sync
             .wait()
             .expect("the GPU finishes the frame");
         *used = Some(*step);
@@ -513,9 +513,9 @@ fn drag_over_scanout_buffers(colour: Option<bande_render::OutputColour>) {
             OutputDamageTracker::new((640, 480), 1.0, Transform::Normal)
                 .render_output(vulkan, &mut framebuffer, 0, &elements, background())
                 .expect("a full redraw")
+                .sync
         })
         .expect("the conversion table loads")
-        .sync
         .wait()
         .expect("the GPU finishes the full redraw");
     let full = read_back(&gbm, &fresh, (width, height));

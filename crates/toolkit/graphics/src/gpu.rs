@@ -32,6 +32,7 @@ pub struct GpuDevice {
     device: wgpu::Device,
     queue: wgpu::Queue,
     submission: Mutex<()>,
+    lost: Arc<AtomicBool>,
 }
 
 static SHARED: Mutex<Weak<GpuDevice>> = Mutex::new(Weak::new());
@@ -63,6 +64,7 @@ impl GpuDevice {
     pub fn shared(allow_software: bool, node: Option<u64>) -> Result<Arc<Self>, DrawError> {
         let mut shared = SHARED.lock().unwrap_or_else(PoisonError::into_inner);
         if let Some(gpu) = shared.upgrade()
+            && !gpu.is_lost()
             && node.is_none_or(|node| gpu.is_node(node))
         {
             return Ok(gpu);
@@ -103,6 +105,17 @@ impl GpuDevice {
         let gpu = Arc::new(Self::open(adapter)?);
         *shared = Arc::downgrade(&gpu);
         Ok(gpu)
+    }
+
+    pub fn is_lost(&self) -> bool {
+        self.lost.load(Ordering::Acquire)
+    }
+
+    fn usable(&self) -> Result<(), DrawError> {
+        match self.is_lost() {
+            true => Err(DrawError::Gpu("the GPU device is lost".to_owned())),
+            false => Ok(()),
+        }
     }
 
     pub fn is_node(&self, node: u64) -> bool {
@@ -151,7 +164,14 @@ impl GpuDevice {
         let (device, queue) = unsafe { adapter.create_device_from_hal(opened, &descriptor) }
             .map_err(DrawError::Device)?;
         device.on_uncaptured_error(Arc::new(|error| tracing::error!(%error, "GPU error")));
+        let lost = Arc::new(AtomicBool::new(false));
+        let losing = Arc::clone(&lost);
+        device.set_device_lost_callback(move |reason, message| {
+            tracing::warn!(?reason, "the GPU device is lost: {message}");
+            losing.store(true, Ordering::Release);
+        });
         Ok(Self {
+            lost,
             sharing: Sharing::new(&device),
             nodes: drm_nodes(&adapter),
             adapter,
@@ -367,12 +387,14 @@ impl GpuRenderer {
         }
         let gpu = Arc::clone(&self.gpu);
         let _submitting = gpu.submitting();
+        gpu.usable()?;
         let encoder = self.draw(scene, scale, &image.texture, damage)?;
         let sharing = gpu
             .sharing
             .as_ref()
             .ok_or_else(|| DrawError::Gpu("the GPU cannot share images".to_owned()))?;
-        sharing.submit(&gpu.device, &gpu.queue, encoder.finish(), image)
+        sharing.submit(&gpu.device, &gpu.queue, encoder.finish(), image)?;
+        gpu.usable()
     }
 
     fn draw(
@@ -673,6 +695,7 @@ mod tests {
     use std::os::fd::AsRawFd;
 
     use super::*;
+    use crate::dmabuf::SharedPlane;
     use crate::scene::{Item, Paint, Rect, Shape};
     use bande_design::Color;
 
@@ -681,6 +704,14 @@ mod tests {
     const DMA_BUF_IOCTL_SYNC: libc::c_ulong = 0x4008_6200;
     const SYNC_READ_START: u64 = 1;
     const SYNC_READ_END: u64 = 1 | 4;
+
+    static ONE_DEVICE_AT_A_TIME: Mutex<()> = Mutex::new(());
+
+    fn device_turn() -> MutexGuard<'static, ()> {
+        ONE_DEVICE_AT_A_TIME
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+    }
 
     fn scene(square: Color) -> Scene {
         Scene {
@@ -704,7 +735,8 @@ mod tests {
             events: libc::POLLIN,
             revents: 0,
         };
-        let length = image.offset as usize + image.stride as usize * SIDE as usize;
+        let SharedPlane { offset, stride } = image.planes[0];
+        let length = offset as usize + stride as usize * SIDE as usize;
         // SAFETY: ready is a valid pollfd; the mapping covers the image's one plane, is only read
         // between the dma-buf's read sync calls and is unmapped before returning.
         unsafe {
@@ -727,8 +759,7 @@ mod tests {
             let read = at
                 .iter()
                 .map(|&(x, y)| {
-                    let start =
-                        image.offset as usize + y as usize * image.stride as usize + x as usize * 4;
+                    let start = offset as usize + y as usize * stride as usize + x as usize * 4;
                     [
                         bytes[start],
                         bytes[start + 1],
@@ -745,6 +776,7 @@ mod tests {
 
     #[test]
     fn frames_reach_a_reused_shared_image_with_their_fence_and_after_waiting_without_one() {
+        let _turn = device_turn();
         let gpu = match GpuDevice::shared(false, None) {
             Ok(gpu) => gpu,
             Err(error) => {
@@ -798,5 +830,33 @@ mod tests {
             pixels(&image, &[inside, outside]),
             [bgra(blue), bgra(Color::hex(0xff0000))]
         );
+    }
+
+    #[test]
+    fn a_lost_device_fails_its_frames_and_is_not_shared_again() {
+        let _turn = device_turn();
+        let linear = [vec![LINEAR]];
+        let Some(gpu) = GpuDevice::shared(false, None)
+            .ok()
+            .filter(|gpu| gpu.shares_images(&linear))
+        else {
+            eprintln!("skipped, no GPU to share images from");
+            return;
+        };
+        let mut renderer = GpuRenderer::with_device(Arc::clone(&gpu), (SIDE, SIDE));
+        let image = gpu
+            .shared_image((SIDE, SIDE), &linear)
+            .expect("a shared image");
+        gpu.device.destroy();
+        let _ = gpu.device.poll(wgpu::PollType::Poll);
+        let drawn = renderer.present(&scene(Color::hex(0x0000ff)), 1.0, &image, None);
+        assert!(drawn.is_err(), "a frame on a lost device passed");
+        assert!(gpu.is_lost());
+        let next = GpuDevice::shared(false, None).expect("another device");
+        assert!(
+            !Arc::ptr_eq(&gpu, &next),
+            "the lost device was shared again"
+        );
+        assert!(!next.is_lost());
     }
 }

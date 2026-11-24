@@ -26,7 +26,6 @@ use crate::journal::JournalStream;
 use crate::vt::{self, GREETER_VT, Terminal};
 use crate::{GREETER_SOCKET, checked, signals};
 
-const SEAT: &str = "seat0";
 const USER_SERVICE: &str = "bande-greeter";
 const GREETER_SERVICE: &str = "bande-greeter-session";
 const GREETER_COMMAND: &str = "/usr/libexec/bande-greeter-session";
@@ -153,7 +152,7 @@ fn serve(
         Class::Greeter => GREETER_SERVICE,
     };
     let mut pam = Transaction::start(service, username, conversation).map_err(Failure::other)?;
-    pam.set_tty(SEAT)
+    pam.set_tty(&format!("tty{GREETER_VT}"))
         .map_err(|code| Failure::pam("pam_set_item", code))?;
     if class == Class::User {
         if let Ok(account) = Account::named(username) {
@@ -269,6 +268,8 @@ fn with_credentials(
         pam.put_env(assignment)
             .map_err(|code| Failure::pam("pam_putenv", code))?;
     }
+    pam.set_tty("")
+        .map_err(|code| Failure::pam("pam_set_item", code))?;
     pam.open_session()
         .map_err(|code| Failure::pam("pam_open_session", code))?;
     if let Err(code) = pam.credentials(REINITIALIZE_CRED) {
@@ -284,7 +285,7 @@ fn with_credentials(
 fn session_environment(class: Class, account: &Account, number: u32) -> Vec<String> {
     let text = |value: &std::ffi::CStr| value.to_string_lossy().into_owned();
     let mut environment = vec![
-        format!("XDG_SEAT={SEAT}"),
+        "XDG_SEAT=seat0".to_owned(),
         format!("XDG_VTNR={number}"),
         "XDG_SESSION_TYPE=wayland".to_owned(),
         format!("HOME={}", text(&account.home)),

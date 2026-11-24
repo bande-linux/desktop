@@ -87,14 +87,19 @@ fn place_and_start(shell: u32) {
     let Some(pid) = i32::try_from(shell).ok().and_then(Pid::from_raw) else {
         return;
     };
-    let stopped = waitid(
-        WaitId::Pid(pid),
-        WaitIdOptions::STOPPED | WaitIdOptions::EXITED | WaitIdOptions::NOWAIT,
-    );
+    let stopped = loop {
+        match waitid(
+            WaitId::Pid(pid),
+            WaitIdOptions::STOPPED | WaitIdOptions::EXITED | WaitIdOptions::NOWAIT,
+        ) {
+            Err(Errno::INTR) => {}
+            waited => break waited,
+        }
+    };
     match stopped {
         Ok(Some(status)) if status.stopped() => {}
-        Ok(_) => return,
-        Err(error) => tracing::warn!("cannot tell whether the shell started: {error}"),
+        Ok(_) | Err(Errno::CHILD) => return,
+        Err(error) => return tracing::warn!("cannot tell whether the shell started: {error}"),
     }
     match bande_xdg::place_tab_in_scope(TERMINAL_APP_ID, shell, SCOPE_PATIENCE) {
         Ok(true) => {}

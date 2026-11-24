@@ -329,7 +329,17 @@ fn every_pane_keeps_clear_of_the_window_buttons_and_the_list_acts_by_swipe_and_k
         requests.any(|request| matches!(request, Request::Compose(_))),
         "a click opens a draft to carry on with it"
     );
+    let sealed = b"Subject: Draft\r\nContent-Type: text/plain\r\n\r\n\
+        -----BEGIN PGP MESSAGE-----\r\n\r\nx\r\n-----END PGP MESSAGE-----\r\n";
+    store.store_body(inbox, read.uid, sealed).unwrap();
+    store.set_flag(&[read.id], Flag::Draft, true).unwrap();
+    view.reload();
     assert!(click(&mut view, &read.subject), "a click opens the reader");
+    let mut requests = view.take_requests().into_iter();
+    assert!(
+        !requests.any(|request| matches!(request, Request::Compose(_))),
+        "a sealed draft is not carried on with before it is decrypted"
+    );
     view.handle(&Event::Key {
         key: Key::PageUp,
         modifiers: Modifiers::default(),

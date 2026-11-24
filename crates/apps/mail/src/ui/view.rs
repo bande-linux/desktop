@@ -1293,7 +1293,7 @@ impl MailView {
             .reader
             .thread
             .as_ref()
-            .filter(|_| self.focus == Pane::Reader)?;
+            .filter(|_| self.focus == Pane::Reader || self.reading_alone())?;
         thread.entry(thread.focus).map(|entry| &entry.summary)
     }
 
@@ -1993,7 +1993,7 @@ impl MailView {
                 || self
                     .mailbox_of(summary)
                     .is_some_and(|mailbox| mailbox.role == Some(Role::Drafts));
-            is_draft && reading.downloaded
+            is_draft && reading.downloaded && reading.content.security.opened()
         })
     }
 
@@ -3604,6 +3604,8 @@ impl MailView {
             }
             Hit::Quick(id, quick) if !secondary => self.quick(id, quick),
             Hit::Quick(..) => {}
+            Hit::Reader(target)
+                if !secondary && pointer.count > 1 && !matches!(target, Target::Card(_)) => {}
             Hit::Reader(target) => {
                 self.focus = Pane::Reader;
                 self.reader.target = None;

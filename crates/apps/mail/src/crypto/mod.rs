@@ -113,6 +113,16 @@ pub struct Security {
     pub pending: bool,
 }
 
+impl Security {
+    pub fn opened(&self) -> bool {
+        !self.pending
+            && self
+                .encrypted
+                .as_ref()
+                .is_none_or(|encrypted| encrypted.state == Sealed::Decrypted)
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct Keys {
     pub gnupg: GnuPg,

@@ -28,5 +28,12 @@ bande-toolkit.workspace = true
 zbus.workspace = true
 zeroize.workspace = true
 
+[dev-dependencies]
+bande-compositor.workspace = true
+bande-render.workspace = true
+bande-test-bus.workspace = true
+bande-test-wayland.workspace = true
+tempfile.workspace = true
+
 [lints]
 workspace = true

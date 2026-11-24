@@ -10,13 +10,14 @@ use smithay::backend::allocator::dumb::DumbAllocator;
 use smithay::backend::allocator::format::FormatSet;
 use smithay::backend::allocator::gbm::{GbmAllocator, GbmBufferFlags, GbmDevice};
 use smithay::backend::drm::compositor::{
-    DrmCompositor, FrameError, FrameFlags, PrimaryPlaneElement,
+    DrmCompositor, FrameError, FrameFlags, PrimaryPlaneElement, RenderFrameError,
 };
 use smithay::backend::drm::{
     DrmDevice, DrmDeviceFd, DrmDeviceNotifier, DrmError, DrmEventMetadata, DrmEventTime, DrmNode, NodeType,
     VrrSupport,
 };
 use smithay::backend::libinput::{LibinputInputBackend, LibinputSessionInterface};
+use smithay::backend::renderer::damage::Error as DamageError;
 use smithay::backend::renderer::{ImportDma, ImportMem, Renderer as _};
 use smithay::backend::session::libseat::{LibSeatSession, LibSeatSessionNotifier};
 use smithay::backend::session::{Event as SessionEvent, Session};
@@ -74,7 +75,7 @@ struct Head {
     kept_mode: Option<Mode>,
     display_profile: Option<Profile>,
     output_colour: Option<(Option<String>, Option<OutputColour>)>,
-    converting: bool,
+    shown_colour: Option<OutputColour>,
 }
 
 impl Head {
@@ -733,7 +734,7 @@ impl DrmBackend {
                 .as_ref()
                 .and_then(crate::colour::edid_profile),
             output_colour: None,
-            converting: false,
+            shown_colour: None,
         }))
     }
 
@@ -1519,22 +1520,38 @@ impl DrmBackend {
             .output_colour
             .as_ref()
             .and_then(|(_, conversion)| conversion.clone());
-        if conversion.is_some() != head.converting {
-            head.converting = conversion.is_some();
+        if conversion != head.shown_colour {
+            head.shown_colour.clone_from(&conversion);
             head.compositor.reset_buffers();
         }
-        self.renderer.set_output_colour(conversion.clone());
         let flags = match conversion {
             Some(_) => FrameFlags::empty(),
             None => FrameFlags::DEFAULT | FrameFlags::ALLOW_PRIMARY_PLANE_SCANOUT_ANY,
         };
         let elements = compositor.render_elements_on(&mut self.renderer, output);
         let (rendered, drew_everything) = drawing_everything(|| {
-            head.compositor
-                .render_frame(&mut self.renderer, &elements, background(), flags)
+            self.renderer
+                .converting(conversion.as_ref(), |renderer| {
+                    head.compositor
+                        .render_frame(renderer, &elements, background(), flags)
+                })
+                .unwrap_or_else(|error| {
+                    Err(RenderFrameError::RenderFrame(DamageError::Rendering(error)))
+                })
         });
         let frame = match rendered {
             Ok(frame) => frame,
+            Err(error)
+                if conversion.is_some()
+                    && !self.renderer.is_lost()
+                    && !self.renderer.out_of_memory() =>
+            {
+                tracing::warn!("{output} shows colours unconverted: {error}");
+                if let Some((_, conversion)) = &mut head.output_colour {
+                    *conversion = None;
+                }
+                return Ok(Submission::Unchanged);
+            }
             Err(error)
                 if !self.renderer.is_lost()
                     && !self.renderer.out_of_memory()

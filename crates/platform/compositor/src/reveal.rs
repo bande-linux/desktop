@@ -253,7 +253,8 @@ impl Compositor {
         true
     }
 
-    pub fn fade_in_over(&mut self, frames: Vec<ShownFrame>) {
+    pub fn fade_in_over(&mut self, mut frames: Vec<ShownFrame>) {
+        frames.retain(|frame| !crate::colour::converts(self.colour_profile(&frame.output)));
         if let Reveal::Holding { over, .. } = &mut self.state.reveal {
             *over = frames;
         }

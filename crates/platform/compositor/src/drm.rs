@@ -1150,7 +1150,6 @@ impl DrmBackend {
         match event {
             SessionEvent::PauseSession => {
                 self.suspend_input();
-                self.stop_hdr();
                 self.device.pause();
                 Ok(())
             }
@@ -1509,6 +1508,7 @@ impl FrameOutput for DrmBackend {
     }
 
     fn switch_virtual_terminal(&mut self, number: i32) {
+        self.stop_hdr();
         if let Err(error) = self.session.change_vt(number) {
             tracing::warn!("cannot switch to virtual terminal {number}: {error}");
         }
@@ -1726,6 +1726,7 @@ impl DrmBackend {
             match set_link(&self.device, head, off) {
                 Ok(()) => {
                     stopped = true;
+                    head.formats.forget_refusals();
                     if let Some(signal) = &mut head.signal {
                         signal.on = false;
                     }

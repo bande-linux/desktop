@@ -321,7 +321,8 @@ when they reach the screen is Bande's own.
   layout). It is a kind of buffer in the depth state machine: 10-bit tiled with the HDR signal first, then
   everything there is without it, so a refusal ends where the display was. The signal (metadata, colour
   space and `max bpc` together) is set by the same commit as the link's depth, and taken back when HDR
-  ends, the session is paused or the process leaves; a display that process had in HDR is darkened instead
+  ends, a key switches the virtual terminal or the process leaves (a switch from elsewhere comes after the
+  kernel has taken the display away, so the next owner sees the signal); a display that process had in HDR is darkened instead
   of keeping its last frame, and a found signal is taken back before the first frame. Frames are drawn as
   ever into the buffer's unconverted image, in sRGB with ordinary white at 203 cd/m² (less on a
   display whose peak is lower), and the conversion pass encodes BT.2020 and PQ; while a surface with HDR

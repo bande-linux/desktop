@@ -306,6 +306,35 @@ fn every_pane_keeps_clear_of_the_window_buttons_and_the_list_acts_by_swipe_and_k
     press(&mut view, Key::Character('2'), true);
     view.scene(600, 800);
     assert!(named(&view, "Sort by").is_some(), "Ctrl+2 shows the list");
+    press(&mut view, Key::Character('1'), true);
+    let [draft, read] = [0, 1].map(|row| view.messages()[row].clone());
+    let body = b"Subject: Draft\r\n\r\nHi\r\n";
+    store.store_body(inbox, draft.uid, body).unwrap();
+    store.set_flag(&[draft.id], Flag::Draft, true).unwrap();
+    view.reload();
+    view.take_requests();
+    let click = |view: &mut MailView, subject: &str| {
+        view.scene(600, 800);
+        let row = named(view, subject).and_then(|node| node.bounds()).unwrap();
+        let row = Point::new(row.x0 as f32 + 100.0, (row.y0 + row.y1) as f32 / 2.0);
+        view.handle(&Event::PointerDown(Pointer::at(row)));
+        view.handle(&Event::PointerUp(Pointer::at(row)));
+        view.scene(600, 800);
+        named(view, "Sort by").is_none()
+    };
+    let alone = click(&mut view, &draft.subject);
+    assert!(!alone, "the list stays behind a draft");
+    let mut requests = view.take_requests().into_iter();
+    assert!(
+        requests.any(|request| matches!(request, Request::Compose(_))),
+        "a click opens a draft to carry on with it"
+    );
+    assert!(click(&mut view, &read.subject), "a click opens the reader");
+    view.handle(&Event::Key {
+        key: Key::PageUp,
+        modifiers: Modifiers::default(),
+    });
+    assert_eq!(view.selected(), Some(read.id), "Page Up scrolls it");
     press(&mut view, Key::Character('?'), false);
     assert!(view.has_sheet(), "? lists the shortcuts");
 

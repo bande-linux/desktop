@@ -380,7 +380,7 @@ impl MailView {
         let button = |x: f32| Rect::new(x, button_y, BUTTON_HEIGHT, BUTTON_HEIGHT);
         let hidden = Rect::default();
         let leading = self.header_insets.leading.max(COLUMN_INSET);
-        let reading_alone = self.panes() == Panes::One && self.single_reader;
+        let reading_alone = self.reading_alone();
         let (sidebar, back, compose, after) = match (self.panes(), reading_alone) {
             (Panes::Three, _) if toolbar.labelled => {
                 let width = self.sidebar_size() - leading - COLUMN_INSET;
@@ -680,10 +680,7 @@ impl MailView {
             (self.toolbar.flag, selected),
             (self.toolbar.more, selected),
             (self.toolbar.sidebar, self.panes() != Panes::Three),
-            (
-                self.toolbar.back,
-                self.panes() == Panes::One && self.single_reader,
-            ),
+            (self.toolbar.back, self.reading_alone()),
         ];
         for (id, enabled) in states {
             if let Some(button) = self.ui.widget_as::<Button>(id) {

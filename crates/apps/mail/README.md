@@ -175,7 +175,7 @@ apt install bande-mail
   quitting offline: it opens again the next time Mail starts, still replacing the draft it came
   from and answering the message it replies to. Both copies keep the Bcc recipients. A message
   marked Encrypt is never put in the server's Drafts in plain text: it stays only in that local
-  copy and opens again the next time Mail starts. Double-click a draft, or press Return, to carry on; saving it again or
+  copy and opens again the next time Mail starts. Double-click a draft (a click where one pane shows at a time), or press Return, to carry on; saving it again or
   sending it removes the older copy. Message ▸ Discard Draft closes the message without keeping it, after asking, and moves the draft it came from to the Trash.
 - **Offline store.** One SQLite database in `~/.local/share/bande-mail/` holds the accounts,
   folders, headers, flags and message bodies (bodies up to 2 MB are fetched ahead, larger ones

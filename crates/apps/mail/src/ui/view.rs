@@ -895,7 +895,9 @@ impl MailView {
             .map(|(_, id)| id)
             .filter(|id| self.is_open(*id))
             .collect::<Vec<_>>();
-        if !still_open.is_empty() {
+        if !self.reader_shown() {
+            self.unshown.extend(still_open);
+        } else if !still_open.is_empty() {
             self.set_flag_on(&still_open, Flag::Seen, true);
         }
     }
@@ -2017,7 +2019,7 @@ impl MailView {
         })
     }
 
-    fn selects_draft(&self) -> bool {
+    pub(crate) fn selects_draft(&self) -> bool {
         self.draft_read()
             .is_some_and(|(summary, _)| self.selected == Some(summary.id))
     }

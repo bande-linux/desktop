@@ -113,22 +113,25 @@ fn photo(bytes: &[u8], fit: Fit, target: (u32, u32)) -> Result<RgbaImage, Render
         return Err(RenderError::Empty);
     }
     let scale = scale_for(fit, source, target);
-    let resized = imageops::resize(
-        &decoded,
-        ((source.0 * scale).ceil() as u32).max(1),
-        ((source.1 * scale).ceil() as u32).max(1),
-        FilterType::CatmullRom,
-    );
     let (width, height) = scaled_size(fit, source, target);
-    let (width, height) = (width.min(resized.width()), height.min(resized.height()));
-    Ok(imageops::crop_imm(
-        &resized,
-        (resized.width() - width) / 2,
-        (resized.height() - height) / 2,
+    let shown = |target: u32, whole: u32| ((target as f32 / scale).round() as u32).clamp(1, whole);
+    let (shown_width, shown_height) = (
+        shown(width, decoded.width()),
+        shown(height, decoded.height()),
+    );
+    let part = imageops::crop_imm(
+        &decoded,
+        (decoded.width() - shown_width) / 2,
+        (decoded.height() - shown_height) / 2,
+        shown_width,
+        shown_height,
+    );
+    Ok(imageops::resize(
+        &*part,
         width,
         height,
-    )
-    .to_image())
+        FilterType::CatmullRom,
+    ))
 }
 
 fn edge_color(image: &RgbaImage) -> Rgba<u8> {
@@ -171,22 +174,60 @@ fn picture(image: RgbaImage) -> Picture {
     }
 }
 
-fn rendered(path: &Path, fit: Fit, width: u32, height: u32) -> Result<RgbaImage, RenderError> {
-    let target = (width.max(1), height.max(1));
-    if bande_volumes::leads_to_connected_volume(path) {
-        return Err(RenderError::Read(std::io::ErrorKind::Unsupported.into()));
+/// A picture file's contents, read but not yet decoded.
+pub struct Source {
+    bytes: Vec<u8>,
+    drawing: bool,
+}
+
+impl Source {
+    pub fn read(path: &Path) -> Result<Self, RenderError> {
+        if bande_volumes::leads_to_connected_volume(path) {
+            return Err(RenderError::Read(std::io::ErrorKind::Unsupported.into()));
+        }
+        Ok(Self {
+            bytes: fs::read(path).map_err(RenderError::Read)?,
+            drawing: path.extension().is_some_and(|extension| extension == "svg"),
+        })
     }
-    let bytes = fs::read(path).map_err(RenderError::Read)?;
-    let content = if path.extension().is_some_and(|extension| extension == "svg") {
-        drawing(&bytes, fit, target)?
-    } else {
-        photo(&bytes, fit, target)?
-    };
-    Ok(framed(content, target))
+
+    fn rendered(&self, fit: Fit, width: u32, height: u32) -> Result<RgbaImage, RenderError> {
+        let target = (width.max(1), height.max(1));
+        let content = match self.drawing {
+            true => drawing(&self.bytes, fit, target)?,
+            false => photo(&self.bytes, fit, target)?,
+        };
+        Ok(framed(content, target))
+    }
+
+    /// The picture fitted to `width` by `height`.
+    pub fn render(&self, fit: Fit, width: u32, height: u32) -> Result<Picture, RenderError> {
+        self.rendered(fit, width, height).map(picture)
+    }
+
+    /// The picture fitted to `width` by `height`, smaller, blurred and darkened.
+    pub fn backdrop(&self, fit: Fit, width: u32, height: u32) -> Result<Picture, RenderError> {
+        let small = self.rendered(
+            fit,
+            width.div_ceil(BACKDROP_REDUCTION),
+            height.div_ceil(BACKDROP_REDUCTION),
+        )?;
+        let mut blurred = imageops::fast_blur(&small, BACKDROP_BLUR);
+        for pixel in blurred.pixels_mut() {
+            let [red, green, blue, _] = pixel.0.map(f32::from);
+            let luma = 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+            for channel in &mut pixel.0[..3] {
+                let saturated = luma + (f32::from(*channel) - luma) * BACKDROP_SATURATION;
+                *channel = (saturated * BACKDROP_BRIGHTNESS).round().clamp(0.0, 255.0) as u8;
+            }
+            pixel.0[3] = 255;
+        }
+        Ok(picture(blurred))
+    }
 }
 
 pub fn render(path: &Path, fit: Fit, width: u32, height: u32) -> Result<Picture, RenderError> {
-    rendered(path, fit, width, height).map(picture)
+    Source::read(path)?.render(fit, width, height)
 }
 
 pub fn material(
@@ -196,7 +237,7 @@ pub fn material(
     height: u32,
     limit: impl Fn([u8; 3]) -> [u8; 3],
 ) -> Result<Picture, RenderError> {
-    let small = rendered(path, fit, width, height)?;
+    let small = Source::read(path)?.rendered(fit, width, height)?;
     let mut blurred = imageops::fast_blur(&small, MATERIAL_BLUR);
     for pixel in blurred.pixels_mut() {
         let [red, green, blue, _] = pixel.0.map(f32::from);
@@ -208,26 +249,6 @@ pub fn material(
         });
         let [red, green, blue] = limit(saturated);
         pixel.0 = [red, green, blue, 255];
-    }
-    Ok(picture(blurred))
-}
-
-pub fn backdrop(path: &Path, fit: Fit, width: u32, height: u32) -> Result<Picture, RenderError> {
-    let small = rendered(
-        path,
-        fit,
-        width.div_ceil(BACKDROP_REDUCTION),
-        height.div_ceil(BACKDROP_REDUCTION),
-    )?;
-    let mut blurred = imageops::fast_blur(&small, BACKDROP_BLUR);
-    for pixel in blurred.pixels_mut() {
-        let [red, green, blue, _] = pixel.0.map(f32::from);
-        let luma = 0.2126 * red + 0.7152 * green + 0.0722 * blue;
-        for channel in &mut pixel.0[..3] {
-            let saturated = luma + (f32::from(*channel) - luma) * BACKDROP_SATURATION;
-            *channel = (saturated * BACKDROP_BRIGHTNESS).round().clamp(0.0, 255.0) as u8;
-        }
-        pixel.0[3] = 255;
     }
     Ok(picture(blurred))
 }

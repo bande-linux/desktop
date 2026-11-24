@@ -1,7 +1,7 @@
 use std::ffi::OsStr;
 use std::io::{self, Read, Write};
 use std::path::Path;
-use std::process::ExitCode;
+use std::process::{ExitCode, Stdio};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -173,6 +173,7 @@ fn font_sample(path: &Path) -> io::Result<Sample> {
 fn run(flag: &str, path: &Path) -> Option<Vec<u8>> {
     run_worker(
         &[OsStr::new(flag), path.as_os_str()],
+        Stdio::null(),
         MOST_PIXELS * 4 + 64,
         WORKER_TIME,
     )

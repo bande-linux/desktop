@@ -1,6 +1,8 @@
 use std::error::Error;
+use std::fs::{File, OpenOptions};
 use std::io;
-use std::os::fd::{AsFd, AsRawFd};
+use std::os::fd::{AsFd, AsRawFd, BorrowedFd};
+use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
@@ -24,6 +26,7 @@ use smithay::backend::session::{Event as SessionEvent, Session};
 use smithay::output::OutputModeSource;
 use smithay::reexports::calloop::generic::Generic;
 use smithay::reexports::calloop::{EventLoop, Interest, Mode as Trigger, PostAction};
+use smithay::reexports::drm::Device as BasicDevice;
 use smithay::reexports::drm::control::atomic::AtomicModeReq;
 use smithay::reexports::drm::control::{
     AtomicCommitFlags, Device as ControlDevice, Mode, ResourceHandle, ModeFlags, ModeTypeFlags, connector, crtc, framebuffer, property,
@@ -55,6 +58,7 @@ pub type DrmBackendError = Box<dyn Error>;
 type OnPlane = PrimarySwapchainElement<ScanoutBuffer, ScanoutFramebuffer>;
 type OutputCompositor = DrmCompositor<ScanoutAllocator, ScanoutExporter, (), DrmDeviceFd>;
 
+const NO_CARD_LIMIT: Duration = Duration::from_secs(30);
 const DRM_IOCTL_MODE_CLOSEFB: libc::c_ulong = 0xC008_64D0;
 const DRM_IOCTL_MODE_MAP_DUMB: libc::c_ulong = 0xC010_64B3;
 const CURSOR_SIZE: (u32, u32) = (64, 64);
@@ -124,6 +128,105 @@ pub struct DrmBackend {
 pub enum FirstMode {
     OnScreen,
     Preferred,
+}
+
+struct Card(File);
+
+impl AsFd for Card {
+    fn as_fd(&self) -> BorrowedFd<'_> {
+        self.0.as_fd()
+    }
+}
+
+impl BasicDevice for Card {}
+impl ControlDevice for Card {}
+
+impl Card {
+    fn open(path: &Path) -> io::Result<Self> {
+        OpenOptions::new()
+            .read(true)
+            .write(true)
+            .custom_flags(libc::O_CLOEXEC | libc::O_NOCTTY | libc::O_NONBLOCK)
+            .open(path)
+            .map(Self)
+    }
+}
+
+/// What the login window needs to draw itself while the boot screen still has the display: the
+/// displays in the modes they are in, and the renderer that shows it afterwards.
+pub struct BehindBootScreen {
+    outputs: Vec<OutputConfig>,
+    renderer: VulkanRenderer,
+    node: DrmNode,
+    feedback: DmabufFeedback,
+}
+
+impl BehindBootScreen {
+    pub fn open(path: Option<&Path>) -> Result<Option<Self>, DrmBackendError> {
+        let candidates = match path {
+            Some(path) => vec![path.to_path_buf()],
+            None => cards()?,
+        };
+        for candidate in candidates {
+            let outputs = match Self::outputs_of(&candidate) {
+                Ok(outputs) => outputs,
+                Err(error) => {
+                    tracing::info!("cannot look at {}: {error}", candidate.display());
+                    continue;
+                }
+            };
+            if outputs.is_empty() {
+                continue;
+            }
+            let node = DrmNode::from_path(&candidate)?;
+            let render = match node.node_with_type(NodeType::Render) {
+                Some(Ok(render)) => render,
+                _ => node,
+            };
+            let mut renderer = VulkanRenderer::new(Some(node.dev_id()))?;
+            let gbm = render
+                .dev_path()
+                .and_then(|path| Card::open(&path).ok())
+                .and_then(|card| GbmDevice::new(card).ok());
+            prove_with_gbm(&mut renderer, gbm);
+            let feedback =
+                DmabufFeedbackBuilder::new(render.dev_id(), renderer.dmabuf_formats()).build()?;
+            return Ok(Some(Self {
+                outputs,
+                renderer,
+                node,
+                feedback,
+            }));
+        }
+        Ok(None)
+    }
+
+    fn outputs_of(path: &Path) -> Result<Vec<OutputConfig>, DrmBackendError> {
+        let card = Card::open(path)?;
+        connected(&card)?
+            .iter()
+            .map(|info| {
+                let shown = current_crtc(&card, info.handle())?.and_then(|crtc| crtc.mode());
+                Ok(head_config(&card, info, &modes_of(info, shown)))
+            })
+            .collect()
+    }
+
+    pub fn outputs(&self) -> &[OutputConfig] {
+        &self.outputs
+    }
+
+    pub fn renderer(&mut self) -> &mut VulkanRenderer {
+        &mut self.renderer
+    }
+
+    pub fn scanout_device(&self) -> ScanoutDevice {
+        ScanoutDevice {
+            node: self.node,
+            feedback: self.feedback.clone(),
+            planes: self.renderer.dmabuf_planes(),
+        }
+    }
 }
 
 pub struct DrmNotifiers {
@@ -438,7 +541,7 @@ fn modes_of(info: &connector::Info, first: Option<Mode>) -> Vec<Mode> {
     modes
 }
 
-fn edid_of(device: &DrmDevice, handle: connector::Handle) -> Option<bande_edid::Edid> {
+fn edid_of(device: &impl ControlDevice, handle: connector::Handle) -> Option<bande_edid::Edid> {
     let properties = device.get_properties(handle).ok()?;
     properties.iter().find_map(|(property, value)| {
         let info = device.get_property(*property).ok()?;
@@ -458,7 +561,11 @@ fn shows_another_display(known: &OutputConfig, edid: Option<bande_edid::Edid>) -
     })
 }
 
-fn head_config(device: &DrmDevice, info: &connector::Info, modes: &[Mode]) -> OutputConfig {
+fn head_config(
+    device: &impl ControlDevice,
+    info: &connector::Info,
+    modes: &[Mode],
+) -> OutputConfig {
     let edid = edid_of(device, info.handle());
     let name = connector_name(info);
     let (make, model, serial) = match edid {
@@ -573,6 +680,14 @@ fn cards() -> Result<Vec<PathBuf>, DrmBackendError> {
     Ok(cards)
 }
 
+fn has_card(cards: &Path) -> bool {
+    std::fs::read_dir(cards)
+        .into_iter()
+        .flatten()
+        .filter_map(Result::ok)
+        .any(|entry| entry.file_name().to_string_lossy().starts_with("card"))
+}
+
 fn shows_connected_display(connectors: &Path) -> bool {
     let read = |connector: &Path, attribute: &str| {
         std::fs::read_to_string(connector.join(attribute)).unwrap_or_default()
@@ -595,7 +710,7 @@ fn event_time(metadata: Option<DrmEventMetadata>) -> Duration {
     }
 }
 
-fn connected(device: &DrmDevice) -> Result<Vec<connector::Info>, DrmBackendError> {
+fn connected(device: &impl ControlDevice) -> Result<Vec<connector::Info>, DrmBackendError> {
     let resources = device.resource_handles()?;
     Ok(resources
         .connectors()
@@ -626,8 +741,14 @@ impl DrmBackend {
             )
             .map_err(|inserted| inserted.error)?;
         let mut connected = false;
+        let started = Instant::now();
         while !connected {
-            event_loop.dispatch(None, &mut connected)?;
+            let left =
+                (!has_card(connectors)).then(|| NO_CARD_LIMIT.saturating_sub(started.elapsed()));
+            if left.is_some_and(|left| left.is_zero()) {
+                return Err("the computer has no graphics card the kernel can drive".into());
+            }
+            event_loop.dispatch(left, &mut connected)?;
         }
         Ok(())
     }
@@ -635,6 +756,7 @@ impl DrmBackend {
     pub fn open(
         path: Option<&Path>,
         first_mode: FirstMode,
+        behind: &mut Option<BehindBootScreen>,
     ) -> Result<Option<(Self, DrmNotifiers)>, DrmBackendError> {
         let (mut session, session_notifier) = LibSeatSession::new()?;
         let candidates = match path {
@@ -645,7 +767,8 @@ impl DrmBackend {
         for candidate in candidates {
             match Self::open_card(&mut session, &candidate) {
                 Ok((device, notifier)) => {
-                    let mut backend = Self::with_device(session, candidate, device, first_mode)?;
+                    let mut backend =
+                        Self::with_device(session, candidate, device, first_mode, behind.take())?;
                     backend.rescan()?;
                     if backend.heads.is_empty() {
                         tracing::warn!(
@@ -691,12 +814,19 @@ impl DrmBackend {
         path: PathBuf,
         device: DrmDevice,
         first_mode: FirstMode,
+        behind: Option<BehindBootScreen>,
     ) -> Result<Self, DrmBackendError> {
         let fd = device.device_fd().clone();
         let node = DrmNode::from_file(&fd)?;
         let gbm = GbmDevice::new(fd).ok();
-        let mut renderer = VulkanRenderer::new(Some(node.dev_id()))?;
-        prove_with_gbm(&mut renderer, gbm.as_ref());
+        let renderer = match behind.filter(|behind| behind.node == node) {
+            Some(behind) => behind.renderer,
+            None => {
+                let mut renderer = VulkanRenderer::new(Some(node.dev_id()))?;
+                prove_with_gbm(&mut renderer, gbm.clone());
+                renderer
+            }
+        };
         let info = renderer.device_info();
         tracing::info!("composing on {info} with {}", info.extensions.join(", "));
         let feedback_device = match node.node_with_type(NodeType::Render) {
@@ -1234,7 +1364,7 @@ fn splash_for(device: &DrmDevice, head: &Head) -> Option<Snapshot> {
 }
 
 fn current_crtc(
-    device: &DrmDevice,
+    device: &impl ControlDevice,
     connector: connector::Handle,
 ) -> io::Result<Option<crtc::Info>> {
     let Some(encoder) = device.get_connector(connector, false)?.current_encoder() else {
@@ -1573,8 +1703,8 @@ impl FrameOutput for DrmBackend {
     }
 }
 
-fn prove_with_gbm(renderer: &mut VulkanRenderer, gbm: Option<&GbmDevice<DrmDeviceFd>>) {
-    let mut allocator = gbm.map(|gbm| GbmAllocator::new(gbm.clone(), GbmBufferFlags::RENDERING));
+fn prove_with_gbm<D: AsFd + 'static>(renderer: &mut VulkanRenderer, gbm: Option<GbmDevice<D>>) {
+    let mut allocator = gbm.map(|gbm| GbmAllocator::new(gbm, GbmBufferFlags::RENDERING));
     renderer.prove_unexported(|format| {
         let buffer = allocator
             .as_mut()?
@@ -1799,7 +1929,7 @@ impl DrmBackend {
             self.renderer.is_lost(),
             self.renderer.memory_use()
         );
-        prove_with_gbm(&mut renewed, self.gbm.as_ref());
+        prove_with_gbm(&mut renewed, self.gbm.clone());
         if renewed.dmabuf_planes() != self.renderer.dmabuf_planes() {
             tracing::warn!(
                 "the restarted renderer offers other dma-buf formats than clients were told"

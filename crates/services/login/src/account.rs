@@ -3,6 +3,7 @@ use std::io;
 use std::mem::MaybeUninit;
 
 const BUFFER: usize = 16 << 10;
+const BUFFER_LIMIT: usize = 1 << 20;
 const GROUP_LIMIT: usize = 65536;
 
 /// An account as the system's user database (NSS) describes it.
@@ -29,18 +30,23 @@ impl Account {
         let mut entry = MaybeUninit::<libc::passwd>::uninit();
         let mut buffer = vec![0 as libc::c_char; BUFFER];
         let mut found = std::ptr::null_mut();
-        // SAFETY: every pointer refers to storage that outlives the call, with buffer's length.
-        let status = unsafe {
-            libc::getpwnam_r(
-                name.as_ptr(),
-                entry.as_mut_ptr(),
-                buffer.as_mut_ptr(),
-                buffer.len(),
-                &mut found,
-            )
-        };
-        if status != 0 {
-            return Err(io::Error::from_raw_os_error(status));
+        loop {
+            // SAFETY: every pointer refers to storage that outlives the call, with buffer's
+            // length.
+            let status = unsafe {
+                libc::getpwnam_r(
+                    name.as_ptr(),
+                    entry.as_mut_ptr(),
+                    buffer.as_mut_ptr(),
+                    buffer.len(),
+                    &mut found,
+                )
+            };
+            match status {
+                0 => break,
+                libc::ERANGE if buffer.len() < BUFFER_LIMIT => buffer.resize(buffer.len() * 2, 0),
+                error => return Err(io::Error::from_raw_os_error(error)),
+            }
         }
         if found.is_null() {
             return Err(io::Error::new(io::ErrorKind::NotFound, "no such account"));

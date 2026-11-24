@@ -75,6 +75,9 @@ msgstr "Avbryt"
 msgid "Sleep"
 msgstr "Vila"
 
+msgid "Press Return to Sign In"
+msgstr "Tryck på Retur för att logga in"
+
 msgid "Your password has expired"
 msgstr "Ditt lösenord har gått ut"
 

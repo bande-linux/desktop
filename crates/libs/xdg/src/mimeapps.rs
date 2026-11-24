@@ -37,6 +37,10 @@ pub fn state_home() -> Option<PathBuf> {
 /// The file a session's compositor creates in its runtime directory once its first frame is on
 /// screen.
 pub const DESKTOP_SHOWN: &str = "bande-desktop-shown";
+/// The folder the login window's compositor and `bande-login` share.
+pub const LOGIN_WINDOW_FOLDER: &str = "/run/bande-greeter";
+/// The mark there once the login window's first frame is on screen.
+pub const LOGIN_WINDOW_SHOWN: &str = "shown";
 
 pub fn runtime_dir() -> Option<PathBuf> {
     env::var_os("XDG_RUNTIME_DIR")

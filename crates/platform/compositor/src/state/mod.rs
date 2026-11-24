@@ -218,6 +218,16 @@ impl Compositor {
         Self::on_device(config, None)
     }
 
+    /// Tells clients what the display's planes can scan out, once the device is open.
+    pub fn use_scanout_device(&mut self, scanout: ScanoutDevice) {
+        let globals = &mut self.state.globals;
+        globals
+            .dmabuf_state
+            .set_default_feedback(&globals.dmabuf_global, &scanout.feedback);
+        globals.dmabuf_planes = scanout.planes;
+        self.state.scanout_node = Some(scanout.node);
+    }
+
     pub fn on_device(config: OutputConfig, scanout: Option<ScanoutDevice>) -> io::Result<Self> {
         let mode = config
             .preferred_mode()

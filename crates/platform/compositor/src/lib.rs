@@ -56,6 +56,7 @@ mod overview;
 mod pacing;
 mod pointing;
 mod popup;
+mod progress;
 mod recall;
 mod release;
 mod remote_input;
@@ -86,7 +87,7 @@ pub use app_states::{AppStatesHandle, serve_app_states};
 pub use appearance::{SystemAppearance, follow_appearance};
 pub use assistive::follow_alerts;
 pub use bande_render::{DeviceInfo, RenderError};
-pub use boot_screen::{boot_screen_shown, take_display_from_boot_screen};
+pub use boot_screen::{boot_screen_has_display, boot_screen_shown, take_display_from_boot_screen};
 pub use clock::{
     FrameClock, FrameOutput, FrameRecovery, FrameScheduler, Poll, RecoveryStep, Submission, Vblank,
 };
@@ -94,7 +95,8 @@ pub use colour::edid_profile;
 pub use cursor::{CursorTheme, write_cursor_theme};
 pub use display_bus::{DisplaysHandle, serve_displays};
 pub use drm::{
-    DrmBackend, DrmBackendError, DrmNotifiers, FirstMode, HeadChanges, refresh_of, sorted_modes,
+    BehindBootScreen, DrmBackend, DrmBackendError, DrmNotifiers, FirstMode, HeadChanges,
+    refresh_of, sorted_modes,
 };
 pub use element::{ScreenElement, SurfaceElement};
 pub use environment::{
@@ -111,11 +113,12 @@ pub use keyboard_monitor::{
 pub use keymap::KeyboardSettings;
 pub use logind::{
     SessionReport, SessionRequest, Shutdown, Sleep, follow_lid, follow_session, follow_shutdown,
-    follow_sleep, handle_power_key, raise_priority,
+    follow_sleep, handle_power_key, lid_closed, raise_priority,
 };
 pub use material::{MaterialPicture, MaterialRequest, render_material};
 pub use night::NightTick;
 pub use pointing::PointerSettings;
+pub use progress::Progress;
 pub use render::{FrameStats, Renderer, Snapshot, background};
 pub use reveal::{Awaited, ShownFrame};
 pub use screen::{OutputConfig, OutputMode, OutputSettings, automatic_scale};

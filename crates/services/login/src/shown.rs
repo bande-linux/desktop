@@ -4,19 +4,19 @@ use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-use bande_xdg::DESKTOP_SHOWN;
 use rustix::fs::inotify::{self, CreateFlags, WatchFlags};
 use rustix::fs::{AtFlags, Mode, OFlags};
 
-/// Waits for a session's compositor to show its first frame.
+/// Waits for a compositor to mark its first frame as shown.
 pub struct ShownWatch {
     folder: OwnedFd,
+    mark: &'static str,
     events: OwnedFd,
 }
 
 impl ShownWatch {
-    /// Watches `runtime_dir`, after removing a mark an earlier session left there.
-    pub fn new(runtime_dir: &Path) -> io::Result<Self> {
+    /// Watches `runtime_dir` for `mark`, after removing one an earlier compositor left there.
+    pub fn new(runtime_dir: &Path, mark: &'static str) -> io::Result<Self> {
         let folder = rustix::fs::open(
             runtime_dir,
             OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC,
@@ -31,11 +31,15 @@ impl ShownWatch {
                 | WatchFlags::ONLYDIR
                 | WatchFlags::DONT_FOLLOW,
         )?;
-        match rustix::fs::unlinkat(&folder, DESKTOP_SHOWN, AtFlags::empty()) {
+        match rustix::fs::unlinkat(&folder, mark, AtFlags::empty()) {
             Ok(()) | Err(rustix::io::Errno::NOENT) => {}
             Err(error) => return Err(error.into()),
         }
-        Ok(Self { folder, events })
+        Ok(Self {
+            folder,
+            mark,
+            events,
+        })
     }
 
     pub fn fd(&self) -> BorrowedFd<'_> {
@@ -62,7 +66,7 @@ impl ShownWatch {
             }
         }
         progress.shown =
-            match rustix::fs::statat(&self.folder, DESKTOP_SHOWN, AtFlags::SYMLINK_NOFOLLOW) {
+            match rustix::fs::statat(&self.folder, self.mark, AtFlags::SYMLINK_NOFOLLOW) {
                 Ok(_) => true,
                 Err(rustix::io::Errno::NOENT) => false,
                 Err(error) => return Err(error.into()),

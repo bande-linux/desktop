@@ -26,6 +26,10 @@ Tests: greetd-upgrade
 Depends: bande-greeter, greetd, apt, debconf, passwd, python3, systemd
 Restrictions: needs-root, breaks-testbed, allow-stderr
 
+Tests: login-recovery
+Depends: bande-greeter, passwd, python3, systemd
+Restrictions: needs-root, breaks-testbed, allow-stderr, isolation-machine
+
 Tests: coexistence
 Depends: gnome-core, gnome-keyring, libpam-gnome-keyring, libsecret-tools, dbus-daemon, dbus-bin,
  python3-dbusmock, apt

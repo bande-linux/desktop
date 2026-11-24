@@ -1,0 +1,175 @@
+#!/bin/bash
+# bande-login on a booted machine, with a scripted login window and session: a session that ends
+# at once, or after its first frame, gives its virtual terminal back and the login window the
+# screen; guessing is slowed down although each guess is cancelled; an account without a password
+# waits to be asked; stopping ends the session; and a login window that takes seconds to fail
+# still ends in a text console.
+set -euo pipefail
+state=/run/login-recovery
+install -d -m 1777 "$state"
+useradd --create-home --shell /bin/bash ada
+echo ada:hunter2 | chpasswd
+useradd --create-home --shell /bin/bash eve
+passwd --quiet --delete eve
+
+cat > /usr/libexec/bande-greeter-session <<'GREETER'
+#!/usr/bin/python3 -I
+import json, os, pathlib, socket, struct, sys, time
+
+state = pathlib.Path("/run/login-recovery")
+mode = (state / "mode").read_text().strip()
+if mode == "fail":
+    time.sleep(4)
+    sys.exit(1)
+pathlib.Path("/run/bande-greeter/shown").touch()
+daemon = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+daemon.connect(os.environ["BANDE_LOGIN_SOCK"])
+reader = daemon.makefile("rb")
+
+
+def send(**request):
+    body = json.dumps(request).encode()
+    daemon.sendall(struct.pack("=I", len(body)) + body)
+
+
+def receive():
+    (length,) = struct.unpack("=I", reader.read(4))
+    return json.loads(reader.read(length))
+
+
+def ask(**request):
+    send(**request)
+    return receive()
+
+
+def prompt():
+    answer = ask(type="create_session", username="ada")
+    while answer["type"] == "auth_message" and answer["auth_message_type"] != "secret":
+        answer = ask(type="post_auth_message_response", response=None)
+    assert answer["type"] == "auth_message", answer
+
+
+def tell(word):
+    (state / "said").write_text(f"{word}\n")
+
+
+if mode == "guess":
+    for _ in range(5):
+        prompt()
+        send(type="post_auth_message_response", response="guess")
+        send(type="cancel_session")
+        receive()
+        assert receive()["type"] == "success"
+    prompt()
+    tell(ask(type="post_auth_message_response", response="hunter2")["description"])
+elif mode == "no-password":
+    answer = ask(type="create_session", username="eve")
+    assert answer.get("auth_message_type") == "confirm", answer
+    time.sleep(2)
+    tell(ask(type="post_auth_message_response", response=None)["type"])
+elif mode == "sign-in":
+    prompt()
+    answer = ask(type="post_auth_message_response", response="hunter2")
+    assert answer["type"] == "success", answer
+    tell(ask(type="start_session", env=[])["type"])
+time.sleep(3600)
+GREETER
+cat > /usr/bin/bande-session <<'SESSION'
+#!/bin/sh
+env > /run/login-recovery/environment
+case $(cat /run/login-recovery/session) in
+exit) exit 3 ;;
+esac
+touch "$XDG_RUNTIME_DIR/bande-desktop-shown"
+while [ ! -e /run/login-recovery/leave ]; do sleep 0.1; done
+SESSION
+chmod 755 /usr/libexec/bande-greeter-session /usr/bin/bande-session
+
+terminal() {
+    python3 -I - "$1" <<'VT'
+import fcntl, os, struct, sys
+tty = os.open(f"/dev/tty{sys.argv[1]}", os.O_RDWR | os.O_NOCTTY)
+mode = fcntl.ioctl(tty, 0x5601, bytes(8))[0]
+kind = struct.unpack("i", fcntl.ioctl(tty, 0x4B3B, bytes(4)))[0]
+print("text" if kind == 0 else "graphics", "auto" if mode == 0 else "process")
+VT
+}
+wait_for() {
+    local patience=$1
+    shift
+    for _ in $(seq "$((patience * 10))"); do
+        if "$@"; then return 0; fi
+        sleep 0.1
+    done
+    echo "gave up waiting for: $*"
+    journalctl --no-pager --boot --unit bande-greeter.service --identifier bande-login --lines 60
+    exit 1
+}
+trap 'echo "login-recovery: line $LINENO failed"' ERR
+on_screen() { [ "$(cat /sys/class/tty/tty0/active)" = "tty$1" ]; }
+session_tty() { sed -n "s/^XDG_VTNR=//p" "$state/environment"; }
+given_back() { [ "$(terminal "$(session_tty)")" = "text auto" ]; }
+session_on_screen() { on_screen "$(session_tty)"; }
+said() { [ -s "$state/said" ]; }
+has_session() { loginctl list-sessions --no-legend | awk -v user="$1" -v class="$2" '$3 == user && $6 == class { found = 1 } END { exit !found }'; }
+signed_in() { has_session ada user; }
+signed_out() { ! signed_in; }
+has_login_window() { has_session _bande-greeter greeter; }
+no_login_window() { ! has_login_window; }
+restart() {
+    rm -f "$state/said" "$state/leave" "$state/environment"
+    echo "$1" > "$state/mode"
+    echo "${2:-exit}" > "$state/session"
+    systemctl reset-failed bande-greeter.service 2> /dev/null || true
+    systemctl restart bande-greeter.service
+}
+
+restart sign-in exit
+wait_for 30 said
+wait_for 5 on_screen 1
+wait_for 5 given_back
+grep -qx error "$state/said"
+has_login_window
+echo "a session that ends at once gives the screen back"
+
+restart sign-in show
+wait_for 30 signed_in
+wait_for 30 no_login_window
+wait_for 5 session_on_screen
+echo sit > "$state/mode"
+touch "$state/leave"
+wait_for 20 has_login_window
+wait_for 10 on_screen 1
+wait_for 5 given_back
+wait_for 10 signed_out
+[ -z "$(systemctl list-units --plain --no-legend 'getty@*' 'autovt@*')" ] || { systemctl list-units 'getty@*' 'autovt@*'; exit 1; }
+echo "logging out brings the login window back"
+
+restart sign-in show
+wait_for 30 signed_in
+wait_for 30 no_login_window
+wait_for 5 session_on_screen
+systemctl stop bande-greeter.service
+wait_for 5 given_back
+wait_for 10 signed_out
+echo "stopping ends the session and gives its terminal back"
+
+restart guess
+wait_for 30 said
+grep -qx "too many attempts: MAXTRIES" "$state/said"
+echo "cancelling a guess does not make the next one free"
+
+restart no-password
+wait_for 30 said
+grep -qx success "$state/said"
+echo "an account without a password is signed in only when asked to"
+
+complaints=$(journalctl --no-pager --boot --quiet --grep "cannot (give tty|take tty|bring the login window)" || true)
+[ -z "$complaints" ] || { echo "$complaints"; exit 1; }
+
+restart fail
+wait_for 60 systemctl --quiet is-failed bande-greeter.service
+wait_for 10 systemctl --quiet is-active getty@tty1.service
+wait_for 5 on_screen 1
+[ "$(terminal 1)" = "text auto" ]
+echo "a login window that keeps failing ends in a text console"

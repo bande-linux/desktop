@@ -207,6 +207,11 @@ impl Compositor {
         }
     }
 
+    /// Whether the client with this process id has left a ping unanswered.
+    pub fn is_unresponsive(&self, pid: u32) -> bool {
+        i32::try_from(pid).is_ok_and(|pid| self.state.watchdog.hung_since(pid).is_some())
+    }
+
     pub(crate) fn relaunch_hung_lock_screen(&mut self, now: Duration) -> Option<Duration> {
         if !self.state.is_locked() {
             return None;

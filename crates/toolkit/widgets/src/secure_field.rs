@@ -37,6 +37,7 @@ pub struct SecureField {
     advances: Vec<f32>,
     placeholder_paragraph: Option<Paragraph>,
     go_button: bool,
+    optional: bool,
     naming: Naming,
     frame: Rect,
 }
@@ -59,6 +60,7 @@ impl SecureField {
             advances: Vec::new(),
             placeholder_paragraph: None,
             go_button: false,
+            optional: false,
             naming: Naming::default(),
             frame: Rect::default(),
         }
@@ -90,7 +92,7 @@ impl SecureField {
     }
 
     fn go_rect(&self) -> Option<Rect> {
-        (self.go_button && !self.secret.is_empty()).then(|| {
+        (self.go_button && (self.optional || !self.secret.is_empty())).then(|| {
             let side = self.frame.height - 2.0 * GO_INSET;
             Rect::new(
                 self.frame.x + self.frame.width - GO_INSET - side,
@@ -126,6 +128,11 @@ impl SecureField {
 
     pub fn set_placeholder(&mut self, placeholder: &str) {
         placeholder.clone_into(&mut self.placeholder);
+    }
+
+    /// Shows the go button also while the field is empty.
+    pub fn set_optional(&mut self, optional: bool) {
+        self.optional = optional;
     }
 
     /// Shows what is typed instead of bullets, for answers that are not secret.

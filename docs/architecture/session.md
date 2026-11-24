@@ -610,11 +610,16 @@ part of login small and the UI unprivileged:
    `greeter` (`/etc/pam.d/bande-greeter-session`, which admits only that account), inside
    `bande-compositor --greeter` on VT 1, and talks to `bande-login` over
    `/run/bande-login/greeter.sock` (`BANDE_LOGIN_SOCK`), which only that uid may open and whose
-   peer `bande-login` checks again. It shows the lock screen's layout (`bande_lock::LockScreen`,
+   peer `bande-login` checks again. People's wallpapers and account pictures are decoded in a
+   confined process for each (`bande_lock::serve_picture_worker`: the program run again, with only
+   computing left after it has read the file), as on the lock screen, so a picture someone made
+   cannot reach the process that reads passwords or end it. It shows the lock screen's layout
+   (`bande_lock::LockScreen`,
    announced as "Sign in") with battery, Wi-Fi or cable or Offline, input source, and Sleep,
    Restart and Shut Down. Logind's answers are asked again when the devices change or the screen
    wakes, so a dock that changes them is followed.
-3. **The protocol**: length-prefixed JSON, one response for each request:
+3. **The protocol**: length-prefixed JSON, one response for each request, in order (a request that
+   arrives while an earlier one waits for PAM takes its place, so `cancel_session` never waits):
    `create_session`, `post_auth_message_response`, `start_session` and `cancel_session`
    (`bande_login::protocol`). Messages either way are refused above 64 KiB, each message to or
    from the login window must pass whole within a second (`Deadline`, on a non-blocking socket,
@@ -638,11 +643,16 @@ typed before the first prompt answers it. PAM's info and error messages stay und
 the last three of them, each at most 400 characters. Escape cancels; while checking it lets go
 of the conversation and starts a new one (`bande-login` ends the worker running the module at
 once). PAM's codes become sentences (wrong password, expired password or account, not
-allowed, too many attempts, unavailable); the raw text goes to the journal. A refusal after an
-answer starts a new conversation at once; one before any prompt (`pam_nologin`, a PAM that cannot
+allowed, too many attempts, unavailable); the raw text goes to the journal. An account PAM accepts
+without asking or showing anything (no password) is signed in only once the person presses Return
+or the field's button (`confirm`). A refusal after an answer starts a new conversation at once; one before any prompt (`pam_nologin`, a PAM that cannot
 load) waits for the next answer, Escape or another person. After four wrong answers for the same
 login name each further one waits 5 s, doubling to a minute, with a countdown under the field;
-the login window keeps the count per name across switching people. While a session is starting,
+the login window keeps the count per name across switching people, and `bande-login` keeps its
+own for each account, under the account's own name (`bande_pam::Backoff`), which also counts an
+answer whose conversation was cancelled, cut off or crashed and refuses answers until the wait is
+over, so a login window that does not wait guesses no faster. A typed name is logged only when it
+is an account's. While a session is starting,
 the field holds text or a power confirmation is open, Up and Down do not switch people. At login
 `bande-login` changes an expired password with `pam_chauthtok` through the same conversation (the
 `password` stack of `bande-greeter`). The lock screen cannot change one, as it runs as the user
@@ -702,11 +712,14 @@ desktop has drawn its first frame, then the desktop fades in over it:
 When the session ends before its first frame (`bande-session` failing, the compositor
 crashing), or its compositor has hung (the worker ends it when, after the compositor opened its
 Wayland socket, nothing new has appeared in the runtime directory for 30 s, or after 5 minutes
-in all, so a slow first login or `~/.profile` is waited for), the worker brings VT 1 back and `bande-login`
-answers `start_session` with an error and accepts a new `create_session`;
+in all, so a slow first login or `~/.profile` is waited for), the worker brings VT 1 back and
+`bande-login` answers `start_session` with an error and accepts a new `create_session`;
 the login window, still running, comes back with its content and the reason `bande-session` left
-for it (above). Logging out ends the session: logind gives the terminal back to the console,
-which shows only `deep`, and `bande-login` starts the login window again on VT 1, set to
+for it (above). Whenever a session ends, the worker brings VT 1 to the front before it closes the session,
+so logind never finds the session's terminal on screen without one and starts no `getty` there. The
+kernel hung up every descriptor on that terminal when the session's leader exited, so the worker
+opens it again first, to acknowledge the switch. Logging out ends the session: logind gives the
+terminal back to the console, VT 1 shows only `deep`, and `bande-login` starts the login window again on VT 1, set to
 graphics mode before it comes to the front, which fades in from that colour. A compositor
 leaving the screen closes its framebuffers with `DRM_IOCTL_MODE_CLOSEFB`, which leaves them on
 their planes until something else is shown, so the login window imports what is on screen only
@@ -716,8 +729,11 @@ session has ended. Unlocking is one compositor: the last lock frame
 fades out over the desktop, so input reaches the desktop at once. A session takes the first free
 virtual terminal, usually VT 2, and `bande-login` keeps VT 1 open, so logind starts no `getty`
 there (which would conflict with `bande-greeter.service`); `Ctrl+Alt+F3` and above reach a text
-console at any time. When the login window ends three times within 10 s of starting while no
-session runs, `bande-login` exits with a failure; after five failed starts in 30 s
+console at any time. When the login window ends three times in a row without anyone having signed
+in or its having stayed on screen for a minute (its compositor marks its first frame with `shown`
+in `/run/bande-greeter`), while no session runs, `bande-login` exits with status 69, which
+`RestartPreventExitStatus=` makes final (waiting at most 15 s for workers that are still ending;
+a login window that was never shown is started again after 2 s), and
 `bande-console-fallback.service` quits Plymouth, gives VT 1 back to the console
 (`bande-login --console`: text mode and automatic switching, whoever left it in graphics mode,
 the keyboard in Unicode mode, then a reset), starts `getty@tty1` and brings the console
@@ -731,8 +747,15 @@ Show a boot screen turns off and on. It keeps playing until the login window is 
 hands over without a blank frame or console text. `bande-greeter.service` starts after
 `plymouth-start.service` and conflicts with `plymouth-quit.service`, so the end of boot does not
 quit it. The login window runs on VT 1, Plymouth's terminal, so nothing switches VT, and
-`bande-login` leaves the mode of a terminal already on screen alone. While Plymouth runs (`/run/plymouth/pid`), the login window's compositor sets its
-terminal to graphics mode, so the kernel's console cannot draw once Plymouth lets go, and asks
+`bande-login` leaves the mode of a terminal already on screen alone. While Plymouth runs
+(`/run/plymouth/pid`) the login window is drawn behind it, so the indicator keeps moving through
+the start of the compositor and the login window: the compositor opens the card only to read which
+displays there are, their modes and what is on them (the kernel makes it master meanwhile when no
+one is), closes it, asks logind whether the lid is closed,
+starts Vulkan on the same device, starts `bande-greeter` and imports its first buffer
+(`BehindBootScreen`). When the login window ends, fails, or draws nothing within 5 s, or the
+card cannot be read, the compositor goes on as without this and takes the display. Then it sets
+its terminal to graphics mode, so the kernel's console cannot draw once Plymouth lets go, and asks
 for the display: only root may talk to Plymouth, so it creates `handover` in
 `/run/bande-greeter` (a `_bande-greeter` folder from `debian/bande-greeter.tmpfiles`) and the root
 `bande-greeter-handover.path` runs `plymouth deactivate`, which stops Plymouth drawing and gives
@@ -750,11 +773,21 @@ buffer), which is Plymouth's last frame, and once the login window can be drawn 
 out over it with the `standard` spring (`fade` with Reduce Motion). When the framebuffer cannot
 be read while Plymouth runs, the frame is the boot screen's own background and mark at
 Plymouth's scale, drawn by `bande-splash`. The compositor holds its frames until the login
-window's buffer is imported for its renderer, not merely attached (at most 2.5 s), as the
-session's compositor does for the wallpaper and the Taskbar. Once a frame in which every element
-was drawn and the login window was among them is on screen, the compositor creates `shown`
+window's buffer is imported for its renderer, not merely attached, as the session's compositor
+does for the wallpaper and the Taskbar (there at most 2.5 s).
+While no login window has
+appeared the compositor goes on holding its frames as long as the login window does anything: it
+ends only when that has used no processor time, read no page and waited for no device for 30 s
+(longer than D-Bus lets AccountsService take to start), or after 5 minutes in all. A compositor
+that hangs, except while no display is connected, is ended by `alarm(20)`, and one that finds no
+graphics card at all gives up after 30 s. Each way `bande-login` starts the login window again or,
+the third time, brings the console. A login window that freezes after it was shown leaves the ping
+that follows a key or click unanswered, and is ended and started again once it has also done
+nothing for 30 s. When its display goes away it moves to another. Once a frame in which every
+element was drawn and the login window was among them is on screen, the compositor creates
+`shown`
 there and the root `bande-greeter-splash.path` runs `plymouth quit --retain-splash`. Plymouth
-is not dismissed onto a frame that left the login window out, except that once the 2.5 s are up
+is not dismissed onto a frame that left the login window out, except that at the next 2.5 s look after it appeared
 the compositor creates `shown` anyway and logs which surfaces were not drawn, so boot always
 finishes. When the handover does not come within 3 s (the unit failed or is missing), the
 compositor logs it and takes the display anyway. The background is Datum's `deep`,

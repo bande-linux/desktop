@@ -16,8 +16,8 @@ use bande_config::{
 use bande_datetime::daylight::{Sky, place_of, sky};
 use bande_datetime::{DateFormats, MinuteTimer};
 use bande_greeter::{
-    Login, Step, account_users, failed_session, last_user_file, login_accessibility, login_look,
-    login_picture, login_users, remember_user, remembered_user,
+    Login, Step, Unanswered, account_users, failed_session, last_user_file, login_accessibility,
+    login_look, login_picture, login_users, remember_user, remembered_user,
 };
 use bande_keyboard::Layouts;
 use bande_l10n::tr;
@@ -80,11 +80,10 @@ struct Greeter {
     login_socket: PathBuf,
     daemon: Option<UnixStream>,
     login: Option<Login>,
-    awaiting: bool,
+    unanswered: Unanswered,
     asked: bool,
     answered: bool,
     backoffs: HashMap<String, Backoff>,
-    cancel_queued: bool,
     next: Option<String>,
     refusal: Option<Refusal>,
     pending: Option<Zeroizing<String>>,
@@ -146,6 +145,16 @@ fn other_user(name: Option<&str>) -> User {
         login: name.unwrap_or_default().to_owned(),
         full_name: name.map_or_else(|| tr!("Other User"), str::to_owned),
     }
+}
+
+fn login_role() -> Role {
+    Role::Layer(LayerOptions {
+        layer: LayerKind::Overlay,
+        anchor: Edges::ALL,
+        exclusive_zone: -1,
+        keyboard: KeyboardFocus::Exclusive,
+        namespace: "greeter".to_owned(),
+    })
 }
 
 fn backdrop_role() -> Role {
@@ -370,8 +379,7 @@ impl Greeter {
         self.daemon = None;
         self.leaving = false;
         self.login = None;
-        self.awaiting = false;
-        self.cancel_queued = false;
+        self.unanswered = Unanswered::default();
         self.next = None;
         self.asked = false;
         self.screen.ask(None);
@@ -388,7 +396,7 @@ impl Greeter {
         {
             Ok(daemon) => {
                 self.daemon = Some(daemon);
-                self.awaiting = true;
+                self.unanswered.sent();
             }
             Err(error) => self.unavailable(&error),
         }
@@ -404,10 +412,7 @@ impl Greeter {
             }));
             if let Some(current) = self.login.as_mut().filter(|login| !login.is_idle()) {
                 let cancel = current.cancel();
-                match self.awaiting {
-                    true => self.cancel_queued = true,
-                    false => self.send(&cancel),
-                }
+                self.send(&cancel);
             }
             return;
         };
@@ -416,10 +421,7 @@ impl Greeter {
                 self.next = Some(login);
                 if !current.is_cancelling() {
                     let cancel = current.cancel();
-                    match self.awaiting {
-                        true => self.cancel_queued = true,
-                        false => self.send(&cancel),
-                    }
+                    self.send(&cancel);
                 }
             }
             _ => {
@@ -469,7 +471,7 @@ impl Greeter {
             self.converse();
             return;
         }
-        if !self.asked || self.awaiting {
+        if !self.asked || self.unanswered.any() {
             self.pending = Some(answer);
             return;
         }
@@ -491,9 +493,7 @@ impl Greeter {
                 return;
             }
         };
-        self.awaiting = false;
-        if std::mem::take(&mut self.cancel_queued) {
-            self.send(&Request::CancelSession);
+        if !self.unanswered.answered() {
             return;
         }
         let steps = self
@@ -509,6 +509,13 @@ impl Greeter {
                     match self.pending.take() {
                         Some(answer) if !prompt.visible => self.answer(answer),
                         _ => self.screen.ask(Some(&prompt)),
+                    }
+                }
+                Step::Confirm => {
+                    self.asked = true;
+                    match self.pending.take() {
+                        Some(answer) => self.answer(answer),
+                        None => self.screen.ask_to_continue(),
                     }
                 }
                 Step::Show(message) => self.screen.set_message(Some(message)),
@@ -585,7 +592,7 @@ impl Greeter {
             self.switch_to(index.unwrap_or(self.users.len()));
             return;
         }
-        if self.screen.take_cancel() {
+        if self.screen.take_cancel() && !self.is_starting() {
             self.pending = None;
             if self.shown >= self.users.len() && self.other.is_some() {
                 self.other = None;
@@ -635,6 +642,21 @@ impl Greeter {
             .is_some_and(|battery| !battery.on_adapter());
         (on_battery && self.powers.contains(&PowerAction::Sleep) && !self.started)
             .then(|| self.last_input + SLEEPS_AFTER)
+    }
+
+    fn reopened(&mut self) -> bool {
+        match self.windows[0].open_beside(login_role(), (0, 0)) {
+            Ok(window) => {
+                tracing::info!("the login window's display went away; showing it on another");
+                self.windows[0] = window;
+                self.backdrop_size = None;
+                true
+            }
+            Err(error) => {
+                tracing::error!("cannot show the login window on another display: {error}");
+                false
+            }
+        }
     }
 
     fn show_displays(&mut self, names: &[String]) {
@@ -952,7 +974,10 @@ impl Surfaces for Greeter {
     }
 
     fn closed(&mut self) -> bool {
-        self.windows[0].is_closed() || (self.started && self.screen.has_left())
+        if self.started && self.screen.has_left() {
+            return true;
+        }
+        self.windows[0].is_closed() && !self.reopened()
     }
 }
 
@@ -997,16 +1022,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 .unwrap_or_default()
         })
         .unwrap_or_default();
-    let window = Window::open(
-        Role::Layer(LayerOptions {
-            layer: LayerKind::Overlay,
-            anchor: Edges::ALL,
-            exclusive_zone: -1,
-            keyboard: KeyboardFocus::Exclusive,
-            namespace: "greeter".to_owned(),
-        }),
-        (0, 0),
-    )?;
+    let window = Window::open_fixed(Appearance::default(), login_role(), (0, 0))?;
     let devices = system.as_ref().and_then(Devices::follow);
     let picture_inbox = load_pictures(
         users.iter().map(|user| user.login.clone()).collect(),
@@ -1036,11 +1052,10 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         login_socket,
         daemon: None,
         login: None,
-        awaiting: false,
+        unanswered: Unanswered::default(),
         asked: false,
         answered: false,
         backoffs: HashMap::new(),
-        cancel_queued: false,
         next: None,
         refusal: None,
         pending: None,
@@ -1079,6 +1094,10 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 
 fn main() -> ExitCode {
     bande_log::init("bande-greeter");
+    let arguments: Vec<String> = std::env::args().skip(1).collect();
+    if let Some(served) = bande_lock::serve_picture_worker(&arguments) {
+        return served;
+    }
     match run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {

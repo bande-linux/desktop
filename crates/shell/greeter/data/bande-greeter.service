@@ -17,6 +17,7 @@ TimeoutStopSec=30s
 KeyringMode=shared
 Restart=always
 RestartSec=1
+RestartPreventExitStatus=69
 
 [Install]
 Alias=display-manager.service

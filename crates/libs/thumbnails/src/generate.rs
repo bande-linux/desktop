@@ -385,7 +385,7 @@ fn in_worker(
         path.as_os_str(),
         cache.root().as_os_str(),
     ];
-    let out = run_worker(&arguments, LARGEST_OUTPUT, WORKER_TIME)?;
+    let out = run_worker(&arguments, Stdio::null(), LARGEST_OUTPUT, WORKER_TIME)?;
     picture_from(&out).ok_or(WorkerFailure::Failed)
 }
 

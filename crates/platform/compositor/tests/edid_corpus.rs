@@ -313,11 +313,24 @@ fn check(bytes: &[u8], tally: &mut Tally) -> Result<(), String> {
         tally.own_profile += 1;
         check_profile(&edid, &profile)?;
     }
+    if edid
+        .depth
+        .is_some_and(|depth| ![6, 8, 10, 12, 14, 16].contains(&depth))
+    {
+        return Err(format!("{:?} bits per channel", edid.depth));
+    }
     let mut blocks = blocks(bytes);
     let base = blocks.next().ok_or("parsed less than a block")?;
     if base[20] & 0x80 != 0 {
         tally.digital += 1;
-        tally.deep_colour += usize::from(base[19] >= 4 && (3..=6).contains(&((base[20] >> 4) & 7)));
+        let stated = usize::from((base[20] >> 4) & 7);
+        if base[18] == 1 && base[19] >= 4 && (1..=6).contains(&stated) {
+            let stated = 4 + 2 * stated;
+            if edid.depth.is_none_or(|depth| usize::from(depth) < stated) {
+                return Err(format!("{:?} of {stated} bits per channel", edid.depth));
+            }
+        }
+        tally.deep_colour += usize::from(edid.depth.is_some_and(|depth| depth >= 10));
     }
     let extensions: Vec<_> = blocks.collect();
     tally.display_id += usize::from(extensions.iter().any(|block| block[0] == DISPLAY_ID));
@@ -380,6 +393,55 @@ fn curated_edids_give_sane_identities_colours_and_modes() {
     ));
     assert!(tally.edids > 0);
     assert!(tally.failures.is_empty(), "{}", tally.failures.join("\n"));
+}
+
+#[test]
+fn the_bits_a_display_takes_come_from_every_block_that_states_them() {
+    let folder = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/edid");
+    let bytes = |name: &str| {
+        hex_lines(&std::fs::read_to_string(folder.join(name)).expect("a curated EDID"))
+    };
+    let depth = |bytes: &[u8]| parse(bytes).and_then(|edid| edid.depth);
+    let mut display = bytes("msi-g274qpx");
+    assert_eq!(depth(&display), Some(10));
+    assert_eq!(depth(&bytes("linuxhw-hkm2800-12-bits")), Some(12));
+    for (code, bits) in [(1, 6), (2, 8), (3, 10), (4, 12), (5, 14), (6, 16)] {
+        display[20] = 0x80 | code << 4;
+        assert_eq!(depth(&display), Some(bits));
+    }
+    for (input, revision) in [(0x80, 4), (0xf0, 4), (0x30, 4), (0xb0, 3)] {
+        display[20] = input;
+        display[19] = revision;
+        assert_eq!(depth(&display), None, "input {input:#x}, 1.{revision}");
+    }
+    let mut hdmi = display.clone();
+    hdmi[BLOCK..].fill(0);
+    hdmi[BLOCK..BLOCK + 11].copy_from_slice(&[CTA, 3, 12, 0, 0x67, 0x03, 0x0c, 0, 0x10, 0, 0]);
+    for (flags, bits) in [
+        (0, None),
+        (0x10, Some(10)),
+        (0x30, Some(12)),
+        (0x70, Some(16)),
+    ] {
+        hdmi[BLOCK + 10] = flags;
+        hdmi[BLOCK + 4] = 0x66;
+        assert_eq!(depth(&hdmi), bits, "HDMI flags {flags:#x}");
+    }
+    let mut display_id = display;
+    display_id[BLOCK..].fill(0);
+    display_id[BLOCK..BLOCK + 8].copy_from_slice(&[DISPLAY_ID, 0x20, 32, 0, 0, 0x21, 0, 29]);
+    for (code, bits) in [
+        (0, None),
+        (2, Some(8)),
+        (3, Some(10)),
+        (5, Some(16)),
+        (7, None),
+    ] {
+        display_id[BLOCK + 8 + 27] = code;
+        assert_eq!(depth(&display_id), bits, "DisplayID depth code {code}");
+    }
+    display_id[BLOCK + 7] = 200;
+    assert_eq!(depth(&display_id), None, "a block past its section");
 }
 
 #[test]

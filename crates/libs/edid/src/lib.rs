@@ -6,6 +6,15 @@ const SERIAL_TEXT: u8 = 0xff;
 const PNP_IDS: &str = "/usr/share/hwdata/pnp.ids";
 const INTERNAL_CONNECTORS: [&str; 3] = ["eDP", "LVDS", "DSI"];
 
+const BLOCK: usize = 128;
+const CTA: u8 = 0x02;
+const DISPLAY_ID: u8 = 0x70;
+const VENDOR_BLOCK: u8 = 3;
+const HDMI: [u8; 3] = [0x03, 0x0c, 0x00];
+const HDMI_FLAGS: usize = 5;
+const DISPLAY_PARAMETERS: u8 = 0x21;
+const DISPLAY_PARAMETERS_DEPTH: usize = 27;
+
 const SRGB_DEFAULT: u8 = 1 << 2;
 const UNDEFINED_GAMMA: u8 = 0xff;
 
@@ -25,6 +34,7 @@ pub struct Edid {
     pub primaries: Primaries,
     pub default_is_srgb: bool,
     pub gamma: Option<u16>,
+    pub depth: Option<u8>,
 }
 
 fn primaries(block: &[u8]) -> Primaries {
@@ -38,6 +48,63 @@ fn primaries(block: &[u8]) -> Primaries {
         blue: (coordinate(31, second, 6), coordinate(32, second, 4)),
         white: (coordinate(33, second, 2), coordinate(34, second, 0)),
     }
+}
+
+fn base_depth(block: &[u8]) -> Option<u8> {
+    let (version, revision, input) = (block[18], block[19], block[20]);
+    if version != 1 || revision < 4 || input & 0x80 == 0 {
+        return None;
+    }
+    match (input >> 4) & 7 {
+        code @ 1..=6 => Some(4 + 2 * code),
+        _ => None,
+    }
+}
+
+fn data_blocks(bytes: &[u8], header: usize) -> impl Iterator<Item = (u8, &[u8])> {
+    let mut left = bytes;
+    std::iter::from_fn(move || {
+        let (tag, length) = match header {
+            1 => (*left.first()? >> 5, usize::from(*left.first()? & 0x1f)),
+            _ => (*left.first()?, usize::from(*left.get(2)?)),
+        };
+        let data = left.get(header..header + length)?;
+        left = &left[header + length..];
+        Some((tag, data))
+    })
+}
+
+fn hdmi_depth(block: &[u8]) -> Option<u8> {
+    let end = usize::from(block[2]).min(BLOCK - 1);
+    let (_, data) = data_blocks(block.get(4..end)?, 1)
+        .find(|(tag, data)| *tag == VENDOR_BLOCK && data.starts_with(&HDMI))?;
+    let flags = *data.get(HDMI_FLAGS)?;
+    [(6, 16), (5, 12), (4, 10)]
+        .into_iter()
+        .find_map(|(bit, depth)| (flags & (1 << bit) != 0).then_some(depth))
+}
+
+fn display_id_depth(block: &[u8]) -> Option<u8> {
+    let end = (5 + usize::from(block[2])).min(BLOCK - 1);
+    let (_, data) =
+        data_blocks(block.get(5..end)?, 3).find(|(tag, _)| *tag == DISPLAY_PARAMETERS)?;
+    match *data.get(DISPLAY_PARAMETERS_DEPTH)? & 7 {
+        code @ 1..=4 => Some(4 + 2 * code),
+        5 => Some(16),
+        _ => None,
+    }
+}
+
+fn depth(bytes: &[u8]) -> Option<u8> {
+    let extensions = bytes.as_chunks::<BLOCK>().0.iter().skip(1);
+    extensions
+        .filter_map(|block| match block[0] {
+            CTA => hdmi_depth(block),
+            DISPLAY_ID => display_id_depth(block),
+            _ => None,
+        })
+        .chain(base_depth(bytes))
+        .max()
 }
 
 fn descriptor_text(block: &[u8], kind: u8) -> Option<String> {
@@ -97,6 +164,7 @@ pub fn parse(block: &[u8]) -> Option<Edid> {
         primaries: primaries(block),
         default_is_srgb: block[24] & SRGB_DEFAULT != 0,
         gamma: (block[23] != UNDEFINED_GAMMA).then(|| u16::from(block[23]) + 100),
+        depth: depth(block),
     })
 }
 

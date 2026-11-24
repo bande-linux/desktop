@@ -23,7 +23,6 @@ pub struct Credentials {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Identity {
-    pub endpoint: String,
     pub credentials: Option<Credentials>,
     pub rotate: bool,
     pub revoked: bool,
@@ -32,9 +31,8 @@ pub struct Identity {
 }
 
 impl Identity {
-    pub fn new(endpoint: &str) -> Self {
+    pub fn unenrolled() -> Self {
         Self {
-            endpoint: endpoint.to_owned(),
             credentials: None,
             rotate: false,
             revoked: false,
@@ -56,7 +54,6 @@ impl Identity {
             _ => None,
         };
         Some(Self {
-            endpoint: text("endpoint")?,
             credentials,
             rotate: state
                 .get("rotate")
@@ -82,7 +79,6 @@ impl Identity {
     pub fn save(&self, root: &Path) -> io::Result<()> {
         let credentials = self.credentials.as_ref();
         let state = json!({
-            "endpoint": self.endpoint,
             "machine": credentials.map(|credentials| &credentials.machine),
             "token": credentials.map(|credentials| &credentials.token),
             "rotate_after": credentials

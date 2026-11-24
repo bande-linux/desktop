@@ -122,7 +122,7 @@ pub fn diagnose(
         },
         spool_root,
     )?;
-    if send && config.has_server() {
+    if send {
         spool.queue_by_hand(&id)?;
     }
     Ok(id)

@@ -76,7 +76,7 @@ fn in_window(root: &Path, due: usize) -> bool {
 
 pub fn queue_if_due(spool: &Spool, config: &Config) {
     let due = due_days(spool.root()).len();
-    if !config.sends_automatically() || due == 0 || !in_window(spool.root(), due) {
+    if !config.send || due == 0 || !in_window(spool.root(), due) {
         return;
     }
     if let Err(error) = spool.queue_checkin() {

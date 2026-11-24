@@ -38,9 +38,8 @@ fn in_this_process(asked: &Asked) -> std::io::Result<Value> {
         &asked.description,
         asked.send,
     )?;
-    Ok(
-        json!({"ok": {"id": id, "queued": asked.send && config.has_server(), "text": text_of_report(&Spool::open(root)?, &id)?}}),
-    )
+    let text = text_of_report(&Spool::open(root)?, &id)?;
+    Ok(json!({"ok": {"id": id, "text": text}}))
 }
 
 fn saved_copy(id: &str, text: &str) -> std::io::Result<PathBuf> {
@@ -85,17 +84,15 @@ fn main() -> ExitCode {
     };
     let id = report.get("id").and_then(Value::as_str).unwrap_or_default();
     println!("report {id}");
-    if report.get("queued").and_then(Value::as_bool) == Some(true) {
+    if asked.send {
         println!("sending; it is known to the server by this id");
     } else if let Some(text) = report.get("text").and_then(Value::as_str) {
         match saved_copy(id, text) {
-            Ok(path) => println!("no server is configured; saved to {}", path.display()),
+            Ok(path) => println!("saved to {}", path.display()),
             Err(error) => eprintln!("cannot save a copy: {error}"),
         }
     } else {
-        println!(
-            "no server is configured; it stays in Settings ▸ Privacy & Security ▸ Diagnostics"
-        );
+        println!("it stays in Settings ▸ Privacy & Security ▸ Diagnostics");
     }
     ExitCode::SUCCESS
 }

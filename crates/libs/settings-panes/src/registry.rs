@@ -1940,19 +1940,17 @@ fn system_panes() -> Vec<Pane> {
         power_pane(),
         pane(
             PaneId::Users,
-            vec![
-                section(
-                    None,
-                    vec![list(
-                        SettingId::Accounts,
-                        tr!("Accounts"),
-                        tr!(
-                            "change password, password, administrator, standard, login name, picture, photo, full name, add user, new user, delete user, remove user"
-                        ),
-                        List::Accounts,
-                    )],
-                ),
-            ],
+            vec![section(
+                None,
+                vec![list(
+                    SettingId::Accounts,
+                    tr!("Accounts"),
+                    tr!(
+                        "change password, password, administrator, standard, login name, picture, photo, full name, add user, new user, delete user, remove user"
+                    ),
+                    List::Accounts,
+                )],
+            )],
         ),
         pane(
             PaneId::Passwords,

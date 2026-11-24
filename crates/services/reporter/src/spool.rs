@@ -38,7 +38,7 @@ pub struct Attachment {
     pub bytes: Vec<u8>,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Status {
     Local,
     Sent,

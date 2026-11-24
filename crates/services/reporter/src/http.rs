@@ -1,9 +1,6 @@
 use std::io;
-use std::path::Path;
 use std::time::Duration;
 
-use bande_https::ureq::config::ConfigBuilder;
-use bande_https::ureq::typestate::AgentScope;
 use bande_https::ureq::{self, Agent};
 use jiff::Timestamp;
 
@@ -12,23 +9,6 @@ const TRANSFER_TIMEOUT: Duration = Duration::from_secs(120);
 const APP: &str = "reporter";
 const BODY_LIMIT: u64 = 64 * 1024;
 const LONGEST_RETRY_AFTER: u64 = 24 * 60 * 60;
-
-pub struct Target {
-    host: String,
-    port: u16,
-}
-
-pub fn parse_endpoint(endpoint: &str) -> Option<Target> {
-    let authority = endpoint.strip_prefix("https://")?;
-    let (host, port) = match authority.rsplit_once(':') {
-        Some((host, port)) => (host, port.parse().ok()?),
-        None => (authority, 443),
-    };
-    (!host.is_empty() && !host.contains('/')).then(|| Target {
-        host: host.to_owned(),
-        port,
-    })
-}
 
 pub struct Answer {
     pub status: u16,
@@ -52,8 +32,7 @@ pub struct Request<'a> {
 
 pub struct Session {
     base: String,
-    pinned: Option<Agent>,
-    system: Agent,
+    agent: Agent,
 }
 
 fn retry_after(value: &str) -> Option<Duration> {
@@ -71,39 +50,22 @@ fn retry_after(value: &str) -> Option<Duration> {
     Some(Duration::from_secs(seconds.min(LONGEST_RETRY_AFTER)))
 }
 
-fn agent(config: ConfigBuilder<AgentScope>) -> Agent {
-    config
-        .https_only(true)
-        .http_status_as_error(false)
-        .allow_non_standard_methods(true)
-        .max_redirects(0)
-        .timeout_connect(Some(CONNECT_TIMEOUT))
-        .timeout_global(Some(TRANSFER_TIMEOUT))
-        .build()
-        .into()
-}
-
 impl Session {
-    pub fn new(target: Target, ca: Option<&Path>) -> Self {
-        let pinned = ca.and_then(|ca| {
-            bande_https::pinned_config(APP, ca)
-                .inspect_err(|error| {
-                    tracing::info!(
-                        "cannot read the pinned roots {}, so the system's roots decide: {error}",
-                        ca.display()
-                    );
-                })
-                .ok()
-                .map(agent)
-        });
+    pub fn new(server: &str) -> Self {
         Self {
-            base: format!("https://{}:{}", target.host, target.port),
-            pinned,
-            system: agent(bande_https::config(APP)),
+            base: server.to_owned(),
+            agent: bande_https::config(APP)
+                .http_status_as_error(false)
+                .allow_non_standard_methods(true)
+                .max_redirects(0)
+                .timeout_connect(Some(CONNECT_TIMEOUT))
+                .timeout_global(Some(TRANSFER_TIMEOUT))
+                .build()
+                .into(),
         }
     }
 
-    fn exchange(&self, agent: &Agent, request: &Request) -> Result<Answer, ureq::Error> {
+    fn exchange(&self, request: &Request) -> Result<Answer, ureq::Error> {
         let mut builder = ureq::http::Request::builder()
             .method(request.method)
             .uri(format!("{}{}", self.base, request.path));
@@ -113,7 +75,7 @@ impl Session {
         for (name, value) in request.headers {
             builder = builder.header(*name, *value);
         }
-        let mut response = agent.run(builder.body(request.body.to_vec())?)?;
+        let mut response = self.agent.run(builder.body(request.body.to_vec())?)?;
         let retry_after = response
             .headers()
             .get("Retry-After")
@@ -131,20 +93,7 @@ impl Session {
         })
     }
 
-    pub fn send(&mut self, request: &Request) -> io::Result<Answer> {
-        let answer = match &self.pinned {
-            Some(pinned) => match self.exchange(pinned, request) {
-                Err(error) if bande_https::untrusted(&error) => {
-                    tracing::info!(
-                        "the report server's certificate is not from the pinned roots, so the system's roots decide: {error}"
-                    );
-                    self.pinned = None;
-                    self.exchange(&self.system, request)
-                }
-                answered => answered,
-            },
-            None => self.exchange(&self.system, request),
-        };
-        answer.map_err(ureq::Error::into_io)
+    pub fn send(&self, request: &Request) -> io::Result<Answer> {
+        self.exchange(request).map_err(ureq::Error::into_io)
     }
 }

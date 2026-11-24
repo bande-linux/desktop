@@ -1886,11 +1886,13 @@ dependencies = [
  "bande-notifications",
  "bande-protocols",
  "bande-quick-settings",
+ "bande-search",
  "bande-status",
  "bande-test-bus",
  "bande-test-wayland",
  "bande-toolkit",
  "bande-xdg",
+ "smithay",
  "tracing",
  "zbus",
 ]

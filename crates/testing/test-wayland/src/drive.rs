@@ -47,7 +47,7 @@ impl TestClient {
 
 pub struct Frames {
     renderer: Renderer,
-    scheduler: FrameScheduler,
+    schedulers: Vec<FrameScheduler>,
     start: Instant,
 }
 
@@ -55,9 +55,18 @@ impl Frames {
     pub fn start() -> Self {
         Self {
             renderer: Renderer::new().expect("Vulkan renderer"),
-            scheduler: FrameScheduler::new(FrameClock::new(Duration::ZERO, REFRESH)),
+            schedulers: vec![FrameScheduler::new(FrameClock::new(
+                Duration::ZERO,
+                REFRESH,
+            ))],
             start: Instant::now(),
         }
+    }
+
+    pub fn add_output(&mut self, output: &str) {
+        let clock = FrameClock::new(Duration::ZERO, REFRESH);
+        self.schedulers
+            .push(FrameScheduler::for_output(clock, output));
     }
 
     pub fn rendered(&self) -> u64 {
@@ -70,15 +79,23 @@ impl Frames {
             .expect("snapshot of the output")
     }
 
+    pub fn snapshot_output(&mut self, output: &str) -> Snapshot {
+        self.renderer
+            .snapshot_output(output)
+            .expect("snapshot of the output")
+    }
+
     pub fn now(&self) -> Duration {
         self.start.elapsed()
     }
 
     pub fn draw_at(&mut self, server: &mut Compositor, time: Duration) {
         server.dispatch().expect("server dispatch");
-        self.scheduler
-            .poll(|| time, server, &mut self.renderer)
-            .expect("compositor frame");
+        for scheduler in &mut self.schedulers {
+            scheduler
+                .poll(|| time, server, &mut self.renderer)
+                .expect("compositor frame");
+        }
     }
 
     pub fn run_until(&mut self, server: &mut Compositor, mut done: impl FnMut() -> bool) {
@@ -86,10 +103,7 @@ impl Frames {
         let start = self.start;
         while !done() {
             assert!(Instant::now() < deadline, "waited in vain");
-            server.dispatch().expect("server dispatch");
-            self.scheduler
-                .poll(|| start.elapsed(), server, &mut self.renderer)
-                .expect("compositor frame");
+            self.draw_at(server, start.elapsed());
             thread::sleep(Duration::from_millis(1));
         }
     }

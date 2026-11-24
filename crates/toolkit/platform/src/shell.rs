@@ -194,8 +194,13 @@ impl Window {
         self.flush()
     }
 
-    pub fn show_launcher(&mut self) -> Result<(), WindowError> {
-        self.shell()?.show_launcher();
+    /// The serial of the last press, key or release delivered to this window.
+    pub fn input_serial(&self) -> Option<u32> {
+        self.state.input.serial
+    }
+
+    pub fn show_launcher(&mut self, pressed: Option<u32>) -> Result<(), WindowError> {
+        self.shell()?.show_launcher(pressed.unwrap_or_default());
         self.flush()
     }
 
@@ -542,10 +547,16 @@ impl Dispatch<BandeShellV1, ()> for State {
     ) {
         match event {
             bande_shell_v1::Event::Ping { serial } => shell.pong(serial),
-            bande_shell_v1::Event::ShowLauncher => state.events.push(WindowEvent::ShowLauncher),
-            bande_shell_v1::Event::PressedOutside { surface } => {
+            bande_shell_v1::Event::ShowLauncher { serial } => {
+                state
+                    .events
+                    .push(WindowEvent::ShowLauncher { pressed: serial });
+            }
+            bande_shell_v1::Event::PressedOutside { surface, serial } => {
                 if state.own_surface.as_ref() == Some(&surface) {
-                    state.events.push(WindowEvent::PressedOutside);
+                    state
+                        .events
+                        .push(WindowEvent::PressedOutside { pressed: serial });
                 }
             }
             bande_shell_v1::Event::OpenLauncher {

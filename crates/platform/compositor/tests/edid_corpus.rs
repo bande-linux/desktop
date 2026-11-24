@@ -5,7 +5,7 @@ use bande_colour::{Profile, conversion, inverse};
 use bande_compositor::{edid_profile, refresh_of, sorted_modes};
 use bande_edid::{Edid, Primaries, display_name, identity, parse};
 use drm_ffi::{DRM_MODE_FLAG_INTERLACE, DRM_MODE_TYPE_DRIVER, DRM_MODE_TYPE_PREFERRED};
-use smithay::reexports::drm::control::Mode;
+use smithay::reexports::drm::control::{Mode, ModeFlags};
 
 const BLOCK: usize = 128;
 const DESCRIPTOR: usize = 18;
@@ -268,11 +268,15 @@ fn check_profile(edid: &Edid, profile: &Profile) -> Result<(), String> {
 }
 
 fn check_modes(bytes: &[u8]) -> Result<bool, String> {
-    let modes = detailed_modes(bytes);
+    let mut modes = detailed_modes(bytes);
+    let whole = |mode: &Mode| !mode.flags().contains(ModeFlags::INTERLACE);
+    if modes.iter().any(whole) {
+        modes.retain(whole);
+    }
     let Some(preferred) = modes.first() else {
         return Ok(false);
     };
-    let sorted = sorted_modes(&modes);
+    let sorted = sorted_modes(&detailed_modes(bytes));
     let chosen = sorted.first().ok_or("no mode left")?;
     if chosen.size() != preferred.size() {
         return Err(format!(

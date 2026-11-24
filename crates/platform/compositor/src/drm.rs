@@ -26,7 +26,7 @@ use smithay::reexports::calloop::generic::Generic;
 use smithay::reexports::calloop::{EventLoop, Interest, Mode as Trigger, PostAction};
 use smithay::reexports::drm::control::atomic::AtomicModeReq;
 use smithay::reexports::drm::control::{
-    AtomicCommitFlags, Device as ControlDevice, Mode, ModeTypeFlags, connector, crtc, framebuffer, property,
+    AtomicCommitFlags, Device as ControlDevice, Mode, ModeFlags, ModeTypeFlags, connector, crtc, framebuffer, property,
 };
 use smithay::reexports::input::Libinput;
 use smithay::reexports::rustix::fs::OFlags;
@@ -39,6 +39,7 @@ use bande_render::{RenderError, VulkanRenderer};
 use crate::boot_screen::boot_screen_shown;
 use crate::clock::{FrameOutput, Submission, Vblank};
 use crate::element::drawing_everything;
+use crate::output_format;
 use crate::render::{Snapshot, background};
 use crate::reveal::ShownFrame;
 use crate::scanout::{ScanoutAllocator, ScanoutExporter};
@@ -54,7 +55,6 @@ type OutputCompositor = DrmCompositor<ScanoutAllocator, ScanoutExporter, (), Drm
 const DRM_IOCTL_MODE_CLOSEFB: libc::c_ulong = 0xC008_64D0;
 const DRM_IOCTL_MODE_MAP_DUMB: libc::c_ulong = 0xC010_64B3;
 const CURSOR_SIZE: (u32, u32) = (64, 64);
-const COLOR_FORMATS: [Fourcc; 2] = [Fourcc::Xrgb8888, Fourcc::Argb8888];
 
 struct Head {
     connector: connector::Handle,
@@ -74,6 +74,8 @@ struct Head {
     refused: bool,
     kept_mode: Option<Mode>,
     display_profile: Option<Profile>,
+    depth: Option<u8>,
+    too_deep_for: Option<Mode>,
     output_colour: Option<(Option<String>, Option<OutputColour>)>,
     shown_colour: Option<OutputColour>,
 }
@@ -159,6 +161,7 @@ pub struct HeadChanges {
     pub look_again_in: Option<Duration>,
 }
 
+const MAX_BPC: &[u8] = b"max bpc";
 const LINK_STATUS: &[u8] = b"link-status";
 const LINK_GOOD: u64 = 0;
 const LINK_BAD: u64 = 1;
@@ -180,12 +183,42 @@ fn rescanned(present: bool, another_display: bool, lost_for: Duration) -> Rescan
     }
 }
 
-fn link_status(device: &DrmDevice, handle: connector::Handle) -> Option<(property::Handle, u64)> {
+fn connector_property(
+    device: &DrmDevice,
+    handle: connector::Handle,
+    name: &[u8],
+) -> Option<(property::Handle, u64, property::Info)> {
     let properties = device.get_properties(handle).ok()?;
     properties.iter().find_map(|(property, value)| {
         let info = device.get_property(*property).ok()?;
-        (info.name().to_bytes() == LINK_STATUS).then_some((*property, *value))
+        (info.name().to_bytes() == name).then_some((*property, *value, info))
     })
+}
+
+fn link_status(device: &DrmDevice, handle: connector::Handle) -> Option<(property::Handle, u64)> {
+    connector_property(device, handle, LINK_STATUS).map(|(property, value, _)| (property, value))
+}
+
+fn raise_bits_per_channel(
+    device: &DrmDevice,
+    handle: connector::Handle,
+    (name, wanted): (&str, u64),
+) {
+    let Some((property, value, info)) = connector_property(device, handle, MAX_BPC) else {
+        return;
+    };
+    let property::ValueType::UnsignedRange(lowest, highest) = info.value_type() else {
+        return;
+    };
+    let Some(raised) = output_format::raised(value, (lowest, highest), wanted) else {
+        return;
+    };
+    let mut request = AtomicModeReq::new();
+    request.add_property(handle, property, property::Value::UnsignedRange(raised));
+    match device.atomic_commit(AtomicCommitFlags::ALLOW_MODESET, request) {
+        Ok(()) => tracing::info!("{name} may get up to {raised} bits per channel, not {value}"),
+        Err(error) => tracing::warn!("{name} stays at {value} bits per channel: {error}"),
+    }
 }
 
 fn relink(device: &DrmDevice, head: &mut Head) {
@@ -213,7 +246,13 @@ pub fn refresh_of(mode: &Mode) -> Duration {
     if pixels_per_frame == 0 || kilohertz == 0 {
         return REFRESH;
     }
-    Duration::from_nanos(pixels_per_frame * 1_000_000 / kilohertz)
+    let frame = pixels_per_frame * 1_000_000 / kilohertz;
+    let frame = frame * u64::from(mode.vscan()).max(1);
+    Duration::from_nanos(match mode.flags() {
+        flags if flags.contains(ModeFlags::INTERLACE) => frame / 2,
+        flags if flags.contains(ModeFlags::DBLSCAN) => frame * 2,
+        _ => frame,
+    })
 }
 
 fn output_mode(mode: &Mode) -> OutputMode {
@@ -230,6 +269,10 @@ fn connector_name(info: &connector::Info) -> String {
 
 pub fn sorted_modes(modes: &[Mode]) -> Vec<Mode> {
     let mut modes = modes.to_vec();
+    let whole = |mode: &Mode| !mode.flags().contains(ModeFlags::INTERLACE);
+    if modes.iter().any(whole) {
+        modes.retain(whole);
+    }
     let preferred = modes
         .iter()
         .find(|mode| mode.mode_type().contains(ModeTypeFlags::PREFERRED))
@@ -566,7 +609,7 @@ impl DrmBackend {
         crtc: crtc::Handle,
         mode: Mode,
         connector: connector::Handle,
-        buffers: Buffers,
+        (buffers, depth): (Buffers, Option<u8>),
     ) -> Result<OutputCompositor, DrmBackendError> {
         let surface = self.device.create_surface(crtc, mode, &[connector])?;
         let allocator = match (&self.gbm, buffers) {
@@ -597,7 +640,7 @@ impl DrmBackend {
             None,
             allocator,
             ScanoutExporter::new(self.gbm.clone(), self.node),
-            COLOR_FORMATS,
+            output_format::formats(depth.filter(|_| buffers == Buffers::Tiled)),
             render_formats,
             Size::from(CURSOR_SIZE),
             self.gbm.clone(),
@@ -619,12 +662,12 @@ impl DrmBackend {
     fn buffered_compositor(
         &mut self,
         (crtc, mode, connector): (crtc::Handle, Mode, connector::Handle),
-        mut buffers: Buffers,
+        (mut buffers, depth): (Buffers, Option<u8>),
         name: &str,
     ) -> Result<(OutputCompositor, Buffers), DrmBackendError> {
         loop {
             match (
-                self.output_compositor(crtc, mode, connector, buffers),
+                self.output_compositor(crtc, mode, connector, (buffers, depth)),
                 buffers.next(),
             ) {
                 (Ok(compositor), _) => return Ok((compositor, buffers)),
@@ -668,11 +711,23 @@ impl DrmBackend {
         ) else {
             return Ok(None);
         };
+        let edid = edid_of(&self.device, info.handle());
+        let depth = edid
+            .as_ref()
+            .and_then(|edid| edid.depth)
+            .filter(|_| !self.renderer.device_info().software);
         let (compositor, buffers) = self.buffered_compositor(
             (crtc, mode, info.handle()),
-            self.first_buffers(),
+            (self.first_buffers(), depth),
             &connector_name(info),
         )?;
+        let wanted = output_format::bits(compositor.format());
+        raise_bits_per_channel(&self.device, info.handle(), (&connector_name(info), wanted));
+        tracing::info!(
+            "{} shows {:?} frames, its display takes {depth:?} bits per channel",
+            connector_name(info),
+            compositor.format()
+        );
         let scanout_formats = compositor.surface().plane_info().formats.clone();
         let variable_refresh = matches!(
             compositor.vrr_supported(info.handle()),
@@ -698,9 +753,9 @@ impl DrmBackend {
             shows_content: false,
             refused: false,
             kept_mode,
-            display_profile: edid_of(&self.device, info.handle())
-                .as_ref()
-                .and_then(crate::colour::edid_profile),
+            display_profile: edid.as_ref().and_then(crate::colour::edid_profile),
+            depth,
+            too_deep_for: None,
             output_colour: None,
             shown_colour: None,
         }))
@@ -1369,17 +1424,18 @@ impl DrmBackend {
         let restore = head.buffers;
         drop(head.compositor);
         let target = (crtc, mode, head.connector);
-        let (compositor, buffers) = match self.buffered_compositor(target, next, &head.config.name)
-        {
-            Ok(found) => found,
-            Err(error) => {
-                tracing::warn!("{} cannot fall back: {error}", head.config.name);
-                (
-                    self.output_compositor(crtc, mode, head.connector, restore)?,
-                    restore,
-                )
-            }
-        };
+        let depth = head.depth.filter(|_| head.too_deep_for.is_none());
+        let (compositor, buffers) =
+            match self.buffered_compositor(target, (next, depth), &head.config.name) {
+                Ok(found) => found,
+                Err(error) => {
+                    tracing::warn!("{} cannot fall back: {error}", head.config.name);
+                    (
+                        self.output_compositor(crtc, mode, head.connector, (restore, None))?,
+                        restore,
+                    )
+                }
+            };
         self.heads.insert(
             index,
             Head {
@@ -1466,6 +1522,15 @@ impl DrmBackend {
         {
             refuse_mode(head, mode, compositor);
             return Ok(after_refusal(head));
+        }
+        if head
+            .too_deep_for
+            .is_some_and(|mode| mode != head.compositor.pending_mode())
+        {
+            head.too_deep_for = None;
+            let buffers = head.buffers;
+            self.fall_back(index, buffers)?;
+            return Ok(Submission::Unchanged);
         }
         head.compositor
             .set_output_mode_source(OutputModeSource::Static {
@@ -1572,6 +1637,13 @@ impl DrmBackend {
             }
             Err(FrameError::DrmError(DrmError::TestFailed(_))) => {
                 let refused = head.compositor.pending_mode();
+                if output_format::is_deep(head.compositor.format()) {
+                    tracing::warn!("{output} shows 8 bits per channel in this mode");
+                    head.too_deep_for = Some(refused);
+                    let buffers = head.buffers;
+                    self.fall_back(index, buffers)?;
+                    return Ok(Submission::Unchanged);
+                }
                 refuse_mode(head, refused, compositor);
                 Ok(after_refusal(head))
             }

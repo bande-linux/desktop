@@ -198,7 +198,14 @@ when they reach the screen is Bande's own.
   the link bad and costs a second mode-set) moves nothing. A mode is tested with the driver before
   it is used. A refused mode falls back to the next that passes, nearest size first, without
   touching the saved settings; with none left the display waits for the next change event. The link
-  is set good again in the frame path, after any pending flip. A display is named by its EDID
+  is set good again in the frame path, after any pending flip. A display whose EDID states ten or
+  more bits per channel (base block, HDMI block or DisplayID parameters) is given 10-bit tiled
+  buffers when the plane and the GPU share them and a test commit in the chosen mode takes them,
+  8-bit ones otherwise (`output_format.rs`); a mode that refuses them later keeps its refresh and
+  shows 8 bits until the mode changes. `max bpc` is only raised, to the bits of the buffers, as
+  some drivers start at 8 and the kernel lowers the link by itself when it cannot carry the mode;
+  what the link ends up sending cannot be read back. Interlaced modes are left out when the display
+  has others. A display is named by its EDID
   (maker from the PNP id, model and serial from the descriptors without control characters,
   falling back to the product code and
   serial number; two displays with the same name are told apart by their connector). A fullscreen

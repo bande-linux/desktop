@@ -469,6 +469,44 @@ fn every_request_is_answered_once_and_cancelling_does_not_wait_for_pam() {
 }
 
 #[test]
+fn what_pam_says_last_does_not_hide_how_signing_in_ended() {
+    let acknowledged = Request::PostAuthMessageResponse { response: None };
+    for (ended, expected) in [
+        (FromWorker::Authenticated, Response::Success),
+        (
+            FromWorker::Failed {
+                error_type: ErrorType::AuthError,
+                description: "pam_authenticate: AUTH_ERR".to_owned(),
+            },
+            Response::error(ErrorType::AuthError, "pam_authenticate: AUTH_ERR"),
+        ),
+    ] {
+        let mut manager = Manager::default();
+        manager.start();
+        tried(&mut manager, ADA, at(0));
+        for text in ["Your password expires in 3 days", "Change it soon"] {
+            let said = FromWorker::Show {
+                text: text.to_owned(),
+                error: false,
+            };
+            manager.worker_said(ADA, said, at(1));
+        }
+        assert!(manager.worker_said(ADA, ended, at(1)).is_empty());
+        assert_eq!(
+            manager.request(acknowledged.clone(), at(2)),
+            vec![Action::Reply(Response::AuthMessage {
+                auth_message_type: AuthMessageType::Info,
+                auth_message: "Change it soon".to_owned(),
+            })]
+        );
+        assert_eq!(
+            manager.request(acknowledged.clone(), at(2)),
+            vec![Action::Reply(expected)]
+        );
+    }
+}
+
+#[test]
 fn a_session_called_off_while_starting_gives_the_screen_back_once_it_has_ended() {
     let mut manager = Manager::default();
     signed_in(&mut manager);

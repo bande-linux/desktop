@@ -295,16 +295,41 @@ impl Daemon {
         }
     }
 
+    fn last_words(&mut self, id: WorkerId) -> Vec<Action> {
+        let mut actions = Vec::new();
+        while let Some(socket) = self
+            .workers
+            .get(&id)
+            .and_then(|worker| worker.socket.as_ref())
+        {
+            match poll(
+                &mut [PollFd::new(socket, PollFlags::IN)],
+                Some(&Timespec::default()),
+            ) {
+                Ok(0) => break,
+                Ok(_) => actions.extend(self.hear_worker(id)),
+                Err(rustix::io::Errno::INTR) => {}
+                Err(error) => {
+                    tracing::warn!("cannot hear session worker {id} out: {error}");
+                    break;
+                }
+            }
+        }
+        actions
+    }
+
     fn reap(&mut self, id: WorkerId) -> Vec<Action> {
+        let mut actions = self.last_words(id);
         let Some(mut worker) = self.workers.remove(&id) else {
-            return Vec::new();
+            return actions;
         };
         match worker.child.wait() {
             Ok(status) if status.success() => {}
             Ok(status) => tracing::info!("session worker {id} ended: {status}"),
             Err(error) => tracing::warn!("cannot reap session worker {id}: {error}"),
         }
-        self.manager.worker_ended(id, Instant::now())
+        actions.extend(self.manager.worker_ended(id, Instant::now()));
+        actions
     }
 
     fn act(&mut self, actions: Vec<Action>) {

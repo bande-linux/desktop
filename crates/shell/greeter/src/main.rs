@@ -377,11 +377,15 @@ impl Greeter {
     fn unavailable(&mut self, error: &std::io::Error) {
         tracing::warn!("bande-login: {error}");
         self.daemon = None;
+        let left = self.leaving || self.screen.has_left();
         self.leaving = false;
         self.login = None;
         self.unanswered = Unanswered::default();
         self.next = None;
         self.asked = false;
+        if left {
+            self.rebuild_screen();
+        }
         self.screen.ask(None);
         self.screen
             .refuse(Refusal::Unavailable, frame_time().on_screen());

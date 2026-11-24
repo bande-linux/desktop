@@ -198,6 +198,9 @@ impl Manager {
             .as_mut()
             .filter(|login| login.phase == Phase::Authenticating)
         else {
+            if !self.queued.is_empty() {
+                return self.await_worker();
+            }
             return vec![Action::Reply(Response::error(
                 ErrorType::Error,
                 "nothing was asked",

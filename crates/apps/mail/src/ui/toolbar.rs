@@ -244,14 +244,28 @@ impl MailView {
         self.symbol_button(symbol, &label, Signal::Direction)
     }
 
+    fn search_field(&self) -> SearchField {
+        let send = sender(&self.signals);
+        SearchField::new(&tr!("Search"), &self.search, move |text| {
+            send(Signal::Search(text.to_owned()));
+        })
+    }
+
+    pub(crate) fn clear_list_controls(&mut self) {
+        let (filter, old) = (self.toolbar.filter, self.toolbar.search);
+        self.ui
+            .update_widget::<SegmentedControl>(filter, |control, cx| control.set_selected(cx, 0));
+        let search = self.search_field();
+        if let Some(id) = self.host_mut().and_then(|host| host.replace(old, search)) {
+            self.toolbar.search = id;
+        }
+    }
+
     pub(crate) fn insert_toolbar(&mut self) {
         let labelled = self.compose_labelled();
         let ascending = self.settings.ascending;
         let compose = self.compose_button(labelled);
-        let send = sender(&self.signals);
-        let search = SearchField::new(&tr!("Search"), &self.search, move |text| {
-            send(Signal::Search(text.to_owned()));
-        });
+        let search = self.search_field();
         let send = sender(&self.signals);
         let filters = [tr!("All"), tr!("Unread"), tr!("Flagged")];
         let chosen = Filter::ALL.iter().position(|filter| *filter == self.filter);
@@ -503,6 +517,13 @@ impl MailView {
             false => Rect::default(),
         };
         frames.push((toolbar.reply_field, reply));
+        if let Some(panel) = self.overlay_panel() {
+            for (_, frame) in &mut frames {
+                if frame.y >= panel.y && frame.x < panel.x + panel.width {
+                    *frame = Rect::default();
+                }
+            }
+        }
         let foot = self.sidebar_foot_frame();
         if foot.width <= 0.0 {
             frames.extend([

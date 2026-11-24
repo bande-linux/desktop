@@ -743,6 +743,7 @@ impl NotesView {
                 if let Err(error) = described {
                     tracing::warn!("cannot describe {email}: {error}");
                 }
+                self.requests.push(Request::Accounts(None));
             }
             Done::Renewed { email, password } => self.renew_password(&email, password),
             Done::ServerSettings => self.close_setup(),

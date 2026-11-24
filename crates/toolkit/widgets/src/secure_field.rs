@@ -437,10 +437,14 @@ impl Widget for SecureField {
         if !self.placeholder.is_empty() {
             node.set_label(self.placeholder.clone());
         }
-        if cx.caps_lock && cx.is_focused(self.id) {
-            node.set_description(tr!("Caps Lock is on"));
-        }
         self.naming.apply(&mut node);
+        if cx.caps_lock && cx.is_focused(self.id) {
+            let caps_lock = tr!("Caps Lock is on");
+            node.set_description(match node.description() {
+                Some(problem) => format!("{problem}\n{caps_lock}"),
+                None => caps_lock,
+            });
+        }
         node.add_action(Action::Focus);
         node.add_action(Action::SetValue);
         node

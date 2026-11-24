@@ -79,9 +79,6 @@ msgstr "Det här kontot är redan tillagt."
 msgid "Enter your password."
 msgstr "Ange ditt lösenord."
 
-msgid "Enter the server name."
-msgstr "Ange servernamnet."
-
 msgid "Mail for {domain} is handled by servers outside that domain. Sign in there only if they belong to your mail provider."
 msgstr "E-post för {domain} hanteras av servrar utanför den domänen. Logga bara in där om de tillhör din e-postleverantör."
 
@@ -243,6 +240,12 @@ msgstr "Servern godtog inte lösenordet för {email}."
 
 msgid "Mail works with any provider that offers IMAP and SMTP."
 msgstr "E-post fungerar med alla leverantörer som erbjuder IMAP och SMTP."
+
+msgid "Enter the server name."
+msgstr "Ange servernamnet."
+
+msgid "Enter a port number from 1 to 65535."
+msgstr "Ange ett portnummer från 1 till 65535."
 
 msgid "Security"
 msgstr "Säkerhet"

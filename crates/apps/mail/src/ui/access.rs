@@ -10,7 +10,7 @@ use crate::store::Summary;
 use crate::ui::format::list_date;
 use crate::ui::reader::Target;
 use crate::ui::sidebar::Row;
-use crate::ui::view::{Hit, MailView, Pane};
+use crate::ui::view::{Hit, MailView, Pane, Panes};
 use jiff::Timestamp;
 
 const KIND_SHIFT: u32 = 28;
@@ -381,6 +381,9 @@ impl MailView {
                     self.select(id);
                 }
                 self.focus = Pane::List;
+                if request.action == Action::Click && self.panes() == Panes::One {
+                    self.single_reader = true;
+                }
             }
             Part::Conversation(index) => {
                 let id = self.messages.get(index)?.id;

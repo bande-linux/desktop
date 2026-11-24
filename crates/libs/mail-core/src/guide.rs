@@ -248,6 +248,13 @@ impl Guide {
         self.state.borrow_mut().action = None;
     }
 
+    fn clear(&self) {
+        let mut state = self.state.borrow_mut();
+        state.lines.clear();
+        state.problem = None;
+        state.status = None;
+    }
+
     fn problem(&self, field: Field, text: String) {
         let mut state = self.state.borrow_mut();
         state.problem = Some((field, text));
@@ -293,11 +300,7 @@ impl Guide {
             (Action::Cancel, Mode::Confirm(_) | Mode::Servers)
                 if matches!(self.host, Host::Inline(_)) =>
             {
-                let mut state = self.state.borrow_mut();
-                state.lines.clear();
-                state.problem = None;
-                state.status = None;
-                drop(state);
+                self.clear();
                 self.show(ui, Mode::Address);
                 None
             }
@@ -334,13 +337,12 @@ impl Guide {
                 Some(Done::Renewed { email, password })
             }
             (Action::Other, Mode::Address | Mode::Confirm(_)) => {
-                self.state.borrow_mut().problem = None;
+                self.clear();
                 self.show(ui, Mode::Servers);
                 None
             }
             (Action::Other, Mode::Servers) => {
-                self.state.borrow_mut().problem = None;
-                self.state.borrow_mut().status = None;
+                self.clear();
                 self.show(ui, Mode::Address);
                 None
             }
@@ -383,25 +385,20 @@ impl Guide {
 
     fn sign_in(&mut self, ui: &mut Ui) {
         let servers = self.state.borrow().servers();
-        let problem = match &servers {
-            None => {
-                let state = self.state.borrow();
-                let field = match state.value(Field::Incoming).is_empty() {
-                    true => Field::Incoming,
-                    false => Field::Outgoing,
-                };
-                Some((field, tr!("Enter the server name.")))
+        let checked = servers.and_then(|servers| match self.address_problem() {
+            Some(problem) => Err(problem),
+            None => Ok(servers),
+        });
+        let servers = match checked {
+            Ok(servers) => servers,
+            Err(problem) => {
+                let mut state = self.state.borrow_mut();
+                state.lines.clear();
+                state.problem = Some(problem);
+                drop(state);
+                self.show(ui, Mode::Servers);
+                return;
             }
-            Some(_) => self.address_problem(),
-        };
-        let Some(servers) = servers.filter(|_| problem.is_none()) else {
-            self.state.borrow_mut().problem = problem;
-            let back = match self.mode {
-                Mode::Confirm(_) | Mode::Checking => Mode::Servers,
-                ref mode => mode.clone(),
-            };
-            self.show(ui, back);
-            return;
         };
         {
             let mut state = self.state.borrow_mut();

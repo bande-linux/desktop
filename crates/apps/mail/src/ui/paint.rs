@@ -103,6 +103,28 @@ impl MailView {
         )
     }
 
+    pub(crate) fn overlay_panel(&self) -> Option<Rect> {
+        let frame = self.sidebar_frame();
+        (self.slid > 0.0 && self.panes() != Panes::Three).then(|| {
+            Rect::new(
+                frame.x,
+                frame.y,
+                frame.width,
+                frame.height + SIDEBAR_FOOT_HEIGHT,
+            )
+        })
+    }
+
+    fn cover_hits(&mut self, panel: Rect) {
+        let edge = panel.x + panel.width;
+        self.hits.retain_mut(|(rect, _)| {
+            let hidden = (edge - rect.x).max(0.0);
+            rect.x += hidden;
+            rect.width -= hidden;
+            rect.width > 0.0
+        });
+    }
+
     pub(crate) fn list_header_frame(&self) -> Rect {
         let sheet = self.sheet_frame();
         let width = match (self.panes(), self.single_reader) {
@@ -229,8 +251,8 @@ impl MailView {
                 items,
             };
         }
-        let overlay = self.slid > 0.0 && self.panes() != Panes::Three;
-        if !overlay {
+        let overlay = self.overlay_panel();
+        if overlay.is_none() {
             self.paint_sidebar(&mut items);
         }
         let sheet_frame = self.sheet_frame();
@@ -246,14 +268,8 @@ impl MailView {
             shape: Shape::rounded(sheet_frame, radius),
             items: content,
         });
-        if overlay {
-            let frame = self.sidebar_frame();
-            let panel = Rect::new(
-                frame.x,
-                frame.y,
-                frame.width,
-                frame.height + SIDEBAR_FOOT_HEIGHT,
-            );
+        if let Some(panel) = overlay {
+            self.cover_hits(panel);
             items.extend(Item::shadows(
                 Shape::rect(panel),
                 Elevation::Overlay,

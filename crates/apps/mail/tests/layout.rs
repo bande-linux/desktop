@@ -3,8 +3,8 @@
 use std::path::Path;
 use std::time::Instant;
 
-use accesskit::{Node, Role};
-use bande_mail::imap::{Fetched, Folder, Role as Kind};
+use accesskit::{Action, ActionRequest, Node, Role, TreeId};
+use bande_mail::imap::{Fetched, Flag, Folder, Role as Kind};
 use bande_mail::net::{Security, Server};
 use bande_mail::settings::MailSettings;
 use bande_mail::store::{Account, Store};
@@ -120,6 +120,10 @@ fn every_pane_keeps_clear_of_the_window_buttons_and_the_list_acts_by_swipe_and_k
                     named(&view, "Mailboxes").is_some(),
                     "the sidebar slides over"
                 );
+                assert!(
+                    named(&view, "Sort by").is_none(),
+                    "nothing under the sidebar shows through"
+                );
                 press(&mut view, Key::Escape, false);
                 view.scene(width, 800);
                 assert!(named(&view, "Mailboxes").is_none(), "Escape closes it");
@@ -196,8 +200,29 @@ fn every_pane_keeps_clear_of_the_window_buttons_and_the_list_acts_by_swipe_and_k
     press(&mut view, Key::Character('z'), true);
     assert_eq!(view.messages().len(), 2, "Ctrl+Z brings it back");
 
+    let ids = view.messages().iter().map(|summary| summary.id);
+    let ids = ids.collect::<Vec<_>>();
+    store.set_flag(&ids, Flag::Seen, false).unwrap();
+    let (unread, _) = view
+        .accessibility()
+        .nodes
+        .into_iter()
+        .find(|(_, node)| node.role() == Role::RadioButton && node.label() == Some("Unread"))
+        .unwrap();
+    view.perform(&ActionRequest {
+        action: Action::Click,
+        target_tree: TreeId::ROOT,
+        target_node: unread,
+        data: None,
+    });
+    press(&mut view, Key::Escape, false);
+    press(&mut view, Key::Character('k'), false);
+    view.reload();
+    assert_eq!(view.messages().len(), 2, "the message being read stays");
     press(&mut view, Key::Character('j'), false);
     assert!(view.selected().is_some(), "J chooses the next message");
+    view.reload();
+    assert_eq!(view.messages().len(), 1, "the one read before it goes");
     press(&mut view, Key::Character('v'), false);
     let finder = view
         .take_requests()

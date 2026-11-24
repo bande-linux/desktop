@@ -202,11 +202,28 @@ pub enum Filter {
 impl Filter {
     pub const ALL: [Self; 3] = [Self::All, Self::Unread, Self::Flagged];
 
-    fn condition(self) -> &'static str {
+    fn condition(self) -> Option<&'static str> {
         match self {
-            Self::All => "",
-            Self::Unread => " AND m.seen = 0",
-            Self::Flagged => " AND m.flagged = 1",
+            Self::All => None,
+            Self::Unread => Some("m.seen = 0"),
+            Self::Flagged => Some("m.flagged = 1"),
+        }
+    }
+}
+
+/// What a listing shows: the messages of `filter`, and `kept` also once it no longer matches.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Shown {
+    pub filter: Filter,
+    pub kept: Option<MessageId>,
+}
+
+impl Shown {
+    fn condition(self) -> String {
+        match (self.filter.condition(), self.kept) {
+            (None, _) => String::new(),
+            (Some(matching), None) => format!(" AND {matching}"),
+            (Some(matching), Some(kept)) => format!(" AND ({matching} OR m.id = {kept})"),
         }
     }
 }
@@ -906,14 +923,21 @@ impl Store {
     }
 
     pub fn summaries(&self, scope: &Scope, search: &str) -> Result<Vec<Summary>> {
-        self.listing(scope, search, Filter::All, SortBy::Date, false, usize::MAX)
+        self.listing(
+            scope,
+            search,
+            Shown::default(),
+            SortBy::Date,
+            false,
+            usize::MAX,
+        )
     }
 
     pub fn listing(
         &self,
         scope: &Scope,
         search: &str,
-        shown: Filter,
+        shown: Shown,
         sort: SortBy,
         ascending: bool,
         limit: usize,

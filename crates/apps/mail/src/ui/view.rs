@@ -16,7 +16,7 @@ use crate::message::{Address, Content, Envelope, parse_addresses};
 use crate::net::Network;
 use crate::settings::{MailSettings, MarkRead, SortBy};
 use crate::store::{
-    Account, AccountId, Filter, Mailbox, MailboxId, MessageId, RuleAction, Store, Summary,
+    Account, AccountId, Filter, Mailbox, MailboxId, MessageId, RuleAction, Shown, Store, Summary,
 };
 use crate::ui::Mode;
 use crate::ui::compose_view::attachable;
@@ -712,7 +712,7 @@ impl MailView {
     }
 
     fn edge_at(&self, at: Point) -> Option<Edge> {
-        if at.y < TOOLBAR_HEIGHT || self.panes() == Panes::One {
+        if at.y < TOOLBAR_HEIGHT || self.panes() == Panes::One || self.overlay_panel().is_some() {
             return None;
         }
         let near = |x: f32| (at.x - x).abs() <= EDGE_GRAB;
@@ -934,6 +934,10 @@ impl MailView {
     }
 
     pub fn reload(&mut self) {
+        self.list(self.selected);
+    }
+
+    fn list(&mut self, kept: Option<MessageId>) {
         self.refresh_sidebar();
         let exists = match &self.place {
             Place::Mailbox(id) => self
@@ -958,7 +962,10 @@ impl MailView {
             .listing(
                 &scope,
                 &self.search,
-                self.filter,
+                Shown {
+                    filter: self.filter,
+                    kept,
+                },
                 self.settings.sort,
                 self.settings.ascending,
                 self.listed,
@@ -1115,8 +1122,20 @@ impl MailView {
     pub fn show_message(&mut self, id: MessageId) {
         if let Ok(Some(summary)) = self.store.summary(id) {
             self.choose_place(Place::Mailbox(summary.mailbox));
+            if !self.messages.iter().any(|listed| listed.id == id) {
+                self.show_all_messages();
+            }
             self.select(id);
+            self.single_reader = self.panes() == Panes::One;
         }
+    }
+
+    fn show_all_messages(&mut self) {
+        self.filter = Filter::All;
+        self.everywhere = false;
+        self.search.clear();
+        self.clear_list_controls();
+        self.reload();
     }
 
     pub fn select(&mut self, id: MessageId) {
@@ -2658,7 +2677,7 @@ impl MailView {
                 Signal::Search(text) => self.search_for(&text),
                 Signal::Filter(filter) => {
                     self.filter = filter;
-                    self.reload();
+                    self.list(None);
                 }
                 Signal::Sort(sort) => {
                     self.settings.sort = sort;
@@ -3029,6 +3048,9 @@ impl MailView {
                 _ => {}
             }
         }
+        if matches!(key, Key::Backspace | Key::Delete) && self.focus == Pane::Sidebar {
+            return true;
+        }
         let event = Event::Key { key, modifiers };
         if let Some((action, ..)) = SHORTCUTS
             .iter()
@@ -3111,7 +3133,6 @@ impl MailView {
             {
                 self.press_reader_target(false)
             }
-            Key::Backspace | Key::Delete if self.focus == Pane::Sidebar => false,
             Key::Right | Key::Left if plain && !modifiers.shift && self.focus == Pane::Sidebar => {
                 self.fold_section(key == Key::Right)
             }
@@ -3921,7 +3942,12 @@ impl MailView {
                     self.mailbox_action("mailbox-new", account);
                 }
             }
-            "find" => self.ui.set_focus(self.toolbar.search),
+            "find" => {
+                if self.panes() == Panes::One {
+                    self.back_to_list();
+                }
+                self.ui.set_focus(self.toolbar.search);
+            }
             "copy-selection" => {
                 self.copy_selection();
             }

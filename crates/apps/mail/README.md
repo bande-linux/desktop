@@ -63,7 +63,7 @@ apt install bande-mail
   the accounts apart. Under the pointer a row's date gives way to Archive, Delete and Flag, and a
   two-finger swipe on a touchpad archives the row (to the right) or deletes it (to the left) once
   it has moved far enough, and springs back otherwise;
-  Undo (Ctrl+Z) brings it back. An empty mailbox, filter or search says so, with when Mail last updated or
+  Undo (Ctrl+Z) brings it back. The message being read stays in a filtered list until another is chosen. An empty mailbox, filter or search says so, with when Mail last updated or
   where search looks; a search with no results offers Search All Mailboxes. With nothing chosen the reader names the keys to start with; with several
   messages chosen it offers Archive, Delete, Mark as Read, Move To… and Flag for all of them. Messages of one conversation (the first `References` entry, else the
   `Message-ID`; a reply that has neither joins the latest message of the account with the same

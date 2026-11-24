@@ -64,7 +64,7 @@ msgstr "Namnen ”.” och ”..” är reserverade av systemet."
 msgid "Two items would both be named “{name}”."
 msgstr "Två objekt skulle båda heta ”{name}”."
 
-msgid "The name “{name}” is already taken. Please choose a different name."
+msgid "The name “{name}” is already taken. Choose a different name."
 msgstr "Namnet ”{name}” är redan upptaget. Välj ett annat namn."
 
 msgid "{old} → {new}"
@@ -369,9 +369,6 @@ msgstr "Radera direkt…"
 msgid "Eject"
 msgstr "Mata ut"
 
-msgid "Find"
-msgstr "Sök"
-
 msgid "Edit"
 msgstr "Redigera"
 
@@ -398,6 +395,9 @@ msgstr "Flytta objektet hit"
 
 msgid "Select All"
 msgstr "Markera allt"
+
+msgid "Find"
+msgstr "Sök"
 
 msgid "View"
 msgstr "Visning"

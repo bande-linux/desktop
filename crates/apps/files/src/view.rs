@@ -2206,7 +2206,7 @@ impl FilesView {
                     }
                     RenameError::Exists => {
                         tr!(
-                            "The name “{name}” is already taken. Please choose a different name.",
+                            "The name “{name}” is already taken. Choose a different name.",
                             name = name.to_owned()
                         )
                     }

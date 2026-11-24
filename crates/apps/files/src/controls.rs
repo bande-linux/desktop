@@ -1170,7 +1170,8 @@ impl FilesView {
             .map(|rename| (rename.field, rename.path.clone()));
         let rename = rename.map(|(field, path)| (field, self.rename_frame(&path)));
         let slider = self.size_slider.map(|slider| {
-            let bar_y = self.size.1 - PATH_BAR_HEIGHT;
+            let sheet = self.sheet_frame();
+            let bar_y = sheet.y + sheet.height - PATH_BAR_HEIGHT;
             (
                 slider,
                 Rect::new(

@@ -404,6 +404,62 @@ fn an_idle_window_is_not_drawn_again_and_still_gets_a_frame_when_it_asks() {
 }
 
 #[test]
+fn hdr_content_is_taken_only_while_a_display_shows_hdr_and_stays_visible_elsewhere() {
+    let grey = [148, 148, 148, 0xff].repeat(64 * 64);
+    let image = ShmImage {
+        width: 64,
+        height: 64,
+        stride: 256,
+        format: Format::Argb8888,
+        bytes: &grey,
+    };
+    let mut server = headless(64, 64);
+    let mut client = TestClient::connect(&mut server);
+    assert!(!client.offered_colour_management());
+    let output = server.main_output();
+    let config = OutputConfig {
+        hdr: true,
+        ..OutputConfig::virtual_display(&output, (64, 64).into())
+    };
+    let identity = config.identity();
+    server.refit_output(config);
+    let hdr = |on: bool| {
+        bande_config::Config::parse(&format!("display \"{identity}\" {{ hdr #{on} }}"))
+            .expect("a display setting")
+    };
+    server.set_display_config(hdr(true));
+    client.exchange(&mut server);
+    assert!(client.offered_colour_management());
+
+    client.show_window(&mut server, &image);
+    let centre = |server: &mut Compositor| {
+        let mut renderer = bande_compositor::Renderer::new().expect("a renderer");
+        renderer.render(server).expect("a frame");
+        let frame = renderer.snapshot(server).expect("a snapshot");
+        let at = ((frame.size.h / 2 * frame.size.w + frame.size.w / 2) * 4) as usize;
+        frame.rgba[at]
+    };
+    assert!(!server.shows_hdr_content(&output));
+    assert_eq!(centre(&mut server), 148, "plain content as it is");
+    let described = client.describe_as_pq(&mut server, 0, 203);
+    client.commit_buffer(0, &image, (0, 0, 64, 64));
+    client.exchange(&mut server);
+    assert!(server.shows_hdr_content(&output));
+    assert!(
+        centre(&mut server) >= 253,
+        "PQ 203 cd/m² is the white of an ordinary frame"
+    );
+    described.unset_image_description();
+    client.commit_buffer(0, &image, (0, 0, 64, 64));
+    client.exchange(&mut server);
+    assert!(!server.shows_hdr_content(&output));
+    assert_eq!(centre(&mut server), 148);
+
+    server.set_display_config(hdr(false));
+    assert!(!TestClient::connect(&mut server).offered_colour_management());
+}
+
+#[test]
 fn a_window_dragged_over_scanout_buffers_leaves_the_frame_a_full_redraw_draws() {
     drag_over_scanout_buffers(None);
 }

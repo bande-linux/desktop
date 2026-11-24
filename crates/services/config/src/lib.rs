@@ -207,6 +207,7 @@ pub struct DisplaySettings {
     pub colour_profile: Option<String>,
     pub variable_refresh: Option<bool>,
     pub deep_colour: Option<bool>,
+    pub hdr: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1875,6 +1876,7 @@ impl Parser<'_> {
                 "colour-profile" => display.colour_profile = Some(self.string(child)?),
                 "variable-refresh" => display.variable_refresh = Some(self.flag(child)?),
                 "deep-colour" => display.deep_colour = Some(self.flag(child)?),
+                "hdr" => display.hdr = Some(self.flag(child)?),
                 _ => return Err(self.unknown_child(node.name().value(), child)),
             }
             Ok(())

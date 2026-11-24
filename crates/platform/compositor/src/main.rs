@@ -181,7 +181,10 @@ impl EventSource for StallSource {
 
 fn publish_displays<O: FrameOutput>(app: &App<O>) {
     if let Some(displays) = &app.displays {
-        displays.publish(app.compositor.connected_displays());
+        displays.publish(
+            app.compositor.connected_displays(),
+            app.compositor.hdr_displays(),
+        );
     }
 }
 
@@ -1186,6 +1189,7 @@ where
         let night = compositor.night_light_tick(now());
         if let Some(kelvin) = night.kelvin {
             output.set_color_temperature(kelvin);
+            compositor.redraw_hdr_displays();
         }
         let night_wait = night.wake_at.map(|at| at.saturating_sub(now()));
         timeout = upkeep

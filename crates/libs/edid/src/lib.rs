@@ -16,6 +16,11 @@ const HDMI_CLOCK: usize = 6;
 const HDMI_FORUM: [u8; 3] = [0xd8, 0x5d, 0xc4];
 const HDMI_FORUM_CLOCK: usize = 4;
 const HDMI_FORUM_FIXED_RATE: usize = 6;
+const EXTENDED_BLOCK: u8 = 7;
+const COLORIMETRY: u8 = 5;
+const BT2020_RGB: u8 = 1 << 7;
+const HDR_STATIC: u8 = 6;
+const PQ: u8 = 1 << 2;
 const CLOCK_STEP_KHZ: u32 = 5_000;
 const DISPLAY_PARAMETERS: u8 = 0x21;
 const DISPLAY_PARAMETERS_DEPTH: usize = 27;
@@ -31,7 +36,7 @@ pub struct Primaries {
     pub white: (u16, u16),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Edid {
     pub make: String,
     pub model: String,
@@ -41,6 +46,15 @@ pub struct Edid {
     pub gamma: Option<u16>,
     pub depth: Option<u8>,
     pub hdmi: Option<Hdmi>,
+    pub hdr: Option<Hdr>,
+}
+
+/// A display that takes PQ in BT.2020, with the luminances in cd/m² its makers state.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Hdr {
+    pub max: Option<f64>,
+    pub max_average: Option<f64>,
+    pub min: Option<f64>,
 }
 
 /// What a display takes over HDMI: the bits per channel and, unless it has fixed-rate links or
@@ -85,6 +99,34 @@ fn data_blocks(bytes: &[u8], header: usize) -> impl Iterator<Item = (u8, &[u8])>
         let data = left.get(header..header + length)?;
         left = &left[header + length..];
         Some((tag, data))
+    })
+}
+
+fn extended_block(bytes: &[u8], kind: u8) -> Option<&[u8]> {
+    let blocks = bytes.as_chunks::<BLOCK>().0.iter().skip(1);
+    blocks.filter(|block| block[0] == CTA).find_map(|block| {
+        let end = usize::from(block[2]).min(BLOCK - 1);
+        data_blocks(block.get(4..end)?, 1)
+            .find(|(tag, data)| *tag == EXTENDED_BLOCK && data.first() == Some(&kind))
+            .map(|(_, data)| &data[1..])
+    })
+}
+
+fn hdr(bytes: &[u8]) -> Option<Hdr> {
+    let colorimetry = extended_block(bytes, COLORIMETRY)?;
+    let metadata = extended_block(bytes, HDR_STATIC)?;
+    if colorimetry.first()? & BT2020_RGB == 0 || metadata.first()? & PQ == 0 {
+        return None;
+    }
+    let code = |at: usize| metadata.get(at).copied().filter(|code| *code != 0);
+    let luminance = |code: u8| 50.0 * 2f64.powf(f64::from(code) / 32.0);
+    let max = code(2).map(luminance);
+    Some(Hdr {
+        max,
+        max_average: code(3).map(luminance),
+        min: max
+            .zip(code(4))
+            .map(|(max, code)| max * (f64::from(code) / 255.0).powi(2) / 100.0),
     })
 }
 
@@ -194,6 +236,7 @@ pub fn parse(block: &[u8]) -> Option<Edid> {
         gamma: (block[23] != UNDEFINED_GAMMA).then(|| u16::from(block[23]) + 100),
         depth: depth(block),
         hdmi: hdmi(block),
+        hdr: hdr(block),
     })
 }
 

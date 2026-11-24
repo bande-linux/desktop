@@ -59,6 +59,7 @@ pub struct OutputConfig {
     pub serial: String,
     pub physical_size_mm: Size<i32, Raw>,
     pub modes: Vec<OutputMode>,
+    pub hdr: bool,
 }
 
 impl OutputConfig {
@@ -73,6 +74,7 @@ impl OutputConfig {
                 size,
                 refresh: REFRESH,
             }],
+            hdr: false,
         }
     }
 
@@ -124,6 +126,7 @@ pub(crate) struct Screen {
     pub(crate) colour_profile: Option<String>,
     pub(crate) variable_refresh: bool,
     pub(crate) deep_colour: bool,
+    pub(crate) hdr: bool,
     pub(crate) refresh_varies: bool,
     pub(crate) parked: bool,
     pub(crate) fitted_to: Rectangle<i32, Logical>,
@@ -168,6 +171,7 @@ impl Screen {
             colour_profile: None,
             variable_refresh: true,
             deep_colour: true,
+            hdr: false,
             refresh_varies: false,
             parked: false,
             fitted_to: Rectangle::default(),

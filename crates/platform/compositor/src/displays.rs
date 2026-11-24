@@ -526,12 +526,15 @@ impl State {
                 self.configure_screen(screen, display.settings);
                 let screen = &mut self.screens[screen];
                 screen.redraw |= screen.colour_profile != display.colour_profile
-                    || screen.deep_colour != display.deep_colour;
+                    || screen.deep_colour != display.deep_colour
+                    || screen.hdr != display.hdr;
                 screen.colour_profile.clone_from(&display.colour_profile);
                 screen.variable_refresh = display.variable_refresh;
                 screen.deep_colour = display.deep_colour;
+                screen.hdr = display.hdr;
             }
         }
+        self.offer_colour_management();
         if let Some(main) = arranged
             .first()
             .and_then(|display| self.screen_named(&display.name))
@@ -618,6 +621,12 @@ impl Compositor {
         self.state
             .screen_named(output)
             .is_none_or(|screen| self.state.screens[screen].deep_colour)
+    }
+
+    pub fn wants_hdr(&self, output: &str) -> bool {
+        self.state
+            .screen_named(output)
+            .is_some_and(|screen| self.state.screens[screen].hdr)
     }
 
     pub fn output_settings(&self, output: &str) -> Option<OutputSettings> {

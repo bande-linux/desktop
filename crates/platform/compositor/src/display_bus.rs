@@ -15,6 +15,7 @@ pub type ConnectedDisplay = (String, String, String);
 
 struct Displays {
     connected: Arc<Mutex<Vec<ConnectedDisplay>>>,
+    hdr: Arc<Mutex<Vec<String>>>,
 }
 
 #[zbus::interface(name = "org.bande.Displays")]
@@ -26,20 +27,34 @@ impl Displays {
             .unwrap_or_else(PoisonError::into_inner)
             .clone()
     }
+
+    /// The connectors whose displays can show HDR.
+    #[zbus(property)]
+    fn hdr(&self) -> Vec<String> {
+        self.hdr
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+    }
 }
 
 pub struct DisplaysHandle {
     connected: Arc<Mutex<Vec<ConnectedDisplay>>>,
+    hdr: Arc<Mutex<Vec<String>>>,
     changed: mpsc::Sender<()>,
 }
 
 impl DisplaysHandle {
-    pub fn publish(&self, displays: Vec<ConnectedDisplay>) {
+    pub fn publish(&self, displays: Vec<ConnectedDisplay>, with_hdr: Vec<String>) {
+        let mut hdr = self.hdr.lock().unwrap_or_else(PoisonError::into_inner);
+        let hdr_changed = *hdr != with_hdr;
+        *hdr = with_hdr;
+        drop(hdr);
         let mut connected = self
             .connected
             .lock()
             .unwrap_or_else(PoisonError::into_inner);
-        if *connected != displays {
+        if *connected != displays || hdr_changed {
             *connected = displays;
             let _ = self.changed.send(());
         }
@@ -48,11 +63,13 @@ impl DisplaysHandle {
 
 fn announce(interface: InterfaceRef<Displays>, changed: mpsc::Receiver<()>) {
     for () in changed {
-        let emitted = zbus::block_on(
-            interface
-                .get()
-                .connected_changed(interface.signal_emitter()),
-        );
+        let emitted = zbus::block_on(async {
+            let displays = interface.get();
+            displays
+                .connected_changed(interface.signal_emitter())
+                .await?;
+            displays.hdr_changed(interface.signal_emitter()).await
+        });
         if let Err(error) = emitted {
             tracing::warn!("cannot announce the connected displays: {error}");
         }
@@ -61,18 +78,24 @@ fn announce(interface: InterfaceRef<Displays>, changed: mpsc::Receiver<()>) {
 
 pub fn serve_displays(connection: &Connection) -> zbus::Result<DisplaysHandle> {
     let connected = Arc::default();
+    let hdr = Arc::default();
     let server = connection.object_server();
     server.at(
         PATH,
         Displays {
             connected: Arc::clone(&connected),
+            hdr: Arc::clone(&hdr),
         },
     )?;
     let interface = server.interface::<_, Displays>(PATH)?;
     connection.request_name(NAME)?;
     let (changed, received) = mpsc::channel();
     thread::spawn(move || announce(interface, received));
-    Ok(DisplaysHandle { connected, changed })
+    Ok(DisplaysHandle {
+        connected,
+        hdr,
+        changed,
+    })
 }
 
 impl Compositor {
@@ -103,6 +126,15 @@ impl Compositor {
             self.style_keyword(),
             displays.join(",")
         )
+    }
+
+    pub fn hdr_displays(&self) -> Vec<String> {
+        self.state
+            .screens
+            .iter()
+            .filter(|screen| !screen.parked && screen.config.hdr)
+            .map(|screen| screen.config.name.clone())
+            .collect()
     }
 
     pub fn connected_displays(&self) -> Vec<ConnectedDisplay> {

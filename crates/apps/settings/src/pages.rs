@@ -145,6 +145,7 @@ fn display_value(
                 .map_or(display.rotation, |rotation| rotation.degrees()),
         ),
         SettingId::VariableRefresh => Value::Flag(output.variable_refresh.unwrap_or(true)),
+        SettingId::Hdr if display.hdr => Value::Flag(output.hdr.unwrap_or(false)),
         SettingId::DeepColour => Value::Flag(output.deep_colour.unwrap_or(true)),
         _ => return None,
     })
@@ -1559,6 +1560,7 @@ impl SettingsView {
             let rows: Widgets = section
                 .settings
                 .iter()
+                .filter(|setting| setting.id != SettingId::Hdr || display.hdr)
                 .filter_map(|setting| {
                     self.setting_row(setting, Some(&display), matched(setting.id).as_ref())
                 })

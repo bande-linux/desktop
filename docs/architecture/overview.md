@@ -203,7 +203,7 @@ small `key = value` file each next to it (`files.conf`, `terminal.conf`).
   keyboard { input-sources "se" "us(dvorak)"; caps-lock "escape"; compose "right-alt"; system-switch #false }   // caps-lock and compose follow XKBOPTIONS unless set (compose "system" is the same as unset); system-switch #false drops its grp: options
   trackpad { tap-to-click #true; natural-scrolling #true }
   search { recent-documents #false; exclude "~/Private" }   // every category is shown unless #false
-  display "Example EX27 0001" { scale 1.5; refresh-rate 120; variable-refresh #false }   // variable refresh and deep colour (`deep-colour`) are on unless #false
+  display "Example EX27 0001" { scale 1.5; refresh-rate 120; variable-refresh #false }   // variable refresh and deep colour (`deep-colour`) are on unless #false, `hdr` is off unless #true
   arrangement {
       display "Example Panel 0002" x=0 y=0 main=#true
       display "Example EX27 0001" x=1504 y=-300

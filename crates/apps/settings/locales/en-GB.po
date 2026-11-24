@@ -27,9 +27,6 @@ msgstr[1] "Erase all {count} items in the Bin?"
 msgid "Empty Trash…"
 msgstr "Empty Bin…"
 
-msgid "Turn on Night Light to make the colors warmer at night."
-msgstr "Turn on Night Light to make the colours warmer at night."
-
 msgid "Documents waiting for it are canceled. You can add it again later."
 msgstr "Documents waiting for it are cancelled. You can add it again later."
 

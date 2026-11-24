@@ -252,21 +252,6 @@ msgstr "Tjänsten för strömläge"
 msgid "The battery service"
 msgstr "Batteritjänsten"
 
-msgid "This computer doesn’t start with GRUB, so Settings can’t turn on the boot screen. Install bande-plymouth-theme and add “splash” to the kernel command line of its boot manager."
-msgstr "Den här datorn startar inte med GRUB, så Inställningar kan inte slå på startskärmen. Installera bande-plymouth-theme och lägg till ”splash” på kärnans kommandorad i dess starthanterare."
-
-msgid "That change didn’t go through."
-msgstr "Ändringen gick inte igenom."
-
-msgid "Show a boot screen"
-msgstr "Visa en startskärm"
-
-msgid "Changing…"
-msgstr "Ändrar…"
-
-msgid "The Bande mark instead of the computer’s messages while it starts and shuts down. It takes effect at the next start."
-msgstr "Bandes märke i stället för datorns meddelanden medan den startar och stängs av. Det gäller från nästa start."
-
 msgid "The brightness service"
 msgstr "Ljusstyrketjänsten"
 
@@ -333,8 +318,8 @@ msgstr "Söker efter appar…"
 msgid "No app installed"
 msgstr "Ingen app installerad"
 
-msgid "That could not be done."
-msgstr "Det gick inte."
+msgid "Couldn’t do that. Try again."
+msgstr "Det gick inte. Försök igen."
 
 msgid "Crash"
 msgstr "Krasch"
@@ -375,35 +360,29 @@ msgstr "Skickad"
 msgid "Waiting to send"
 msgstr "Väntar på att skickas"
 
-msgid "Refused by the server"
-msgstr "Avvisad av servern"
+msgid "Not accepted"
+msgstr "Avvisad"
 
 msgid "On this computer"
 msgstr "På den här datorn"
 
+msgid "{program}: {kind}"
+msgstr "{program}: {kind}"
+
 msgid "Send reports automatically"
 msgstr "Skicka rapporter automatiskt"
 
-msgid "New reports are sent to the report server. Names, addresses and file names are removed first."
-msgstr "Nya rapporter skickas till rapportservern. Namn, adresser och filnamn tas bort först."
+msgid "Names, addresses and file names are removed first"
+msgstr "Namn, adresser och filnamn tas bort först"
 
-msgid "Reports stay on this computer unless you send one."
-msgstr "Rapporterna stannar på den här datorn om du inte skickar någon."
+msgid "Also sent once a day"
+msgstr "Skickas också en gång om dagen"
 
-msgid "Reports stay on this computer. No server is configured."
-msgstr "Rapporterna stannar på den här datorn. Ingen server är inställd."
-
-msgid "Once a day it also sends how long the computer was used, and nothing else: {checkin}"
-msgstr "En gång om dagen skickas också hur länge datorn användes, och inget annat: {checkin}"
-
-msgid "What the server keeps, and for how long: {address}"
-msgstr "Vad servern sparar, och hur länge: {address}"
+msgid "Privacy policy"
+msgstr "Integritetspolicy"
 
 msgid "Nothing has gone wrong"
 msgstr "Inget har gått fel"
-
-msgid "{program}: {kind}"
-msgstr "{program}: {kind}"
 
 msgid "Delete the reports sent from this computer?"
 msgstr "Radera rapporterna som skickats från den här datorn?"
@@ -426,29 +405,44 @@ msgstr "Radera rapporter som skickats från den här datorn"
 msgid "Erases everything the server keeps about this computer"
 msgstr "Raderar allt servern sparar om den här datorn"
 
+msgid "Includes system logs. You can review it before sending."
+msgstr "Innehåller systemloggar. Du kan granska den innan den skickas."
+
+msgid "Preparing the report…"
+msgstr "Förbereder rapporten…"
+
+msgid "Couldn’t prepare the report. Try again."
+msgstr "Rapporten kunde inte förberedas. Försök igen."
+
+msgid "Report sent. Thank you."
+msgstr "Rapporten är skickad. Tack!"
+
+msgid "The report is sent when the server can be reached."
+msgstr "Rapporten skickas när servern kan nås."
+
+msgid "The report wasn’t sent."
+msgstr "Rapporten skickades inte."
+
 msgid "What happened? (optional)"
 msgstr "Vad hände? (valfritt)"
 
-msgid "This gathers the logs of this boot and the one before, including anything left from a freeze or restart. You read it before it goes."
-msgstr "Det här samlar loggarna från den här starten och den förra, med det som en frysning eller omstart lämnade efter sig. Du läser den innan den skickas."
+msgid "Review…"
+msgstr "Granska…"
 
-msgid "Prepare Report"
-msgstr "Förbered rapport"
+msgid "Send"
+msgstr "Skicka"
 
 msgid "Copy"
 msgstr "Kopiera"
 
-msgid "Send Now"
-msgstr "Skicka nu"
-
-msgid "Save to File"
-msgstr "Spara till fil"
-
-msgid "Report {id}"
-msgstr "Rapport {id}"
+msgid "Save"
+msgstr "Spara"
 
 msgid "Saved as {path}"
 msgstr "Sparad som {path}"
+
+msgid "Report {id}"
+msgstr "Rapport {id}"
 
 msgid "Choose the Network’s Certificate Authority"
 msgstr "Välj nätverkets certifikatutfärdare"
@@ -1943,6 +1937,9 @@ msgstr "Lösenord för skärmdelning"
 msgid "Choose a folder to share"
 msgstr "Välj en mapp att dela"
 
+msgid "That change didn’t go through."
+msgstr "Ändringen gick inte igenom."
+
 msgid "Use at least {count} characters."
 msgstr "Använd minst {count} tecken."
 
@@ -2395,9 +2392,6 @@ msgstr "Bild, dra för att flytta och scrolla för att zooma"
 
 msgid "Zoom"
 msgstr "Zoom"
-
-msgid "Save"
-msgstr "Spara"
 
 msgid "Drag the picture to choose what shows in the circle."
 msgstr "Dra bilden för att välja vad som visas i cirkeln."

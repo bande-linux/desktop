@@ -6,7 +6,7 @@ use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
 use bande_reporter::checkin;
-use bande_reporter::config::Config;
+use bande_reporter::config::{Config, SERVER};
 use bande_reporter::policy::{Choice, Policy};
 use bande_reporter::send::{self, Outcome, Sender};
 use bande_reporter::spool::{Attachment, Spool, Status};
@@ -90,17 +90,21 @@ fn check_in(spool: &Spool, sender: &mut Sender, retry: Duration) -> Option<Pause
     None
 }
 
-fn send_waiting(spool: &Spool, config: &Config, waiting: &[String], retry: Duration) -> Pause {
-    let Some(mut sender) = Sender::new(config, spool) else {
-        return Pause::UntilConfigChanges;
-    };
+fn send_waiting(
+    server: &str,
+    spool: &Spool,
+    config: &Config,
+    waiting: &[String],
+    retry: Duration,
+) -> Pause {
+    let mut sender = Sender::new(server, spool);
     let mut ledger = Ledger::load(spool.root());
     let policy = sender.identity.policy.clone();
     let asked: Vec<&String> = waiting.iter().filter(|id| spool.asked(id)).collect();
     let until_run = ledger.next_run_in(&policy);
     let metered = throttle::is_metered();
     let due = until_run.is_zero() && !metered && config.send;
-    let checkin = due && spool.checkin_waiting() && config.sends_automatically();
+    let checkin = due && spool.checkin_waiting();
     let batch: Vec<&String> = if due {
         waiting.iter().collect()
     } else {
@@ -237,11 +241,11 @@ fn settle(spool: &Spool, id: &str, status: Option<Status>) {
     }
 }
 
-fn forget(spool: &Spool, config: &Config, retry: Duration) -> Pause {
+fn forget(server: &str, spool: &Spool, retry: Duration) -> Pause {
     let Some(request) = spool.forget_waiting() else {
         return Pause::None;
     };
-    match send::forget(&request, config.ca.as_deref()) {
+    match send::forget(server, &request) {
         Outcome::Stored => {
             if let Err(error) = spool.forgotten() {
                 tracing::warn!("cannot note that the server forgot this computer: {error}");
@@ -252,14 +256,13 @@ fn forget(spool: &Spool, config: &Config, retry: Duration) -> Pause {
     }
 }
 
-fn run_sender(paths: &Paths) -> Result<(), Box<dyn Error>> {
+fn run_sender(paths: &Paths, server: &str) -> Result<(), Box<dyn Error>> {
     let spool = Spool::open(&paths.spool)?;
     let mut waiter = Waiter::new(&paths.config, &spool.outbox());
     let mut retry = FIRST_RETRY;
     loop {
         let waiting = spool.waiting()?;
-        let forgetting = spool.forget_waiting().is_some();
-        if waiting.is_empty() && !spool.checkin_waiting() && !forgetting {
+        if waiting.is_empty() && !spool.checkin_waiting() && spool.forget_waiting().is_none() {
             return Ok(());
         }
         let config = match Config::load(&paths.config) {
@@ -269,10 +272,8 @@ fn run_sender(paths: &Paths) -> Result<(), Box<dyn Error>> {
                 Config::default()
             }
         };
-        let pause = match forget(&spool, &config, retry) {
-            Pause::None if config.has_server() => send_waiting(&spool, &config, &waiting, retry),
-            Pause::None if forgetting => Pause::None,
-            Pause::None => Pause::UntilConfigChanges,
+        let pause = match forget(server, &spool, retry) {
+            Pause::None => send_waiting(server, &spool, &config, &waiting, retry),
             pause => pause,
         };
         let backs_off = matches!(pause, Pause::Network | Pause::Server(_));
@@ -366,7 +367,7 @@ fn store(paths: &Paths, manifest: &Path, attachments: &[String]) -> Result<(), B
             bytes: fs::read(file)?,
         });
     }
-    let automatic = Config::load(&paths.config)?.sends_automatically();
+    let automatic = Config::load(&paths.config)?.send;
     println!("{}", spool.store(manifest, read, automatic)?);
     Ok(())
 }
@@ -386,7 +387,7 @@ fn run(arguments: &[String]) -> Result<(), Box<dyn Error>> {
         rest = tail;
     }
     match rest {
-        [command] if command == "send" => run_sender(&paths),
+        [command] if command == "send" => run_sender(&paths, SERVER),
         [command] if command == "list" => list(&paths),
         [command, unit] if command == "collect-failures" => {
             Ok(bande_reporter::diagnose::ask_for_collection(unit)?)
@@ -417,5 +418,101 @@ fn main() -> ExitCode {
             eprintln!("{error}");
             ExitCode::FAILURE
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::{BufRead, BufReader, Read, Write};
+    use std::net::{TcpListener, TcpStream};
+    use std::sync::mpsc::{self, Receiver};
+
+    use super::*;
+    use serde_json::json;
+
+    fn answer(stream: &TcpStream) -> io::Result<String> {
+        let mut reader = BufReader::new(stream);
+        let mut request = String::new();
+        reader.read_line(&mut request)?;
+        let mut length = 0;
+        loop {
+            let mut line = String::new();
+            reader.read_line(&mut line)?;
+            match line.trim().split_once(':') {
+                Some((name, value)) if name.eq_ignore_ascii_case("content-length") => {
+                    length = value.trim().parse().map_err(io::Error::other)?;
+                }
+                Some(_) => {}
+                None => break,
+            }
+        }
+        io::copy(&mut reader.take(length), &mut io::sink())?;
+        let request = request.trim_end_matches(" HTTP/1.1\r\n").to_owned();
+        let (status, body) = match request.as_str() {
+            "GET /v1/enroll" => (200, json!({"challenge": "c", "difficulty": 0})),
+            "POST /v1/enroll" => (201, json!({"machine": "m", "token": "t"})),
+            _ => (201, json!({})),
+        };
+        let body = body.to_string();
+        let mut stream = stream;
+        write!(
+            stream,
+            "HTTP/1.1 {status} OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )?;
+        Ok(request)
+    }
+
+    fn server() -> io::Result<(String, Receiver<io::Result<String>>)> {
+        let listener = TcpListener::bind("127.0.0.1:0")?;
+        let address = format!("http://{}", listener.local_addr()?);
+        let (sender, receiver) = mpsc::channel();
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                if sender
+                    .send(stream.and_then(|stream| answer(&stream)))
+                    .is_err()
+                {
+                    return;
+                }
+            }
+        });
+        Ok((address, receiver))
+    }
+
+    fn stored(spool: &Spool, signature: &str) -> io::Result<String> {
+        let manifest = json!({"kind": "crash", "program": "bande-files", "signature": signature});
+        let manifest = manifest.as_object().cloned().unwrap_or_default();
+        spool.store(manifest, Vec::new(), true)
+    }
+
+    #[test]
+    fn while_sending_is_off_only_a_report_sent_by_hand_leaves() -> Result<(), Box<dyn Error>> {
+        let folder = tempfile::tempdir()?;
+        let paths = Paths {
+            spool: folder.path().join("reports"),
+            config: folder.path().join("reports.conf"),
+        };
+        let (address, requests) = server()?;
+        let spool = Spool::open(&paths.spool)?;
+        let kept = stored(&spool, "a")?;
+        spool.queue_checkin()?;
+        run_sender(&paths, &address)?;
+        assert!(requests.try_recv().is_err());
+        assert!(spool.waiting()?.is_empty());
+        assert_eq!(spool.read(&kept)?.status, Status::Local);
+
+        let sent = stored(&spool, "b")?;
+        spool.queue_by_hand(&sent)?;
+        spool.queue(&kept)?;
+        run_sender(&paths, &address)?;
+        let requests: Vec<String> = requests.try_iter().collect::<io::Result<_>>()?;
+        assert_eq!(
+            requests,
+            ["GET /v1/enroll", "POST /v1/enroll", "POST /v1/reports"]
+        );
+        assert_eq!(spool.read(&sent)?.status, Status::Sent);
+        assert_eq!(spool.read(&kept)?.status, Status::Local);
+        Ok(())
     }
 }

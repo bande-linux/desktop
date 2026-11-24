@@ -15,7 +15,7 @@ use rustix::net::sockopt::socket_peercred;
 use serde_json::{Map, Value, json};
 
 use crate::checkin;
-use crate::config::{self, Config};
+use crate::config::{self, Config, SERVER};
 use crate::counters;
 use crate::diagnose::diagnose;
 use crate::facts;
@@ -397,7 +397,7 @@ impl Service {
     fn status(&self) -> Value {
         let config = self.config();
         let checkin = config
-            .sends_automatically()
+            .send
             .then(|| {
                 let day = checkin::due_days(&self.spool_root)
                     .last()
@@ -408,12 +408,11 @@ impl Service {
             .flatten();
         let spool = Spool::open(&self.spool_root).ok();
         json!({
-            "sending": config.sends_automatically(),
-            "configured": config.has_server(),
+            "sending": config.send,
             "checkin": checkin,
             "enrolled": Identity::load(&self.spool_root).is_some_and(|identity| identity.credentials.is_some()),
             "forgetting": spool.is_some_and(|spool| spool.forget_waiting().is_some()),
-            "privacy": config.endpoint.as_ref().map(|endpoint| format!("{endpoint}/privacy")),
+            "privacy": format!("{SERVER}/privacy"),
         })
     }
 
@@ -445,10 +444,7 @@ impl Service {
                     .and_then(Value::as_bool)
                     .unwrap_or(false);
                 let id = diagnose(&self.spool_root, &self.config(), peer, description, send)?;
-                Ok(json!({
-                    "id": id,
-                    "queued": send && self.config().has_server(),
-                }))
+                Ok(json!({"id": id}))
             }
             "delete" => {
                 let (spool, _) = self.visible(id, peer)?;
@@ -457,9 +453,6 @@ impl Service {
             }
             "send" => {
                 let (spool, _) = self.visible(id, peer)?;
-                if !self.config().has_server() {
-                    return Err("no server is configured".into());
-                }
                 spool.queue_by_hand(id)?;
                 Ok(json!({}))
             }

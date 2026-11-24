@@ -73,7 +73,6 @@ flatpak flatpak optional
 /usr/bin/bande-screenshot bande-screenshot depends
 /usr/bin/bande-shell bande-shell depends
 /usr/libexec/bande-backupd bande-backup optional
-/usr/libexec/bande-boot-screen-helper bande-settings depends
 /usr/libexec/bande-greeter-session bande-greeter depends
 /usr/libexec/bande-consent bande-settings depends
 /usr/libexec/bande-file-chooser bande-file-chooser depends

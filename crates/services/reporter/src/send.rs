@@ -1,14 +1,12 @@
 use std::fs;
 use std::io::{self, Write};
-use std::path::Path;
 use std::time::Duration;
 
 use flate2::Compression;
 use flate2::write::GzEncoder;
 use serde_json::{Map, Value, json};
 
-use crate::config::Config;
-use crate::http::{Answer, Request, Session, parse_endpoint};
+use crate::http::{Answer, Request, Session};
 use crate::identity::{self, Identity};
 use crate::spool::{MANIFEST, STATE, Spool, Status, Stored};
 
@@ -134,28 +132,13 @@ pub struct Sender<'a> {
 }
 
 impl<'a> Sender<'a> {
-    pub fn new(config: &Config, spool: &'a Spool) -> Option<Self> {
-        let endpoint = config.endpoint.as_deref()?;
-        let Some(target) = parse_endpoint(endpoint) else {
-            tracing::warn!("the report server's address is not https://host:port");
-            return None;
-        };
-        let identity = match Identity::load(spool.root()) {
-            Some(identity) if identity.endpoint == endpoint => identity,
-            Some(_) => {
-                if let Err(error) = forget_here(spool) {
-                    tracing::warn!("cannot forget the identity for the old server: {error}");
-                }
-                Identity::new(endpoint)
-            }
-            None => Identity::new(endpoint),
-        };
-        Some(Self {
-            session: Session::new(target, config.ca.as_deref()),
+    pub fn new(server: &str, spool: &'a Spool) -> Self {
+        Self {
+            session: Session::new(server),
             spool,
-            identity,
+            identity: Identity::load(spool.root()).unwrap_or_else(Identity::unenrolled),
             contacted: false,
-        })
+        }
     }
 
     fn save(&self) {
@@ -379,13 +362,11 @@ impl<'a> Sender<'a> {
     }
 }
 
-pub fn forget(request: &Map<String, Value>, ca: Option<&Path>) -> Outcome {
-    let text = |name| request.get(name).and_then(Value::as_str);
-    let (Some(target), Some(token)) = (text("endpoint").and_then(parse_endpoint), text("token"))
-    else {
+pub fn forget(server: &str, request: &Map<String, Value>) -> Outcome {
+    let Some(token) = request.get("token").and_then(Value::as_str) else {
         return Outcome::Stored;
     };
-    let answer = Session::new(target, ca).send(&Request {
+    let answer = Session::new(server).send(&Request {
         method: "DELETE",
         path: ME,
         token: Some(token),
@@ -409,7 +390,7 @@ pub fn forget_here(spool: &Spool) -> io::Result<()> {
     if let Some(identity) = Identity::load(spool.root())
         && let Some(credentials) = identity.credentials
     {
-        spool.queue_forget(&json!({"endpoint": identity.endpoint, "token": credentials.token}))?;
+        spool.queue_forget(&json!({"token": credentials.token}))?;
     }
     identity::forget(spool.root())
 }

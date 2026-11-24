@@ -14,7 +14,7 @@ use bande_l10n::tr;
 use bande_settings_panes::{
     AUTOMATIC, Kind, Pane, PaneId, Permission, Setting, SettingId, Value, panes,
 };
-use bande_settings_panes::{PaneHit, search, with_pointers};
+use bande_settings_panes::{PaneHit, search};
 use bande_status::brightness::{DisplayLevel, LevelRequest};
 use bande_toolkit::ui::{
     Alert, Context, Event, Key, Modifiers, PointerButton, ScrollState, SearchField, Size, Ui,
@@ -26,9 +26,10 @@ use jiff::Zoned;
 use crate::about::{About, AboutCommand};
 use crate::backup::{BackupIntent, BackupView};
 use crate::battery::{BatteryCommand, PowerState};
-use crate::boot_screen::{BootScreenCommand, BootScreenState};
 use crate::defaults::{DefaultApp, DefaultAppCommand};
-use crate::diagnostics::{Diagnostics, DiagnosticsCommand};
+use crate::diagnostics::{
+    After, DESCRIPTION, Diagnostics, DiagnosticsCommand, Progress, ReportForm,
+};
 use crate::enterprise::{Certificate, EnterpriseField};
 use crate::follow::{Command, Update};
 use crate::forget::Forget;
@@ -57,7 +58,6 @@ use crate::users::{Account, NewAccountForm, PasswordForm, PictureEdit, UsersComm
 use crate::widgets::{Column, Crossfade, Root};
 use crate::wifi::{HIDDEN_SECURITY, Other};
 use bande_network::Security;
-use bande_status::pointing::PointingDevices;
 use zeroize::Zeroizing;
 
 pub(crate) const PICK_RESULTS: usize = 8;
@@ -140,12 +140,12 @@ pub(crate) enum Intent {
     SendReport(String),
     SetSendingReports(bool),
     DraftReportDescription(String),
-    CreateReport(()),
+    CreateReport(After),
+    OpenPrivacy(String),
     SaveReport((String, String)),
     DefaultPrinter(String),
     Sharing(SharingCommand),
     SignInPages(bool),
-    BootScreen(BootScreenCommand),
     PrinterAddress(String),
     AddPrinterAddress,
     InstallPrinting(Support),
@@ -300,9 +300,9 @@ pub struct SettingsView {
     pub(crate) pane: PaneId,
     pub(crate) layouts: Option<Layouts>,
     pub(crate) system_keys: RefCell<Option<SystemKeys>>,
-    pub(crate) pointing: PointingDevices,
     pub(crate) about: Option<About>,
     pub(crate) diagnostics: Diagnostics,
+    pub(crate) report_form: ReportForm,
     report_wanted: Option<String>,
     pub(crate) storage: Option<Storage>,
     pub(crate) files_installed: bool,
@@ -335,8 +335,6 @@ pub struct SettingsView {
     pub(crate) screen_password: Rc<RefCell<Zeroizing<String>>>,
     pub(crate) screen_password_field: Option<WidgetId>,
     pub(crate) turning_on_screen: bool,
-    pub(crate) boot_screen: Option<BootScreenState>,
-    pub(crate) changing_boot_screen: bool,
     pub(crate) installing_vpn_plugin: bool,
     pub(crate) adding_printer: bool,
     pub(crate) installing_printing: Option<Support>,
@@ -427,9 +425,9 @@ impl SettingsView {
             pane: PaneId::Appearance,
             layouts: None,
             system_keys: RefCell::default(),
-            pointing: PointingDevices::default(),
             about: None,
             diagnostics: Diagnostics::default(),
+            report_form: ReportForm::default(),
             report_wanted: None,
             storage: None,
             files_installed: false,
@@ -462,8 +460,6 @@ impl SettingsView {
             screen_password: Rc::default(),
             screen_password_field: None,
             turning_on_screen: false,
-            boot_screen: None,
-            changing_boot_screen: false,
             installing_vpn_plugin: false,
             adding_printer: false,
             installing_printing: None,
@@ -563,13 +559,6 @@ impl SettingsView {
 
     pub(crate) fn fail_here(&mut self, failure: String) {
         self.failures.insert(self.pane, failure);
-    }
-
-    pub fn set_pointing_devices(&mut self, devices: PointingDevices) {
-        if self.pointing != devices {
-            self.pointing = devices;
-            self.availability_changed();
-        }
     }
 
     pub fn hide_screen_reader(&mut self) {
@@ -765,7 +754,6 @@ impl SettingsView {
             }
             Update::Pictures(_) | Update::Thumbnail(..) => (None, &[SettingId::Wallpaper]),
             Update::Sharing(_) => (Some(PaneId::Sharing), &[SettingId::Sharing]),
-            Update::BootScreen(_) => (Some(PaneId::About), &[SettingId::BootScreen]),
             Update::Printers(_)
             | Update::PrinterAdded(..)
             | Update::PrintingInstalled
@@ -902,7 +890,6 @@ impl SettingsView {
             Update::SoftwareHint(hint) => self.software_hint = hint,
             Update::FirmwareMissing(missing) => self.firmware_missing = missing,
             Update::Locale(locale) => self.locale = locale,
-            Update::Pointing(devices) => self.set_pointing_devices(devices),
             Update::Network(network) => {
                 let opened = match &self.detail {
                     Some(Detail::Wired(interface)) => network
@@ -966,9 +953,7 @@ impl SettingsView {
                 self.availability_changed();
             }
             Update::Diagnostics(diagnostics) => {
-                let open = self.diagnostics.open.take();
                 self.diagnostics = diagnostics;
-                self.diagnostics.open = open;
                 if let Some(wanted) = self.report_wanted.take()
                     && let Some(id) = self
                         .diagnostics
@@ -980,13 +965,21 @@ impl SettingsView {
                     self.open_report(id);
                 }
             }
-            Update::DiagnosticsReport(id, text) => self.diagnostics.open = Some((id, text)),
-            Update::ReportCreated(id) => {
-                self.select_pane(PaneId::Diagnostics);
-                self.detail = Some(Detail::Report(id));
-                self.focus_next = Some(Anchor::Back);
+            Update::DiagnosticsReport(id, text) => self.report_form.open = Some((id, text)),
+            Update::ReportCreated(id, after) => {
+                self.report_form.description.clear();
+                match after {
+                    After::Review => {
+                        self.report_form.progress = Progress::Idle;
+                        if self.pane == PaneId::Diagnostics && self.detail.is_none() {
+                            self.open_report(id);
+                        }
+                    }
+                    After::Send => self.report_form.progress = Progress::Sending(id),
+                }
             }
-            Update::ReportSaved(path) => self.diagnostics.saved = Some(path),
+            Update::ReportFailed => self.report_form.progress = Progress::Failed,
+            Update::ReportSaved(path) => self.report_form.saved = Some(path),
             Update::Storage(storage) => {
                 if storage.trash_items == 0 {
                     self.confirming_empty_trash = false;
@@ -1014,10 +1007,6 @@ impl SettingsView {
                 self.installing_sharing = false;
                 self.turning_on_screen = false;
                 self.sharing = Some(state);
-            }
-            Update::BootScreen(state) => {
-                self.changing_boot_screen = false;
-                self.boot_screen = Some(state);
             }
             Update::KeyboardAccess(access) => self.keyboard_access = access,
             Update::Spelling(state) => self.spelling = state,
@@ -1162,9 +1151,10 @@ impl SettingsView {
             | PaneId::Storage
             | PaneId::Diagnostics
             | PaneId::Backup
+            | PaneId::Mouse
+            | PaneId::Trackpad
             | PaneId::SoftwareUpdate => true,
             PaneId::LanguageTime => self.locale.is_some() || self.time.is_some(),
-            PaneId::Pointing => self.pointing.mouse || self.pointing.trackpad,
             PaneId::Microphone | PaneId::Location => self.has_grants(pane),
         }
     }
@@ -1586,6 +1576,10 @@ impl SettingsView {
                 self.enterprise_intent(intent);
                 continue;
             }
+            if let Intent::DraftReportDescription(text) = intent {
+                self.report_form.description = text;
+                continue;
+            }
             if let Intent::PrinterAddress(address) = intent {
                 self.printer_address = address;
                 continue;
@@ -1596,7 +1590,10 @@ impl SettingsView {
             }
             self.stale = true;
             match intent {
-                Intent::Draft(..) | Intent::OtherName(..) | Intent::PrinterAddress(..) => {}
+                Intent::Draft(..)
+                | Intent::OtherName(..)
+                | Intent::PrinterAddress(..)
+                | Intent::DraftReportDescription(..) => {}
                 Intent::Back => {
                     if matches!(self.detail, Some(Detail::Account(_)))
                         && let Some(name) = self.drafts.remove(&SettingId::FullName)
@@ -1769,12 +1766,19 @@ impl SettingsView {
                 Intent::SetSendingReports(on) => self
                     .commands
                     .push(Command::Diagnostics(DiagnosticsCommand::SetSending(on))),
-                Intent::DraftReportDescription(text) => self.diagnostics.description = text,
-                Intent::CreateReport(()) => {
-                    let description = std::mem::take(&mut self.diagnostics.description);
+                Intent::OpenPrivacy(address) => {
+                    self.commands
+                        .push(Command::Diagnostics(DiagnosticsCommand::OpenPrivacy(
+                            address,
+                        )))
+                }
+                Intent::CreateReport(after) => {
+                    self.report_form.progress = Progress::Preparing;
+                    let description = self.report_form.description.trim().to_owned();
                     self.commands
                         .push(Command::Diagnostics(DiagnosticsCommand::Create(
                             description,
+                            after,
                         )));
                 }
                 Intent::SaveReport((id, text)) => self
@@ -1805,10 +1809,6 @@ impl SettingsView {
                             | SharingCommand::InstallScreenSharing
                     );
                     self.commands.push(Command::Sharing(command));
-                }
-                Intent::BootScreen(command) => {
-                    self.changing_boot_screen |= command != BootScreenCommand::Read;
-                    self.commands.push(Command::BootScreen(command));
                 }
                 Intent::InstallPrinting(support) => {
                     self.installing_printing = Some(support);
@@ -2131,6 +2131,7 @@ impl SettingsView {
         self.commands
             .push(Command::Diagnostics(DiagnosticsCommand::Read(id.clone())));
         self.detail = Some(Detail::Report(id));
+        self.report_form.saved = None;
         self.clear_failure();
         self.focus_next = Some(Anchor::Back);
         *self.scroll.borrow_mut() = ScrollState::default();
@@ -2226,7 +2227,6 @@ impl SettingsView {
             PaneId::Wifi | PaneId::Network => Command::Network(NetworkCommand::Watch(on)),
             PaneId::Printers => Command::Printers(PrinterCommand::Watch(on)),
             PaneId::Sharing if on => Command::Sharing(SharingCommand::Read),
-            PaneId::About if on => Command::BootScreen(BootScreenCommand::Read),
             PaneId::Keyboard if on => Command::Locale(LocaleCommand::Read),
             PaneId::LanguageTime if on => {
                 self.commands
@@ -2258,9 +2258,7 @@ impl SettingsView {
     }
 
     fn search_hits(&self, query: &str) -> Vec<PaneHit> {
-        let mut panes = self.panes.clone();
-        with_pointers(&mut panes, self.pointing.mouse, self.pointing.trackpad);
-        search(&panes, query)
+        search(&self.panes, query)
             .into_iter()
             .filter(|hit| self.available(hit.pane))
             .collect()
@@ -2746,6 +2744,9 @@ impl SettingsView {
         let typed = match &focused {
             Some(Anchor::Picker) => self.picking.as_ref().map(|(_, query)| query.clone()),
             Some(Anchor::Setting(setting, _)) => self.drafts.get(setting).cloned(),
+            Some(Anchor::Item(item)) if item == DESCRIPTION => {
+                Some(self.report_form.description.clone())
+            }
             _ => None,
         };
         let target = focused.and_then(|anchor| {

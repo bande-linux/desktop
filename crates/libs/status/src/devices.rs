@@ -16,7 +16,6 @@ use zbus::proxy::CacheProperties;
 use zbus::zvariant::{OwnedObjectPath, Type};
 use zbus::{MatchRule, Message, message};
 
-use crate::pointing::{PointingDevices, UDEV_DATA};
 use crate::session::{Ending, Inhibitor, Refusal};
 use crate::status::{Battery, Bluetooth, Gadget, Power, Reading, Wifi};
 use crate::{Command, Update};
@@ -129,7 +128,6 @@ pub fn powers(system: &Connection) -> zbus::Result<Vec<PowerAction>> {
 pub struct Hardware {
     pub wifi: bool,
     pub bluetooth: bool,
-    pub pointing: PointingDevices,
 }
 
 impl Hardware {
@@ -137,7 +135,6 @@ impl Hardware {
         Self {
             wifi: wifi_in_kernel(),
             bluetooth: adapter_in_kernel(),
-            pointing: PointingDevices::scan(std::path::Path::new(UDEV_DATA)),
         }
     }
 }

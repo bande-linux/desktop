@@ -3,8 +3,7 @@
 # chosen, the initramfs carries it with its link, plugins and font, and purging it leaves neither
 # the alternative nor the theme in the next initramfs. It installs cleanly without GRUB; with GRUB
 # its configuration file adds "splash" and "loglevel=3" once to the kernel command line outside
-# recovery mode, Settings' helper turns them off and on, and purging regenerates grub.cfg without
-# them.
+# recovery mode, and purging regenerates grub.cfg without them.
 set -euo pipefail
 themes=/usr/share/plymouth/themes
 theme=$themes/bande/bande.plymouth
@@ -32,9 +31,6 @@ splash_times() {
             [ "$(grep -ow "$option" <<< "$line" | wc -l)" = "$1" ] || { echo "$option not $1 time(s): $line"; exit 1; }
         done
     done <<< "$lines"
-}
-helper() {
-    PKEXEC_UID=0 /usr/libexec/bande-boot-screen-helper "$1"
 }
 
 update-alternatives --query default.plymouth | grep -qx "Value: $theme"
@@ -82,13 +78,6 @@ sed -i 's/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT="quiet splas
 update-grub
 splash_times 1
 sed -i 's/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT="quiet"/' /etc/default/grub
-
-helper off
-splash_times 0
-dpkg --verify bande-plymouth-theme | grep -q " c $drop_in$"
-helper on
-splash_times 1
-[ -z "$(dpkg --verify bande-plymouth-theme)" ] || { dpkg --verify bande-plymouth-theme; exit 1; }
 
 DEBIAN_FRONTEND=noninteractive apt-get purge --yes bande-plymouth-theme > /dev/null
 never grep -q "$theme" <<< "$(update-alternatives --query default.plymouth 2> /dev/null || true)"

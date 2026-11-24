@@ -959,7 +959,6 @@ impl SettingsView {
             List::KnownNetworks => self.known_network_rows(),
             List::Printers => self.printer_rows(),
             List::Sharing => self.sharing_rows(),
-            List::BootScreen => self.boot_screen_rows(),
             List::Accounts => self.account_rows(),
             List::NearbyPrinters => self.add_printer_rows(),
             List::Networks => self.network_rows(),
@@ -975,7 +974,8 @@ impl SettingsView {
             List::Shortcuts => Vec::new(),
             List::About => self.about_rows(),
             List::Storage => self.storage_rows(),
-            List::Diagnostics => self.diagnostics_rows(),
+            List::ReportSending => self.report_sending_rows(),
+            List::Reports => self.report_rows(),
             List::SendReport => self.send_report_rows(),
             List::LargeFiles => self.large_file_rows(),
             List::Backup => self.backup_rows(),
@@ -1385,9 +1385,6 @@ impl SettingsView {
     }
 
     fn section_shown(&self, section: &Section) -> bool {
-        if !section.fits_pointers(self.pointing.mouse, self.pointing.trackpad) {
-            return false;
-        }
         section.settings.iter().all(|setting| match setting.id {
             SettingId::Networks => self.wifi.present().is_some_and(|wifi| wifi.enabled),
             SettingId::KnownNetworks | SettingId::Hotspot => self

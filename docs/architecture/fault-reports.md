@@ -8,26 +8,20 @@
 
 - `reports/<id>/`: `manifest.json`, attachments and `state.json` (occurrences, sent or rejected). A report is written in `tmp/`, every file and folder fsynced, then renamed into place, so a power cut leaves a whole report or none.
 - `outbox/<id>`: a marker for a report waiting to be sent; it holds `asked` when someone sent it by hand. `outbox/checkin` and `outbox/forget` (a token to delete from the server) wait the same way.
-- `identity` (`0600`): `{endpoint, machine, token, rotate_after, checkin_minute, policy}`, what the server handed out at enrollment and its last collection policy (see Protocol).
+- `identity` (`0600`): `{machine, token, rotate_after, checkin_minute, policy}`, what the server handed out at enrollment and its last collection policy (see Protocol).
 - `sending.json`: what went out this UTC day (reports, bytes, exempt reports) and when the last upload run was.
 
 Kept: 30 days, at most 200 reports and 256 MiB, 16 MiB a report. Sent and rejected reports go first, then the oldest. With under 512 MiB free on the disk a report keeps its manifest and drops its attachments, and names them in `attachments_dropped`. A repeat of a signature within an hour, or within a day while the first is unsent, only adds to `occurrences`; if the first was already sent, the manifest goes again without attachments so the server keeps count. A program makes at most 25 reports a UTC day (`manual` aside); after that a repeat of any of its signatures that day only adds to `occurrences`, and a new signature is only counted, as `program-limit` in the counters.
 
 ## Sending
 
-Nothing leaves the computer unless sending is on, or someone sends one report by hand. Sending is off until a server is configured and the person switches on "Send reports automatically" in Settings ▸ Privacy & Security ▸ Diagnostics, which links the server's `/privacy` address and also shows what is sent and has "Delete reports sent from this computer", which forgets the identity and erases the server's copy (see Enrollment).
+Nothing leaves the computer unless sending is on, or someone sends one report by hand. Sending is off until the person switches on "Send reports automatically" in Settings ▸ Privacy & Security ▸ Diagnostics, which links the server's `/privacy` address and also shows what is sent and has "Delete reports sent from this computer", which forgets the identity and erases the server's copy (see Enrollment).
 
-Bande ships no server and no certificate pin, so reporting stays off until the administrator
-configures a server in `/etc/bande/reports.conf`, owned by root, mode `0600` (any other mode is
-refused), which also holds the switch:
+The server is `https://logs.mikaelhug.se`, one constant (`config::SERVER`) that no setting changes; its certificate is checked against the system's roots. `/etc/bande/reports.conf`, owned by root, mode `0600` (any other mode is refused), holds the switch, which `bande-reporter sending on|off` and Settings write:
 
 ```
 send = on
-endpoint = https://host:port
-ca = /path/to/ca.pem
 ```
-
-`bande-reporter sending on|off` and Settings write `send`; `endpoint` names the server, and Settings offers the switch only once one is set. `ca`, optional and set with the endpoint, pins the roots the server's chain is checked against first; a chain they do not verify falls back to the system's roots.
 
 A daily check-in rides on the same sender: at boot, at login, when `serve` starts, when sending is switched on and on the resource wake-up every 10 minutes, an `outbox/checkin` marker is added if a day is due and this machine's minute of the policy's `checkin_hour` (UTC) has passed, or two days are due; and the sender posts it with the reports (see Protocol). Settings ▸ Privacy & Security ▸ Diagnostics shows its exact contents. It carries no content of any kind.
 
@@ -35,7 +29,7 @@ A daily check-in rides on the same sender: at boot, at login, when `serve` start
 
 ### Enrollment
 
-No key is built in. The first time something is to be sent, the sender enrolls: it asks `GET /v1/enroll` for a challenge, solves the proof of work and keeps the `{machine, token}` from `POST /v1/enroll` in `identity`. Reports and check-ins then carry `Authorization: Bearer <token>` and no `machine`: the server knows the computer only by the id it chose. The token is rotated (`POST /v1/rotate`) once `rotate_after` has passed or an answer says `"rotate": true`. `401 unknown_token` enrolls afresh; `401 revoked` stops sending until the settings change. Switching sending off removes `identity` and queues `outbox/forget`, which `DELETE /v1/me` erases from the server once it can be reached; switching it on again enrolls under a new id, so the two periods cannot be linked. A different `endpoint` forgets the old server the same way.
+No key is built in. The first time something is to be sent, the sender enrolls: it asks `GET /v1/enroll` for a challenge, solves the proof of work and keeps the `{machine, token}` from `POST /v1/enroll` in `identity`. Reports and check-ins then carry `Authorization: Bearer <token>` and no `machine`: the server knows the computer only by the id it chose. The token is rotated (`POST /v1/rotate`) once `rotate_after` has passed or an answer says `"rotate": true`. `401 unknown_token` enrolls afresh; `401 revoked` stops sending until the settings change. Switching sending off removes `identity` and queues `outbox/forget`, which `DELETE /v1/me` erases from the server once it can be reached; switching it on again enrolls under a new id, so the two periods cannot be linked.
 
 ### Throttling
 
@@ -45,7 +39,7 @@ No key is built in. The first time something is to be sent, the sender enrolls: 
 - **Policy:** kinds in `kinds_off` stay on this computer, `sample` sends one in `n` of a kind (chosen by report id) and keeps the rest here, and a signature in `counts_only` goes as its manifest without attachments.
 - **Retries:** every backoff and `Retry-After` wait is spread by ±20 %.
 
-`POST <endpoint>/v1/reports` with `Authorization: Bearer <token>`: `multipart/form-data` with `Content-Encoding: gzip` on the whole body, a part named `manifest` (`application/json`) first, then parts named `attachment`, each with a `filename`. The report's id makes a resend harmless.
+`POST <server>/v1/reports` with `Authorization: Bearer <token>`: `multipart/form-data` with `Content-Encoding: gzip` on the whole body, a part named `manifest` (`application/json`) first, then parts named `attachment`, each with a `filename`. The report's id makes a resend harmless.
 
 | Answer | What happens |
 |---|---|
@@ -82,7 +76,7 @@ File contents, typed text, window titles and the clipboard are not read. Every t
 
 ## By hand, and after a freeze
 
-Settings ▸ Privacy & Security ▸ Diagnostics ▸ Send Report or `bande-diagnose [--send] [--describe TEXT]`. It makes a `manual` report with this boot's and the previous boot's logs, the core dump list, processes, failed services, disk use and anything a hang left behind. Settings shows it first, with Send Now, Copy, Delete, and Save to File when no server is configured. `bande-diagnose` works without the service as root, so it also runs from a text console; with no server it saves a text file in the home folder.
+Settings ▸ Privacy & Security ▸ Diagnostics ▸ Send Report or `bande-diagnose [--send] [--describe TEXT]`. It makes a `manual` report with this boot's and the previous boot's logs, the core dump list, processes, failed services, disk use and anything a hang left behind. Settings sends it at once, or shows it first (Review…), with Send, Save, Copy and Delete. `bande-diagnose` works without the service as root, so it also runs from a text console; made that way without `--send`, the report is saved as a text file in the home folder.
 
 During a total freeze nothing runs. What survives: the journal up to its last sync and hang snapshots already fsynced.
 
@@ -119,11 +113,11 @@ The symbol may hold spaces; the last field is always the module and offset. Oute
 
 ### Check-in
 
-`POST <endpoint>/v1/checkins`, the same token, JSON: `{os_version, desktop_version, arch, active_hours, sessions, boots, day}`. `day` is the UTC date (`YYYY-MM-DD`) it covers; `active_hours` (one decimal) the time that day a desktop session (logind class `user`, type `wayland`) was open and the computer awake; `sessions` the desktop sessions started and `boots` the boots that day, all from the journal. Only while sending is on: the first covers yesterday, later ones each day since the last, at most 7, and days with no use are skipped; switching sending off forgets where it was. 200 or 201: done; anything else follows the table above.
+`POST <server>/v1/checkins`, the same token, JSON: `{os_version, desktop_version, arch, active_hours, sessions, boots, day}`. `day` is the UTC date (`YYYY-MM-DD`) it covers; `active_hours` (one decimal) the time that day a desktop session (logind class `user`, type `wayland`) was open and the computer awake; `sessions` the desktop sessions started and `boots` the boots that day, all from the journal. Only while sending is on: the first covers yesterday, later ones each day since the last, at most 7, and days with no use are skipped; switching sending off forgets where it was. 200 or 201: done; anything else follows the table above.
 
 ### Symbols
 
-`PUT <endpoint>/v1/symbols/<build-id>` with `Authorization: Bearer <LOGS_SYMBOLS_KEY>` (a key of its own, not a report token) and the `.debug` file as `application/octet-stream`; its debug sections are zlib-compressed (`SHF_COMPRESSED`). `ci/release/upload-symbols.sh <dbgsym deb>... <endpoint>` sends every `.debug` of the packages' `-dbgsym` packages (2xx is success). `LOGS_SYMBOLS_KEY` may list several keys separated by commas: on a 401 the next one is tried and kept, so the server's keys can be rotated without a gap.
+`PUT <server>/v1/symbols/<build-id>` with `Authorization: Bearer <LOGS_SYMBOLS_KEY>` (a key of its own, not a report token) and the `.debug` file as `application/octet-stream`; its debug sections are zlib-compressed (`SHF_COMPRESSED`). `ci/release/upload-symbols.sh <dbgsym deb>... <endpoint>` sends every `.debug` of the packages' `-dbgsym` packages (2xx is success). `LOGS_SYMBOLS_KEY` may list several keys separated by commas: on a 401 the next one is tried and kept, so the server's keys can be rotated without a gap.
 
 ### Signature
 

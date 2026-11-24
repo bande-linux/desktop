@@ -17,19 +17,17 @@ use bande_settings_panes::{PaneId, SettingId, Value};
 use bande_status::brightness::{DisplayLevel, LevelRequest};
 use bande_status::devices::can_sleep;
 use bande_toolkit::SessionEnd;
-use bande_watch::FolderWatch;
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::PropertiesProxy;
 
 use crate::about::{About, AboutCommand, follow_about};
 use crate::backup::{BackupCommand, BackupUpdate, follow_backup};
 use crate::battery::{BatteryCommand, PowerState, follow_battery};
-use crate::boot_screen::{BootScreenCommand, BootScreenState, follow_boot_screen};
 use crate::brightness::follow_brightness;
 use crate::client::{CONFIG_SETTINGS, SettingsClient};
 use crate::consent::{KeyboardAccess, follow_keyboard_access};
 use crate::defaults::{DefaultApp, DefaultAppCommand, follow_default_apps};
-use crate::diagnostics::{Diagnostics, DiagnosticsCommand, follow_diagnostics};
+use crate::diagnostics::{After, Diagnostics, DiagnosticsCommand, follow_diagnostics};
 use crate::enterprise::Certificate;
 use crate::failure::{explained, pane_failed, sentence};
 use crate::handover::{HandOver, hand_over};
@@ -39,7 +37,6 @@ use crate::notifications::{AppNotifications, NotificationCommand, follow_app_not
 use crate::passwords::{Concealed, PasswordCommand, Saved, follow_passwords};
 use crate::permissions::{Grants, PermissionCommand, follow_permissions};
 use crate::pictures::{Pair, PictureCommand, follow_pictures};
-use crate::pointing::follow_pointing;
 use crate::printers::{PrinterCommand, PrintersState, follow_printers};
 use crate::privacy::clear_clipboard;
 use crate::privilege::{Privilege, follow_privileges};
@@ -56,7 +53,6 @@ use crate::state::{Answer, BluetoothState, Joined, NetworkState, Question, WifiS
 use crate::storage::{Storage, StorageCommand, follow_storage};
 use crate::time::{TimeCommand, TimeState, follow_time};
 use crate::users::{Account, PasswordOutcome, UsersCommand, follow_users};
-use bande_status::pointing::{PointingDevices, UDEV_DATA};
 
 const NOTIFICATIONS: &str = "org.freedesktop.Notifications";
 const NOTIFICATIONS_PATH: &str = "/org/freedesktop/Notifications";
@@ -84,7 +80,8 @@ pub enum Update {
     Storage(Storage),
     Diagnostics(Diagnostics),
     DiagnosticsReport(String, String),
-    ReportCreated(String),
+    ReportCreated(String, After),
+    ReportFailed,
     ReportSaved(String),
     Backup(BackupUpdate),
     Time(Option<TimeState>),
@@ -98,7 +95,6 @@ pub enum Update {
     FirmwareMissing(bool),
     Locale(Option<LocaleState>),
     Layouts(Layouts),
-    Pointing(PointingDevices),
     InputLevel(f32),
     Failed(SettingId, String),
     PaneFailed(PaneId, String),
@@ -111,7 +107,6 @@ pub enum Update {
     Security(SecurityStatus),
     Printers(PrintersState),
     Sharing(SharingState),
-    BootScreen(BootScreenState),
     PrinterAdded(bool),
     Scan(ScanUpdate),
     PrintingInstalled,
@@ -155,7 +150,6 @@ pub enum Command {
     Printers(PrinterCommand),
     Sharing(SharingCommand),
     SignInPages(bool),
-    BootScreen(BootScreenCommand),
     Users(UsersCommand),
     Brightness(LevelRequest),
     Reveal(PathBuf),
@@ -460,9 +454,7 @@ pub struct Services {
     printers: Option<Sender<PrinterCommand>>,
     sharing: Sender<SharingCommand>,
     sign_in_pages: Sender<bool>,
-    boot_screen: Sender<BootScreenCommand>,
     users: Sender<UsersCommand>,
-    _pointing: Option<FolderWatch>,
 }
 
 impl Services {
@@ -510,11 +502,7 @@ impl Services {
             printers: system.map(|system| follow_printers(system, session, updates.clone())),
             sharing: follow_sharing(Some(session.clone()), system.cloned(), updates.clone()),
             sign_in_pages,
-            boot_screen: follow_boot_screen(system.cloned(), updates.clone()),
             users: follow_users(session, system, updates.clone()),
-            _pointing: follow_pointing(PathBuf::from(UDEV_DATA), updates.clone())
-                .inspect_err(|error| tracing::warn!("cannot watch {UDEV_DATA}: {error}"))
-                .ok(),
         }
     }
 
@@ -563,7 +551,6 @@ impl Services {
             Command::Users(command) => self.users.send(command).is_ok(),
             Command::Sharing(command) => self.sharing.send(command).is_ok(),
             Command::SignInPages(on) => self.sign_in_pages.send(on).is_ok(),
-            Command::BootScreen(command) => self.boot_screen.send(command).is_ok(),
             Command::Printers(command) => self
                 .printers
                 .as_ref()

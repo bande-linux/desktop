@@ -1,14 +1,15 @@
 use std::fs::File;
 use std::io::{self, Read};
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
-use std::path::{Path, PathBuf};
+use std::path::Path;
+
+/// The report server.
+pub const SERVER: &str = "https://logs.mikaelhug.se";
 
 const PRIVATE_BITS: u32 = 0o077;
 
 #[derive(Default, Clone, PartialEq, Eq)]
 pub struct Config {
-    pub endpoint: Option<String>,
-    pub ca: Option<PathBuf>,
     pub send: bool,
     pub stack_memory: bool,
     pub signature_tag: Option<String>,
@@ -43,8 +44,6 @@ impl Config {
             };
             let value = value.trim();
             match name.trim() {
-                "endpoint" => config.endpoint = Some(value.trim_end_matches('/').to_owned()),
-                "ca" => config.ca = Some(PathBuf::from(value)),
                 "send" => config.send = value == "on",
                 "stack_memory" => config.stack_memory = value == "on",
                 "signature_tag" => config.signature_tag = Some(value.to_owned()),
@@ -52,14 +51,6 @@ impl Config {
             }
         }
         config
-    }
-
-    pub fn has_server(&self) -> bool {
-        self.endpoint.is_some()
-    }
-
-    pub fn sends_automatically(&self) -> bool {
-        self.send && self.has_server()
     }
 }
 

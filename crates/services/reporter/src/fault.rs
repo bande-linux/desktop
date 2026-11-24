@@ -153,7 +153,7 @@ impl Fault {
             let ring = facts::ring_lines(uid, program, self.pid.as_deref());
             push_text(&mut self.attachments, "ring.txt", scrubber.text(&ring));
         }
-        spool.store(manifest, self.attachments, config.sends_automatically())
+        spool.store(manifest, self.attachments, config.send)
     }
 }
 

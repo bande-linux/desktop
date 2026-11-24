@@ -117,7 +117,7 @@ impl SettingsView {
                 Some(Command::Passwords(PasswordCommand::Delete(path)))
             }
             Some(Forget::SentReports) => {
-                self.focus_next = Some(Anchor::Setting(SettingId::DiagnosticsList, None));
+                self.focus_next = Some(Anchor::Setting(SettingId::ReportSending, None));
                 Some(Command::Diagnostics(DiagnosticsCommand::ForgetSent))
             }
             Some(Forget::Printer(name)) => {

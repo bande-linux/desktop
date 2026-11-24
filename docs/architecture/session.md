@@ -747,8 +747,8 @@ forward. Stopping
 
 The boot screen (`bande-plymouth-theme`, which `bande-desktop` recommends) shows when GRUB starts
 the kernel with `splash` and `loglevel=3`, which the package's
-`/etc/default/grub.d/bande-splash.cfg` adds ([packaging.md](packaging.md)) and Settings ▸ About ▸
-Show a boot screen turns off and on. It keeps playing until the login window is on screen and
+`/etc/default/grub.d/bande-splash.cfg` adds ([packaging.md](packaging.md)) and
+the administrator may edit. It keeps playing until the login window is on screen and
 hands over without a blank frame or console text. `bande-greeter.service` starts after
 `plymouth-start.service` and conflicts with `plymouth-quit.service`, so the end of boot does not
 quit it. The login window runs on VT 1, Plymouth's terminal, so nothing switches VT, and

@@ -33,7 +33,8 @@ pub enum PaneId {
     Sound,
     Keyboard,
     KeyboardShortcuts,
-    Pointing,
+    Mouse,
+    Trackpad,
     Printers,
     Sharing,
     Power,
@@ -55,7 +56,7 @@ pub enum PaneId {
 }
 
 impl PaneId {
-    const KEYWORDS: [(Self, &'static str); 31] = [
+    const KEYWORDS: [(Self, &'static str); 32] = [
         (Self::Wifi, "wifi"),
         (Self::Bluetooth, "bluetooth"),
         (Self::Network, "network"),
@@ -68,7 +69,8 @@ impl PaneId {
         (Self::Sound, "sound"),
         (Self::Keyboard, "keyboard"),
         (Self::KeyboardShortcuts, "keyboard-shortcuts"),
-        (Self::Pointing, "mouse-trackpad"),
+        (Self::Mouse, "mouse"),
+        (Self::Trackpad, "trackpad"),
         (Self::Printers, "printers"),
         (Self::Sharing, "sharing"),
         (Self::Power, "power"),
@@ -99,11 +101,15 @@ impl PaneId {
             | Self::Notifications
             | Self::Search
             | Self::Accessibility => Some(Group::Desktop),
-            Self::Displays | Self::Sound | Self::Keyboard | Self::Pointing | Self::Printers => {
-                Some(Group::Devices)
-            }
+            Self::Displays
+            | Self::Sound
+            | Self::Keyboard
+            | Self::Mouse
+            | Self::Trackpad
+            | Self::Printers => Some(Group::Devices),
             Self::Power
             | Self::Users
+            | Self::Passwords
             | Self::PrivacySecurity
             | Self::Apps
             | Self::LanguageTime
@@ -111,7 +117,6 @@ impl PaneId {
             | Self::Backup
             | Self::About => Some(Group::System),
             Self::KeyboardShortcuts
-            | Self::Passwords
             | Self::Camera
             | Self::Microphone
             | Self::Screenshots
@@ -135,7 +140,8 @@ impl PaneId {
             Self::Displays => "video-display-symbolic",
             Self::Sound => "audio-volume-high-symbolic",
             Self::Keyboard | Self::KeyboardShortcuts => "input-keyboard-symbolic",
-            Self::Pointing => "input-mouse-symbolic",
+            Self::Mouse => "input-mouse-symbolic",
+            Self::Trackpad => "input-touchpad-symbolic",
             Self::Printers => "printer-symbolic",
             Self::Sharing => "folder-publicshare-symbolic",
             Self::Power => "system-shutdown-symbolic",
@@ -171,7 +177,8 @@ impl PaneId {
             Self::Sound => tr!("Sound"),
             Self::Keyboard => tr!("Keyboard"),
             Self::KeyboardShortcuts => tr!("Keyboard Shortcuts"),
-            Self::Pointing => tr!("Mouse & Trackpad"),
+            Self::Mouse => tr!("Mouse"),
+            Self::Trackpad => tr!("Trackpad"),
             Self::Printers => tr!("Printers"),
             Self::Sharing => tr!("Sharing"),
             Self::Power => tr!("Power"),
@@ -211,9 +218,8 @@ impl PaneId {
             Self::Sound => tr!("Output, input and sound effects"),
             Self::Keyboard => tr!("Input sources, key repeat and modifier keys"),
             Self::KeyboardShortcuts => tr!("The keys that work everywhere on the desktop"),
-            Self::Pointing => {
-                tr!("Buttons, tapping, scrolling, tracking speed and trackpad gestures")
-            }
+            Self::Mouse => tr!("Primary button, scrolling and tracking speed"),
+            Self::Trackpad => tr!("Tapping, scrolling, tracking speed and gestures"),
             Self::Printers => tr!("Add printers, pick the default, see what is printing and scan"),
             Self::Sharing => {
                 tr!("Share folders and the screen with other computers and allow remote login")
@@ -234,9 +240,7 @@ impl PaneId {
             Self::About => tr!("This computer"),
             Self::Storage => tr!("What fills the disk and how to free up space"),
             Self::SoftwareUpdate => tr!("Updates for Bande, Debian apps and firmware"),
-            Self::Diagnostics => tr!(
-                "What failed on this computer. Read each report, choose whether it is sent, or tell what went wrong."
-            ),
+            Self::Diagnostics => tr!("Problem reports from this computer"),
             Self::Backup => tr!("Hourly encrypted versions on an external disk"),
         }
     }
@@ -261,9 +265,10 @@ impl PaneId {
             Self::KeyboardShortcuts => {
                 tr!("hotkeys, shortcuts, keys, super, command, combinations")
             }
-            Self::Pointing => tr!(
-                "mouse, trackpad, touchpad, pointer, cursor, click, tap, scroll, wheel, buttons, gestures"
-            ),
+            Self::Mouse => tr!("pointer, cursor, click, scroll, wheel, buttons"),
+            Self::Trackpad => {
+                tr!("touchpad, pointer, cursor, click, tap, scroll, gestures")
+            }
             Self::Printers => {
                 tr!("print, printer, cups, queue, ipp, airprint, scan, scanner, escl")
             }
@@ -333,7 +338,6 @@ impl PaneId {
         match self {
             Self::Storage => Some(Self::About),
             Self::Diagnostics => Some(Self::PrivacySecurity),
-            Self::Passwords => Some(Self::Users),
             Self::KeyboardShortcuts => Some(Self::Keyboard),
             Self::Camera
             | Self::Microphone
@@ -478,8 +482,9 @@ pub enum SettingId {
     Region,
     StoragePage,
     DiagnosticsPage,
-    DiagnosticsList,
-    SendReportForm,
+    ReportSending,
+    SendReport,
+    Reports,
     ShortcutsPage,
     Spelling,
     TextReplacements,
@@ -517,13 +522,11 @@ pub enum SettingId {
     Printers,
     NearbyPrinters,
     Sharing,
-    BootScreen,
     Accounts,
     FullName,
     LockMessage,
     ShowPreviews,
     SavedPasswords,
-    PasswordsPage,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -544,7 +547,6 @@ pub enum List {
     Printers,
     NearbyPrinters,
     Sharing,
-    BootScreen,
     KnownNetworks,
     Networks,
     PairedDevices,
@@ -559,8 +561,9 @@ pub enum List {
     Shortcuts,
     About,
     Storage,
-    Diagnostics,
+    ReportSending,
     SendReport,
+    Reports,
     LargeFiles,
     Backup,
     Clock,
@@ -723,36 +726,6 @@ impl Section {
         self.note = Some(note);
         self
     }
-
-    pub fn fits_pointers(&self, mouse: bool, trackpad: bool) -> bool {
-        self.settings.iter().all(|setting| match setting.id {
-            SettingId::MousePrimaryButton
-            | SettingId::MouseNaturalScrolling
-            | SettingId::MouseSpeed
-            | SettingId::MouseAcceleration => mouse,
-            SettingId::TrackpadTapToClick
-            | SettingId::TrackpadNaturalScrolling
-            | SettingId::TrackpadSpeed
-            | SettingId::TrackpadSecondaryClick
-            | SettingId::TrackpadDisableWhileTyping
-            | SettingId::TrackpadWorkspaceSwipe
-            | SettingId::TrackpadOverviewSwipe
-            | SettingId::TrackpadDesktopSpread
-            | SettingId::TrackpadLauncherPinch
-            | SettingId::TrackpadAcceleration
-            | SettingId::TrackpadDragging
-            | SettingId::TrackpadScrollMethod => trackpad,
-            _ => true,
-        })
-    }
-}
-
-pub fn with_pointers(panes: &mut Vec<Pane>, mouse: bool, trackpad: bool) {
-    for pane in panes.iter_mut() {
-        pane.sections
-            .retain(|section| section.fits_pointers(mouse, trackpad));
-    }
-    panes.retain(|pane| pane.id != PaneId::Pointing || !pane.sections.is_empty());
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -1440,7 +1413,8 @@ fn device_panes() -> Vec<Pane> {
                 )],
             )],
         ),
-        pointing_pane(),
+        mouse_pane(),
+        trackpad_pane(),
         pane(
             PaneId::Printers,
             vec![
@@ -1809,37 +1783,43 @@ fn acceleration(id: SettingId) -> Setting {
     .described(tr!("Faster movements move the pointer farther"))
 }
 
-fn pointing_pane() -> Pane {
+fn mouse_pane() -> Pane {
     pane(
-        PaneId::Pointing,
+        PaneId::Mouse,
+        vec![section(
+            None,
+            vec![
+                setting(
+                    SettingId::MousePrimaryButton,
+                    tr!("Primary button"),
+                    tr!("left-handed, right-handed, swap buttons, click"),
+                    Kind::Choices(keyword_choices(vec![
+                        (tr!("Left"), "left"),
+                        (tr!("Right"), "right"),
+                    ])),
+                ),
+                setting(
+                    SettingId::MouseNaturalScrolling,
+                    tr!("Natural scrolling"),
+                    tr!("scroll direction, reverse, wheel"),
+                    Kind::Switch,
+                ),
+                speed(
+                    SettingId::MouseSpeed,
+                    tr!("pointer, cursor, acceleration, mouse"),
+                ),
+                acceleration(SettingId::MouseAcceleration),
+            ],
+        )],
+    )
+}
+
+fn trackpad_pane() -> Pane {
+    pane(
+        PaneId::Trackpad,
         vec![
             section(
-                Some(tr!("Mouse")),
-                vec![
-                    setting(
-                        SettingId::MousePrimaryButton,
-                        tr!("Primary button"),
-                        tr!("left-handed, right-handed, swap buttons, click"),
-                        Kind::Choices(keyword_choices(vec![
-                            (tr!("Left"), "left"),
-                            (tr!("Right"), "right"),
-                        ])),
-                    ),
-                    setting(
-                        SettingId::MouseNaturalScrolling,
-                        tr!("Natural scrolling"),
-                        tr!("scroll direction, reverse, wheel"),
-                        Kind::Switch,
-                    ),
-                    speed(
-                        SettingId::MouseSpeed,
-                        tr!("pointer, cursor, acceleration, mouse"),
-                    ),
-                    acceleration(SettingId::MouseAcceleration),
-                ],
-            ),
-            section(
-                Some(tr!("Trackpad")),
+                Some(tr!("Tap and click")),
                 vec![
                     switch(
                         SettingId::TrackpadTapToClick,
@@ -1869,7 +1849,7 @@ fn pointing_pane() -> Pane {
                 ],
             ),
             section(
-                Some(tr!("Trackpad scrolling")),
+                Some(tr!("Scrolling")),
                 vec![
                     switch(
                         SettingId::TrackpadNaturalScrolling,
@@ -1888,7 +1868,7 @@ fn pointing_pane() -> Pane {
                 ],
             ),
             section(
-                Some(tr!("Trackpad pointer")),
+                Some(tr!("Pointer")),
                 vec![
                     speed(
                         SettingId::TrackpadSpeed,
@@ -1903,7 +1883,7 @@ fn pointing_pane() -> Pane {
                 ],
             ),
             section(
-                Some(tr!("Trackpad gestures")),
+                Some(tr!("Gestures")),
                 vec![
                     gesture(
                         SettingId::TrackpadWorkspaceSwipe,
@@ -1944,23 +1924,17 @@ fn system_panes() -> Vec<Pane> {
         power_pane(),
         pane(
             PaneId::Users,
-            vec![
-                section(
-                    None,
-                    vec![list(
-                        SettingId::Accounts,
-                        tr!("Accounts"),
-                        tr!(
-                            "change password, password, administrator, standard, login name, picture, photo, full name, add user, new user, delete user, remove user"
-                        ),
-                        List::Accounts,
-                    )],
-                ),
-                section(
-                    None,
-                    vec![page(SettingId::PasswordsPage, PaneId::Passwords)],
-                ),
-            ],
+            vec![section(
+                None,
+                vec![list(
+                    SettingId::Accounts,
+                    tr!("Accounts"),
+                    tr!(
+                        "change password, password, administrator, standard, login name, picture, photo, full name, add user, new user, delete user, remove user"
+                    ),
+                    List::Accounts,
+                )],
+            )],
         ),
         pane(
             PaneId::Passwords,
@@ -2041,21 +2015,30 @@ fn system_panes() -> Vec<Pane> {
                 section(
                     None,
                     vec![list(
-                        SettingId::DiagnosticsList,
-                        tr!("Reports"),
-                        tr!(
-                            "crash, crashes, freeze, hang, quit unexpectedly, core dump, log, diagnostics, report, send, bug, analytics, privacy, delete"
-                        ),
-                        List::Diagnostics,
+                        SettingId::ReportSending,
+                        tr!("Send reports automatically"),
+                        tr!("automatic, privacy, analytics, telemetry, delete reports"),
+                        List::ReportSending,
                     )],
                 ),
                 section(
                     Some(tr!("Send Report")),
                     vec![list(
-                        SettingId::SendReportForm,
+                        SettingId::SendReport,
                         tr!("Send Report"),
                         tr!("bug, report, problem, freeze, crash, feedback, send, diagnose"),
                         List::SendReport,
+                    )],
+                ),
+                section(
+                    Some(tr!("Reports")),
+                    vec![list(
+                        SettingId::Reports,
+                        tr!("Reports"),
+                        tr!(
+                            "crash, crashes, freeze, hang, quit unexpectedly, core dump, log, diagnostics"
+                        ),
+                        List::Reports,
                     )],
                 ),
             ],
@@ -2440,17 +2423,6 @@ fn about_pane() -> Pane {
                         "model, chip, processor, cpu, memory, ram, version, debian, bande, serial number"
                     ),
                     List::About,
-                )],
-            ),
-            section(
-                Some(tr!("Startup")),
-                vec![list(
-                    SettingId::BootScreen,
-                    tr!("Show a boot screen"),
-                    tr!(
-                        "boot screen, splash, start up, startup, logo, plymouth, grub, boot messages"
-                    ),
-                    List::BootScreen,
                 )],
             ),
             section(None, vec![page(SettingId::StoragePage, PaneId::Storage)]),

@@ -1631,6 +1631,7 @@ dependencies = [
  "rustc-demangle",
  "rustix 1.1.6",
  "serde_json",
+ "tempfile",
  "tracing",
 ]
 
@@ -1835,7 +1836,6 @@ dependencies = [
  "bande-toolkit",
  "bande-volumes",
  "bande-wallpaper",
- "bande-watch",
  "bande-xdg",
  "futures-lite",
  "image",

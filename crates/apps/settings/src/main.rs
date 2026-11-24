@@ -9,9 +9,8 @@ use bande_app::{Cx, Info, Keys, Kind, Menus, Program, Saved, View, WindowId};
 use bande_app_menu::Entry;
 use bande_l10n::tr;
 use bande_settings::{
-    Command, Displays, Feed, Leaving, Notice, PaneId, PointingDevices, Services, SettingsView,
-    SoftwareCommand, UDEV_DATA, UPDATE_NOTICE, announce_translations, announce_updates, feed,
-    sidebar_width,
+    Command, Displays, Feed, Leaving, Notice, PaneId, Services, SettingsView, SoftwareCommand,
+    UPDATE_NOTICE, announce_translations, announce_updates, feed, sidebar_width,
 };
 use bande_settings_panes::panes as panes_list;
 use bande_toolkit::{
@@ -171,7 +170,6 @@ fn open_main(
         let mut view = SettingsView::new(appearance.palette(), TextSystem::new());
         view.set_appearance(appearance);
         view.set_files_installed(files);
-        view.set_pointing_devices(PointingDevices::scan(Path::new(UDEV_DATA)));
         if bande_xdg::find_executable(bande_config::SCREEN_READER).is_none() {
             view.hide_screen_reader();
         }

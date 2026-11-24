@@ -90,8 +90,7 @@ debhelper compat 14, built with Debian's `rustc` and `cargo` through dh-cargo's 
   `boot-screen` (the boot screen is a `default.plymouth` alternative that only applies when no
   other theme is chosen, the initramfs carries it, its link and Inter, it installs without GRUB,
   with GRUB the generated `linux` lines carry `splash` and `loglevel=3` once, also when
-  `/etc/default/grub` has `splash`, Settings' helper turns them off and back to the unmodified
-  conffile, and purging it leaves neither the alternative, the theme, `splash` nor `loglevel=3`
+  `/etc/default/grub` has `splash`, and purging it leaves neither the alternative, the theme, `splash` nor `loglevel=3`
   behind), `system-setup` (every package with its recommends brings none of the short list of packages
   that take over system-wide setup, such as `systemd-resolved`, `iwd`, a firewall or another
   display manager, and leaves `/etc/resolv.conf`, `/etc/network/interfaces` and
@@ -161,10 +160,9 @@ are in [performance.md](performance.md).
   `loglevel=3` unless a `loglevel=` is: Debian's kernel prints errors to the console with
   `quiet`, and firmware errors would otherwise show as text before Plymouth starts. It stays
   until purge like any conffile; a removed package's `splash` only shows Plymouth's own theme.
-  Settings ▸ About ▸ Show a boot screen shows whether that line is active and comments it out or
-  back in through `bande-boot-screen-helper`, an administrator's change to the conffile that
-  dpkg keeps on upgrade, installing the package first when it is missing; on a boot manager
-  other than GRUB it says what to do instead. Plymouth draws images at their own size and doubles
+  The boot screen has no setting: the file is the administrator's to edit, followed by
+  `update-grub`, and dpkg keeps the change on upgrade; another boot manager needs `splash` added
+  by hand. Plymouth draws images at their own size and doubles
   them on a HiDPI display, with no larger variant to choose, so the assets are drawn on whole
   pixels at scale 1.
 - **`bande-desktop`** (architecture `all`, section `metapackages`): the one package that installs a complete Bande desktop.

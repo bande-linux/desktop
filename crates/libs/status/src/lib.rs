@@ -9,7 +9,6 @@ pub mod gtkmenu;
 pub mod history;
 pub mod hub;
 pub mod memory;
-pub mod pointing;
 pub mod session;
 #[cfg(feature = "audio")]
 mod sound;

@@ -366,9 +366,7 @@ fn run_session(
         },
         None => tracing::warn!("pam_systemd registered no session"),
     }
-    let protection = (class == Class::User).then(|| Protection::of(account.uid));
     let followed = launch(class, account, terminal, &environment, links);
-    drop(protection);
     if let Err(error) = terminal.reclaim() {
         tracing::warn!("cannot take tty{} back: {error}", terminal.number());
     }
@@ -387,6 +385,10 @@ fn launch(
     environment: &[(OsString, OsString)],
     links: Links<'_>,
 ) -> Result<(), Failure> {
+    let _protection = match class {
+        Class::User => Protection::of(account.uid),
+        Class::Greeter => None,
+    };
     let marked = match class {
         Class::User => {
             variable(environment, "XDG_RUNTIME_DIR").map(|runtime| (runtime, DESKTOP_SHOWN))

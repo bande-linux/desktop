@@ -222,6 +222,10 @@ impl State {
 }
 
 impl Compositor {
+    pub fn redraw_displays(&mut self) {
+        self.state.needs_redraw = true;
+    }
+
     pub fn redraw_hdr_displays(&mut self) {
         for screen in &mut self.state.screens {
             screen.redraw |= screen.hdr && screen.config.hdr.is_some();

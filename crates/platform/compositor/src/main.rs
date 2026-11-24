@@ -45,7 +45,6 @@ use zbus::blocking::Connection;
 use zbus::blocking::fdo::PropertiesProxy;
 
 const HEADLESS_SIZE: (i32, i32) = (1920, 1080);
-const TINT_RETRY: Duration = Duration::from_millis(250);
 const SHELL_READY_TIMEOUT: Duration = Duration::from_millis(2500);
 const BEHIND_BOOT_SCREEN_LIMIT: Duration = Duration::from_secs(5);
 const LOGIN_WINDOW_LIMIT: Duration = Duration::from_secs(300);
@@ -1319,9 +1318,10 @@ where
         if compositor.take_outputs_powered_on() {
             schedulers.iter_mut().for_each(FrameScheduler::resume);
         }
-        if let Some(number) = compositor.take_virtual_terminal() {
-            output.switch_virtual_terminal(number);
-            compositor.redraw_hdr_displays();
+        if let Some(number) = compositor.take_virtual_terminal()
+            && output.switch_virtual_terminal(number)
+        {
+            compositor.redraw_displays();
         }
         if session == Session::Greeter && compositor.awaited_has_not_appeared(now()) {
             let hung = progress
@@ -1420,7 +1420,7 @@ where
             compositor.redraw_hdr_displays();
         }
         let night_wait = night.wake_at.map(|at| at.saturating_sub(now()));
-        let tint_wait = (!output.retry_tint()).then_some(TINT_RETRY);
+        let tint_wait = output.retry_tint();
         timeout = upkeep
             .retry_in
             .into_iter()

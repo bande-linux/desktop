@@ -245,11 +245,14 @@ pub trait FrameOutput {
 
     fn set_color_temperature(&mut self, _kelvin: f64) {}
 
-    fn retry_tint(&mut self) -> bool {
-        true
+    fn retry_tint(&mut self) -> Option<Duration> {
+        None
     }
 
-    fn switch_virtual_terminal(&mut self, _number: i32) {}
+    /// Whether displays went dark for it and have to be drawn again.
+    fn switch_virtual_terminal(&mut self, _number: i32) -> bool {
+        false
+    }
 
     fn renew_failed_renderer(&mut self) -> Result<bool, Self::Error> {
         Ok(false)

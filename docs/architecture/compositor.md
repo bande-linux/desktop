@@ -327,7 +327,7 @@ when they reach the screen is Bande's own.
   when a key switches the virtual terminal (and draws HDR again only if that did not happen within half a
   second) and whenever the process leaves, also by an error; a display that was in HDR keeps no last frame. A
   switch from elsewhere (`chvt`, user switching) cannot be caught: seatd and logind take the device away
-  before they tell, so the text console is shown in the HDR signal until Bande returns. Frames are drawn as
+  before they tell, so a text console stays in HDR until Bande returns. Frames are drawn as
   ever into the buffer's unconverted image, in sRGB with ordinary white at 203 cd/m² (less on a
   display whose peak is lower), and the conversion pass encodes BT.2020 and PQ; while HDR content is drawn on the
   display that image is half-float, so light above white and colours outside sRGB survive. Night
@@ -520,7 +520,7 @@ there is no table at all (some drivers round to 8 bits with a legacy-size one): 
 display that has none, and a table, matrix or ramp another process left is taken away. Scheduled changes fade over a
 minute, switching fades in 1.5 s and a new warmth applies at once; it wakes every 50 ms only while
 fading. A display that can do none of these is left alone with one log line; a tint
-the display was too busy for is tried again 250 ms later, and the tint is looked at
+the display was too busy for is tried again up to five times, after 250 ms and then twice the wait each time, and the tint is looked at
 again after a session switch or wake once the first frame has flipped.
 
 ## Sleep and wake

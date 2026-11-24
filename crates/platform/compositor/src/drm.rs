@@ -42,9 +42,9 @@ use bande_render::{RenderError, VulkanRenderer};
 use crate::boot_screen::boot_screen_shown;
 use crate::clock::{FrameOutput, Submission, Vblank};
 use crate::element::{ScreenElement, drawing_everything};
-use crate::gamma::Tint;
+use crate::gamma::{Tint, TintRetry};
 use crate::output_format::{
-    self, Buffers, Failure, LinkDepth, OutputFormat, Shape, Sink, Step, Wanted,
+    self, Buffers, Failure, LinkDepth, OutputFormat, Shape, Signalled, Sink, Step, Wanted,
 };
 use crate::render::{Snapshot, background};
 use crate::reveal::ShownFrame;
@@ -79,7 +79,7 @@ struct Head {
     dark: bool,
     tint: Option<Tint>,
     tone: Option<f64>,
-    tint_failed: bool,
+    tint_retry: TintRetry,
     lost_at: Option<Instant>,
     relink_wanted: bool,
     flip_pending: bool,
@@ -315,8 +315,7 @@ struct HdrSignal {
     default: u64,
     bt2020: u64,
     metadata: property::Handle,
-    ours: bool,
-    left: bool,
+    state: Signalled,
 }
 
 fn hdr_signal(device: &DrmDevice, handle: connector::Handle) -> Option<HdrSignal> {
@@ -338,8 +337,7 @@ fn hdr_signal(device: &DrmDevice, handle: connector::Handle) -> Option<HdrSignal
         default,
         bt2020,
         metadata,
-        ours: false,
-        left: shown != default || blob != 0,
+        state: Signalled::found(shown != default || blob != 0),
     })
 }
 
@@ -775,7 +773,7 @@ fn shows_connected_display(connectors: &Path) -> bool {
 fn event_time(metadata: Option<DrmEventMetadata>) -> Duration {
     match metadata.map(|metadata| metadata.time) {
         Some(DrmEventTime::Monotonic(time)) => time,
-        _ => Duration::from(Clock::<Monotonic>::new().now()),
+        _ => monotonic(),
     }
 }
 
@@ -1110,7 +1108,7 @@ impl DrmBackend {
             dark: false,
             tint: None,
             tone: None,
-            tint_failed: false,
+            tint_retry: TintRetry::default(),
             lost_at: None,
             relink_wanted: false,
             flip_pending: false,
@@ -1377,7 +1375,7 @@ impl DrmBackend {
             }
             head.tone = None;
             head.tint = None;
-            head.tint_failed = false;
+            head.tint_retry = TintRetry::default();
             head.dark = false;
             head.flip_pending = false;
             head.formats.forget_refusals();
@@ -1590,12 +1588,17 @@ fn read_buffer(
     }))
 }
 
+fn monotonic() -> Duration {
+    Duration::from(Clock::<Monotonic>::new().now())
+}
+
 fn tint(device: &DrmDevice, head: &mut Head, kelvin: f64) {
     let kelvin = match head.shape.hdr {
         true => crate::night::NEUTRAL,
         false => kelvin,
     };
     if head.tone == Some(kelvin) {
+        head.tint_retry = TintRetry::default();
         return;
     }
     let crtc = head.compositor.crtc();
@@ -1619,10 +1622,15 @@ fn tint(device: &DrmDevice, head: &mut Head, kelvin: f64) {
         shown = tint.show(device, crtc, kelvin);
     }
     head.tint = Some(tint);
-    head.tint_failed = shown.is_err();
     match shown {
-        Ok(()) => head.tone = Some(kelvin),
-        Err(error) => tracing::debug!("{} is tinted later: {error}", head.config.name),
+        Ok(()) => {
+            head.tone = Some(kelvin);
+            head.tint_retry = TintRetry::default();
+        }
+        Err(error) => {
+            tracing::debug!("{} is tinted later: {error}", head.config.name);
+            head.tint_retry.failed(monotonic());
+        }
     }
 }
 
@@ -1634,7 +1642,7 @@ impl FrameOutput for DrmBackend {
         let frames: Vec<(String, OnScreen)> = self
             .heads
             .iter()
-            .filter(|head| !head.signal.is_some_and(|signal| signal.ours || signal.left))
+            .filter(|head| !head.signal.is_some_and(|signal| signal.state.is_on()))
             .filter_map(|head| {
                 let name = &head.config.name;
                 match shown_frame(&self.device, head.connector) {
@@ -1685,22 +1693,28 @@ impl FrameOutput for DrmBackend {
         }
     }
 
-    fn retry_tint(&mut self) -> bool {
-        let Some(kelvin) = self.kelvin.filter(|_| self.session.is_active()) else {
-            return true;
-        };
-        for head in self.heads.iter_mut().filter(|head| head.tint_failed) {
-            tint(&self.device, head, kelvin);
+    fn retry_tint(&mut self) -> Option<Duration> {
+        let kelvin = self.kelvin.filter(|_| self.session.is_active())?;
+        let now = monotonic();
+        for head in &mut self.heads {
+            if head.tint_retry.is_due(now) {
+                tint(&self.device, head, kelvin);
+            }
         }
-        self.heads.iter().all(|head| !head.tint_failed)
+        self.heads
+            .iter()
+            .filter_map(|head| head.tint_retry.wait(now))
+            .min()
     }
 
-    fn switch_virtual_terminal(&mut self, number: i32) {
-        self.leaving = self.stop_hdr().then(Instant::now);
+    fn switch_virtual_terminal(&mut self, number: i32) -> bool {
+        let stopped = self.stop_hdr();
+        self.leaving = stopped.then(Instant::now);
         if let Err(error) = self.session.change_vt(number) {
             tracing::warn!("cannot switch to virtual terminal {number}: {error}");
             self.leaving = None;
         }
+        stopped
     }
 
     fn submit(
@@ -1888,8 +1902,7 @@ impl DrmBackend {
             .and_then(|link| link.change(shape.bits(), wanted.deep || shape.is_deep()));
         let hdr = head
             .signal
-            .filter(|signal| signal.ours != shape.hdr || signal.left)
-            .map(|_| shape.hdr);
+            .and_then(|signal| signal.state.change(shape.hdr));
         if bits.is_none() && hdr.is_none() {
             return Ok(());
         }
@@ -1902,8 +1915,7 @@ impl DrmBackend {
             );
         }
         if let (Some(signal), Some(on)) = (&mut head.signal, hdr) {
-            signal.ours = on;
-            signal.left = false;
+            signal.state.set(on);
             tracing::info!("{} HDR signal: {on}", head.config.name);
         }
         Ok(())
@@ -1912,7 +1924,7 @@ impl DrmBackend {
     fn stop_hdr(&mut self) -> bool {
         let mut stopped = false;
         for head in &mut self.heads {
-            if !head.shape.hdr || !head.signal.is_some_and(|signal| signal.ours) {
+            if !head.signal.is_some_and(|signal| signal.state.is_ours()) {
                 continue;
             }
             let found = head.link.filter(|link| link.found != link.current);
@@ -1928,7 +1940,7 @@ impl DrmBackend {
                     }
                     head.formats.forget_refusals();
                     if let Some(signal) = &mut head.signal {
-                        signal.ours = false;
+                        signal.state.set(false);
                     }
                 }
                 Err(error) => {
@@ -1976,7 +1988,7 @@ impl DrmBackend {
                 if !shape.hdr
                     && self.heads[index]
                         .signal
-                        .is_some_and(|signal| signal.ours || signal.left)
+                        .is_some_and(|signal| signal.state.is_on())
                 {
                     return Err(error.into());
                 }

@@ -363,9 +363,59 @@ impl LinkDepth {
     }
 }
 
+/// What is known of the HDR signal on a connector: set by this process, or left by another one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Signalled {
+    ours: bool,
+    left: bool,
+}
+
+impl Signalled {
+    pub(crate) fn found(left: bool) -> Self {
+        Self { ours: false, left }
+    }
+
+    /// The signal to set for frames that are HDR or not, if it has to change.
+    pub(crate) fn change(self, hdr: bool) -> Option<bool> {
+        (self.ours != hdr || self.left).then_some(hdr)
+    }
+
+    pub(crate) fn set(&mut self, hdr: bool) {
+        *self = Self {
+            ours: hdr,
+            left: false,
+        };
+    }
+
+    pub(crate) fn is_ours(self) -> bool {
+        self.ours
+    }
+
+    pub(crate) fn is_on(self) -> bool {
+        self.ours || self.left
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_signal_of_ours_is_taken_back_until_that_succeeds_and_one_left_there_is_replaced() {
+        let mut signal = Signalled::found(false);
+        assert_eq!((signal.change(false), signal.is_on()), (None, false));
+        signal.set(true);
+        let plain = first(&deep(8), FAST);
+        assert_eq!(signal.change(plain.hdr), Some(false));
+        assert!(signal.is_ours(), "a refused way back leaves it ours");
+        signal.set(false);
+        assert!(!signal.is_ours() && !signal.is_on());
+
+        let left = Signalled::found(true);
+        assert_eq!(left.change(true), Some(true));
+        assert_eq!(left.change(false), Some(false));
+        assert!(left.is_on() && !left.is_ours());
+    }
 
     const DEEPEST: Wanted = Wanted {
         deep: true,

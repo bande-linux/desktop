@@ -276,16 +276,19 @@ struct HostDraft {
     socket: String,
 }
 
-fn text_field(
+fn host_field(
     draft: &Rc<RefCell<HostDraft>>,
+    label: &str,
     placeholder: &str,
     text: &str,
     set: fn(&mut HostDraft, String),
-) -> TextField {
+) -> Field {
     let draft = Rc::clone(draft);
-    TextField::new(placeholder, text, move |typed| {
+    let field = TextField::new(placeholder, text, move |typed| {
         set(&mut draft.borrow_mut(), typed.trim().to_owned());
     })
+    .named(label, None);
+    Field::new(label, field)
 }
 
 pub fn add_host_sheet(ui: &mut Ui, intents: &Intents) {
@@ -297,33 +300,32 @@ pub fn add_host_sheet(ui: &mut Ui, intents: &Intents) {
         ..HostDraft::default()
     }));
     let fields = Fields::new(vec![
-        Field::new(
+        host_field(
+            &draft,
             &tr!("Host"),
-            text_field(&draft, "server.example.com", "", |draft, text| {
-                draft.host = text
-            }),
+            "server.example.com",
+            "",
+            |draft, text| draft.host = text,
         ),
-        Field::new(
+        host_field(
+            &draft,
             &tr!("Port"),
-            text_field(&draft, "22", &SSH_PORT.to_string(), |draft, text| {
-                draft.port = text
-            }),
+            "22",
+            &SSH_PORT.to_string(),
+            |draft, text| draft.port = text,
         ),
-        Field::new(
-            &tr!("User"),
-            text_field(&draft, &user, &user, |draft, text| draft.user = text),
-        ),
-        Field::new(
-            &tr!("Name"),
-            text_field(&draft, &tr!("Optional"), "", |draft, text| {
-                draft.name = text
-            }),
-        ),
-        Field::new(
+        host_field(&draft, &tr!("User"), &user, &user, |draft, text| {
+            draft.user = text
+        }),
+        host_field(&draft, &tr!("Name"), &tr!("Optional"), "", |draft, text| {
+            draft.name = text
+        }),
+        host_field(
+            &draft,
             &tr!("Docker socket"),
-            text_field(&draft, DEFAULT_SOCKET, DEFAULT_SOCKET, |draft, text| {
-                draft.socket = text
-            }),
+            DEFAULT_SOCKET,
+            DEFAULT_SOCKET,
+            |draft, text| draft.socket = text,
         ),
     ]);
     let intents = Rc::clone(intents);
@@ -405,7 +407,8 @@ pub fn new_workspace_sheet(ui: &mut Ui, intents: &Intents, hosts: &[RemoteHost])
             &tr!("Name"),
             TextField::new(&tr!("project-a"), "", move |text| {
                 *typed.borrow_mut() = text.trim().to_owned();
-            }),
+            })
+            .named(&tr!("Name"), None),
         ),
         Field::new(
             &tr!("Engine"),

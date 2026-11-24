@@ -231,7 +231,7 @@ impl Viewer {
         }
         let opened = cx.open(
             Kind::Utility(INFO_TAG),
-            &tr!("Info"),
+            &tr!("Properties"),
             INFO_SIZE,
             |appearance| {
                 let (ui, panel) = info_ui(appearance, sections);

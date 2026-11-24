@@ -703,14 +703,14 @@ msgstr "Alla villkor"
 msgid "If"
 msgstr "Om"
 
+msgid "contains"
+msgstr "innehåller"
+
 msgid "And if"
 msgstr "Och om"
 
 msgid "Or if"
 msgstr "Eller om"
-
-msgid "contains"
-msgstr "innehåller"
 
 msgid "Add Condition"
 msgstr "Lägg till villkor"
@@ -748,11 +748,20 @@ msgstr "Varje kontos signatur ställs in på kontots sida."
 msgid "Remove Account…"
 msgstr "Ta bort konto…"
 
+msgid "Description"
+msgstr "Beskrivning"
+
 msgid "Ann Lee"
 msgstr "Anna Lind"
 
+msgid "Full name"
+msgstr "Fullständigt namn"
+
 msgid "No signature"
 msgstr "Ingen signatur"
+
+msgid "Signature"
+msgstr "Signatur"
 
 msgid "Save"
 msgstr "Spara"
@@ -763,20 +772,11 @@ msgstr "Använd det här kontot"
 msgid "Account Information"
 msgstr "Kontoinformation"
 
-msgid "Description"
-msgstr "Beskrivning"
-
-msgid "Full name"
-msgstr "Fullständigt namn"
-
 msgid "Email address"
 msgstr "E-postadress"
 
 msgid "Also use this account for Notes"
 msgstr "Använd även kontot för Anteckningar"
-
-msgid "Signature"
-msgstr "Signatur"
 
 msgid "Server Settings"
 msgstr "Serverinställningar"

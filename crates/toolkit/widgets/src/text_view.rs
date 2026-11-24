@@ -1,6 +1,6 @@
 use accesskit::{ActionRequest, Node, Role};
 
-use super::control::paint_field;
+use super::control::{Naming, paint_field};
 use super::editor::{Editor, ParagraphAttributes, PrintedBlock, RichText, TextAttributes};
 use super::{Context, Cursor, DragAction, Event, Menu, Parts, ScrollState, Size, Widget, WidgetId};
 use bande_graphics::{
@@ -26,6 +26,7 @@ pub struct TextView {
     offset: f32,
     visible_lines: Option<u16>,
     borderless: bool,
+    naming: Naming,
     frame: Rect,
 }
 
@@ -45,6 +46,7 @@ impl TextView {
             offset: 0.0,
             visible_lines: None,
             borderless: false,
+            naming: Naming::default(),
             frame: Rect::default(),
         }
     }
@@ -54,6 +56,12 @@ impl TextView {
             on_change: None,
             ..Self::new("", text, |_| {})
         }
+    }
+
+    /// Names the view for assistive technology.
+    pub fn named(mut self, label: &str) -> Self {
+        self.naming.label = Some(label.to_owned());
+        self
     }
 
     pub fn without_text_checking(mut self) -> Self {
@@ -285,6 +293,10 @@ impl Widget for TextView {
     fn access(&self, cx: &Context) -> Node {
         let mut node = Node::new(Role::MultilineTextInput);
         node.set_placeholder(self.placeholder.clone());
+        if !self.placeholder.is_empty() {
+            node.set_label(self.placeholder.clone());
+        }
+        self.naming.apply(&mut node);
         let runs = self.editor.runs(self.visible());
         self.editor.describe(&mut node, self.id, &runs);
         self.scroll.describe(cx, &mut node);

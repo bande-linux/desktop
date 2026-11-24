@@ -939,7 +939,8 @@ pub fn show(request: &PrintRequest) -> ExitCode {
     let pages = TextField::new(&tr!("All"), "", move |text| {
         push(&pages_signals, Signal::Pages(text.to_owned()));
     })
-    .without_text_checking();
+    .without_text_checking()
+    .named(&tr!("Pages"), None);
     let paper_popup = PopUpButton::new(
         &tr!("Paper"),
         &Paper::ALL

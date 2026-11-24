@@ -11,7 +11,9 @@ use crate::ui::symbols::Symbol;
 use crate::ui::toolbar::{
     LIST_HEADER_HEIGHT, LIST_TITLE_HEIGHT, QUICK_REPLY_BAR, SIDEBAR_FOOT_HEIGHT,
 };
-use crate::ui::view::{Hit, MailView, Pane, Panes, Quick, READER_MAX_WIDTH, TOOLBAR_HEIGHT};
+use crate::ui::view::{
+    Hit, MailView, PANE_DIVIDER, Pane, Panes, Quick, READER_MAX_WIDTH, TOOLBAR_HEIGHT,
+};
 use bande_toolkit::Color;
 use bande_toolkit::ui::{BUTTON_HEIGHT, Key, Scroll, ScrollPhase, ScrollSource, Size, chevron};
 use bande_toolkit::{
@@ -103,6 +105,39 @@ impl MailView {
         )
     }
 
+    pub(crate) fn overlay_panel(&self) -> Option<Rect> {
+        let frame = self.sidebar_frame();
+        (self.slid > 0.0 && self.panes() != Panes::Three).then(|| {
+            Rect::new(
+                frame.x,
+                frame.y,
+                frame.width,
+                frame.height + SIDEBAR_FOOT_HEIGHT,
+            )
+        })
+    }
+
+    fn cover_hits(&mut self, panel: Rect) {
+        let edge = panel.x + panel.width;
+        self.hits.retain_mut(|(rect, _)| {
+            let hidden = (edge - rect.x).max(0.0);
+            rect.x += hidden;
+            rect.width -= hidden;
+            rect.width > 0.0
+        });
+    }
+
+    fn clip_hits(&mut self, from: usize, frame: Rect) {
+        let added = self.hits.split_off(from);
+        self.hits
+            .extend(added.into_iter().filter_map(|(rect, hit)| {
+                let top = rect.y.max(frame.y);
+                let bottom = (rect.y + rect.height).min(frame.y + frame.height);
+                let shown = Rect::new(rect.x, top, rect.width, bottom - top);
+                (bottom > top).then_some((shown, hit))
+            }));
+    }
+
     pub(crate) fn list_header_frame(&self) -> Rect {
         let sheet = self.sheet_frame();
         let width = match (self.panes(), self.single_reader) {
@@ -133,7 +168,7 @@ impl MailView {
         let sheet = self.sheet_frame();
         let list = self.list_header_frame();
         let divider = match list.width > 0.0 {
-            true => 1.0,
+            true => PANE_DIVIDER,
             false => 0.0,
         };
         let width = match (self.panes(), self.single_reader) {
@@ -229,8 +264,8 @@ impl MailView {
                 items,
             };
         }
-        let overlay = self.slid > 0.0 && self.panes() != Panes::Three;
-        if !overlay {
+        let overlay = self.overlay_panel();
+        if overlay.is_none() {
             self.paint_sidebar(&mut items);
         }
         let sheet_frame = self.sheet_frame();
@@ -246,14 +281,8 @@ impl MailView {
             shape: Shape::rounded(sheet_frame, radius),
             items: content,
         });
-        if overlay {
-            let frame = self.sidebar_frame();
-            let panel = Rect::new(
-                frame.x,
-                frame.y,
-                frame.width,
-                frame.height + SIDEBAR_FOOT_HEIGHT,
-            );
+        if let Some(panel) = overlay {
+            self.cover_hits(panel);
             items.extend(Item::shadows(
                 Shape::rect(panel),
                 Elevation::Overlay,
@@ -346,6 +375,7 @@ impl MailView {
             scroll.offset(self.ui.context())
         };
         let sidebar = std::mem::take(&mut self.sidebar);
+        let first_hit = self.hits.len();
         let mut drawn = Vec::new();
         let mut y = frame.y + SIDEBAR_INSET / 2.0 - offset;
         for (index, row) in sidebar.iter().enumerate() {
@@ -448,6 +478,7 @@ impl MailView {
             }
         }
         self.sidebar = sidebar;
+        self.clip_hits(first_hit, frame);
         items.push(Item::Clip {
             shape: Shape::rect(frame),
             items: drawn,
@@ -525,7 +556,10 @@ impl MailView {
     fn paint_list_header(&mut self, items: &mut Vec<Item>) {
         let palette = self.palette;
         let frame = self.list_header_frame();
-        let unread = self.unread_here();
+        let unread = match self.searching_everywhere() {
+            true => 0,
+            false => self.unread_here(),
+        };
         let count = match unread {
             0 => String::new(),
             unread => trn!("{count} unread", "{count} unread", count = unread),
@@ -644,6 +678,7 @@ impl MailView {
         if self.messages.is_empty() && frame.width > 0.0 {
             self.paint_empty_list(&mut drawn, frame);
         }
+        let first_hit = self.hits.len();
         let first = self.first_row_after(offset, row_height);
         let visible = (frame.height / row_height).ceil() as usize + 1;
         let now = self.now.unwrap_or_else(Timestamp::now);
@@ -714,13 +749,19 @@ impl MailView {
                 None => self.paint_row(&mut drawn, &summary, rect, now),
             }
         }
+        self.clip_hits(first_hit, frame);
         items.push(Item::Clip {
             shape: Shape::rect(frame),
             items: drawn,
         });
         let sheet = self.sheet_frame();
         items.push(Item::Fill {
-            shape: Shape::rect(Rect::new(frame.x + frame.width, sheet.y, 1.0, sheet.height)),
+            shape: Shape::rect(Rect::new(
+                frame.x + frame.width,
+                sheet.y,
+                PANE_DIVIDER,
+                sheet.height,
+            )),
             paint: palette.hairline.into(),
         });
         let scroll = &self.scrolls[1];
@@ -1095,6 +1136,10 @@ impl MailView {
             Some(Hit::Message(id) | Hit::Quick(id, _)) => Some(id),
             _ => None,
         };
+        if scroll.phase == ScrollPhase::Began {
+            self.swipe = None;
+            self.finish_release();
+        }
         match (self.swipe, scroll.phase) {
             (Some((id, moved)), ScrollPhase::Ended) => {
                 self.swipe = None;

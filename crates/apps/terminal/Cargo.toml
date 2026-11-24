@@ -30,6 +30,8 @@ bande-toolkit.workspace = true
 bande-xdg.workspace = true
 
 [dev-dependencies]
+bande-test-bus.workspace = true
+bande-test-wayland.workspace = true
 tempfile.workspace = true
 
 [lints]

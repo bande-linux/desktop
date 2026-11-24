@@ -16,7 +16,7 @@ use crate::message::{Address, Content, Envelope, parse_addresses};
 use crate::net::Network;
 use crate::settings::{MailSettings, MarkRead, SortBy};
 use crate::store::{
-    Account, AccountId, Filter, Mailbox, MailboxId, MessageId, RuleAction, Store, Summary,
+    Account, AccountId, Filter, Mailbox, MailboxId, MessageId, RuleAction, Shown, Store, Summary,
 };
 use crate::ui::Mode;
 use crate::ui::compose_view::attachable;
@@ -27,7 +27,7 @@ use crate::ui::reader_pane::{
 };
 use crate::ui::sidebar::{Place, Row, rows};
 use crate::ui::symbols::Symbols;
-use crate::ui::toolbar::{Signal, Signals, Toolbar};
+use crate::ui::toolbar::{ACTIONS_WIDTH, Signal, Signals, Toolbar};
 use crate::worker::{Command, Event as MailEvent, MailboxChange, Mailroom, Status, Worker};
 use accesskit::{ActionRequest, TreeUpdate};
 use bande_app::{Dropping, FileDrop};
@@ -35,6 +35,7 @@ use bande_app_settings::{Stored, settings_folder};
 use bande_datetime::DateFormats;
 use bande_keyring::Keyring;
 use bande_mail_core::guide::{Done, Guide, Host, Options, Report};
+use bande_mail_core::sheet::AccountSheet;
 use bande_toolkit::ui::{
     Alert, Animated, Button, ClipboardRequest, Context, Cursor, Event, FreeLayout, Key, Menu,
     MenuItem, Modifiers, Pointer, PointerButton, ScrollState, Spring, TextField, Ui, Widget,
@@ -78,6 +79,7 @@ const LIST_SIZES: (f32, f32) = (280.0, 560.0);
 const THREE_PANES: f32 = 1040.0;
 const TWO_PANES: f32 = 720.0;
 const EDGE_GRAB: f32 = 4.0;
+pub const PANE_DIVIDER: f32 = 1.0;
 pub const TOOLBAR_HEIGHT: f32 = WINDOW_HEADER_HEIGHT as f32;
 const NOTIFIED_AT_ONCE: usize = 3;
 const UNDO_TRIES: u8 = 3;
@@ -464,13 +466,18 @@ impl MailView {
             .find(|(head, (_, earlier))| {
                 **head == id || earlier.iter().any(|summary| summary.id == id)
             })
-            .map(|(head, (key, _))| (*head, key.clone()));
-        let Some((head, key)) = head else {
+            .map(|(head, (key, earlier))| {
+                let selected = earlier
+                    .iter()
+                    .any(|summary| self.selected == Some(summary.id));
+                (*head, key.clone(), selected)
+            });
+        let Some((head, key, selected)) = head else {
             return false;
         };
         if !self.conversations.expanded.remove(&key) {
             self.conversations.expanded.insert(key);
-        } else if self.selected != Some(head) && self.is_chosen(id) {
+        } else if self.selected != Some(head) && (selected || self.is_chosen(id)) {
             self.select(head);
         }
         self.reload();
@@ -512,6 +519,19 @@ impl MailView {
         match same {
             true => self.refresh_sidebar(),
             false => self.reload(),
+        }
+        self.leave_welcome();
+    }
+
+    fn leave_welcome(&mut self) {
+        let added = self
+            .setup
+            .as_ref()
+            .is_some_and(|guide| matches!(guide.mode(), Mode::Added(_)));
+        if self.welcoming() && !added && self.has_accounts() {
+            self.close_setup();
+            self.refresh_toolbar();
+            self.compose_waiting();
         }
     }
 
@@ -636,7 +656,10 @@ impl MailView {
     }
 
     pub(crate) fn list_size(&self) -> f32 {
-        f32::from(self.settings.list_width).clamp(LIST_SIZES.0, LIST_SIZES.1)
+        let reader = PANE_DIVIDER + ACTIONS_WIDTH + self.header_insets.trailing;
+        f32::from(self.settings.list_width)
+            .clamp(LIST_SIZES.0, LIST_SIZES.1)
+            .min((self.size.0 - self.sheet_frame().x - reader).max(LIST_SIZES.0))
     }
 
     pub fn sidebar_region(&self) -> f32 {
@@ -672,7 +695,26 @@ impl MailView {
             .animate(&mut self.slide, target, Spring::STANDARD);
     }
 
+    pub(crate) fn reading_alone(&self) -> bool {
+        self.panes() == Panes::One && self.single_reader
+    }
+
+    fn settle_focus(&mut self) {
+        let shown = match self.focus {
+            Pane::Sidebar => self.sidebar_shown(),
+            Pane::List => !self.reading_alone(),
+            Pane::Reader => self.panes() != Panes::One || self.single_reader,
+        };
+        if !shown {
+            self.focus = match self.reading_alone() {
+                true => Pane::Reader,
+                false => Pane::List,
+            };
+        }
+    }
+
     pub(crate) fn advance_motion(&mut self) {
+        self.settle_focus();
         if self.panes() == Panes::Three && (self.overlay || self.slid > 0.0) {
             self.overlay = false;
             self.slide.jump_to(0.0);
@@ -712,7 +754,7 @@ impl MailView {
     }
 
     fn edge_at(&self, at: Point) -> Option<Edge> {
-        if at.y < TOOLBAR_HEIGHT || self.panes() == Panes::One {
+        if at.y < TOOLBAR_HEIGHT || self.panes() == Panes::One || self.overlay_panel().is_some() {
             return None;
         }
         let near = |x: f32| (at.x - x).abs() <= EDGE_GRAB;
@@ -737,6 +779,12 @@ impl MailView {
     pub(crate) fn back_to_list(&mut self) {
         self.single_reader = false;
         self.focus = Pane::List;
+    }
+
+    fn leave_reader(&mut self) {
+        if std::mem::take(&mut self.single_reader) && self.focus == Pane::Reader {
+            self.focus = Pane::List;
+        }
     }
 
     pub(crate) fn unread_here(&self) -> usize {
@@ -798,15 +846,21 @@ impl MailView {
         }
     }
 
+    pub(crate) fn finish_release(&mut self) {
+        self.releasing = false;
+        let Some((id, _, quick)) = self.release.take() else {
+            return;
+        };
+        self.swipe_shown = None;
+        if let Some(quick) = quick {
+            self.quick(id, quick);
+            self.refresh_toolbar();
+        }
+    }
+
     pub fn tick(&mut self, now: Instant) {
-        if !self.releasing
-            && let Some((id, _, quick)) = self.release.take()
-        {
-            self.swipe_shown = None;
-            if let Some(quick) = quick {
-                self.quick(id, quick);
-                self.refresh_toolbar();
-            }
+        if !self.releasing {
+            self.finish_release();
         }
         let (due, later) = std::mem::take(&mut self.read_later)
             .into_iter()
@@ -934,6 +988,10 @@ impl MailView {
     }
 
     pub fn reload(&mut self) {
+        self.list(self.selected);
+    }
+
+    fn list(&mut self, kept: Option<MessageId>) {
         self.refresh_sidebar();
         let exists = match &self.place {
             Place::Mailbox(id) => self
@@ -958,7 +1016,10 @@ impl MailView {
             .listing(
                 &scope,
                 &self.search,
-                self.filter,
+                Shown {
+                    filter: self.filter,
+                    kept,
+                },
                 self.settings.sort,
                 self.settings.ascending,
                 self.listed,
@@ -976,20 +1037,8 @@ impl MailView {
                 all
             }
         };
-        self.groups = match self.settings.sort {
-            SortBy::Date => {
-                let now = Timestamp::now();
-                let mut groups: Vec<(usize, String)> = Vec::new();
-                for (index, summary) in self.messages.iter().enumerate() {
-                    let label = day_group(summary.date, now, &self.zone, &self.formats);
-                    if groups.last().is_none_or(|(_, last)| *last != label) {
-                        groups.push((index, label));
-                    }
-                }
-                groups
-            }
-            _ => Vec::new(),
-        };
+        self.group_by_day();
+        let several = !self.also.is_empty();
         let messages = &self.messages;
         self.also
             .retain(|id| messages.iter().any(|summary| summary.id == *id));
@@ -1001,8 +1050,42 @@ impl MailView {
             self.also.clear();
             self.reader.thread = None;
             self.reader.layout = None;
+            self.leave_reader();
+        }
+        if several {
+            self.open_lone();
         }
         self.refresh_thread();
+    }
+
+    fn open_lone(&mut self) {
+        if self.reader.thread.is_none()
+            && self.also.is_empty()
+            && let Some(summary) = self.selected_summary()
+        {
+            self.reader.scroll = ScrollState::default();
+            self.open_thread(&summary);
+        }
+    }
+
+    fn group_by_day(&mut self) {
+        self.groups = match self.settings.sort {
+            SortBy::Date => {
+                let now = Timestamp::now();
+                let mut groups: Vec<(usize, String)> = Vec::new();
+                for (index, summary) in self.messages.iter().enumerate() {
+                    if self.conversations.children.contains(&summary.id) {
+                        continue;
+                    }
+                    let label = day_group(summary.date, now, &self.zone, &self.formats);
+                    if groups.last().is_none_or(|(_, last)| *last != label) {
+                        groups.push((index, label));
+                    }
+                }
+                groups
+            }
+            _ => Vec::new(),
+        };
     }
 
     fn conversation_of(&self, summary: &Summary) -> Vec<Summary> {
@@ -1088,6 +1171,8 @@ impl MailView {
     }
 
     pub fn choose_place(&mut self, place: Place) {
+        self.finish_release();
+        self.leave_reader();
         if place == self.place && !self.everywhere {
             return;
         }
@@ -1103,6 +1188,7 @@ impl MailView {
     }
 
     pub fn search_for(&mut self, text: &str) {
+        self.finish_release();
         if text.trim().is_empty() {
             self.everywhere = false;
         }
@@ -1115,8 +1201,26 @@ impl MailView {
     pub fn show_message(&mut self, id: MessageId) {
         if let Ok(Some(summary)) = self.store.summary(id) {
             self.choose_place(Place::Mailbox(summary.mailbox));
+            if !self.reveal_listed(id) {
+                self.show_all_messages();
+                self.reveal_listed(id);
+            }
             self.select(id);
+            self.single_reader = self.panes() == Panes::One && self.selected == Some(id);
         }
+    }
+
+    fn reveal_listed(&mut self, id: MessageId) -> bool {
+        self.messages.iter().any(|listed| listed.id == id) || self.toggle_conversation(id)
+    }
+
+    fn show_all_messages(&mut self) {
+        self.filter = Filter::All;
+        self.everywhere = false;
+        self.listed = usize::MAX;
+        self.search.clear();
+        self.clear_list_controls();
+        self.reload();
     }
 
     pub fn select(&mut self, id: MessageId) {
@@ -1162,16 +1266,9 @@ impl MailView {
             self.also.push(id);
         }
         self.focus = Pane::List;
-        match (self.also.is_empty(), self.selected_summary()) {
-            (true, Some(summary)) => {
-                self.reader.scroll = ScrollState::default();
-                self.open_thread(&summary);
-            }
-            _ => {
-                self.reader.thread = None;
-                self.reader.layout = None;
-            }
-        }
+        self.reader.thread = None;
+        self.reader.layout = None;
+        self.open_lone();
     }
 
     pub(crate) fn is_chosen(&self, id: MessageId) -> bool {
@@ -1182,16 +1279,13 @@ impl MailView {
         self.messages
             .iter()
             .filter(|summary| self.is_chosen(summary.id))
-            .flat_map(|summary| {
-                std::iter::once(summary.clone()).chain(
-                    self.conversations
-                        .collapsed(summary.id)
-                        .unwrap_or_default()
-                        .iter()
-                        .cloned(),
-                )
-            })
+            .flat_map(|summary| self.row_messages(summary))
             .collect()
+    }
+
+    fn row_messages(&self, row: &Summary) -> Vec<Summary> {
+        let collapsed = self.conversations.collapsed(row.id).unwrap_or_default();
+        std::iter::once(row).chain(collapsed).cloned().collect()
     }
 
     fn reader_target(&self) -> Option<&Summary> {
@@ -1199,7 +1293,7 @@ impl MailView {
             .reader
             .thread
             .as_ref()
-            .filter(|_| self.focus == Pane::Reader)?;
+            .filter(|_| self.focus == Pane::Reader || self.reading_alone())?;
         thread.entry(thread.focus).map(|entry| &entry.summary)
     }
 
@@ -1363,6 +1457,9 @@ impl MailView {
     }
 
     fn set_flag_on(&mut self, ids: &[MessageId], flag: Flag, value: bool) {
+        if flag == Flag::Seen {
+            self.read_later.retain(|(_, id)| !ids.contains(id));
+        }
         match self.store.set_flag(ids, flag, value) {
             Ok(accounts) => self.flush(&accounts),
             Err(error) => tracing::warn!("cannot change a flag: {error}"),
@@ -1482,10 +1579,6 @@ impl MailView {
             .iter()
             .position(|summary| ids.contains(&summary.id));
         self.messages.retain(|summary| !ids.contains(&summary.id));
-        self.selected = None;
-        self.also.clear();
-        self.reader.thread = None;
-        self.reader.layout = None;
         let next = position
             .and_then(|position| {
                 self.messages.get(position).or_else(|| {
@@ -1495,10 +1588,22 @@ impl MailView {
                 })
             })
             .map(|summary| summary.id);
-        if let Some(next) = next {
-            self.select(next);
+        let left = self.selected.is_some_and(|id| ids.contains(&id));
+        if left {
+            self.also.retain(|id| !ids.contains(id));
+            self.selected = (!self.also.is_empty()).then(|| self.also.remove(0));
+            self.reader.thread = None;
+            self.reader.layout = None;
         }
-        self.refresh_sidebar();
+        self.reload();
+        self.open_lone();
+        if !left || self.selected.is_some() {
+            return;
+        }
+        match next {
+            Some(next) => self.select(next),
+            None => self.leave_reader(),
+        }
     }
 
     fn leave_targets(&mut self, gone: &[MessageId]) {
@@ -1533,11 +1638,13 @@ impl MailView {
                 .iter()
                 .chain(before.iter().rev())
                 .find(|entry| !gone.contains(&entry.summary.id))
+                .filter(|next| next.summary.id != thread.focus)
             {
                 thread.focus = next.summary.id;
                 thread.reveal = true;
             }
         }
+        let (single_reader, focus) = (self.single_reader, self.focus);
         self.reload();
         let conversations = &self.conversations;
         self.selected = self
@@ -1554,6 +1661,8 @@ impl MailView {
             })
             .map(|summary| summary.id);
         if self.selected.is_some() {
+            self.single_reader = single_reader;
+            self.focus = focus;
             self.reader.thread = thread;
             self.reader.layout = None;
             self.refresh_thread();
@@ -1663,6 +1772,7 @@ impl MailView {
     }
 
     pub fn undo(&mut self) {
+        self.finish_release();
         let moves = self.undo.pop().unwrap_or_default();
         self.put_back(moves);
     }
@@ -1832,12 +1942,12 @@ impl MailView {
         self.respond_with(all, "");
     }
 
-    fn respond_with(&mut self, all: bool, text: &str) {
+    fn respond_with(&mut self, all: bool, text: &str) -> bool {
         let Some((summary, reading)) = self.reader.focused() else {
-            return;
+            return false;
         };
         let Some(account) = self.account(summary.account) else {
-            return;
+            return false;
         };
         let envelope = &reading.content.envelope;
         let attribution = tr!(
@@ -1861,19 +1971,36 @@ impl MailView {
             replaces: None,
             unsent: None,
         })));
+        true
+    }
+
+    fn quick_reply(&mut self, text: &str) -> bool {
+        let closed = self
+            .reader
+            .thread
+            .as_ref()
+            .filter(|thread| thread.focused().is_none())
+            .map(|thread| thread.focus);
+        if let Some(id) = closed {
+            self.read_entry(id);
+        }
+        self.respond_with(false, text)
+    }
+
+    fn draft_read(&self) -> Option<(&Summary, &Reading)> {
+        self.reader.focused().filter(|(summary, reading)| {
+            let is_draft = summary.flags.draft
+                || self
+                    .mailbox_of(summary)
+                    .is_some_and(|mailbox| mailbox.role == Some(Role::Drafts));
+            is_draft && reading.downloaded && reading.content.security.opened()
+        })
     }
 
     pub fn continue_draft(&mut self) {
-        let Some((summary, reading)) = self.reader.focused() else {
+        let Some((summary, reading)) = self.draft_read() else {
             return;
         };
-        let is_draft = summary.flags.draft
-            || self
-                .mailbox_of(summary)
-                .is_some_and(|mailbox| mailbox.role == Some(Role::Drafts));
-        if !is_draft || !reading.downloaded {
-            return;
-        }
         let Some(account) = self.account(summary.account) else {
             return;
         };
@@ -1954,6 +2081,13 @@ impl MailView {
         for worker in &self.workers {
             worker.send(Command::Sync);
         }
+    }
+
+    fn retry(&mut self, account: AccountId) {
+        if !self.retrying.contains(&account) {
+            self.retrying.push(account);
+        }
+        self.send_command(account, Command::Sync);
     }
 
     pub(crate) fn offline_accounts(&self) -> Vec<AccountId> {
@@ -2206,7 +2340,7 @@ impl MailView {
                     stale = true;
                 }
                 MailEvent::LoginFailed(account, _) => {
-                    if self.setup.is_none()
+                    if !self.setting_up()
                         && let Some(account) = self.account(account)
                     {
                         let email = account.email.clone();
@@ -2239,7 +2373,7 @@ impl MailView {
                 MailEvent::Guide(report) => self.guide_reported(*report),
                 MailEvent::Opened(id, content) => self.opened(id, *content),
                 MailEvent::LookedUp(id, result) => self.looked_up(id, result),
-                MailEvent::Setup(_) | MailEvent::KeysChanged(_) => {}
+                MailEvent::Setup(_) | MailEvent::KeysChanged(..) => {}
                 MailEvent::Chosen(path) => self.requests.push(Request::OpenMessage(path)),
                 MailEvent::Pictures(id, pictures) => self.reader.add_pictures(id, pictures),
             }
@@ -2362,6 +2496,7 @@ impl MailView {
 
     pub fn present_setup(&mut self, mode: Mode) {
         if mode == Mode::Address
+            && self.setting_up()
             && self
                 .setup
                 .as_ref()
@@ -2391,9 +2526,12 @@ impl MailView {
             server_settings: true,
             ready_note: tr!("Mail is downloading your mail; you can start reading now."),
             taken: self
-                .accounts
-                .iter()
-                .map(|(account, _)| account.email.clone())
+                .store
+                .accounts()
+                .inspect_err(|error| tracing::warn!("cannot read the accounts: {error}"))
+                .unwrap_or_default()
+                .into_iter()
+                .map(|account| account.email)
                 .collect(),
             network: self.network.clone(),
             reporter: Arc::new(move |report| notifier.send(MailEvent::Guide(Box::new(report)))),
@@ -2410,6 +2548,12 @@ impl MailView {
                 Err(error) => tracing::warn!("cannot choose a message file: {error}"),
             }
         });
+    }
+
+    fn setting_up(&self) -> bool {
+        self.setup
+            .as_ref()
+            .is_some_and(|guide| self.ui.widget_ref::<AccountSheet>(guide.widget()).is_some())
     }
 
     pub(crate) fn welcoming(&self) -> bool {
@@ -2442,6 +2586,12 @@ impl MailView {
                 sound: false,
                 message: None,
             });
+        }
+    }
+
+    fn compose_waiting(&mut self) {
+        for draft in std::mem::take(&mut self.waiting) {
+            self.compose(draft);
         }
     }
 
@@ -2497,9 +2647,7 @@ impl MailView {
                     }
                 }
                 self.reload();
-                for draft in std::mem::take(&mut self.waiting) {
-                    self.compose(draft);
-                }
+                self.compose_waiting();
             }
             Done::Renewed { email, password } => self.renew_password(&email, password),
             Done::ServerSettings => {
@@ -2654,8 +2802,9 @@ impl MailView {
                 Signal::Flag => self.toggle_flag(),
                 Signal::Search(text) => self.search_for(&text),
                 Signal::Filter(filter) => {
+                    self.finish_release();
                     self.filter = filter;
-                    self.reload();
+                    self.list(None);
                 }
                 Signal::Sort(sort) => {
                     self.settings.sort = sort;
@@ -2680,14 +2829,10 @@ impl MailView {
                 signal @ (Signal::NewMailbox(..)
                 | Signal::RenameMailbox(..)
                 | Signal::DeleteMailbox(_)) => self.change_mailboxes(signal),
-                Signal::TryAgain(account) => {
-                    self.retrying.push(account);
-                    self.send_command(account, Command::Sync);
-                }
+                Signal::TryAgain(account) => self.retry(account),
                 Signal::TryOffline => {
                     for account in self.offline_accounts() {
-                        self.retrying.push(account);
-                        self.send_command(account, Command::Sync);
+                        self.retry(account);
                     }
                 }
                 Signal::SearchEverywhere => self.search_everywhere(),
@@ -2703,6 +2848,7 @@ impl MailView {
         if let Some((menu, at)) = self.ui.take_menu_request() {
             self.requests.push(Request::ShowMenu(menu, at));
         }
+        self.settle_focus();
         self.refresh_toolbar();
     }
 
@@ -2895,7 +3041,6 @@ impl MailView {
                     .iter()
                     .map(|summary| summary.id)
                     .collect::<Vec<_>>();
-                self.read_later.retain(|(_, id)| !ids.contains(id));
                 self.set_flag_on(&ids, Flag::Seen, false);
                 Some(!ids.is_empty())
             }
@@ -2921,6 +3066,9 @@ impl MailView {
         };
         self.focus = Pane::List;
         self.choose_place(place);
+        if self.overlay {
+            self.set_overlay(false);
+        }
         true
     }
 
@@ -2996,11 +3144,11 @@ impl MailView {
                     .widget_as::<TextField>(before)
                     .map(|field| field.text())
                     .unwrap_or_default();
-                if !text.trim().is_empty() {
-                    self.respond_with(false, text.trim());
-                    if let Some(field) = self.ui.widget_as::<TextField>(before) {
-                        field.replace_text("");
-                    }
+                if !text.trim().is_empty()
+                    && self.quick_reply(text.trim())
+                    && let Some(field) = self.ui.widget_as::<TextField>(before)
+                {
+                    field.replace_text("");
                 }
                 return true;
             }
@@ -3010,6 +3158,13 @@ impl MailView {
             }
             if handled || self.search_focused() || key == Key::Tab {
                 return handled;
+            }
+            if before == self.toolbar.reply_field {
+                match key {
+                    Key::PageUp | Key::PageDown => return self.scroll_reader(key),
+                    Key::Backspace | Key::Delete => return false,
+                    _ => {}
+                }
             }
         }
         if key == Key::Tab && bare {
@@ -3025,6 +3180,9 @@ impl MailView {
                 }
                 _ => {}
             }
+        }
+        if matches!(key, Key::Backspace | Key::Delete) && self.focus == Pane::Sidebar {
+            return true;
         }
         let event = Event::Key { key, modifiers };
         if let Some((action, ..)) = SHORTCUTS
@@ -3076,6 +3234,7 @@ impl MailView {
             Key::Up if plain && modifiers.shift => self.extend(-1),
             Key::Down if plain && modifiers.shift => self.extend(1),
             Key::Enter if plain && self.focus == Pane::Sidebar => {
+                self.leave_reader();
                 self.focus = Pane::List;
                 self.set_overlay(false);
                 true
@@ -3084,18 +3243,19 @@ impl MailView {
                 if plain
                     && self.focus == Pane::List
                     && self.panes() == Panes::One
+                    && self.draft_read().is_none()
                     && self.selected.is_some() =>
             {
                 self.single_reader = true;
                 self.focus = Pane::Reader;
                 true
             }
-            Key::Escape if self.single_reader && self.panes() == Panes::One => {
-                self.back_to_list();
-                true
-            }
             Key::Escape if self.overlay => {
                 self.set_overlay(false);
+                true
+            }
+            Key::Escape if self.reading_alone() => {
+                self.back_to_list();
                 true
             }
             _ if opens_menu(key, modifiers) => self.keyboard_menu(),
@@ -3108,7 +3268,6 @@ impl MailView {
             {
                 self.press_reader_target(false)
             }
-            Key::Backspace | Key::Delete if self.focus == Pane::Sidebar => false,
             Key::Right | Key::Left if plain && !modifiers.shift && self.focus == Pane::Sidebar => {
                 self.fold_section(key == Key::Right)
             }
@@ -3409,12 +3568,13 @@ impl MailView {
             }
             Hit::Message(id) => {
                 self.focus = Pane::List;
-                if !secondary && self.panes() == Panes::One {
-                    self.single_reader = true;
-                }
+                let alone = !secondary && self.panes() == Panes::One;
                 let collapse = !secondary && self.is_chosen(id) && !self.also.is_empty();
                 if !self.is_chosen(id) {
                     self.select(id);
+                }
+                if alone {
+                    self.single_reader = self.draft_read().is_none();
                 }
                 if !secondary && pointer.count == 1 {
                     self.drag = Some(Drag {
@@ -3425,7 +3585,11 @@ impl MailView {
                         collapse: collapse.then_some(id),
                     });
                 }
-                if pointer.count >= 2 && !secondary {
+                let edits = match alone {
+                    true => pointer.count == 1,
+                    false => pointer.count >= 2,
+                };
+                if edits && !secondary {
                     self.continue_draft();
                 }
                 if secondary {
@@ -3440,6 +3604,8 @@ impl MailView {
             }
             Hit::Quick(id, quick) if !secondary => self.quick(id, quick),
             Hit::Quick(..) => {}
+            Hit::Reader(target)
+                if !secondary && pointer.count > 1 && !matches!(target, Target::Card(_)) => {}
             Hit::Reader(target) => {
                 self.focus = Pane::Reader;
                 self.reader.target = None;
@@ -3725,7 +3891,7 @@ impl MailView {
         else {
             return;
         };
-        let summaries = self.conversation_of(&summary);
+        let summaries = self.row_messages(&summary);
         match quick {
             Quick::Archive => self.move_summaries(summaries, Role::Archive),
             Quick::Delete => {
@@ -3918,7 +4084,12 @@ impl MailView {
                     self.mailbox_action("mailbox-new", account);
                 }
             }
-            "find" => self.ui.set_focus(self.toolbar.search),
+            "find" => {
+                if self.panes() == Panes::One {
+                    self.back_to_list();
+                }
+                self.ui.set_focus(self.toolbar.search);
+            }
             "copy-selection" => {
                 self.copy_selection();
             }

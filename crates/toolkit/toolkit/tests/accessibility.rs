@@ -10,8 +10,8 @@ use accesskit::TreeUpdate;
 use bande_test_bus::SessionBus;
 use bande_test_bus::atspi::{FakeRegistry, ROLE_BUTTON, accessible, find_named};
 use bande_test_wayland::{Frames, headless};
-use bande_toolkit::ui::{Button, Context, Ui};
-use bande_toolkit::{App, Palette, Role, Scene, Scheme, TextSystem, Window, WindowEvent};
+use bande_toolkit::ui::{Button, Context, FreeLayout, Ui};
+use bande_toolkit::{App, Palette, Rect, Role, Scene, Scheme, TextSystem, Window, WindowEvent};
 use zbus::blocking::connection;
 
 const TIMEOUT: Duration = Duration::from_secs(180);
@@ -49,7 +49,7 @@ impl App for Greeting {
 }
 
 #[test]
-fn a_screen_reader_finds_a_button_over_atspi_and_presses_it() {
+fn a_screen_reader_finds_a_button_over_atspi_and_presses_it_while_a_hidden_one_has_the_focus() {
     let bus = SessionBus::start().expect("private session and AT-SPI bus");
     // SAFETY: this binary's only test sets these before it starts the registry or the compositor,
     // so no other thread reads the environment yet.
@@ -70,13 +70,18 @@ fn a_screen_reader_finds_a_button_over_atspi_and_presses_it() {
         .expect("window");
         let greeted = Rc::new(Cell::new(false));
         let pressed = greeted.clone();
-        let mut greeting = Greeting {
-            ui: Ui::new(
-                Box::new(Button::new("Greet", move || pressed.set(true))),
-                Context::new(TextSystem::new(), Palette::for_scheme(Scheme::Light)),
-            ),
-            greeted,
-        };
+        let mut layout = FreeLayout::new();
+        layout.insert(
+            Button::new("Greet", move || pressed.set(true)),
+            Rect::new(10.0, 10.0, 100.0, 24.0),
+        );
+        let hidden = layout.insert(Button::new("Hidden", || {}), Rect::default());
+        let mut ui = Ui::new(
+            Box::new(layout),
+            Context::new(TextSystem::new(), Palette::for_scheme(Scheme::Light)),
+        );
+        ui.set_focus(hidden);
+        let mut greeting = Greeting { ui, greeted };
         bande_toolkit::run(&mut window, &mut greeting).expect("run the window");
         greeting.greeted.get()
     });

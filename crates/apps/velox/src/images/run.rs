@@ -17,11 +17,13 @@ fn field(
     set: fn(&mut RunSpec, &str),
 ) -> Field {
     let spec = Rc::clone(spec);
+    let label = label.tr();
     Field::new(
-        &label.tr(),
+        &label,
         TextField::new(&placeholder.tr(), text, move |text| {
             set(&mut spec.borrow_mut(), text);
-        }),
+        })
+        .named(&label, None),
     )
 }
 

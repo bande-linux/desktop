@@ -115,11 +115,13 @@ impl SettingsView {
             .cloned()
             .unwrap_or_else(|| text_of(self, id));
         let mut draft = intent(&self.intents, move |text: String| Intent::Draft(id, text));
+        let label = label.tr();
         let field = TextField::new(&placeholder.tr(), &text, move |text| draft(text.to_owned()))
-            .without_text_checking();
+            .without_text_checking()
+            .named(&label, None);
         self.anchors.push((Anchor::Setting(id, None), field.id()));
         boxed(Row::new(
-            Text::new(&label.tr(), Tone::Primary),
+            Text::new(&label, Tone::Primary),
             Some(boxed(field)),
         ))
     }

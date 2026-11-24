@@ -361,7 +361,8 @@ impl FilesView {
                 send(Signal::Server(ServerField::Address(text.to_owned())));
             },
         )
-        .without_text_checking();
+        .without_text_checking()
+        .named(&tr!("Server"), None);
         let send = sender(&self.signals);
         let reconnect = Checkbox::new(
             &tr!("Reconnect at login"),

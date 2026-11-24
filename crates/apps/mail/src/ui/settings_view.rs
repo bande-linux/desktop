@@ -222,8 +222,17 @@ fn edited(
     }
 }
 
-fn field(state: &Shared, text: &str, placeholder: Text, set: fn(&mut Editing, &str)) -> TextField {
-    TextField::new(&placeholder.tr(), text, edited(state, None, set)).without_text_checking()
+fn field_row(
+    state: &Shared,
+    label: Text,
+    text: &str,
+    placeholder: Text,
+    set: fn(&mut Editing, &str),
+) -> FormLine {
+    let field = TextField::new(&placeholder.tr(), text, edited(state, None, set))
+        .without_text_checking()
+        .named(&label.tr(), None);
+    row(label, field)
 }
 
 fn security(state: &Shared, chosen: usize, set: fn(&mut Editing, usize)) -> PopUpButton {
@@ -555,7 +564,9 @@ impl SettingsView {
         &mut self,
         task: impl FnOnce(&GnuPg) -> crate::error::Result<String> + Send + 'static,
     ) {
-        let Some(mailroom) = &self.mailroom else {
+        let (Some(account), Some(mailroom)) =
+            (self.current().map(|account| account.id), &self.mailroom)
+        else {
             return;
         };
         let (gnupg, notifier) = (self.gnupg.clone(), mailroom.notifier());
@@ -564,20 +575,23 @@ impl SettingsView {
             .name("keys".to_owned())
             .spawn(move || {
                 let outcome = task(&gnupg).map_err(|error| error.to_string());
-                notifier.send(MailEvent::KeysChanged(outcome));
+                notifier.send(MailEvent::KeysChanged(account, outcome));
             });
         if let Err(error) = spawned {
             self.status = Some((error.to_string(), true));
         }
     }
 
-    fn keys_changed(&mut self, outcome: Result<String, String>) {
+    fn keys_changed(&mut self, account: AccountId, outcome: Result<String, String>) {
         let before = self
             .own_keys
             .iter()
             .map(|key| key.fingerprint.clone())
             .collect::<Vec<_>>();
         self.refresh_keys();
+        if self.page != Page::Account(account) {
+            return;
+        }
         if self.identity.openpgp.is_empty()
             && let Some(new) = self
                 .own_keys
@@ -1003,7 +1017,8 @@ impl SettingsView {
                 if let Some(condition) = state.borrow_mut().rule.conditions.get_mut(index) {
                     condition.1 = text.to_owned();
                 }
-            });
+            })
+            .named(&tr!("contains"), None);
             let label = match (index, rule.every) {
                 (0, _) => text!("If"),
                 (_, true) => text!("And if"),
@@ -1189,14 +1204,16 @@ impl SettingsView {
             edited(&self.state, Some(Signal::Identity), |editing, text| {
                 editing.description = text.to_owned();
             }),
-        );
+        )
+        .named(&tr!("Description"), None);
         let name = TextField::new(
             &tr!("Ann Lee"),
             &editing.name,
             edited(&self.state, Some(Signal::Identity), |editing, text| {
                 editing.name = text.to_owned();
             }),
-        );
+        )
+        .named(&tr!("Full name"), None);
         let signature = TextView::new(
             &tr!("No signature"),
             &editing.signature,
@@ -1204,7 +1221,8 @@ impl SettingsView {
                 editing.signature = text.to_owned();
             }),
         )
-        .visible_lines(SIGNATURE_LINES);
+        .visible_lines(SIGNATURE_LINES)
+        .named(&tr!("Signature"));
         let mut save = Button::new(&tr!("Save"), sender(&self.state, Signal::SaveServers));
         save.set_enabled(self.checking.is_none());
         let mut lines = vec![
@@ -1235,34 +1253,28 @@ impl SettingsView {
         ]);
         lines.extend([
             heading(text!("Server Settings")),
-            row(
+            field_row(
+                &self.state,
                 text!("User name"),
-                field(
-                    &self.state,
-                    &editing.user,
-                    text!("Same as the email address"),
-                    |editing, text| {
-                        editing.user = text.to_owned();
-                    },
-                ),
+                &editing.user,
+                text!("Same as the email address"),
+                |editing, text| {
+                    editing.user = text.to_owned();
+                },
             ),
-            row(
+            field_row(
+                &self.state,
                 text!("Incoming server (IMAP)"),
-                field(
-                    &self.state,
-                    &editing.incoming.0,
-                    text!("imap.example.com"),
-                    |editing, text| editing.incoming.0 = text.to_owned(),
-                ),
+                &editing.incoming.0,
+                text!("imap.example.com"),
+                |editing, text| editing.incoming.0 = text.to_owned(),
             ),
-            row(
+            field_row(
+                &self.state,
                 text!("Port"),
-                field(
-                    &self.state,
-                    &editing.incoming.1,
-                    text!("Port"),
-                    |editing, text| editing.incoming.1 = text.to_owned(),
-                ),
+                &editing.incoming.1,
+                text!("Port"),
+                |editing, text| editing.incoming.1 = text.to_owned(),
             ),
             row(
                 text!("Security"),
@@ -1270,23 +1282,19 @@ impl SettingsView {
                     editing.incoming.2 = index;
                 }),
             ),
-            row(
+            field_row(
+                &self.state,
                 text!("Outgoing server (SMTP)"),
-                field(
-                    &self.state,
-                    &editing.outgoing.0,
-                    text!("smtp.example.com"),
-                    |editing, text| editing.outgoing.0 = text.to_owned(),
-                ),
+                &editing.outgoing.0,
+                text!("smtp.example.com"),
+                |editing, text| editing.outgoing.0 = text.to_owned(),
             ),
-            row(
+            field_row(
+                &self.state,
                 text!("Port"),
-                field(
-                    &self.state,
-                    &editing.outgoing.1,
-                    text!("Port"),
-                    |editing, text| editing.outgoing.1 = text.to_owned(),
-                ),
+                &editing.outgoing.1,
+                text!("Port"),
+                |editing, text| editing.outgoing.1 = text.to_owned(),
             ),
             row(
                 text!("Security"),
@@ -1420,7 +1428,7 @@ impl SettingsView {
         let Some(id) = self.checking.take() else {
             return;
         };
-        self.status = Some(match outcome {
+        let status = match outcome {
             Outcome::Ready(servers) => {
                 if let Some(account) = self.accounts.iter_mut().find(|account| account.id == id) {
                     account.user = servers.user;
@@ -1431,7 +1439,10 @@ impl SettingsView {
             }
             Outcome::Failed(_, problem) => (problem.message(), true),
             Outcome::Stopped => return,
-        });
+        };
+        if self.page == Page::Account(id) {
+            self.status = Some(status);
+        }
     }
 
     fn confirm_removal(&mut self) {
@@ -1753,7 +1764,7 @@ impl View for SettingsView {
         for event in events {
             match event {
                 MailEvent::Setup(outcome) => self.checked(*outcome),
-                MailEvent::KeysChanged(outcome) => self.keys_changed(outcome),
+                MailEvent::KeysChanged(account, outcome) => self.keys_changed(account, outcome),
                 _ => {}
             }
         }

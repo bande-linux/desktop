@@ -31,7 +31,7 @@ msgstr "Anslut säkerhetskopieringsskivan eller återuppta säkerhetskopieringen
 msgid "The disk is too small"
 msgstr "Skivan är för liten"
 
-msgid "There's no more room, even with the oldest versions removed. Use a larger disk."
+msgid "There’s no more room, even with the oldest versions removed. Use a larger disk."
 msgstr "Det finns inget mer utrymme, trots att de äldsta versionerna har tagits bort. Använd en större skiva."
 
 msgid "Damage found on the disk"
@@ -40,7 +40,7 @@ msgstr "Skada hittades på skivan"
 msgid "Some older versions were lost. Backups go on, but the disk may be failing."
 msgstr "Vissa äldre versioner gick förlorade. Säkerhetskopieringen fortsätter, men skivan kan vara på väg att gå sönder."
 
-msgid "Can't open the backups"
+msgid "Can’t open the backups"
 msgstr "Det går inte att öppna säkerhetskopiorna"
 
 msgid "They are missing from the disk or use another password. Choose the disk again."
@@ -49,16 +49,16 @@ msgstr "De saknas på skivan eller använder ett annat lösenord. Välj skivan i
 msgid "Backups keep failing"
 msgstr "Säkerhetskopieringen misslyckas gång på gång"
 
-msgid "The last few backups didn't finish. The disk may have a fault."
+msgid "The last few backups didn’t finish. The disk may have a fault."
 msgstr "De senaste säkerhetskopiorna blev inte klara. Skivan kan ha ett fel."
 
-msgid "That isn't the address of a share."
+msgid "That isn’t the address of a share."
 msgstr "Det är inte adressen till en delad mapp."
 
-msgid "The share can't be reached with that address and sign-in."
+msgid "The share can’t be reached with that address and sign-in."
 msgstr "Den delade mappen går inte att nå med den adressen och inloggningen."
 
-msgid "Backup isn't installed."
+msgid "Backup isn’t installed."
 msgstr "Säkerhetskopiering är inte installerad."
 
 msgid "Calculating…"
@@ -103,7 +103,7 @@ msgstr "Radera och använd"
 msgid "Erase all of {disk} ({size})?"
 msgstr "Radera hela {disk} ({size})?"
 
-msgid "Everything on this disk will be permanently deleted{contents}. This can't be undone."
+msgid "Everything on this disk will be permanently deleted{contents}. This can’t be undone."
 msgstr "Allt på skivan raderas permanent{contents}. Det går inte att ångra."
 
 msgid "Password"
@@ -142,7 +142,7 @@ msgstr "Allt utom cacheminnen och papperskorgen säkerhetskopieras."
 msgid "Remove"
 msgstr "Ta bort"
 
-msgid "{disk} already has this computer's backups"
+msgid "{disk} already has this computer’s backups"
 msgstr "{disk} innehåller redan den här datorns säkerhetskopior"
 
 msgid "Enter the password you chose for them to carry on."
@@ -151,7 +151,7 @@ msgstr "Ange lösenordet du valde för dem för att fortsätta."
 msgid "Type the password again"
 msgstr "Skriv lösenordet igen"
 
-msgid "Write this password down. It can't be recovered: without it, these backups can't be restored onto another computer."
+msgid "Write this password down. It can’t be recovered: without it, these backups can’t be restored onto another computer."
 msgstr "Skriv ner lösenordet. Det går inte att återfå: utan det kan säkerhetskopiorna inte återställas till en annan dator."
 
 msgid "Same password"
@@ -160,16 +160,16 @@ msgstr "Samma lösenord"
 msgid "Choose a password for {disk}"
 msgstr "Välj ett lösenord för {disk}"
 
-msgid "The passwords don't match. Try again."
+msgid "The passwords don’t match. Try again."
 msgstr "Lösenorden stämmer inte överens. Försök igen."
 
-msgid "That isn't the password for these backups."
+msgid "That isn’t the password for these backups."
 msgstr "Det är inte lösenordet för de här säkerhetskopiorna."
 
-msgid "The disk can't be used for backups."
+msgid "The disk can’t be used for backups."
 msgstr "Skivan kan inte användas för säkerhetskopiering."
 
-msgid "The disk couldn't be erased."
+msgid "The disk couldn’t be erased."
 msgstr "Skivan kunde inte raderas."
 
 msgid "Back up on battery"
@@ -202,13 +202,13 @@ msgstr "Återuppta"
 msgid "Paused until {when}"
 msgstr "Pausad till {when}"
 
-msgid "{disk} can't be reached"
+msgid "{disk} can’t be reached"
 msgstr "Det går inte att nå {disk}"
 
-msgid "Backups carry on when it's back."
+msgid "Backups carry on when it’s back."
 msgstr "Säkerhetskopieringen fortsätter när den är tillbaka."
 
-msgid "{disk} isn't connected"
+msgid "{disk} isn’t connected"
 msgstr "{disk} är inte ansluten"
 
 msgid "Back Up Now"
@@ -303,7 +303,7 @@ msgstr "{program} kan skriva åt dig"
 msgid "No program has asked to read or type your keystrokes. Password fields and the lock screen stay private either way."
 msgstr "Inget program har bett om att få läsa eller skriva dina tangenttryckningar. Lösenordsfält och låsskärmen förblir privata i båda fallen."
 
-msgid "Couldn't change the default app."
+msgid "Couldn’t change the default app."
 msgstr "Det gick inte att ändra standardappen."
 
 msgid "Web browser"
@@ -525,34 +525,34 @@ msgstr "Välj ditt certifikat."
 msgid "Type your password."
 msgstr "Skriv ditt lösenord."
 
-msgid "{service} isn't responding. Try again in a moment."
+msgid "{service} isn’t responding. Try again in a moment."
 msgstr "{service} svarar inte. Försök igen om en stund."
 
 msgid "Only an administrator can change this."
 msgstr "Bara en administratör kan ändra detta."
 
-msgid "Couldn't make this change."
+msgid "Couldn’t make this change."
 msgstr "Det gick inte att göra ändringen."
 
-msgid "This computer can't sleep, so it stays on when idle."
+msgid "This computer can’t sleep, so it stays on when idle."
 msgstr "Den här datorn kan inte vila, så den förblir på när den inte används."
 
-msgid "A virtual machine doesn't sleep when idle, since a sleeping guest looks like a crash and loses its network. Sleep from the menu still works."
+msgid "A virtual machine doesn’t sleep when idle, since a sleeping guest looks like a crash and loses its network. Sleep from the menu still works."
 msgstr "En virtuell maskin vilar inte när den inte används, eftersom en vilande gäst ser ut som en krasch och tappar sitt nätverk. Vila från menyn fungerar ändå."
 
 msgid "The desktop settings service"
 msgstr "Tjänsten för skrivbordsinställningar"
 
-msgid "Couldn't change the displays."
+msgid "Couldn’t change the displays."
 msgstr "Det gick inte att ändra skärmarna."
 
-msgid "Couldn't clear the clipboard history."
+msgid "Couldn’t clear the clipboard history."
 msgstr "Det gick inte att rensa urklippshistoriken."
 
-msgid "Couldn't add this folder to the excluded folders."
+msgid "Couldn’t add this folder to the excluded folders."
 msgstr "Det gick inte att lägga till mappen bland de uteslutna mapparna."
 
-msgid "Couldn't change the proxy."
+msgid "Couldn’t change the proxy."
 msgstr "Det gick inte att ändra proxyn."
 
 msgid "Certificates and keys"
@@ -564,7 +564,7 @@ msgstr "Importera en VPN-konfiguration"
 msgid "VPN configurations"
 msgstr "VPN-konfigurationer"
 
-msgid "Couldn't import this VPN file."
+msgid "Couldn’t import this VPN file."
 msgstr "Det gick inte att importera VPN-filen."
 
 msgid "Couldn’t install OpenVPN support, so this VPN file can’t be imported."
@@ -602,7 +602,7 @@ msgstr[1] "{count} uppdateringar är tillgängliga"
 msgid "Your computer is up to date"
 msgstr "Datorn är uppdaterad"
 
-msgid "Updates aren't available on this computer"
+msgid "Updates aren’t available on this computer"
 msgstr "Uppdateringar är inte tillgängliga på den här datorn"
 
 msgctxt "count"
@@ -749,16 +749,16 @@ msgstr "Inga inställningar matchar ”{query}”"
 msgid "Try another word, such as “sleep” or “wallpaper”."
 msgstr "Försök med ett annat ord, till exempel ”vila” eller ”skrivbordsbild”."
 
-msgid "The network service isn't running, so Wi-Fi can't be shown or changed."
+msgid "The network service isn’t running, so Wi-Fi can’t be shown or changed."
 msgstr "Nätverkstjänsten körs inte, så Wi-Fi kan inte visas eller ändras."
 
-msgid "The Bluetooth service isn't running, so Bluetooth can't be shown or changed."
+msgid "The Bluetooth service isn’t running, so Bluetooth can’t be shown or changed."
 msgstr "Bluetooth-tjänsten körs inte, så Bluetooth kan inte visas eller ändras."
 
-msgid "{pane} isn't available"
+msgid "{pane} isn’t available"
 msgstr "{pane} är inte tillgänglig"
 
-msgid "Its device or service isn't responding."
+msgid "Its device or service isn’t responding."
 msgstr "Enheten eller tjänsten svarar inte."
 
 msgid "{pane} is off"
@@ -797,10 +797,10 @@ msgstr "Språk"
 msgid "Getting Bande in {name}…"
 msgstr "Hämtar Bande på {name}…"
 
-msgid "Couldn't get Bande in {name}. Choose it again when this computer is online."
+msgid "Couldn’t get Bande in {name}. Choose it again when this computer is online."
 msgstr "Det gick inte att hämta Bande på {name}. Välj det igen när datorn är ansluten till internet."
 
-msgid "Bande's own apps stay in English for now; other apps use this language."
+msgid "Bande’s own apps stay in English for now; other apps use this language."
 msgstr "Bandes egna appar förblir på engelska tills vidare, andra appar använder det här språket."
 
 msgid "The login screen uses this language and region"
@@ -836,16 +836,16 @@ msgstr "Engelska (inget land)"
 msgid "Only an administrator can set up {name} on this computer."
 msgstr "Bara en administratör kan installera {name} på den här datorn."
 
-msgid "{name} can't be used on this computer."
+msgid "{name} can’t be used on this computer."
 msgstr "{name} kan inte användas på den här datorn."
 
-msgid "Couldn't set up {name}. {reason}"
+msgid "Couldn’t set up {name}. {reason}"
 msgstr "Det gick inte att ställa in {name}. {reason}"
 
 msgid "The language service"
 msgstr "Språktjänsten"
 
-msgid "Couldn't read the current language and region."
+msgid "Couldn’t read the current language and region."
 msgstr "Det gick inte att läsa det aktuella språket och den aktuella regionen."
 
 msgid "Settings"
@@ -860,7 +860,7 @@ msgstr "Apparna visar dem nästa gång de öppnas."
 msgid "Something went wrong. Try again later."
 msgstr "Något gick fel. Försök igen senare."
 
-msgid "Couldn't install the translations"
+msgid "Couldn’t install the translations"
 msgstr "Det gick inte att installera översättningarna"
 
 msgid "Translations are available for your language"
@@ -875,13 +875,13 @@ msgstr "Installera"
 msgid "Not Now"
 msgstr "Inte nu"
 
-msgid "Couldn't change the app's language."
+msgid "Couldn’t change the app’s language."
 msgstr "Det gick inte att ändra appens språk."
 
-msgid "Couldn't change the app's shortcut."
+msgid "Couldn’t change the app’s shortcut."
 msgstr "Det gick inte att ändra appens kortkommando."
 
-msgid "Couldn't change the apps that open at login."
+msgid "Couldn’t change the apps that open at login."
 msgstr "Det gick inte att ändra vilka appar som öppnas vid inloggning."
 
 msgid "View"
@@ -1079,7 +1079,7 @@ msgstr "Stör ej är på"
 msgid "Do Not Disturb turns on at {time}"
 msgstr "Stör ej slås på {time}"
 
-msgid "Couldn't change the notification settings for this app."
+msgid "Couldn’t change the notification settings for this app."
 msgstr "Det gick inte att ändra notisinställningarna för appen."
 
 msgid "Temporary"
@@ -1158,7 +1158,7 @@ msgstr "Spegla {display}"
 msgid "Never"
 msgstr "Aldrig"
 
-msgid "The display turns off first, so the screen saver doesn't start."
+msgid "The display turns off first, so the screen saver doesn’t start."
 msgstr "Skärmen stängs av först, så skärmsläckaren startar inte."
 
 msgid "The computer stays awake until the display turns off."
@@ -1290,8 +1290,8 @@ msgstr "Begäran om ihopparning"
 msgid "Arrangement"
 msgstr "Placering"
 
-msgid "Drag the displays to match how they stand on your desk. The white bar marks the main display."
-msgstr "Dra skärmarna så att de motsvarar hur de står på ditt skrivbord. Den vita stapeln markerar huvudskärmen."
+msgid "Drag the displays to match your desk. The bar marks the main display."
+msgstr "Dra skärmarna så att de motsvarar ditt skrivbord. Stapeln markerar huvudskärmen."
 
 msgid "Mouse"
 msgstr "Mus"
@@ -1344,22 +1344,22 @@ msgstr "Nätverk"
 msgid "Unknown app"
 msgstr "Okänd app"
 
-msgid "Couldn't open the keyring."
+msgid "Couldn’t open the keyring."
 msgstr "Det gick inte att öppna nyckelringen."
 
-msgid "Couldn't show the keyring prompt."
+msgid "Couldn’t show the keyring prompt."
 msgstr "Det gick inte att visa nyckelringens fråga."
 
-msgid "Couldn't read this password."
+msgid "Couldn’t read this password."
 msgstr "Det gick inte att läsa lösenordet."
 
-msgid "Couldn't save the new password."
+msgid "Couldn’t save the new password."
 msgstr "Det gick inte att spara det nya lösenordet."
 
-msgid "Couldn't delete this password."
+msgid "Couldn’t delete this password."
 msgstr "Det gick inte att radera lösenordet."
 
-msgid "Couldn't list your saved passwords."
+msgid "Couldn’t list your saved passwords."
 msgstr "Det gick inte att visa dina sparade lösenord."
 
 msgid "Unlock…"
@@ -1404,7 +1404,7 @@ msgstr "Visa"
 msgid "Other apps"
 msgstr "Andra appar"
 
-msgid "Couldn't change this app's permission."
+msgid "Couldn’t change this app’s permission."
 msgstr "Det gick inte att ändra appens behörighet."
 
 msgid "1 app"
@@ -1433,10 +1433,10 @@ msgstr "Den frågar igen innan den delar din skärm eller ett fönster."
 msgid "Choose a Wallpaper"
 msgstr "Välj en skrivbordsbild"
 
-msgid "Couldn't open the file chooser."
+msgid "Couldn’t open the file chooser."
 msgstr "Det gick inte att öppna filväljaren."
 
-msgid "Couldn't set this picture as the wallpaper."
+msgid "Couldn’t set this picture as the wallpaper."
 msgstr "Det gick inte att använda bilden som skrivbordsbild."
 
 msgid "{minutes} min"
@@ -1505,49 +1505,49 @@ msgstr "Begränsa laddningen till {percent} %"
 msgid "Limit charging"
 msgstr "Begränsa laddningen"
 
-msgid "Stops charging before full to slow the battery's ageing."
+msgid "Stops charging before full to slow the battery’s ageing."
 msgstr "Slutar ladda före fullt för att batteriet ska åldras långsammare."
 
-msgid "Power information isn't available because the power service isn't running."
+msgid "Power information isn’t available because the power service isn’t running."
 msgstr "Ströminformation är inte tillgänglig eftersom strömtjänsten inte körs."
 
 msgid "Power source"
 msgstr "Strömkälla"
 
-msgid "Power modes aren't available because the power profiles service isn't installed."
+msgid "Power modes aren’t available because the power profiles service isn’t installed."
 msgstr "Strömlägen är inte tillgängliga eftersom tjänsten för strömprofiler inte är installerad."
 
-msgid "Power modes aren't available because the power profiles service isn't responding."
+msgid "Power modes aren’t available because the power profiles service isn’t responding."
 msgstr "Strömlägen är inte tillgängliga eftersom tjänsten för strömprofiler inte svarar."
 
-msgid "This computer doesn't offer power modes."
+msgid "This computer doesn’t offer power modes."
 msgstr "Den här datorn har inga strömlägen."
 
-msgid "Hibernation isn't set up, so sleep lasts until the battery runs out."
+msgid "Hibernation isn’t set up, so sleep lasts until the battery runs out."
 msgstr "Viloläge på disk är inte inställt, så vilan varar tills batteriet tar slut."
 
-msgid "This computer can't hibernate, so sleep lasts until the battery runs out. Hibernation needs swap space at least as large as memory and isn't possible while Secure Boot locks the kernel."
+msgid "This computer can’t hibernate, so sleep lasts until the battery runs out. Hibernation needs swap space at least as large as memory and isn’t possible while Secure Boot locks the kernel."
 msgstr "Den här datorn kan inte gå i viloläge på disk, så vilan varar tills batteriet tar slut. Viloläge på disk kräver växlingsutrymme minst lika stort som minnet och går inte medan Secure Boot låser kärnan."
 
-msgid "The administrator doesn't allow hibernation, so sleep lasts until the battery runs out."
+msgid "The administrator doesn’t allow hibernation, so sleep lasts until the battery runs out."
 msgstr "Administratören tillåter inte viloläge på disk, så vilan varar tills batteriet tar slut."
 
-msgid "This computer can't sleep, so it stays on when idle. The display still turns off as set above."
+msgid "This computer can’t sleep, so it stays on when idle. The display still turns off as set above."
 msgstr "Den här datorn kan inte vila, så den förblir på när den inte används. Skärmen stängs ändå av enligt inställningen ovan."
 
 msgid "Only members of the lpadmin group can change printers."
 msgstr "Bara medlemmar i gruppen lpadmin kan ändra skrivare."
 
-msgid "Couldn't change this printer."
+msgid "Couldn’t change this printer."
 msgstr "Det gick inte att ändra skrivaren."
 
-msgid "Couldn't install printing support."
+msgid "Couldn’t install printing support."
 msgstr "Det gick inte att installera utskriftsstöd."
 
-msgid "Couldn't install Avahi."
+msgid "Couldn’t install Avahi."
 msgstr "Det gick inte att installera Avahi."
 
-msgid "Couldn't add “{name}”. Check that it is turned on and on this network."
+msgid "Couldn’t add “{name}”. Check that it is turned on and on this network."
 msgstr "Det gick inte att lägga till ”{name}”. Kontrollera att den är påslagen och finns i det här nätverket."
 
 msgid "Paused"
@@ -1610,6 +1610,9 @@ msgstr "Standardskrivare"
 msgid "192.168.1.30 or printer.local"
 msgstr "192.168.1.30 eller printer.local"
 
+msgid "Add by address"
+msgstr "Lägg till via adress"
+
 msgid "Add"
 msgstr "Lägg till"
 
@@ -1618,9 +1621,6 @@ msgstr "Lägger till…"
 
 msgid "For a printer that does not show up: its IP address or host name"
 msgstr "För en skrivare som inte dyker upp: dess IP-adress eller värdnamn"
-
-msgid "Add by address"
-msgstr "Lägg till via adress"
 
 msgid "Installing…"
 msgstr "Installerar…"
@@ -1862,7 +1862,7 @@ msgstr "Släng…"
 msgid "Start over"
 msgstr "Börja om"
 
-msgid "Couldn't change sign-in page detection."
+msgid "Couldn’t change sign-in page detection."
 msgstr "Det gick inte att ändra upptäckten av inloggningssidor."
 
 msgid "On. Others on your network can try to sign in over SSH."
@@ -1889,52 +1889,52 @@ msgstr "Kontaktar {server} varje gång ett nätverk ansluts, för att ta reda p�
 msgid "Contacts Debian’s server whenever a network connects, to find out whether it asks you to sign in"
 msgstr "Kontaktar Debians server varje gång ett nätverk ansluts, för att ta reda på om det vill att du loggar in"
 
-msgid "Couldn't change the sound settings."
+msgid "Couldn’t change the sound settings."
 msgstr "Det gick inte att ändra ljudinställningarna."
 
-msgid "Couldn't turn Wi-Fi on or off."
+msgid "Couldn’t turn Wi-Fi on or off."
 msgstr "Det gick inte att slå på eller av Wi-Fi."
 
-msgid "Couldn't change the network settings."
+msgid "Couldn’t change the network settings."
 msgstr "Det gick inte att ändra nätverksinställningarna."
 
-msgid "Couldn't change how this connection signs in."
+msgid "Couldn’t change how this connection signs in."
 msgstr "Det gick inte att ändra hur anslutningen loggar in."
 
-msgid "Couldn't turn the hotspot on."
+msgid "Couldn’t turn the hotspot on."
 msgstr "Det gick inte att slå på surfzonen."
 
-msgid "Couldn't turn the hotspot off."
+msgid "Couldn’t turn the hotspot off."
 msgstr "Det gick inte att stänga av surfzonen."
 
-msgid "Couldn't turn airplane mode on or off."
+msgid "Couldn’t turn airplane mode on or off."
 msgstr "Det gick inte att slå på eller stänga av flygplansläget."
 
-msgid "Couldn't connect to the VPN."
+msgid "Couldn’t connect to the VPN."
 msgstr "Det gick inte att ansluta till VPN."
 
-msgid "Couldn't remove the VPN."
+msgid "Couldn’t remove the VPN."
 msgstr "Det gick inte att ta bort VPN."
 
-msgid "Couldn't disconnect from the VPN."
+msgid "Couldn’t disconnect from the VPN."
 msgstr "Det gick inte att koppla från VPN."
 
-msgid "Couldn't forget this network."
+msgid "Couldn’t forget this network."
 msgstr "Det gick inte att glömma nätverket."
 
-msgid "Couldn't turn Bluetooth on or off."
+msgid "Couldn’t turn Bluetooth on or off."
 msgstr "Det gick inte att slå på eller av Bluetooth."
 
-msgid "Couldn't connect to this device."
+msgid "Couldn’t connect to this device."
 msgstr "Det gick inte att ansluta till enheten."
 
-msgid "Couldn't disconnect this device."
+msgid "Couldn’t disconnect this device."
 msgstr "Det gick inte att koppla från enheten."
 
-msgid "Couldn't forget this device."
+msgid "Couldn’t forget this device."
 msgstr "Det gick inte att glömma enheten."
 
-msgid "Couldn't pair with this device."
+msgid "Couldn’t pair with this device."
 msgstr "Det gick inte att para ihop med enheten."
 
 msgid "Screen Sharing password"
@@ -2045,7 +2045,7 @@ msgstr "Starta om för att slutföra uppdateringen"
 msgid "Restart to install updates"
 msgstr "Starta om för att installera uppdateringar"
 
-msgid "Updates didn't finish installing"
+msgid "Updates didn’t finish installing"
 msgstr "Uppdateringarna blev inte färdiginstallerade"
 
 msgid "Shut Down Now"
@@ -2082,13 +2082,13 @@ msgstr "Stäng av för att installera uppdateringar"
 msgid "Log out to finish updating the desktop"
 msgstr "Logga ut för att slutföra uppdateringen av skrivbordet"
 
-msgid "You're offline. Connect to the internet and try again."
+msgid "You’re offline. Connect to the internet and try again."
 msgstr "Du är offline. Anslut till internet och försök igen."
 
 msgid "Another installation is running. Try again when it finishes."
 msgstr "En annan installation pågår. Försök igen när den är klar."
 
-msgid "There isn't enough free space. Free up some space and try again."
+msgid "There isn’t enough free space. Free up some space and try again."
 msgstr "Det finns inte tillräckligt med ledigt utrymme. Frigör utrymme och försök igen."
 
 msgid "The update was canceled."
@@ -2100,7 +2100,7 @@ msgstr "Uppdateringstjänsten stannade. Försök igen om en stund."
 msgid "Software Update"
 msgstr "Programuppdatering"
 
-msgid "The firmware update didn't install. The device keeps its earlier firmware."
+msgid "The firmware update didn’t install. The device keeps its earlier firmware."
 msgstr "Uppdateringen av den inbyggda programvaran installerades inte. Enheten behåller sin tidigare inbyggda programvara."
 
 msgid "{device}: {reason}"
@@ -2112,7 +2112,7 @@ msgstr "Skrivbordet fortsätter köra sin gamla version tills du loggar ut"
 msgid "The battery is too low to update firmware safely. Charge it and try again."
 msgstr "Batteriet är för svagt för att uppdatera den inbyggda programvaran säkert. Ladda det och försök igen."
 
-msgid "The device's battery is too low. Charge it and try again."
+msgid "The device’s battery is too low. Charge it and try again."
 msgstr "Enhetens batteri är för svagt. Ladda det och försök igen."
 
 msgid "Plug in the computer to install this firmware update."
@@ -2127,7 +2127,7 @@ msgstr "En uppdatering av den inbyggda programvaran väntar redan på en omstart
 msgid "The device is busy. Try again in a moment."
 msgstr "Enheten är upptagen. Försök igen om en stund."
 
-msgid "The device isn't connected. Connect it and try again."
+msgid "The device isn’t connected. Connect it and try again."
 msgstr "Enheten är inte ansluten. Anslut den och försök igen."
 
 msgid "The device needs your attention. Follow its instructions and try again."
@@ -2174,7 +2174,7 @@ msgstr[1] "{count} av dem kräver omstart."
 msgid "Software updates are available"
 msgstr "Programuppdateringar är tillgängliga"
 
-msgid "Firmware updates aren't available from this computer's software sources."
+msgid "Firmware updates aren’t available from this computer’s software sources."
 msgstr "Uppdateringar av inbyggd programvara finns inte i datorns programkällor."
 
 msgid "Check spelling"
@@ -2198,7 +2198,7 @@ msgstr "Visa webb- och e-postadresser som länkar"
 msgid "Get Dictionary"
 msgstr "Hämta ordlista"
 
-msgid "The {name} dictionary matches your region but isn't installed."
+msgid "The {name} dictionary matches your region but isn’t installed."
 msgstr "Ordlistan {name} passar din region men är inte installerad."
 
 msgid "No learned words yet."
@@ -2225,7 +2225,7 @@ msgstr "{from}, ersätts med {to}"
 msgid "Remove Text Replacement"
 msgstr "Ta bort textersättning"
 
-msgid "Couldn't empty the Trash."
+msgid "Couldn’t empty the Trash."
 msgstr "Det gick inte att tömma papperskorgen."
 
 msgid "The date and time service"
@@ -2234,7 +2234,7 @@ msgstr "Tjänsten för datum och tid"
 msgid "Later"
 msgstr "Senare"
 
-msgid "Some updates didn't install"
+msgid "Some updates didn’t install"
 msgstr "Vissa uppdateringar installerades inte"
 
 msgid "Check Now"
@@ -2324,7 +2324,7 @@ msgstr "Det gick inte att hämta uppdateringar"
 msgid "The login service"
 msgstr "Inloggningstjänsten"
 
-msgid "Couldn't change this account."
+msgid "Couldn’t change this account."
 msgstr "Det gick inte att ändra kontot."
 
 msgid "{name} is logged in. To delete this user, they must log out first."
@@ -2336,7 +2336,7 @@ msgstr "Kontotjänsten"
 msgid "Choose a Picture"
 msgstr "Välj en bild"
 
-msgid "That picture can't be opened. Choose a JPEG or PNG picture."
+msgid "That picture can’t be opened. Choose a JPEG or PNG picture."
 msgstr "Bilden kan inte öppnas. Välj en JPEG- eller PNG-bild."
 
 msgid "The file chooser"
@@ -2369,7 +2369,7 @@ msgstr "Fullständigt namn"
 msgid "Account name"
 msgstr "Kontonamn"
 
-msgid "The name of the home folder; it can't be changed later."
+msgid "The name of the home folder; it can’t be changed later."
 msgstr "Namnet på hemmappen. Det kan inte ändras senare."
 
 msgid "Account type"
@@ -2417,7 +2417,7 @@ msgstr "Radera hemmappen"
 msgid "Keep the home folder to keep their files in /home/{login}, or delete it and everything in it."
 msgstr "Behåll hemmappen för att behålla användarens filer i /home/{login}, eller radera den och allt i den."
 
-msgid "Type the person's full name."
+msgid "Type the person’s full name."
 msgstr "Skriv personens fullständiga namn."
 
 msgid "Use lowercase letters, digits, - and _ for the account name, starting with a letter."
@@ -2429,7 +2429,7 @@ msgstr "Kontonamnet används redan. Välj ett annat."
 msgid "Type a new password."
 msgstr "Skriv ett nytt lösenord."
 
-msgid "The passwords don't match. Type the password again."
+msgid "The passwords don’t match. Type the password again."
 msgstr "Lösenorden stämmer inte överens. Skriv lösenordet igen."
 
 msgid "Changing the password…"
@@ -2441,7 +2441,7 @@ msgstr "Tryck på Retur efter varje fält för att ändra lösenordet, eller Esc
 msgid "Type your current password first."
 msgstr "Skriv ditt nuvarande lösenord först."
 
-msgid "The new passwords don't match. Type the new password again."
+msgid "The new passwords don’t match. Type the new password again."
 msgstr "De nya lösenorden stämmer inte överens. Skriv det nya lösenordet igen."
 
 msgid "Your password was changed. Use it the next time you log in or unlock."
@@ -2450,13 +2450,13 @@ msgstr "Lösenordet har ändrats. Använd det nästa gång du loggar in eller l�
 msgid "The current password is not correct."
 msgstr "Det nuvarande lösenordet är fel."
 
-msgid "That password can't be used: {reason}"
+msgid "That password can’t be used: {reason}"
 msgstr "Lösenordet kan inte användas: {reason}"
 
 msgid "That password is too weak. Choose a longer one."
 msgstr "Lösenordet är för svagt. Välj ett längre."
 
-msgid "Couldn't change the password."
+msgid "Couldn’t change the password."
 msgstr "Det gick inte att ändra lösenordet."
 
 msgid "The previous settings come back in {seconds} s."

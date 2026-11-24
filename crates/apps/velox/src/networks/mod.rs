@@ -121,6 +121,7 @@ fn create_sheet(ui: &mut Ui, acts: &Acts) {
         TextField::new(&tr!("backend"), "", move |text| {
             typed.borrow_mut().0 = text.trim().to_owned();
         })
+        .named(&tr!("Name"), None)
     };
     let subnet = {
         let typed = Rc::clone(&typed);
@@ -128,6 +129,7 @@ fn create_sheet(ui: &mut Ui, acts: &Acts) {
             typed.borrow_mut().1 = text.trim().to_owned();
         })
         .without_text_checking()
+        .named(&tr!("Subnet"), None)
     };
     let acts = Rc::clone(acts);
     ui.present_sheet(

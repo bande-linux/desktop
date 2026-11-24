@@ -133,6 +133,10 @@ impl Work {
                     archive: archive.clone(),
                     wrong: true,
                 },
+                (None, Kind::Expand { .. }) if damaged(&failure.error) => {
+                    tracing::warn!("cannot expand: {}", failure.error);
+                    Ended::Failed(tr!("The archive is damaged."))
+                }
                 _ => Ended::Failed(failure.error.to_string()),
             };
         }
@@ -195,4 +199,15 @@ impl Work {
             Kind::Compress { sources, .. } => sources.clone(),
         }
     }
+}
+
+fn damaged(error: &io::Error) -> bool {
+    error.raw_os_error().is_none()
+        && matches!(
+            error.kind(),
+            io::ErrorKind::InvalidData
+                | io::ErrorKind::InvalidInput
+                | io::ErrorKind::UnexpectedEof
+                | io::ErrorKind::Other
+        )
 }

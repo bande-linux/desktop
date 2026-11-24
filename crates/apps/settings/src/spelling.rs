@@ -247,7 +247,7 @@ impl SettingsView {
             rows.push(boxed(Row::new(
                 Text::new(
                     &tr!(
-                        "The {name} dictionary matches your region but isn't installed.",
+                        "The {name} dictionary matches your region but isn’t installed.",
                         name = name.clone()
                     ),
                     Tone::Primary,

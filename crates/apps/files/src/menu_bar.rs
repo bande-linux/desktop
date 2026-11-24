@@ -143,7 +143,6 @@ pub fn app_menus(view: &FilesView, recent_folders: &[PathBuf]) -> Menus {
         shortcut(text!("Delete Immediately…"), "Shift+Delete"),
         Entry::separator(),
         plain(text!("Eject"), "eject-current"),
-        shortcut(text!("Find"), "Ctrl+F"),
         Entry::separator(),
         bande_app_menu::print_item(view.can_print()),
     ]);
@@ -161,6 +160,8 @@ pub fn app_menus(view: &FilesView, recent_folders: &[PathBuf]) -> Menus {
                 shortcut(text!("Paste"), "Ctrl+V"),
                 plain(text!("Move Item Here"), "move-here"),
                 shortcut(text!("Select All"), "Ctrl+A"),
+                Entry::separator(),
+                shortcut(text!("Find"), "Ctrl+F"),
             ],
         ),
         submenu(

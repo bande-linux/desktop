@@ -143,7 +143,7 @@ fn sentence(error: &bande_printers::Error) -> String {
             tr!("Only members of the lpadmin group can change printers.")
         }
         bande_printers::Error::Refused(_, message) if !message.is_empty() => message.clone(),
-        _ => tr!("Couldn't change this printer."),
+        _ => tr!("Couldn’t change this printer."),
     }
 }
 
@@ -208,7 +208,7 @@ pub fn follow_printers(
                 .and_then(|client| work(&client))
                 .map_err(|error| {
                     tracing::warn!("the print service refused: {error}");
-                    tr!("Couldn't change this printer.")
+                    tr!("Couldn’t change this printer.")
                 })
         };
         for command in receiver {
@@ -271,8 +271,8 @@ pub fn follow_printers(
                     installed.map_err(|error| {
                         tracing::warn!("cannot install {support:?}: {error}");
                         match support {
-                            Support::Cups => tr!("Couldn't install printing support."),
-                            Support::Avahi => tr!("Couldn't install Avahi."),
+                            Support::Cups => tr!("Couldn’t install printing support."),
+                            Support::Avahi => tr!("Couldn’t install Avahi."),
                         }
                     })
                 }
@@ -305,7 +305,7 @@ pub fn follow_printers(
                     let added = service(&|client| client.add_address(&address).map(drop));
                     updates.send(Update::PrinterAdded(added.is_ok()));
                     added.map_err(|_| {
-                        tr!("Couldn't add “{name}”. Check that it is turned on and on this network.", name = address.clone())
+                        tr!("Couldn’t add “{name}”. Check that it is turned on and on this network.", name = address.clone())
                     })
                 }
             };
@@ -518,7 +518,8 @@ impl SettingsView {
             &self.printer_address,
             move |text| address(text.to_owned()),
         )
-        .without_text_checking();
+        .without_text_checking()
+        .named(&tr!("Add by address"), None);
         self.anchors
             .push((Anchor::Item("printer-address".to_owned()), field.id()));
         let mut add = intent(&self.intents, |()| Intent::AddPrinterAddress);

@@ -93,7 +93,7 @@ impl CopyDiagnostics {
         let click = Rc::clone(&clicked);
         Self {
             button: Button::new(&tr!("Copy Diagnostics"), move || click.set(true)).tooltip(&tr!(
-                "Copies versions, the engine's state and the end of its log, for a bug report"
+                "Copies versions, the engine’s state and the end of its log, for a bug report"
             )),
             clicked,
         }

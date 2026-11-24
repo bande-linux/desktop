@@ -1170,7 +1170,8 @@ impl FilesView {
             .map(|rename| (rename.field, rename.path.clone()));
         let rename = rename.map(|(field, path)| (field, self.rename_frame(&path)));
         let slider = self.size_slider.map(|slider| {
-            let bar_y = self.size.1 - PATH_BAR_HEIGHT;
+            let sheet = self.sheet_frame();
+            let bar_y = sheet.y + sheet.height - PATH_BAR_HEIGHT;
             (
                 slider,
                 Rect::new(
@@ -1217,6 +1218,7 @@ impl FilesView {
         self.cancel_rename();
         let mut field = TextField::new("", &shown, |_| {})
             .without_text_checking()
+            .named(&tr!("Name"), None)
             .in_place(NAME_SIZE)
             .padding(FIELD_INSET);
         field.select(match hidden_extension {
@@ -1420,12 +1422,14 @@ impl FilesView {
             .map(|folder| folder.display().to_string())
             .unwrap_or_default();
         let send = sender(&self.signals);
+        let title = tr!("Go to the folder:");
         let mut field = TextField::new("", &current, move |text| {
             send(Signal::GoTo(text.to_owned()));
         })
-        .without_text_checking();
+        .without_text_checking()
+        .named(&title, None);
         field.select(0..current.len());
-        let prompt = Prompt::new(&tr!("Go to the folder:"), "", self.choice())
+        let prompt = Prompt::new(&title, "", self.choice())
             .accessory(field)
             .button(&tr!("Cancel"), "cancel", Kind::Cancel)
             .button(&tr!("Go"), "go", Kind::Primary);

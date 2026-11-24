@@ -785,7 +785,7 @@ impl Worker {
                         source,
                         io::Error::new(
                             io::ErrorKind::InvalidInput,
-                            "an item can't replace the folder that contains it",
+                            tr!("An item can’t replace the folder that contains it."),
                         ),
                     )?;
                     return Ok(None);
@@ -814,7 +814,7 @@ impl Worker {
                 source,
                 io::Error::new(
                     io::ErrorKind::InvalidInput,
-                    "a folder can't be copied into itself",
+                    tr!("A folder can’t be copied into itself."),
                 ),
             )?;
             return Ok(());
@@ -1016,7 +1016,7 @@ impl Worker {
         } else {
             Err(io::Error::new(
                 io::ErrorKind::Unsupported,
-                "special files can't be copied",
+                tr!("Special files can’t be copied."),
             ))
         })
     }
@@ -1191,7 +1191,7 @@ impl Worker {
                 source,
                 io::Error::new(
                     io::ErrorKind::InvalidInput,
-                    "a folder can't be moved into itself",
+                    tr!("A folder can’t be moved into itself."),
                 ),
             )?;
             return Ok(());

@@ -3,11 +3,11 @@
 use std::path::Path;
 use std::time::Instant;
 
-use accesskit::{Node, Role};
-use bande_mail::imap::{Fetched, Folder, Role as Kind};
+use accesskit::{Action, ActionRequest, Node, Role, TreeId};
+use bande_mail::imap::{Fetched, Flag, Folder, Role as Kind};
 use bande_mail::net::{Security, Server};
 use bande_mail::settings::MailSettings;
-use bande_mail::store::{Account, Store};
+use bande_mail::store::{Account, Action as Change, Store};
 use bande_mail::ui::{MailView, Panes, Request};
 use bande_toolkit::ui::{Event, Key, Modifiers, Pointer, Scroll, ScrollPhase, ScrollSource};
 use bande_toolkit::{Appearance, HeaderInsets, Palette, Point, Scheme, TextSystem, WindowButtons};
@@ -79,10 +79,17 @@ fn every_pane_keeps_clear_of_the_window_buttons_and_the_list_acts_by_swipe_and_k
     store.replace_mailboxes(id, &folders).unwrap();
     let palette = Palette::for_scheme(Scheme::Light);
     let settings = MailSettings::default();
-    let mut view = MailView::new(store_path, settings, palette, TextSystem::new()).unwrap();
+    let mut view = MailView::new(store_path.clone(), settings, palette, TextSystem::new()).unwrap();
     view.reload();
 
-    for (width, panes) in [(1280, Panes::Three), (900, Panes::Two), (600, Panes::One)] {
+    let widths = [
+        (1280, Panes::Three),
+        (1040, Panes::Three),
+        (900, Panes::Two),
+        (720, Panes::Two),
+        (600, Panes::One),
+    ];
+    for (width, panes) in widths {
         for buttons in [WindowButtons::Right, WindowButtons::Left] {
             view.set_appearance(Appearance {
                 window_buttons: buttons,
@@ -120,6 +127,10 @@ fn every_pane_keeps_clear_of_the_window_buttons_and_the_list_acts_by_swipe_and_k
                     named(&view, "Mailboxes").is_some(),
                     "the sidebar slides over"
                 );
+                assert!(
+                    named(&view, "Sort by").is_none(),
+                    "nothing under the sidebar shows through"
+                );
                 press(&mut view, Key::Escape, false);
                 view.scene(width, 800);
                 assert!(named(&view, "Mailboxes").is_none(), "Escape closes it");
@@ -142,25 +153,39 @@ fn every_pane_keeps_clear_of_the_window_buttons_and_the_list_acts_by_swipe_and_k
         "the list edge drags: {kept}"
     );
 
-    let mailboxes = store.mailboxes(id).unwrap();
-    let inbox = mailboxes
-        .iter()
-        .find(|mailbox| mailbox.role == Some(Kind::Inbox));
-    let fetched = [7, 8].map(|uid| Fetched {
+    let [inbox, archive] = [Kind::Inbox, Kind::Archive].map(|role| {
+        let mailbox = store.mailbox_with_role(id, role).unwrap().unwrap();
+        store.set_mailbox_state(mailbox.id, 1, Some(1)).unwrap();
+        mailbox.id
+    });
+    let plan = |uid: u32, plan: u32| Fetched {
         uid,
         flags: None,
         size: Some(10),
         internal_date: Some(1),
         header: Some(
             format!(
-                "From: <ada@example.org>\r\nMessage-ID: <{uid}@x>\r\nSubject: Plan {uid}\r\n\r\n"
+                "From: <ada@example.org>\r\nMessage-ID: <{plan}@x>\r\nSubject: Plan {plan}\r\n\r\n"
             )
             .into_bytes(),
         ),
         body: None,
-    });
-    store.insert_headers(inbox.unwrap().id, &fetched).unwrap();
+    };
+    let plans = [plan(7, 7), plan(8, 8)];
+    store.insert_headers(inbox, &plans).unwrap();
     view.reload();
+    let asked = |store: &Store| {
+        let asked = store.pending(id).unwrap();
+        for change in &asked {
+            store.finish_pending(change.id).unwrap();
+        }
+        let asked = asked.into_iter().filter_map(|change| match change.action {
+            Change::Move(target) => Some((change.mailbox, change.uids, target)),
+            _ => None,
+        });
+        asked.collect::<Vec<_>>()
+    };
+    let moved = |from: &str, uid: u32, to: &str| (from.to_owned(), vec![uid], to.to_owned());
     let panel = |view: &mut MailView| {
         view.scene(1280, 800);
         named(view, "Mark as Read")
@@ -172,32 +197,99 @@ fn every_pane_keeps_clear_of_the_window_buttons_and_the_list_acts_by_swipe_and_k
     assert!(panel(&mut view), "choosing both offers Mark as Read");
     press(&mut view, Key::Escape, false);
 
-    let row = named(&view, "Plan 8")
-        .and_then(|node| node.bounds())
-        .unwrap();
-    let row = Point::new(row.x0 as f32 + 100.0, (row.y0 + row.y1) as f32 / 2.0);
-    view.handle(&Event::PointerMove(Pointer::at(row)));
-    for (delta, phase) in [
-        (-50.0, ScrollPhase::Began),
-        (-60.0, ScrollPhase::Changed),
-        (0.0, ScrollPhase::Ended),
-    ] {
-        view.handle(&Event::Scroll(Scroll {
-            position: row,
-            delta: Point::new(delta, 0.0),
-            source: ScrollSource::Finger,
-            phase,
-            ..Scroll::default()
-        }));
-        view.scene(1280, 800);
-    }
+    let swipe = |view: &mut MailView, subject: &str| {
+        let row = named(view, subject).and_then(|node| node.bounds()).unwrap();
+        let row = Point::new(row.x0 as f32 + 100.0, (row.y0 + row.y1) as f32 / 2.0);
+        view.handle(&Event::PointerMove(Pointer::at(row)));
+        for (delta, phase) in [
+            (-50.0, ScrollPhase::Began),
+            (-60.0, ScrollPhase::Changed),
+            (0.0, ScrollPhase::Ended),
+        ] {
+            view.handle(&Event::Scroll(Scroll {
+                position: row,
+                delta: Point::new(delta, 0.0),
+                source: ScrollSource::Finger,
+                phase,
+                ..Scroll::default()
+            }));
+            view.scene(1280, 800);
+        }
+    };
+    press(&mut view, Key::Character('2'), true);
+    press(&mut view, Key::Character('1'), true);
+    swipe(&mut view, "Plan 7");
     view.tick(Instant::now());
     assert_eq!(view.messages().len(), 1, "a swipe to the right archives");
+    assert_eq!(view.selected(), None, "and opens no other message");
+    assert_eq!(asked(&store), [moved("INBOX", 7, "Archive")]);
+    store.insert_headers(archive, &[plan(1, 7)]).unwrap();
     press(&mut view, Key::Character('z'), true);
-    assert_eq!(view.messages().len(), 2, "Ctrl+Z brings it back");
+    assert_eq!(
+        asked(&store),
+        [moved("Archive", 1, "INBOX")],
+        "Ctrl+Z moves it back"
+    );
+    store.insert_headers(inbox, &[plan(9, 7)]).unwrap();
+    view.reload();
+    assert_eq!(view.messages().len(), 2, "and it is in the list again");
 
+    press(&mut view, Key::Character('a'), true);
+    swipe(&mut view, "Plan 8");
+    swipe(&mut view, "Plan 7");
+    view.tick(Instant::now());
+    assert!(view.messages().is_empty(), "swipes in a row all count");
+    let both = [moved("INBOX", 8, "Archive"), moved("INBOX", 9, "Archive")];
+    assert_eq!(asked(&store), both);
+    let arrived = [plan(2, 8), plan(3, 7)];
+    store.insert_headers(archive, &arrived).unwrap();
+    press(&mut view, Key::Character('z'), true);
+    press(&mut view, Key::Character('z'), true);
+    let back = [moved("Archive", 3, "INBOX"), moved("Archive", 2, "INBOX")];
+    assert_eq!(
+        asked(&store),
+        back,
+        "each Ctrl+Z undoes one, the last first"
+    );
+    let returned = [plan(10, 8), plan(11, 7)];
+    store.insert_headers(inbox, &returned).unwrap();
+    view.reload();
+
+    press(&mut view, Key::Character('a'), true);
+    store.remove_uids(inbox, &[10]).unwrap();
+    view.reload();
+    let reader = find(&view, |node| node.role() == Role::Document).unwrap();
+    assert!(
+        !reader.children().is_empty(),
+        "the one left of several chosen messages opens"
+    );
+    store.insert_headers(inbox, &[plan(10, 8)]).unwrap();
+    press(&mut view, Key::Character('2'), true);
+    press(&mut view, Key::Character('1'), true);
+
+    let ids = view.messages().iter().map(|summary| summary.id);
+    let ids = ids.collect::<Vec<_>>();
+    store.set_flag(&ids, Flag::Seen, false).unwrap();
+    let (unread, _) = view
+        .accessibility()
+        .nodes
+        .into_iter()
+        .find(|(_, node)| node.role() == Role::RadioButton && node.label() == Some("Unread"))
+        .unwrap();
+    view.perform(&ActionRequest {
+        action: Action::Click,
+        target_tree: TreeId::ROOT,
+        target_node: unread,
+        data: None,
+    });
+    press(&mut view, Key::Escape, false);
+    press(&mut view, Key::Character('k'), false);
+    view.reload();
+    assert_eq!(view.messages().len(), 2, "the message being read stays");
     press(&mut view, Key::Character('j'), false);
     assert!(view.selected().is_some(), "J chooses the next message");
+    view.reload();
+    assert_eq!(view.messages().len(), 1, "the one read before it goes");
     press(&mut view, Key::Character('v'), false);
     let finder = view
         .take_requests()
@@ -207,6 +299,69 @@ fn every_pane_keeps_clear_of_the_window_buttons_and_the_list_acts_by_swipe_and_k
     let place = view.place().clone();
     press(&mut view, Key::Character('2'), true);
     assert_ne!(*view.place(), place, "Ctrl+2 goes to the second mailbox");
+    view.scene(600, 800);
+    view.show_message(ids[0]);
+    view.scene(600, 800);
+    assert!(named(&view, "Sort by").is_none(), "the reader stands alone");
+    press(&mut view, Key::Character('2'), true);
+    view.scene(600, 800);
+    assert!(named(&view, "Sort by").is_some(), "Ctrl+2 shows the list");
+    press(&mut view, Key::Character('1'), true);
+    let [draft, read] = [0, 1].map(|row| view.messages()[row].clone());
+    let body = b"Subject: Draft\r\n\r\nHi\r\n";
+    store.store_body(inbox, draft.uid, body).unwrap();
+    store.set_flag(&[draft.id], Flag::Draft, true).unwrap();
+    view.reload();
+    view.take_requests();
+    let click = |view: &mut MailView, subject: &str| {
+        view.scene(600, 800);
+        let row = named(view, subject).and_then(|node| node.bounds()).unwrap();
+        let row = Point::new(row.x0 as f32 + 100.0, (row.y0 + row.y1) as f32 / 2.0);
+        view.handle(&Event::PointerDown(Pointer::at(row)));
+        view.handle(&Event::PointerUp(Pointer::at(row)));
+        view.scene(600, 800);
+        named(view, "Sort by").is_none()
+    };
+    let alone = click(&mut view, &draft.subject);
+    assert!(!alone, "the list stays behind a draft");
+    let mut requests = view.take_requests().into_iter();
+    assert!(
+        requests.any(|request| matches!(request, Request::Compose(_))),
+        "a click opens a draft to carry on with it"
+    );
+    let sealed = b"Subject: Draft\r\nContent-Type: text/plain\r\n\r\n\
+        -----BEGIN PGP MESSAGE-----\r\n\r\nx\r\n-----END PGP MESSAGE-----\r\n";
+    store.store_body(inbox, read.uid, sealed).unwrap();
+    store.set_flag(&[read.id], Flag::Draft, true).unwrap();
+    view.reload();
+    assert!(click(&mut view, &read.subject), "a click opens the reader");
+    let mut requests = view.take_requests().into_iter();
+    assert!(
+        !requests.any(|request| matches!(request, Request::Compose(_))),
+        "a sealed draft is not carried on with before it is decrypted"
+    );
+    view.handle(&Event::Key {
+        key: Key::PageUp,
+        modifiers: Modifiers::default(),
+    });
+    assert_eq!(view.selected(), Some(read.id), "Page Up scrolls it");
     press(&mut view, Key::Character('?'), false);
     assert!(view.has_sheet(), "? lists the shortcuts");
+
+    let mut account = store.account(id).unwrap().unwrap();
+    account.enabled = false;
+    store.update_account(&account).unwrap();
+    let settings = MailSettings::default();
+    let mut view = MailView::new(store_path, settings, palette, TextSystem::new()).unwrap();
+    view.start();
+    view.scene(1280, 800);
+    assert!(named(&view, "Sort by").is_none(), "the setup guide shows");
+    account.enabled = true;
+    store.update_account(&account).unwrap();
+    view.accounts_changed();
+    view.scene(1280, 800);
+    assert!(
+        named(&view, "Sort by").is_some(),
+        "an account turned on in Settings ends the setup guide"
+    );
 }

@@ -199,8 +199,7 @@ impl Program for Disks {
                 .without_window(),
             self.item(cx, tr!("Image from Selection…"), IMAGE_FROM),
         ];
-        let edit = edit_submenu(vec![
-            Entry::separator(),
+        let disk = vec![
             self.item(cx, tr!("Check and Repair…"), REPAIR),
             self.item(cx, tr!("Add Partition…"), ADD_PARTITION),
             self.item(cx, tr!("Delete Partition…"), DELETE_PARTITION),
@@ -211,9 +210,13 @@ impl Program for Disks {
             Entry::separator(),
             self.item(cx, mount, MOUNT),
             self.item(cx, tr!("Eject"), EJECT).shortcut("Ctrl+E"),
-        ]);
+        ];
         Menus {
-            menus: vec![Entry::submenu(&tr!("File"), file), edit],
+            menus: vec![
+                Entry::submenu(&tr!("File"), file),
+                edit_submenu(Vec::new()),
+                Entry::submenu(&tr!("Disk"), disk),
+            ],
             window: vec![Entry::item(&tr!("Disks"), SHOW_MAIN)],
         }
     }

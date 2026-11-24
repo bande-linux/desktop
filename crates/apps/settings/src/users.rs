@@ -232,7 +232,7 @@ fn refuse_logged_in(system: &Connection, uid: u32) -> Result<(), String> {
         explained(
             &error,
             text!("The login service"),
-            text!("Couldn't change this account."),
+            text!("Couldn’t change this account."),
         )
     })?;
     if !users.contains(&uid) {
@@ -491,7 +491,7 @@ fn set_picture(system: &Connection, login: &str, encoded: &[u8]) -> Result<(), S
             explained(
                 &error,
                 text!("The accounts service"),
-                text!("Couldn't change this account."),
+                text!("Couldn’t change this account."),
             )
         });
     if let Err(error) = std::fs::remove_file(&file) {
@@ -517,7 +517,7 @@ fn create(system: &Connection, new: &NewAccount) -> Result<(), String> {
         explained(
             &error,
             text!("The accounts service"),
-            text!("Couldn't change this account."),
+            text!("Couldn’t change this account."),
         )
     };
     let crypted = crypted(&new.password)?;
@@ -606,7 +606,7 @@ pub fn follow_users(
                                 Err(error) => {
                                     tracing::warn!("{}: {error}", path.display());
                                     Err(tr!(
-                                        "That picture can't be opened. Choose a JPEG or PNG picture."
+                                        "That picture can’t be opened. Choose a JPEG or PNG picture."
                                     ))
                                 }
                             }
@@ -615,7 +615,7 @@ pub fn follow_users(
                         Err(error) => Err(explained(
                             &error,
                             text!("The file chooser"),
-                            text!("Couldn't open the file chooser."),
+                            text!("Couldn’t open the file chooser."),
                         )),
                     }
                 }
@@ -631,7 +631,7 @@ pub fn follow_users(
                             explained(
                                 &error,
                                 text!("The accounts service"),
-                                text!("Couldn't change this account."),
+                                text!("Couldn’t change this account."),
                             )
                         })
                 }),
@@ -645,7 +645,7 @@ pub fn follow_users(
                                 explained(
                                     &error,
                                     text!("The accounts service"),
-                                    text!("Couldn't change this account."),
+                                    text!("Couldn’t change this account."),
                                 )
                             })
                     })
@@ -667,7 +667,7 @@ pub fn follow_users(
                                 explained(
                                     &error,
                                     text!("The accounts service"),
-                                    text!("Couldn't change this account."),
+                                    text!("Couldn’t change this account."),
                                 )
                             })
                     })
@@ -807,7 +807,7 @@ impl SettingsView {
             )
             .detail(
                 Text::new(
-                    &tr!("The name of the home folder; it can't be changed later."),
+                    &tr!("The name of the home folder; it can’t be changed later."),
                     Tone::Muted,
                 )
                 .caption(),
@@ -1251,7 +1251,7 @@ impl SettingsView {
         let text = Zeroizing::new(text);
         let login = form.login.trim().to_owned();
         let problem = if form.full_name.trim().is_empty() {
-            Some((text!("Type the person's full name."), NEW_NAME))
+            Some((text!("Type the person’s full name."), NEW_NAME))
         } else if !valid_login(&login) {
             Some((
                 text!(
@@ -1284,7 +1284,7 @@ impl SettingsView {
                 }
                 (Some(password), _) if *password != text => {
                     form.password = None;
-                    form.error = Some(tr!("The passwords don't match. Type the password again."));
+                    form.error = Some(tr!("The passwords don’t match. Type the password again."));
                     NEW_PASSWORD_FIELDS[0]
                 }
                 (Some(_), Some((error, field))) => {
@@ -1414,7 +1414,7 @@ impl SettingsView {
                 _ => {
                     form.new = None;
                     form.error = Some(tr!(
-                        "The new passwords don't match. Type the new password again."
+                        "The new passwords don’t match. Type the new password again."
                     ));
                     Some(1)
                 }
@@ -1451,7 +1451,7 @@ impl SettingsView {
             PasswordOutcome::Rejected(reason) if !reason.is_empty() => {
                 form.new = None;
                 (
-                    tr!("That password can't be used: {reason}", reason = reason),
+                    tr!("That password can’t be used: {reason}", reason = reason),
                     1,
                 )
             }
@@ -1461,7 +1461,7 @@ impl SettingsView {
             }
             PasswordOutcome::Failed(reason) => {
                 tracing::warn!("passwd: {reason}");
-                (tr!("Couldn't change the password."), 0)
+                (tr!("Couldn’t change the password."), 0)
             }
         };
         form.error = Some(error);

@@ -154,9 +154,9 @@ impl NotesView {
         );
         let list = host.insert(
             Table::new(vec![
-                Column::new(&tr!("Title"), 130.0),
+                Column::new(&tr!("Title"), 110.0),
                 Column::new(&tr!("Text"), 110.0).flexible(),
-                Column::new(&tr!("Modified"), 80.0),
+                Column::new(&tr!("Modified"), 130.0),
             ])
             .without_header()
             .label(&tr!("Notes"))
@@ -743,6 +743,7 @@ impl NotesView {
                 if let Err(error) = described {
                     tracing::warn!("cannot describe {email}: {error}");
                 }
+                self.requests.push(Request::Accounts(None));
             }
             Done::Renewed { email, password } => self.renew_password(&email, password),
             Done::ServerSettings => self.close_setup(),

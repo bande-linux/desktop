@@ -169,6 +169,9 @@ msgstr "Kopior"
 msgid "All"
 msgstr "Alla"
 
+msgid "Pages"
+msgstr "Sidor"
+
 msgid "Paper"
 msgstr "Papper"
 
@@ -192,9 +195,6 @@ msgstr "Svartvitt"
 
 msgid "Print options"
 msgstr "Utskriftsalternativ"
-
-msgid "Pages"
-msgstr "Sidor"
 
 msgid "Print"
 msgstr "Skriv ut"

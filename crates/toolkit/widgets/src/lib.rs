@@ -689,7 +689,11 @@ impl Ui {
         self.sync_event_clock();
         self.cancel_capture();
         self.end_input_capture();
-        let previous_focus = self.cx.focus.take();
+        let focus = self.cx.focus.take();
+        let previous_focus = match self.sheet.take() {
+            Some(open) if !open.closing => open.previous_focus,
+            _ => focus,
+        };
         let mut shown = Animated::new(0.0);
         self.cx.animate(&mut shown, 1.0, Spring::QUICK);
         self.sheet = Some(Sheet {
@@ -1514,6 +1518,11 @@ impl Ui {
             }
             collect(sheet.widget.as_ref(), &self.cx, &mut nodes);
         }
+        let focus = self.focus_node();
+        let focus = match nodes.iter().any(|(id, _)| *id == focus) {
+            true => focus,
+            false => self.root.id().node(),
+        };
         TreeUpdate {
             nodes,
             tree: Some(TreeInfo {
@@ -1522,7 +1531,7 @@ impl Ui {
                 ..TreeInfo::new(self.root.id().node())
             }),
             tree_id: TreeId::ROOT,
-            focus: self.focus_node(),
+            focus,
         }
     }
 

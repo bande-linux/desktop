@@ -46,12 +46,16 @@ pub fn all() -> Vec<City> {
     cities
 }
 
-pub fn matching<'a>(cities: &'a [City], text: &str) -> impl Iterator<Item = &'a City> {
+pub fn matching<'a>(cities: &'a [City], text: &str) -> Vec<&'a City> {
     let text = text.trim().to_lowercase();
-    cities.iter().filter(move |city| {
-        text.is_empty()
-            || city.name.to_lowercase().contains(&text)
-            || city.country.to_lowercase().contains(&text)
-            || city.zone.to_lowercase().contains(&text)
-    })
+    let mut found: Vec<&City> = cities
+        .iter()
+        .filter(|city| {
+            [&city.name, &city.country, &city.zone]
+                .iter()
+                .any(|field| field.to_lowercase().contains(&text))
+        })
+        .collect();
+    found.sort_by_key(|city| !city.name.to_lowercase().starts_with(&text));
+    found
 }

@@ -234,7 +234,7 @@ pub fn follow_audio(session: &Connection, updates: Updates) -> Sender<AudioComma
                 report(
                     &updates,
                     PaneId::Sound,
-                    text!("Couldn't change the sound settings."),
+                    text!("Couldn’t change the sound settings."),
                     run_audio(&audio, command),
                 );
             }
@@ -489,19 +489,19 @@ pub fn follow_network(system: &Connection, updates: Updates) -> Sender<NetworkCo
                 NetworkCommand::Power(on) => report(
                     &updates,
                     PaneId::Wifi,
-                    text!("Couldn't turn Wi-Fi on or off."),
+                    text!("Couldn’t turn Wi-Fi on or off."),
                     network.set_wifi_enabled(on),
                 ),
                 NetworkCommand::ConfigureEthernet(interface, manual) => report(
                     &updates,
                     PaneId::Network,
-                    text!("Couldn't change the network settings."),
+                    text!("Couldn’t change the network settings."),
                     network.configure_ethernet(&interface, manual.as_ref()),
                 ),
                 NetworkCommand::SecureEthernet(interface, login) => report(
                     &updates,
                     PaneId::Network,
-                    text!("Couldn't change how this connection signs in."),
+                    text!("Couldn’t change how this connection signs in."),
                     network.secure_ethernet(&interface, login.as_deref()),
                 ),
                 NetworkCommand::StartHotspot(name, password) => {
@@ -514,46 +514,46 @@ pub fn follow_network(system: &Connection, updates: Updates) -> Sender<NetworkCo
                     report(
                         &updates,
                         PaneId::Wifi,
-                        text!("Couldn't turn the hotspot on."),
+                        text!("Couldn’t turn the hotspot on."),
                         failed.map_or(Ok(()), Err),
                     );
                 }
                 NetworkCommand::StopHotspot => report(
                     &updates,
                     PaneId::Wifi,
-                    text!("Couldn't turn the hotspot off."),
+                    text!("Couldn’t turn the hotspot off."),
                     network.stop_hotspot(),
                 ),
                 NetworkCommand::Airplane(on) => report(
                     &updates,
                     PaneId::Network,
-                    text!("Couldn't turn airplane mode on or off."),
+                    text!("Couldn’t turn airplane mode on or off."),
                     set_airplane_mode(on),
                 ),
                 NetworkCommand::ConnectVpn(path) => report(
                     &updates,
                     PaneId::Network,
-                    text!("Couldn't connect to the VPN."),
+                    text!("Couldn’t connect to the VPN."),
                     network.connect_vpn(&path),
                 ),
                 NetworkCommand::RemoveVpn(path) => report(
                     &updates,
                     PaneId::Network,
-                    text!("Couldn't remove the VPN."),
+                    text!("Couldn’t remove the VPN."),
                     network.remove_vpn(&path),
                 ),
                 NetworkCommand::DisconnectVpn(path) => {
                     report(
                         &updates,
                         PaneId::Network,
-                        text!("Couldn't disconnect from the VPN."),
+                        text!("Couldn’t disconnect from the VPN."),
                         network.disconnect_vpn(&path),
                     );
                 }
                 NetworkCommand::Forget(ssid) => report(
                     &updates,
                     PaneId::Wifi,
-                    text!("Couldn't forget this network."),
+                    text!("Couldn’t forget this network."),
                     network.forget(&ssid),
                 ),
                 NetworkCommand::SignIn => bande_status::captive::sign_in(&network, None),
@@ -561,7 +561,7 @@ pub fn follow_network(system: &Connection, updates: Updates) -> Sender<NetworkCo
                     report(
                         &updates,
                         pane,
-                        text!("Couldn't change the network settings."),
+                        text!("Couldn’t change the network settings."),
                         network.change_connection(&path, &change),
                     );
                 }
@@ -688,7 +688,7 @@ pub fn follow_bluetooth(
         for command in receiver {
             let (what, result) = match command {
                 BluetoothCommand::Power(on) => (
-                    text!("Couldn't turn Bluetooth on or off."),
+                    text!("Couldn’t turn Bluetooth on or off."),
                     bluetooth.set_powered(on),
                 ),
                 BluetoothCommand::Discover(on) => {
@@ -718,21 +718,21 @@ pub fn follow_bluetooth(
                     continue;
                 }
                 BluetoothCommand::Connect(device) => (
-                    text!("Couldn't connect to this device."),
+                    text!("Couldn’t connect to this device."),
                     bluetooth.connect(&device),
                 ),
                 BluetoothCommand::Disconnect(device) => (
-                    text!("Couldn't disconnect this device."),
+                    text!("Couldn’t disconnect this device."),
                     bluetooth.disconnect(&device),
                 ),
                 BluetoothCommand::Forget(device) => (
-                    text!("Couldn't forget this device."),
+                    text!("Couldn’t forget this device."),
                     bluetooth.forget(&device),
                 ),
                 BluetoothCommand::Pair(device) => {
                     let result = bluetooth.pair(&device);
                     updates.send(Update::Pairing(None));
-                    (text!("Couldn't pair with this device."), result)
+                    (text!("Couldn’t pair with this device."), result)
                 }
             };
             report(&updates, PaneId::Bluetooth, what, result);

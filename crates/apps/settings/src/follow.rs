@@ -252,12 +252,12 @@ fn hide_sleep_if_unavailable(system: &Connection, updates: Updates) {
         if !can_sleep(&system) {
             updates.send(Update::IdleSleepUnavailable {
                 sleeps: false,
-                why: tr!("This computer can't sleep, so it stays on when idle."),
+                why: tr!("This computer can’t sleep, so it stays on when idle."),
             });
         } else if bande_bus::logind::runs_in_virtual_machine(&system) {
             updates.send(Update::IdleSleepUnavailable {
                 sleeps: true,
-                why: tr!("A virtual machine doesn't sleep when idle, since a sleeping guest looks like a crash and loses its network. Sleep from the menu still works."),
+                why: tr!("A virtual machine doesn’t sleep when idle, since a sleeping guest looks like a crash and loses its network. Sleep from the menu still works."),
             });
         }
     });
@@ -415,7 +415,7 @@ pub fn worker(session: &Connection, updates: Updates) -> Sender<Command> {
                             explained(
                                 &error,
                                 text!("The desktop settings service"),
-                                text!("Couldn't change the displays."),
+                                text!("Couldn’t change the displays."),
                             ),
                         ),
                     });
@@ -596,7 +596,7 @@ impl Services {
                     if let Err(error) = clear_clipboard(&session) {
                         updates.send(pane_failed(
                             PaneId::PrivacySecurity,
-                            text!("Couldn't clear the clipboard history."),
+                            text!("Couldn’t clear the clipboard history."),
                             error,
                         ));
                     }
@@ -609,7 +609,7 @@ impl Services {
                     if let Err(error) = exclude_folder(&session) {
                         updates.send(pane_failed(
                             PaneId::Search,
-                            text!("Couldn't add this folder to the excluded folders."),
+                            text!("Couldn’t add this folder to the excluded folders."),
                             error,
                         ));
                     }
@@ -622,7 +622,7 @@ impl Services {
                     if let Err(error) = write_proxy(&session, &settings) {
                         updates.send(pane_failed(
                             PaneId::Network,
-                            text!("Couldn't change the proxy."),
+                            text!("Couldn’t change the proxy."),
                             error,
                         ));
                     }
@@ -676,7 +676,7 @@ impl Services {
                         Err(error) => {
                             updates.send(pane_failed(
                                 PaneId::Network,
-                                text!("Couldn't import this VPN file."),
+                                text!("Couldn’t import this VPN file."),
                                 error,
                             ));
                             return;
@@ -704,7 +704,7 @@ impl Services {
                     if let Err(error) = import_vpn(&file) {
                         updates.send(pane_failed(
                             PaneId::Network,
-                            text!("Couldn't import this VPN file."),
+                            text!("Couldn’t import this VPN file."),
                             error,
                         ));
                     }

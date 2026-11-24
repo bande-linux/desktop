@@ -190,7 +190,8 @@ impl Calculator {
             |appearance| {
                 let mut text = TextView::new(&tr!("Calculations appear here"), &shown, |_| {})
                     .read_only()
-                    .borderless();
+                    .borderless()
+                    .named(&tr!("Paper Tape"));
                 text.select(shown.len()..shown.len());
                 let view = text.id();
                 Pane::Tape {

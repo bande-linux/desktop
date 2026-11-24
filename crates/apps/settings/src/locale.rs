@@ -232,11 +232,11 @@ fn change_failure(failure: HelperFailure, code: &str, available: &[AvailableLoca
             "Only an administrator can set up {name} on this computer.",
             name = name
         ),
-        HelperFailure::UnknownValue => tr!("{name} can't be used on this computer.", name = name),
+        HelperFailure::UnknownValue => tr!("{name} can’t be used on this computer.", name = name),
         HelperFailure::Failed(reason) => {
             tracing::warn!("locale helper: {reason}");
             tr!(
-                "Couldn't set up {name}. {reason}",
+                "Couldn’t set up {name}. {reason}",
                 name = name,
                 reason = reason
             )
@@ -247,10 +247,10 @@ fn change_failure(failure: HelperFailure, code: &str, available: &[AvailableLoca
 fn keyboard_failure(failure: HelperFailure) -> String {
     match failure {
         HelperFailure::NotAllowed => tr!("Only an administrator can change this."),
-        HelperFailure::UnknownValue => tr!("Couldn't make this change."),
+        HelperFailure::UnknownValue => tr!("Couldn’t make this change."),
         HelperFailure::Failed(reason) => {
             tracing::warn!("locale helper: {reason}");
-            tr!("Couldn't make this change.")
+            tr!("Couldn’t make this change.")
         }
     }
 }
@@ -410,7 +410,7 @@ pub fn follow_locale(system: &Connection, updates: Updates) -> Sender<LocaleComm
                         explained(
                             error,
                             text!("The language service"),
-                            text!("Couldn't read the current language and region."),
+                            text!("Couldn’t read the current language and region."),
                         ),
                     ));
                     updates.send(Update::Locale(read(&locale, available, &watch)));
@@ -458,7 +458,7 @@ pub fn follow_locale(system: &Connection, updates: Updates) -> Sender<LocaleComm
                     Ok(()) => {}
                     Err(error) => {
                         tracing::warn!("cannot write the language choice: {error}");
-                        updates.send(Update::Failed(setting, tr!("Couldn't make this change.")));
+                        updates.send(Update::Failed(setting, tr!("Couldn’t make this change.")));
                     }
                 },
                 Err(failure) => {
@@ -658,7 +658,7 @@ fn install_packs(session: &Connection, system: &Connection, packs: &[String]) ->
     };
     tell(
         session,
-        &tr!("Couldn't install the translations"),
+        &tr!("Couldn’t install the translations"),
         &reason,
         &[],
     )

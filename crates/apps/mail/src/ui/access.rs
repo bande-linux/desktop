@@ -10,7 +10,7 @@ use crate::store::Summary;
 use crate::ui::format::list_date;
 use crate::ui::reader::Target;
 use crate::ui::sidebar::Row;
-use crate::ui::view::{Hit, MailView, Pane};
+use crate::ui::view::{Hit, MailView, Pane, Panes};
 use jiff::Timestamp;
 
 const KIND_SHIFT: u32 = 28;
@@ -109,6 +109,9 @@ impl MailView {
     }
 
     pub(crate) fn describe_panes(&self, tree: &mut TreeUpdate) {
+        if self.welcoming() {
+            return;
+        }
         let panes = [
             self.describe_sidebar(tree),
             self.describe_list(tree),
@@ -361,8 +364,9 @@ impl MailView {
                     _ => return Some(false),
                 };
                 self.focus = Pane::Sidebar;
-                if place != self.place {
-                    self.choose_place(place);
+                self.choose_place(place);
+                if request.action == Action::Click && self.overlay {
+                    self.set_overlay(false);
                 }
             }
             Part::Offline(index) => {
@@ -381,6 +385,9 @@ impl MailView {
                     self.select(id);
                 }
                 self.focus = Pane::List;
+                if request.action == Action::Click && self.panes() == Panes::One {
+                    self.single_reader = true;
+                }
             }
             Part::Conversation(index) => {
                 let id = self.messages.get(index)?.id;

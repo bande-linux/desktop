@@ -76,6 +76,12 @@ msgstr "Textredigerare"
 msgid "The file is larger than 512 MB."
 msgstr "Filen är större än 512 MB."
 
+msgid "It no longer exists."
+msgstr "Den finns inte längre."
+
+msgid "You don’t have permission to open it."
+msgstr "Du har inte behörighet att öppna den."
+
 msgid "Untitled"
 msgstr "Namnlös"
 

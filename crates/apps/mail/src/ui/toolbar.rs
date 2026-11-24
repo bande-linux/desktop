@@ -178,6 +178,8 @@ const ACTIONS: [(Symbol, Text, Signal); 8] = [
     (Symbol::More, text!("More"), Signal::More),
 ];
 const GROUP_ENDS: [usize; 2] = [3, 6];
+pub const ACTIONS_WIDTH: f32 =
+    COLUMN_INSET + ACTIONS.len() as f32 * BUTTON_HEIGHT + GROUP_ENDS.len() as f32 * GROUP_GAP;
 const SELECTION: [(Text, Signal); 5] = [
     (text!(context = "action", "Archive"), Signal::Archive),
     (text!("Delete"), Signal::Delete),
@@ -244,14 +246,28 @@ impl MailView {
         self.symbol_button(symbol, &label, Signal::Direction)
     }
 
+    fn search_field(&self) -> SearchField {
+        let send = sender(&self.signals);
+        SearchField::new(&tr!("Search"), &self.search, move |text| {
+            send(Signal::Search(text.to_owned()));
+        })
+    }
+
+    pub(crate) fn clear_list_controls(&mut self) {
+        let (filter, old) = (self.toolbar.filter, self.toolbar.search);
+        self.ui
+            .update_widget::<SegmentedControl>(filter, |control, cx| control.set_selected(cx, 0));
+        let search = self.search_field();
+        if let Some(id) = self.host_mut().and_then(|host| host.replace(old, search)) {
+            self.toolbar.search = id;
+        }
+    }
+
     pub(crate) fn insert_toolbar(&mut self) {
         let labelled = self.compose_labelled();
         let ascending = self.settings.ascending;
         let compose = self.compose_button(labelled);
-        let send = sender(&self.signals);
-        let search = SearchField::new(&tr!("Search"), &self.search, move |text| {
-            send(Signal::Search(text.to_owned()));
-        });
+        let search = self.search_field();
         let send = sender(&self.signals);
         let filters = [tr!("All"), tr!("Unread"), tr!("Flagged")];
         let chosen = Filter::ALL.iter().position(|filter| *filter == self.filter);
@@ -364,7 +380,7 @@ impl MailView {
         let button = |x: f32| Rect::new(x, button_y, BUTTON_HEIGHT, BUTTON_HEIGHT);
         let hidden = Rect::default();
         let leading = self.header_insets.leading.max(COLUMN_INSET);
-        let reading_alone = self.panes() == Panes::One && self.single_reader;
+        let reading_alone = self.reading_alone();
         let (sidebar, back, compose, after) = match (self.panes(), reading_alone) {
             (Panes::Three, _) if toolbar.labelled => {
                 let width = self.sidebar_size() - leading - COLUMN_INSET;
@@ -503,6 +519,13 @@ impl MailView {
             false => Rect::default(),
         };
         frames.push((toolbar.reply_field, reply));
+        if let Some(panel) = self.overlay_panel() {
+            for (_, frame) in &mut frames {
+                if frame.y >= panel.y && frame.x < panel.x + panel.width {
+                    *frame = Rect::default();
+                }
+            }
+        }
         let foot = self.sidebar_foot_frame();
         if foot.width <= 0.0 {
             frames.extend([
@@ -657,10 +680,7 @@ impl MailView {
             (self.toolbar.flag, selected),
             (self.toolbar.more, selected),
             (self.toolbar.sidebar, self.panes() != Panes::Three),
-            (
-                self.toolbar.back,
-                self.panes() == Panes::One && self.single_reader,
-            ),
+            (self.toolbar.back, self.reading_alone()),
         ];
         for (id, enabled) in states {
             if let Some(button) = self.ui.widget_as::<Button>(id) {

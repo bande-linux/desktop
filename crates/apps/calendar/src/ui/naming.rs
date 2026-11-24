@@ -41,9 +41,12 @@ impl Naming {
         };
         let mut panel = Panel::new(Some(&title), WIDTH, LABEL_WIDTH).sheet();
         let send = sender(signals);
-        let field = panel.add(TextField::new(&tr!("Untitled"), name, move |text| {
-            send(Signal::NameText(text.to_owned()))
-        }));
+        let field = panel.add(
+            TextField::new(&tr!("Untitled"), name, move |text| {
+                send(Signal::NameText(text.to_owned()))
+            })
+            .named(&tr!("Name:"), None),
+        );
         panel.line(Line::new(
             Some(&tr!("Name:")),
             vec![(field, Width::Fill)],

@@ -246,7 +246,7 @@ fn problem_texts(kind: &str) -> Option<(bande_l10n::Text, bande_l10n::Text)> {
         problem::DISK_FULL => Some((
             text!("The disk is too small"),
             text!(
-                "There's no more room, even with the oldest versions removed. Use a larger disk."
+                "There’s no more room, even with the oldest versions removed. Use a larger disk."
             ),
         )),
         problem::DAMAGED => Some((
@@ -254,12 +254,12 @@ fn problem_texts(kind: &str) -> Option<(bande_l10n::Text, bande_l10n::Text)> {
             text!("Some older versions were lost. Backups go on, but the disk may be failing."),
         )),
         problem::CANNOT_OPEN => Some((
-            text!("Can't open the backups"),
+            text!("Can’t open the backups"),
             text!("They are missing from the disk or use another password. Choose the disk again."),
         )),
         problem::FAILING => Some((
             text!("Backups keep failing"),
-            text!("The last few backups didn't finish. The disk may have a fault."),
+            text!("The last few backups didn’t finish. The disk may have a fault."),
         )),
         _ => None,
     }
@@ -453,9 +453,9 @@ impl SettingsView {
             draft.text = draft.url.clone();
             draft.share_password = None;
             draft.error = Some(if answer == setup_error::BAD_ADDRESS {
-                text!("That isn't the address of a share.")
+                text!("That isn’t the address of a share.")
             } else {
-                text!("The share can't be reached with that address and sign-in.")
+                text!("The share can’t be reached with that address and sign-in.")
             });
             self.focus_next = Some(Anchor::Item(NETWORK_ANCHOR.to_owned()));
         }
@@ -468,7 +468,7 @@ impl SettingsView {
 
     pub(crate) fn backup_rows(&mut self) -> Widgets {
         if self.backup.absent {
-            return vec![muted_row(&tr!("Backup isn't installed."))];
+            return vec![muted_row(&tr!("Backup isn’t installed."))];
         }
         let Some(status) = self.backup.status.clone() else {
             return vec![muted_row(&tr!("Calculating…"))];
@@ -555,7 +555,7 @@ impl SettingsView {
             )
             .detail(
                 Text::new(
-                    &tr!("Everything on this disk will be permanently deleted{contents}. This can't be undone.", contents = contents),
+                    &tr!("Everything on this disk will be permanently deleted{contents}. This can’t be undone.", contents = contents),
                     Tone::Danger,
                 )
                 .caption(),
@@ -577,7 +577,8 @@ impl SettingsView {
                 let field = SecureField::new(&tr!("Password"), FIELD_SIZE, move |text| {
                     submit(text.to_owned());
                 })
-                .with_go_button();
+                .with_go_button()
+                .named(&tr!("Password on the server"), None);
                 self.anchors
                     .push((Anchor::Item(NETWORK_ANCHOR.to_owned()), field.id()));
                 (tr!("Password on the server"), None, boxed(field))
@@ -601,7 +602,8 @@ impl SettingsView {
                 };
                 let field = TextField::new(&placeholder, &draft.text, move |text| {
                     changed(text.to_owned());
-                });
+                })
+                .named(&title, None);
                 self.anchors
                     .push((Anchor::Item(NETWORK_ANCHOR.to_owned()), field.id()));
                 let next = self.backup_button(&tr!("Next"), BackupIntent::NetworkNext);
@@ -678,7 +680,7 @@ impl SettingsView {
         let repeating = self.backup.first_password.is_some();
         let (title, detail, placeholder) = if existing {
             (
-                tr!("{disk} already has this computer's backups", disk = place),
+                tr!("{disk} already has this computer’s backups", disk = place),
                 tr!("Enter the password you chose for them to carry on."),
                 tr!("Password"),
             )
@@ -686,7 +688,7 @@ impl SettingsView {
             (
                 tr!("Type the password again"),
                 tr!(
-                    "Write this password down. It can't be recovered: without it, these backups can't be restored onto another computer."
+                    "Write this password down. It can’t be recovered: without it, these backups can’t be restored onto another computer."
                 ),
                 tr!("Same password"),
             )
@@ -694,21 +696,21 @@ impl SettingsView {
             (
                 tr!("Choose a password for {disk}", disk = place),
                 tr!(
-                    "Write this password down. It can't be recovered: without it, these backups can't be restored onto another computer."
+                    "Write this password down. It can’t be recovered: without it, these backups can’t be restored onto another computer."
                 ),
                 tr!("Password"),
             )
         };
         let error = if self.backup.passwords_differ {
-            Some(tr!("The passwords don't match. Try again."))
+            Some(tr!("The passwords don’t match. Try again."))
         } else {
             match status.setup_error.as_str() {
                 setup_error::WRONG_PASSWORD => {
-                    Some(tr!("That isn't the password for these backups."))
+                    Some(tr!("That isn’t the password for these backups."))
                 }
                 setup_error::DISK_GONE => Some(tr!("The disk is no longer connected.")),
-                setup_error::FAILED => Some(tr!("The disk can't be used for backups.")),
-                setup_error::ERASE_FAILED => Some(tr!("The disk couldn't be erased.")),
+                setup_error::FAILED => Some(tr!("The disk can’t be used for backups.")),
+                setup_error::ERASE_FAILED => Some(tr!("The disk couldn’t be erased.")),
                 _ => None,
             }
         };
@@ -817,18 +819,18 @@ impl SettingsView {
                 )
             }
             phase::DISK_AWAY if status.on_network => (
-                tr!("{disk} can't be reached", disk = status.disk_name.clone()),
+                tr!("{disk} can’t be reached", disk = status.disk_name.clone()),
                 Some(format!(
                     "{last}. {}",
-                    tr!("Backups carry on when it's back.")
+                    tr!("Backups carry on when it’s back.")
                 )),
                 None,
             ),
             phase::DISK_AWAY => (
-                tr!("{disk} isn't connected", disk = status.disk_name.clone()),
+                tr!("{disk} isn’t connected", disk = status.disk_name.clone()),
                 Some(format!(
                     "{last}. {}",
-                    tr!("Backups carry on when it's back.")
+                    tr!("Backups carry on when it’s back.")
                 )),
                 None,
             ),

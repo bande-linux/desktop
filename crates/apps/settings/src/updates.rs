@@ -72,7 +72,7 @@ impl SettingsView {
                 false,
             );
             rows.push(self.status_row(
-                &tr!("Some updates didn't install"),
+                &tr!("Some updates didn’t install"),
                 Some(failed),
                 Some(retry),
             ));
@@ -324,7 +324,7 @@ impl SettingsView {
                     true,
                 );
                 vec![self.status_row(
-                    &tr!("Updates didn't finish installing"),
+                    &tr!("Updates didn’t finish installing"),
                     Some(&tr!(
                         "Finish installing them before you install anything else"
                     )),
@@ -332,7 +332,7 @@ impl SettingsView {
                 )]
             }
             SoftwareState::Unavailable => vec![self.status_row(
-                &tr!("Updates aren't available on this computer"),
+                &tr!("Updates aren’t available on this computer"),
                 Some(&tr!("Install the packagekit package")),
                 None,
             )],

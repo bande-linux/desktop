@@ -181,7 +181,7 @@ impl SettingsView {
         match locale.packs {
             Packs::Fetching => rows.push(muted_row(&tr!("Getting Bande in {name}…", name = name))),
             Packs::Offline => rows.push(muted_row(&tr!(
-                "Couldn't get Bande in {name}. Choose it again when this computer is online.",
+                "Couldn’t get Bande in {name}. Choose it again when this computer is online.",
                 name = name
             ))),
             Packs::Ready => {}
@@ -189,7 +189,7 @@ impl SettingsView {
         if !locale.translated(&locale.language) {
             rows.push(boxed(Row::new(
                 Text::new(
-                    &tr!("Bande's own apps stay in English for now; other apps use this language."),
+                    &tr!("Bande’s own apps stay in English for now; other apps use this language."),
                     Tone::Muted,
                 )
                 .caption(),

@@ -275,17 +275,24 @@ impl SheetState {
         self.set(Field::User, &settings.user);
     }
 
-    pub fn servers(&self) -> Option<Settings> {
+    pub fn servers(&self) -> Result<Settings, (Field, String)> {
         let server = |host: Field, port: Field, security: Field| {
             let name = self.value(host).to_ascii_lowercase();
+            if name.is_empty() {
+                return Err((host, tr!("Enter the server name.")));
+            }
             let security = self.security(security);
-            let port = match self.value(port) {
-                port if port.is_empty() => default_port(host, security),
-                port => port.parse().ok()?,
+            let number = match self.value(port).as_str() {
+                "" => default_port(host, security),
+                number => number
+                    .parse()
+                    .ok()
+                    .filter(|number| *number > 0)
+                    .ok_or_else(|| (port, tr!("Enter a port number from 1 to 65535.")))?,
             };
-            (!name.is_empty()).then_some(Server {
+            Ok(Server {
                 host: name,
-                port,
+                port: number,
                 security,
             })
         };
@@ -293,7 +300,7 @@ impl SheetState {
             user if user.is_empty() => self.value(Field::Email),
             user => user,
         };
-        Some(Settings {
+        Ok(Settings {
             imap: server(
                 Field::Incoming,
                 Field::IncomingPort,
@@ -509,6 +516,10 @@ impl AccountSheet {
             .iter()
             .position(|known| *known == field)
             .map(|index| self.children[index].id())
+    }
+
+    pub fn first_field(&self) -> Option<WidgetId> {
+        self.fields.first().and_then(|field| self.field(*field))
     }
 
     fn rows(&self) -> Vec<Vec<usize>> {

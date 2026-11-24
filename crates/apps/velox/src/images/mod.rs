@@ -177,7 +177,8 @@ impl Images {
                     move |text| {
                         push(&typed, Act::Text(text.to_owned()));
                     },
-                );
+                )
+                .named(&tr!("Image"), None);
                 let id = field.id();
                 let pull = Rc::clone(acts);
                 let button = Button::new(&tr!("Pull"), move || {

@@ -501,6 +501,7 @@ impl DesktopView {
         };
         let mut field = TextField::new("", &name, |_| {})
             .without_text_checking()
+            .named(&tr!("Name"), None)
             .in_place(LABEL_SIZE);
         field.select(0..stem);
         let at = self.editor_bounds(path).map(rect).unwrap_or_default();

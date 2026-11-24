@@ -982,14 +982,14 @@ msgstr "Skicka Ctrl+Alt+Delete"
 msgid "Containers"
 msgstr "Containrar"
 
-msgid "Find"
-msgstr "Sök"
-
 msgid "Command Palette…"
 msgstr "Kommandopalett…"
 
 msgid "Container"
 msgstr "Container"
+
+msgid "Find"
+msgstr "Sök"
 
 msgid "File"
 msgstr "Arkiv"
@@ -1006,14 +1006,14 @@ msgstr "backend"
 msgid "Automatic"
 msgstr "Automatiskt"
 
+msgid "Subnet"
+msgstr "Subnät"
+
 msgid "New Network"
 msgstr "Nytt nätverk"
 
 msgid "A bridge network on this computer."
 msgstr "Ett bryggnätverk på den här datorn."
-
-msgid "Subnet"
-msgstr "Subnät"
 
 msgid "Filter networks"
 msgstr "Filtrera nätverk"
@@ -1270,7 +1270,7 @@ msgstr "Starta Velox vid inloggning"
 msgid "Copy Diagnostics"
 msgstr "Kopiera diagnostik"
 
-msgid "Copies versions, the engine's state and the end of its log, for a bug report"
+msgid "Copies versions, the engine’s state and the end of its log, for a bug report"
 msgstr "Kopierar versioner, motorns tillstånd och slutet av dess logg, till en felrapport"
 
 msgid "Quick Access"

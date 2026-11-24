@@ -348,11 +348,11 @@ impl Stage {
         });
         let failure = self.session.failure().map(|kind| match kind {
             FailureKind::Unsupported => (
-                text!("This file can't be played"),
+                text!("This file can’t be played"),
                 text!("Bande has no decoder for its format."),
             ),
             FailureKind::Unreadable => (
-                text!("This file can't be opened"),
+                text!("This file can’t be opened"),
                 text!("It may have been moved, or you may not have permission to read it."),
             ),
             FailureKind::Failed => (

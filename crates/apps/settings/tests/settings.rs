@@ -5,8 +5,8 @@ use std::sync::Arc;
 use bande_config::SoftwareUpdates;
 use bande_config::{Config, ConfigService, ConfigStore};
 use bande_settings::{
-    Command, Display, PaneId, PointingDevices, Problem, ScreenSharing, SettingId, SettingsClient,
-    SettingsView, SharingCommand, SharingState, Update, Value,
+    Command, Display, Mode, PaneId, PointingDevices, Problem, ScreenSharing, SettingId,
+    SettingsClient, SettingsView, SharingCommand, SharingState, Update, Value,
 };
 use bande_test_bus::SessionBus;
 use bande_toolkit::ui::{Event, Key, Modifiers};
@@ -212,4 +212,59 @@ fn screen_sharing_without_a_password_asks_for_one_and_a_failure_stays_next_to_th
         Some(Some(accesskit::Toggled::False)),
         "the switch is off again"
     );
+}
+
+#[test]
+fn two_displays_of_one_model_are_told_apart_and_arranged_from_the_keyboard() {
+    let mode = Mode {
+        width: 1920,
+        height: 1080,
+        millihertz: 60_000,
+    };
+    let display = |connector: &str, x| Display {
+        connector: connector.to_owned(),
+        identity: format!("Example 24 {connector}"),
+        make: "Example".to_owned(),
+        model: "24".to_owned(),
+        modes: vec![mode],
+        current: Some(mode),
+        position: (x, 0),
+        scale: 1.0,
+        rotation: 0,
+    };
+    let mut view = SettingsView::new(Palette::for_scheme(Scheme::Light), TextSystem::new());
+    view.set_displays(vec![display("DP-1", 0), display("DP-2", 1920)]);
+    view.select_pane(PaneId::Displays);
+    view.take_commands();
+    view.scene(SIZE.0, SIZE.1);
+    assert!(shows(&view, "Example 24 (DP-1)") && shows(&view, "Example 24 (DP-2)"));
+    let uses = view
+        .accessibility()
+        .nodes
+        .iter()
+        .filter(|(_, node)| node.label() == Some("Use as"))
+        .count();
+    assert!(uses >= 2, "each display has its own choice of use");
+
+    let (arrangement, _) = node_labelled(&view, "Arrangement").expect("the arrangement");
+    view.perform(&accesskit::ActionRequest {
+        action: accesskit::Action::Focus,
+        target_tree: accesskit::TreeId::ROOT,
+        target_node: arrangement,
+        data: None,
+    });
+    press(&mut view, Key::Down);
+    let moved = view
+        .take_commands()
+        .into_iter()
+        .find_map(|command| match command {
+            Command::Arrangement(placements) => Some(placements),
+            _ => None,
+        });
+    let places: Vec<(i32, i32, bool)> = moved
+        .expect("the second display moves")
+        .iter()
+        .map(|placement| (placement.x, placement.y, placement.main))
+        .collect();
+    assert_eq!(places, [(0, 0, true), (0, 1080, false)]);
 }

@@ -313,19 +313,19 @@ impl SettingsView {
         let name = pane.name.clone();
         let stopped = match pane.id {
             PaneId::Wifi => self.wifi.is_unavailable().then_some(text!(
-                "The network service isn't running, so Wi-Fi can't be shown or changed."
+                "The network service isn’t running, so Wi-Fi can’t be shown or changed."
             )),
             PaneId::Bluetooth => self.bluetooth.is_unavailable().then_some(text!(
-                "The Bluetooth service isn't running, so Bluetooth can't be shown or changed."
+                "The Bluetooth service isn’t running, so Bluetooth can’t be shown or changed."
             )),
             _ => None,
         };
         let (heading, line) = if let Some(reason) = stopped {
-            (tr!("{pane} isn't available", pane = name), reason.tr())
+            (tr!("{pane} isn’t available", pane = name), reason.tr())
         } else if !self.available(pane.id) {
             (
-                tr!("{pane} isn't available", pane = name.clone()),
-                tr!("Its device or service isn't responding."),
+                tr!("{pane} isn’t available", pane = name.clone()),
+                tr!("Its device or service isn’t responding."),
             )
         } else if let Some(master) = pane.master
             && self.values.get(&master) == Some(&Value::Flag(false))

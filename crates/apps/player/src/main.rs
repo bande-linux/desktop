@@ -35,7 +35,6 @@ const TOGGLE: &str = "toggle";
 const NEXT: &str = "next";
 const PREVIOUS: &str = "previous";
 const LOOP: &str = "loop";
-const FULL_SCREEN: &str = "full-screen";
 const QUEUE: &str = "queue";
 const REMOVE_FROM_QUEUE: &str = "remove-from-queue";
 const MOVE_UP: &str = "move-up";
@@ -352,10 +351,7 @@ impl Program for Player {
             false => text!("Show Queue"),
         };
         let editable = pane.is_some_and(Pane::can_edit_queue);
-        let view = vec![
-            item(queue_key, QUEUE, Some("F9"), pane.is_some()),
-            item(text!("Full Screen"), FULL_SCREEN, Some("F11"), true),
-        ];
+        let view = vec![item(queue_key, QUEUE, Some("F9"), pane.is_some())];
         playback.extend([
             Entry::separator(),
             item(text!("Move Up in Queue"), MOVE_UP, Some("Alt+Up"), editable),
@@ -415,11 +411,6 @@ impl Program for Player {
                 MOVE_DOWN => pane.move_selected(true),
                 REMOVE_FROM_QUEUE => pane.remove_selected(),
                 SUBTITLES_OFF => pane.select_subtitles(None),
-                FULL_SCREEN => {
-                    if let Err(error) = shown.toggle_full_screen() {
-                        tracing::warn!("cannot go full screen: {error}");
-                    }
-                }
                 _ => return,
             }
         }

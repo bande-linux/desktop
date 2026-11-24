@@ -194,9 +194,9 @@ impl Window {
         self.flush()
     }
 
-    /// The serial of the last press, key or release delivered to this window.
-    pub fn input_serial(&self) -> Option<u32> {
-        self.state.input.serial
+    /// The serial of the last press delivered to this window.
+    pub fn press_serial(&self) -> Option<u32> {
+        self.state.input.press_serial
     }
 
     pub fn show_launcher(&mut self, pressed: Option<u32>) -> Result<(), WindowError> {

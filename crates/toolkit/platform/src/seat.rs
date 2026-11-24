@@ -122,6 +122,7 @@ pub(crate) struct Input {
     repeat_delay: Duration,
     repeat: Option<Repeat>,
     pub(crate) serial: Option<u32>,
+    pub(crate) press_serial: Option<u32>,
     pointer_elsewhere: bool,
     keyboard_elsewhere: bool,
     keyboard_here: bool,
@@ -575,6 +576,7 @@ impl State {
         let Some(button) = button_for(code) else {
             return;
         };
+        input.press_serial = Some(serial);
         input.keyboard_initiated = false;
         input.held.retain(|(held, _)| *held != code);
         input.held.push((code, button));

@@ -2065,13 +2065,13 @@ msgid "Updates install while the computer restarts. Keep the computer plugged in
 msgstr "Uppdateringarna installeras medan datorn startar om. Håll datorn ansluten till ström tills den har startat igen."
 
 msgid "Firmware installs while the computer is shut down. Then turn it on again."
-msgstr "Firmware installeras medan datorn är avstängd. Slå sedan på den igen."
+msgstr "Den inbyggda programvaran installeras medan datorn är avstängd. Starta den sedan igen."
 
 msgid "Firmware installs while the computer is shut down. Keep it plugged in, then turn it on again."
 msgstr "Den inbyggda programvaran installeras medan datorn är avstängd. Håll den ansluten till ström och starta den sedan igen."
 
 msgid "Firmware installs while the computer is shut down, and the other updates when you turn it on again."
-msgstr "Firmware installeras medan datorn är avstängd och de andra uppdateringarna när du slår på den igen."
+msgstr "Den inbyggda programvaran installeras medan datorn är avstängd och de andra uppdateringarna när du startar den igen."
 
 msgid "Firmware installs while the computer is shut down, and the other updates when you turn it on again. Keep it plugged in."
 msgstr "Den inbyggda programvaran installeras medan datorn är avstängd och de andra uppdateringarna när du startar den igen. Håll den ansluten till ström."

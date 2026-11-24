@@ -161,6 +161,18 @@ fn mapped<B: InputBackend>(
         + rect.loc.to_f64()
 }
 
+impl State {
+    fn touch_outside(&self, under: Option<&WlSurface>, serial: Serial) {
+        let menu_open = self
+            .popup_grab
+            .as_ref()
+            .is_some_and(|grab| !grab.has_ended());
+        if !menu_open {
+            self.press_outside(under, serial);
+        }
+    }
+}
+
 impl Compositor {
     fn touch_down<B: InputBackend>(
         &mut self,
@@ -175,7 +187,7 @@ impl Compositor {
             Contact::BottomEdge(location)
         } else if let Some((surface, origin)) = state.client_under(location) {
             let serial = SERIAL_COUNTER.next_serial();
-            state.press_outside(Some(&surface), serial);
+            state.touch_outside(Some(&surface), serial);
             if let Some(focusable) = state
                 .toplevel_of(&surface)
                 .or_else(|| state.focusable_layer_of(&surface))
@@ -392,7 +404,7 @@ impl Compositor {
                 let serial = SERIAL_COUNTER.next_serial();
                 let touched = self.state.touch.pen_focus.as_ref();
                 self.state
-                    .press_outside(touched.map(|(surface, _)| surface), serial);
+                    .touch_outside(touched.map(|(surface, _)| surface), serial);
                 tool.tip_down(serial, time);
             }
             (Some((PenPress::Client, false)), Some(tool)) => tool.tip_up(time),

@@ -164,7 +164,7 @@ msgid "Share folders and the screen with other computers and allow remote login"
 msgstr "Dela mappar och skärmen med andra datorer och tillåt fjärrinloggning"
 
 msgid "Power mode, display off and sleep"
-msgstr "Energiläge, avstängning av skärmen och vila"
+msgstr "Strömläge, avstängning av skärmen och vila"
 
 msgid "Your account and the others on this computer"
 msgstr "Ditt konto och de andra på den här datorn"
@@ -1412,10 +1412,10 @@ msgid "low power mode, automatic, unplugged, longer battery life"
 msgstr "strömsparläge, automatiskt, urkopplad, längre batteritid"
 
 msgid "Power modes"
-msgstr "Energilägen"
+msgstr "Strömlägen"
 
 msgid "power profile, power profiles service"
-msgstr "energiprofil, tjänsten för energiprofiler"
+msgstr "strömprofil, tjänsten för strömprofiler"
 
 msgid "When inactive"
 msgstr "Vid inaktivitet"
@@ -1466,7 +1466,7 @@ msgid "Keep running"
 msgstr "Fortsätt köra"
 
 msgid "Power mode and display off"
-msgstr "Energiläge och avstängning av skärmen"
+msgstr "Strömläge och avstängning av skärmen"
 
 msgid "Language"
 msgstr "Språk"

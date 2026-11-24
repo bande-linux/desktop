@@ -77,7 +77,7 @@ forget_limits() {
         rm -f "$controls/$unit.d/50-ManagedOOMPreference.conf"
     done
     rm -f "$controls/session.slice.d/50-MemoryMin.conf"
-    for property in ManagedOOMMemoryPressure ManagedOOMMemoryPressureLimit ManagedOOMMemoryPressureDurationSec TasksMax CPUWeight MemoryHigh; do
+    for property in ManagedOOMMemoryPressure ManagedOOMMemoryPressureLimit ManagedOOMMemoryPressureDurationUSec TasksMaxScale CPUWeight MemoryHigh; do
         rm -f "$controls/app.slice.d/50-$property.conf"
     done
     systemctl --user daemon-reload

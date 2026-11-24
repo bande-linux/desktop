@@ -12,7 +12,7 @@ fn looks_shown(picture: &[u8], patience: u64) -> Vec<Look> {
     std::fs::write(&path, picture).unwrap();
     let source = BackdropSource::Picture(Some(Arc::new(File::open(&path).unwrap())), Fit::Fill);
     let looks = vec![Look::Blurred, Look::Sharp];
-    let mut inbox = load_backdrop(source, Variant::Dark, (64, 40), looks).unwrap();
+    let mut inbox = load_backdrop(source, Variant::Dark, (1920, 1080), looks).unwrap();
     let until = Instant::now() + Duration::from_secs(patience);
     let mut shown = Vec::new();
     while shown.len() < 2 && Instant::now() < until {
@@ -38,6 +38,19 @@ fn pictures_are_decoded_in_a_confined_process_that_may_fail_alone() {
     assert_eq!(
         looks_shown(jpeg.get_ref(), 20),
         vec![Look::Blurred, Look::Sharp]
+    );
+    let mut sliver = std::io::Cursor::new(Vec::new());
+    image::RgbImage::from_pixel(1, 30_000, image::Rgb([200, 40, 90]))
+        .write_to(&mut sliver, image::ImageFormat::Png)
+        .unwrap();
+    let began = Instant::now();
+    assert_eq!(
+        looks_shown(sliver.get_ref(), 20),
+        vec![Look::Blurred, Look::Sharp]
+    );
+    assert!(
+        began.elapsed() < Duration::from_secs(15),
+        "only the part that is shown is enlarged"
     );
     assert!(looks_shown(&[], 2).is_empty());
     use_worker("/bin/false");

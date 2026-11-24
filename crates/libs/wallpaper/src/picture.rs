@@ -113,22 +113,25 @@ fn photo(bytes: &[u8], fit: Fit, target: (u32, u32)) -> Result<RgbaImage, Render
         return Err(RenderError::Empty);
     }
     let scale = scale_for(fit, source, target);
-    let resized = imageops::resize(
-        &decoded,
-        ((source.0 * scale).ceil() as u32).max(1),
-        ((source.1 * scale).ceil() as u32).max(1),
-        FilterType::CatmullRom,
-    );
     let (width, height) = scaled_size(fit, source, target);
-    let (width, height) = (width.min(resized.width()), height.min(resized.height()));
-    Ok(imageops::crop_imm(
-        &resized,
-        (resized.width() - width) / 2,
-        (resized.height() - height) / 2,
+    let shown = |target: u32, whole: u32| ((target as f32 / scale).round() as u32).clamp(1, whole);
+    let (shown_width, shown_height) = (
+        shown(width, decoded.width()),
+        shown(height, decoded.height()),
+    );
+    let part = imageops::crop_imm(
+        &decoded,
+        (decoded.width() - shown_width) / 2,
+        (decoded.height() - shown_height) / 2,
+        shown_width,
+        shown_height,
+    );
+    Ok(imageops::resize(
+        &*part,
         width,
         height,
-    )
-    .to_image())
+        FilterType::CatmullRom,
+    ))
 }
 
 fn edge_color(image: &RgbaImage) -> Rgba<u8> {

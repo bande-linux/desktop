@@ -12,10 +12,12 @@ use bande_inbox::Inbox;
 use bande_toolkit::Image;
 use bande_wallpaper::{Choice, Fit, Picture, Source, Variant, read};
 use bande_xdg::data_dirs;
+use rustix::process::{Resource, Rlimit, setrlimit};
 
 const WORKER_FLAG: &str = "--backdrop-worker";
 const WORKER_TIME: Duration = Duration::from_secs(20);
 const STANDARD_INPUT: &str = "/proc/self/fd/0";
+const WORKER_MEMORY: u64 = 1 << 30;
 const HEADER: usize = 8;
 
 #[derive(Debug, Clone)]
@@ -88,6 +90,14 @@ pub fn serve_picture_worker(arguments: &[String]) -> Option<ExitCode> {
         return None;
     }
     confine();
+    let memory = Rlimit {
+        current: Some(WORKER_MEMORY),
+        maximum: Some(WORKER_MEMORY),
+    };
+    if let Err(error) = setrlimit(Resource::As, memory) {
+        tracing::warn!("cannot limit a picture reader's memory: {error}");
+        return Some(ExitCode::FAILURE);
+    }
     let (Some(look), Some(fit), Ok(width), Ok(height)) = (
         Look::named(look),
         fit_named(fit),
@@ -198,11 +208,9 @@ pub fn load_backdrop(
                     fit,
                     size,
                 };
-                let image = drawing.made().and_then(|drawn| {
-                    Image::redrawable(drawn.width, drawn.height, drawn.rgba, move || {
-                        drawing.made().map(|picture| picture.rgba)
-                    })
-                });
+                let image = drawing
+                    .made()
+                    .and_then(|drawn| Image::from_rgba(drawn.width, drawn.height, drawn.rgba));
                 if let Some(image) = image
                     && !sender.send((look, image))
                 {

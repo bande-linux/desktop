@@ -127,13 +127,14 @@ pub fn app_menus(tabs: &[Tab], shown: Filter, windowed: bool, files: bool) -> Ve
     view.extend([
         Entry::separator(),
         entry(text!("Show CPU Cores"), MenuCommand::ShowCores),
-        Entry::separator(),
+    ]);
+    let mut process_entries = vec![
         process(text!("Quit Process…"), MenuCommand::Quit).shortcut("Ctrl+E"),
         process(text!("Force Quit Process…"), MenuCommand::ForceQuit),
         process(text!("Inspect"), MenuCommand::Inspect).shortcut("Ctrl+I"),
-    ]);
+    ];
     if files {
-        view.extend([
+        process_entries.extend([
             Entry::separator(),
             process(text!("Show in Files"), MenuCommand::ShowInFiles),
         ]);
@@ -146,5 +147,6 @@ pub fn app_menus(tabs: &[Tab], shown: Filter, windowed: bool, files: bool) -> Ve
             process(text!("Find"), MenuCommand::Find).shortcut("Ctrl+F"),
         ]),
         Entry::submenu(&tr!("View"), view),
+        Entry::submenu(&tr!("Process"), process_entries),
     ]
 }

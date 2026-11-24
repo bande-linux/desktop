@@ -10,7 +10,7 @@ use accesskit::TreeUpdate;
 use bande_app::{
     Cx, Dropping, FileDrop, Info, Keys, Kind, Menus, Program, Settings, View, WindowId,
 };
-use bande_app_menu::Entry;
+use bande_app_menu::{Entry, edit_submenu};
 use bande_app_settings::{SettingsWatch, SettingsWindow, Stored, settings_folder};
 use bande_l10n::{Text, text, tr};
 use bande_toolkit::{
@@ -1057,7 +1057,6 @@ impl Program for Velox {
             })
             .collect();
         sections.push(Entry::separator());
-        sections.push(Entry::item(&tr!("Find"), FIND).shortcut("Ctrl+F"));
         sections.push(
             Entry::item(&tr!("Command Palette…"), PALETTE)
                 .shortcut("Ctrl+K")
@@ -1100,6 +1099,7 @@ impl Program for Velox {
         Menus {
             menus: vec![
                 Entry::submenu(&tr!("File"), file),
+                edit_submenu(vec![Entry::item(&tr!("Find"), FIND).shortcut("Ctrl+F")]),
                 Entry::submenu(&tr!("View"), sections),
                 pane,
                 self.machine_menu(cx),

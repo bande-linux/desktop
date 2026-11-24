@@ -2,6 +2,7 @@ pub mod checkin;
 pub mod config;
 pub mod counters;
 pub mod diagnose;
+pub mod dispatch;
 pub mod elfcore;
 pub mod facts;
 pub mod fault;

@@ -26,6 +26,7 @@ pub enum Outcome {
     Revoked,
     TooLarge,
     OverBudget,
+    Withdrawn,
     Later(Option<Duration>),
     NoRoute(io::Error),
 }
@@ -129,26 +130,47 @@ pub struct Sender<'a> {
     spool: &'a Spool,
     pub identity: Identity,
     pub contacted: bool,
+    kept: bool,
 }
 
 impl<'a> Sender<'a> {
-    pub fn new(server: &str, spool: &'a Spool) -> Self {
+    pub fn new(session: Session, spool: &'a Spool) -> Self {
+        let identity = Identity::load(spool.root());
         Self {
-            session: Session::new(server),
+            session,
             spool,
-            identity: Identity::load(spool.root()).unwrap_or_else(Identity::unenrolled),
+            kept: identity.is_some(),
+            identity: identity.unwrap_or_else(Identity::unenrolled),
             contacted: false,
         }
     }
 
-    fn save(&self) {
-        if let Err(error) = self.identity.save(self.spool.root()) {
+    fn forgotten(&self) -> bool {
+        if self.kept {
+            Identity::load(self.spool.root()).is_none()
+        } else {
+            self.spool.is_withdrawn()
+        }
+    }
+
+    fn save(&mut self) {
+        let saved = if self.forgotten() {
+            queue_forget(self.spool, &self.identity)
+        } else {
+            self.identity
+                .save(self.spool.root())
+                .inspect(|()| self.kept = true)
+        };
+        if let Err(error) = saved {
             tracing::warn!("cannot keep this computer's report identity: {error}");
         }
     }
 
-    fn exchange(&mut self, request: &Request) -> io::Result<Answer> {
-        let answer = self.session.send(request)?;
+    fn exchange(&mut self, request: &Request) -> Result<Answer, Outcome> {
+        if self.spool.is_withdrawn() {
+            return Err(Outcome::Withdrawn);
+        }
+        let answer = self.session.send(request).map_err(Outcome::NoRoute)?;
         self.contacted = true;
         if let Some(body) = answer.json() {
             let before = self.identity.clone();
@@ -181,7 +203,7 @@ impl<'a> Sender<'a> {
             }) {
                 Ok(answer) if answer.status == 200 => answer.json().unwrap_or_default(),
                 Ok(answer) => return outcome_of(&answer),
-                Err(error) => return Outcome::NoRoute(error),
+                Err(outcome) => return outcome,
             };
             let text = challenge.get("challenge").and_then(Value::as_str);
             let difficulty = challenge
@@ -204,7 +226,7 @@ impl<'a> Sender<'a> {
                 body: body.as_bytes(),
             }) {
                 Ok(answer) => answer,
-                Err(error) => return Outcome::NoRoute(error),
+                Err(outcome) => return outcome,
             };
             match answer.status {
                 403 => continue,
@@ -248,7 +270,10 @@ impl<'a> Sender<'a> {
                 }
             }
             Ok(answer) => self.lost(&outcome_of(&answer)),
-            Err(error) => tracing::debug!("cannot rotate the report token: {error}"),
+            Err(Outcome::NoRoute(error)) => {
+                tracing::debug!("cannot rotate the report token: {error}");
+            }
+            Err(_) => {}
         }
     }
 
@@ -310,7 +335,7 @@ impl<'a> Sender<'a> {
                 body: &bytes,
             }) {
                 Ok(answer) => outcome_of(&answer),
-                Err(error) => Outcome::NoRoute(error),
+                Err(outcome) => outcome,
             };
             self.lost(&outcome);
             if matches!(outcome, Outcome::UnknownToken) && self.prepare().is_ok() {
@@ -362,11 +387,11 @@ impl<'a> Sender<'a> {
     }
 }
 
-pub fn forget(server: &str, request: &Map<String, Value>) -> Outcome {
+pub fn forget(session: &Session, request: &Map<String, Value>) -> Outcome {
     let Some(token) = request.get("token").and_then(Value::as_str) else {
         return Outcome::Stored;
     };
-    let answer = Session::new(server).send(&Request {
+    let answer = session.send(&Request {
         method: "DELETE",
         path: ME,
         token: Some(token),
@@ -386,11 +411,16 @@ pub fn forget(server: &str, request: &Map<String, Value>) -> Outcome {
     }
 }
 
+fn queue_forget(spool: &Spool, identity: &Identity) -> io::Result<()> {
+    match &identity.credentials {
+        Some(credentials) => spool.queue_forget(&json!({"token": credentials.token})),
+        None => Ok(()),
+    }
+}
+
 pub fn forget_here(spool: &Spool) -> io::Result<()> {
-    if let Some(identity) = Identity::load(spool.root())
-        && let Some(credentials) = identity.credentials
-    {
-        spool.queue_forget(&json!({"token": credentials.token}))?;
+    if let Some(identity) = Identity::load(spool.root()) {
+        queue_forget(spool, &identity)?;
     }
     identity::forget(spool.root())
 }

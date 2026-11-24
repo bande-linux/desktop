@@ -17,7 +17,7 @@ Kept: 30 days, at most 200 reports and 256 MiB, 16 MiB a report. Sent and reject
 
 Nothing leaves the computer unless sending is on, or someone sends one report by hand. Sending is off until the person switches on "Send reports automatically" in Settings ▸ Privacy & Security ▸ Diagnostics, which links the server's `/privacy` address and also shows what is sent and has "Delete reports sent from this computer", which forgets the identity and erases the server's copy (see Enrollment).
 
-The server is `https://logs.mikaelhug.se`, one constant (`config::SERVER`) that no setting changes; its certificate is checked against the system's roots. `/etc/bande/reports.conf`, owned by root, mode `0600` (any other mode is refused), holds the switch, which `bande-reporter sending on|off` and Settings write:
+The server is `https://logs.mikaelhug.se`, one constant (`config::SERVER`) that no setting changes, reached only over HTTPS; its certificate is checked against the system's roots. `/etc/bande/reports.conf`, owned by root, mode `0600` (any other mode is refused), holds the switch, which `bande-reporter sending on|off` and Settings write:
 
 ```
 send = on
@@ -29,7 +29,7 @@ A daily check-in rides on the same sender: at boot, at login, when `serve` start
 
 ### Enrollment
 
-No key is built in. The first time something is to be sent, the sender enrolls: it asks `GET /v1/enroll` for a challenge, solves the proof of work and keeps the `{machine, token}` from `POST /v1/enroll` in `identity`. Reports and check-ins then carry `Authorization: Bearer <token>` and no `machine`: the server knows the computer only by the id it chose. The token is rotated (`POST /v1/rotate`) once `rotate_after` has passed or an answer says `"rotate": true`. `401 unknown_token` enrolls afresh; `401 revoked` stops sending until the settings change. Switching sending off removes `identity` and queues `outbox/forget`, which `DELETE /v1/me` erases from the server once it can be reached; switching it on again enrolls under a new id, so the two periods cannot be linked.
+No key is built in. The first time something is to be sent, the sender enrolls: it asks `GET /v1/enroll` for a challenge, solves the proof of work and keeps the `{machine, token}` from `POST /v1/enroll` in `identity`. Reports and check-ins then carry `Authorization: Bearer <token>` and no `machine`: the server knows the computer only by the id it chose. The token is rotated (`POST /v1/rotate`) once `rotate_after` has passed or an answer says `"rotate": true`. `401 unknown_token` enrolls afresh; `401 revoked` stops sending until the settings change. Switching sending off removes `identity` and queues `outbox/forget`, which `DELETE /v1/me` erases from the server once it can be reached; a run in progress sends nothing more and keeps no identity. Switching it on again enrolls under a new id, so the two periods cannot be linked.
 
 ### Throttling
 

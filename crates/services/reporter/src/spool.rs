@@ -166,6 +166,11 @@ impl Spool {
         serde_json::from_slice(&bytes).ok()
     }
 
+    pub fn is_withdrawn(&self) -> bool {
+        self.forget_waiting().is_some()
+            || (!self.checkin_waiting() && self.waiting().is_ok_and(|waiting| waiting.is_empty()))
+    }
+
     pub fn forgotten(&self) -> io::Result<()> {
         self.unqueue(FORGET)
     }

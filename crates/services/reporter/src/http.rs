@@ -4,6 +4,8 @@ use std::time::Duration;
 use bande_https::ureq::{self, Agent};
 use jiff::Timestamp;
 
+use crate::config::SERVER;
+
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 const TRANSFER_TIMEOUT: Duration = Duration::from_secs(120);
 const APP: &str = "reporter";
@@ -51,10 +53,20 @@ fn retry_after(value: &str) -> Option<Duration> {
 }
 
 impl Session {
-    pub fn new(server: &str) -> Self {
+    pub fn with_report_server() -> Self {
+        Self::with(SERVER, true)
+    }
+
+    #[cfg(test)]
+    pub fn unencrypted(server: &str) -> Self {
+        Self::with(server, false)
+    }
+
+    fn with(server: &str, https_only: bool) -> Self {
         Self {
             base: server.to_owned(),
             agent: bande_https::config(APP)
+                .https_only(https_only)
                 .http_status_as_error(false)
                 .allow_non_standard_methods(true)
                 .max_redirects(0)

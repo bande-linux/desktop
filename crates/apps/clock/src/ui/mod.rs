@@ -509,12 +509,22 @@ impl ClockView {
     }
 
     fn search(&mut self, text: &str) {
-        let Some(Sheet::City { list, .. }) = &self.sheet else {
+        let Some(Sheet::City { list, chosen }) = &mut self.sheet else {
             return;
         };
         let rows = city_rows(&self.cities, text);
-        self.ui
-            .update_widget::<Table>(*list, |table, _| table.set_rows(rows));
+        *chosen = match text.trim().is_empty() {
+            true => Vec::new(),
+            false => rows
+                .first()
+                .map(|row| row.key.clone())
+                .into_iter()
+                .collect(),
+        };
+        self.ui.update_widget::<Table>(*list, |table, _| {
+            table.set_rows(rows);
+            table.select(chosen);
+        });
     }
 
     fn open_sheet(&mut self, alarm: Option<u64>) {
@@ -663,7 +673,7 @@ impl ClockView {
                 let lines = vec![
                     FormLine::Wide(boxed(Stack::new(
                         Axis::Horizontal,
-                        6.0,
+                        2.0,
                         0.0,
                         vec![
                             stepper(&tr!("Hour"), draft.hours, 23.0, Field::Hour),
@@ -1042,17 +1052,16 @@ impl ClockView {
 
     fn header(&self, width: f32, insets: HeaderInsets) -> (Rect, Rect) {
         let end = width - insets.trailing;
-        let (add, end) = match self.can_add() {
-            true => {
-                let add = Rect::new(
-                    end - BUTTON_HEIGHT,
-                    ((HEADER - BUTTON_HEIGHT) / 2.0).round(),
-                    BUTTON_HEIGHT,
-                    BUTTON_HEIGHT,
-                );
-                (add, add.x - SIDE)
-            }
-            false => (Rect::default(), end),
+        let button = Rect::new(
+            end - BUTTON_HEIGHT,
+            ((HEADER - BUTTON_HEIGHT) / 2.0).round(),
+            BUTTON_HEIGHT,
+            BUTTON_HEIGHT,
+        );
+        let end = button.x - SIDE;
+        let add = match self.can_add() {
+            true => button,
+            false => Rect::default(),
         };
         let tabs_width = SEGMENT_WIDTH * Page::ALL.len() as f32;
         let x = ((width - tabs_width) / 2.0)
@@ -1071,6 +1080,7 @@ impl ClockView {
 
 fn city_rows(cities: &[City], text: &str) -> Vec<Row> {
     cities::matching(cities, text)
+        .into_iter()
         .map(|city| {
             Row::new(
                 city.zone.clone(),

@@ -34,8 +34,13 @@ struct GlyphKey {
     coords: Vec<i16>,
 }
 
+pub(crate) struct GlyphOutline {
+    pub(crate) path: BezPath,
+    pub(crate) bounds: kurbo::Rect,
+}
+
 struct Entry {
-    path: Option<Arc<BezPath>>,
+    outline: Option<Arc<GlyphOutline>>,
     used: u64,
 }
 
@@ -88,7 +93,7 @@ impl GlyphOutlines {
         })
     }
 
-    pub(crate) fn outline(&mut self, run: &GlyphRun, glyph: u32) -> Option<Arc<BezPath>> {
+    pub(crate) fn outline(&mut self, run: &GlyphRun, glyph: u32) -> Option<Arc<GlyphOutline>> {
         let key = GlyphKey {
             font: font_key(run),
             glyph,
@@ -98,11 +103,14 @@ impl GlyphOutlines {
         };
         let frame = self.frame;
         let entry = self.glyphs.entry(key).or_insert_with(|| Entry {
-            path: draw(run, glyph).map(Arc::new),
+            outline: draw(run, glyph).map(|path| {
+                let bounds = path.control_box();
+                Arc::new(GlyphOutline { path, bounds })
+            }),
             used: frame,
         });
         entry.used = frame;
-        entry.path.clone()
+        entry.outline.clone()
     }
 
     pub(crate) fn end_frame(&mut self) {

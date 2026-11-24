@@ -5,7 +5,8 @@ use vello_cpu::kurbo::{self, Affine, BezPath, Shape as _, Stroke, StrokeOpts, Ve
 use vello_cpu::peniko::{BlendMode, Compose, Extend, Gradient, ImageQuality, ImageSampler, Mix};
 use vello_cpu::{Glyph, ImageId, ImageSource, PaintType};
 
-use crate::outline::{GlyphOutlines, TOLERANCE};
+use crate::damage::Region;
+use crate::outline::{GlyphOutline, GlyphOutlines, TOLERANCE};
 use crate::scene::{
     Image, Item, Paint, Path, PathElement, Picture, Pixels, Point, Recorded, Rect, Shape, Stop,
     Transform,
@@ -29,6 +30,11 @@ pub(crate) trait Canvas {
     fn clear_path(&mut self, path: &BezPath);
     fn fill_glyphs(&mut self, run: &GlyphRun, glyphs: &[Glyph]);
 }
+
+const ANTIALIASING_PIXEL: f64 = 1.0;
+const LYING_MARGIN: f64 = 2.0;
+const OVERHANG_EMS: f64 = 4.0;
+const SHADOW_DEVIATIONS: f64 = 2.5;
 
 pub(crate) const CLEAR: BlendMode = BlendMode::new(Mix::Normal, Compose::Clear);
 
@@ -194,7 +200,7 @@ enum Op {
     },
     Outlines {
         color: AlphaColor<Srgb>,
-        glyphs: Vec<(Arc<BezPath>, Vec2)>,
+        glyphs: Vec<(Arc<GlyphOutline>, Vec2)>,
     },
     Glyphs {
         run: GlyphRun,
@@ -295,22 +301,123 @@ fn image_op(area: Rect, tile: Rect, image: &Image, extend: Extend) -> Op {
     }
 }
 
-fn record(items: &[Item], outlines: &mut GlyphOutlines, ops: &mut Vec<Op>) {
-    for item in items {
-        record_item(item, outlines, ops);
+#[derive(Clone, Copy)]
+struct Reach<'a> {
+    drawn: &'a [kurbo::Rect],
+    transform: Affine,
+}
+
+impl Reach<'_> {
+    fn through(self, transform: Affine) -> Self {
+        Self { transform, ..self }
+    }
+
+    fn touches(self, bounds: kurbo::Rect) -> bool {
+        let on_screen = self
+            .transform
+            .transform_rect_bbox(bounds)
+            .inflate(ANTIALIASING_PIXEL, ANTIALIASING_PIXEL);
+        self.drawn.iter().any(|drawn| drawn.overlaps(on_screen))
+    }
+
+    fn lies_within(self, shape: &Shape, inset: f32) -> bool {
+        let [scale_x, skew_y, skew_x, scale_y, _, _] = self.transform.as_coeffs();
+        if skew_x != 0.0 || skew_y != 0.0 || scale_x <= 0.0 || scale_y <= 0.0 {
+            return false;
+        }
+        let corner = f64::from((shape.radius - inset).max(0.0));
+        let inside = rect(shape.rect).inflate(-f64::from(inset), -f64::from(inset));
+        let part = |x: f64, y: f64| {
+            self.transform
+                .transform_rect_bbox(inside.inflate(-x, -y))
+                .inflate(-LYING_MARGIN, -LYING_MARGIN)
+        };
+        let (wide, tall) = (part(0.0, corner), part(corner, 0.0));
+        self.drawn
+            .iter()
+            .all(|drawn| wide.contains_rect(*drawn) || tall.contains_rect(*drawn))
+    }
+
+    fn outline(self) -> BezPath {
+        let local = self.transform.inverse();
+        let mut path = BezPath::new();
+        for drawn in self.drawn {
+            let reached = drawn.inflate(ANTIALIASING_PIXEL, ANTIALIASING_PIXEL);
+            path.extend(local.transform_rect_bbox(reached).path_elements(TOLERANCE));
+        }
+        path
+    }
+
+    fn skips(self, item: &Item) -> bool {
+        match item {
+            Item::Fill { shape, .. } | Item::Clip { shape, .. } => !self.touches(rect(shape.rect)),
+            Item::Stroke { shape, width, .. } => {
+                let reach = f64::from(*width);
+                !self.touches(rect(shape.rect).inflate(reach, reach))
+                    || self.lies_within(shape, *width)
+            }
+            Item::CastShadow {
+                shape,
+                offset,
+                blur_radius,
+                ..
+            } => {
+                let reach = f64::from(*blur_radius * 4.0 + offset.x.abs() + offset.y.abs());
+                !self.touches(rect(shape.rect).inflate(reach, reach))
+                    || self.lies_within(shape, 0.0)
+            }
+            Item::Text { origin, paragraph } => {
+                let overhang = f64::from(paragraph.largest_size()) * OVERHANG_EMS;
+                let laid_out = rect(Rect::new(
+                    origin.x,
+                    origin.y,
+                    paragraph.painted_width(),
+                    paragraph.height(),
+                ));
+                !self.touches(laid_out.inflate(overhang, overhang))
+            }
+            _ => false,
+        }
     }
 }
 
-fn scoped(opening: Op, items: &[Item], outlines: &mut GlyphOutlines, ops: &mut Vec<Op>) {
+fn record(
+    items: &[Item],
+    outlines: &mut GlyphOutlines,
+    ops: &mut Vec<Op>,
+    reach: Option<Reach<'_>>,
+) {
+    for item in items {
+        if !reach.is_some_and(|reach| reach.skips(item)) {
+            record_item(item, outlines, ops, reach);
+        }
+    }
+}
+
+fn scoped(
+    opening: Op,
+    items: &[Item],
+    outlines: &mut GlyphOutlines,
+    ops: &mut Vec<Op>,
+    reach: Option<Reach<'_>>,
+) {
     ops.push(opening);
-    record(items, outlines, ops);
+    record(items, outlines, ops, reach);
     ops.push(Op::End);
 }
 
-fn record_item(item: &Item, outlines: &mut GlyphOutlines, ops: &mut Vec<Op>) {
+fn record_item(
+    item: &Item,
+    outlines: &mut GlyphOutlines,
+    ops: &mut Vec<Op>,
+    reach: Option<Reach<'_>>,
+) {
     match item {
         Item::Fill { shape, paint: fill } => ops.push(Op::Fill {
-            path: path(shape),
+            path: match reach.filter(|reach| reach.lies_within(shape, 0.0)) {
+                Some(reach) => reach.outline(),
+                None => path(shape),
+            },
             paint: paint(fill),
         }),
         Item::Stroke {
@@ -357,24 +464,34 @@ fn record_item(item: &Item, outlines: &mut GlyphOutlines, ops: &mut Vec<Op>) {
             }
         }
         Item::Glyphs(run) => record_run(outlines, run, Point::default(), ops),
-        Item::Clip { shape, items } => scoped(Op::Clip(path(shape)), items, outlines, ops),
-        Item::Translate { offset, items } => scoped(Op::Snap(*offset), items, outlines, ops),
+        Item::Clip { shape, items } if reach.is_some_and(|reach| reach.lies_within(shape, 0.0)) => {
+            record(items, outlines, ops, reach);
+        }
+        Item::Clip { shape, items } => {
+            scoped(Op::Clip(path(shape)), items, outlines, ops, reach);
+        }
+        Item::Translate { offset, items } => {
+            let reach = reach.map(|reach| reach.through(snapped(reach.transform, *offset)));
+            scoped(Op::Snap(*offset), items, outlines, ops, reach);
+        }
         Item::Opacity { alpha, items } => {
             let layer = Op::Layer {
                 blend: BlendMode::default(),
                 alpha: *alpha,
             };
-            scoped(layer, items, outlines, ops);
+            scoped(layer, items, outlines, ops, reach);
         }
         Item::Blend { mode, items } => {
             let layer = Op::Layer {
                 blend: (*mode).into(),
                 alpha: 1.0,
             };
-            scoped(layer, items, outlines, ops);
+            scoped(layer, items, outlines, ops, reach);
         }
         Item::Transform { transform, items } => {
-            scoped(Op::Transform(affine(*transform)), items, outlines, ops);
+            let local = affine(*transform);
+            let reach = reach.map(|reach| reach.through(reach.transform * local));
+            scoped(Op::Transform(local), items, outlines, ops, reach);
         }
         Item::Scale {
             origin,
@@ -385,7 +502,8 @@ fn record_item(item: &Item, outlines: &mut GlyphOutlines, ops: &mut Vec<Op>) {
             let scaled = Affine::translate(pivot)
                 * Affine::scale(f64::from(*factor))
                 * Affine::translate(-pivot);
-            scoped(Op::Transform(scaled), items, outlines, ops);
+            let reach = reach.map(|reach| reach.through(reach.transform * scaled));
+            scoped(Op::Transform(scaled), items, outlines, ops, reach);
         }
         Item::Line {
             from,
@@ -434,6 +552,32 @@ fn record_item(item: &Item, outlines: &mut GlyphOutlines, ops: &mut Vec<Op>) {
     }
 }
 
+fn region_outline(regions: &[Region]) -> BezPath {
+    let mut path = BezPath::new();
+    for region in regions {
+        let (left, top) = (f64::from(region.x), f64::from(region.y));
+        let (right, bottom) = (
+            left + f64::from(region.width),
+            top + f64::from(region.height),
+        );
+        path.move_to((left, top));
+        path.line_to((right, top));
+        path.line_to((right, bottom));
+        path.line_to((left, bottom));
+        path.close_path();
+    }
+    path
+}
+
+fn region_rect(region: &Region) -> kurbo::Rect {
+    kurbo::Rect::new(
+        f64::from(region.x),
+        f64::from(region.y),
+        f64::from(region.x + region.width),
+        f64::from(region.y + region.height),
+    )
+}
+
 pub(crate) struct Frame {
     pub(crate) scale: f64,
     pub(crate) origin: (u32, u32),
@@ -445,21 +589,30 @@ pub(crate) fn encode(
     caches: &mut Caches,
     items: &[Item],
     frame: &Frame,
-    outer_clip: Option<BezPath>,
+    damage: Option<&[Region]>,
 ) {
     caches.pictures.take_dropped();
     let mut ops = Vec::new();
-    record(items, &mut caches.outlines, &mut ops);
+    let viewport = kurbo::Rect::new(0.0, 0.0, f64::from(frame.size.0), f64::from(frame.size.1));
     let base = Affine::translate((-f64::from(frame.origin.0), -f64::from(frame.origin.1)))
         * Affine::scale(frame.scale);
+    let drawn = match damage {
+        Some(regions) => regions.iter().map(region_rect).collect(),
+        None => vec![viewport],
+    };
+    let reach = Reach {
+        drawn: &drawn,
+        transform: base,
+    };
+    record(items, &mut caches.outlines, &mut ops, Some(reach));
     let mut encoder = Encoder {
         canvas,
         caches,
-        viewport: kurbo::Rect::new(0.0, 0.0, f64::from(frame.size.0), f64::from(frame.size.1)),
+        drawn,
         clips: Vec::new(),
         isolated: false,
     };
-    if let Some(clip) = outer_clip {
+    if let Some(clip) = damage.map(region_outline) {
         encoder.canvas.set_transform(Affine::IDENTITY);
         encoder.canvas.push_clip_layer(&clip);
         encoder.clips.push((clip, Affine::IDENTITY));
@@ -480,9 +633,23 @@ enum Scope {
 struct Encoder<'a, C> {
     canvas: &'a mut C,
     caches: &'a mut Caches,
-    viewport: kurbo::Rect,
+    drawn: Vec<kurbo::Rect>,
     clips: Vec<(BezPath, Affine)>,
     isolated: bool,
+}
+
+fn skip_scope<'a>(ops: &mut impl Iterator<Item = &'a Op>) {
+    let mut open = 1;
+    for op in ops {
+        open += match op {
+            Op::Clip(_) | Op::Layer { .. } | Op::Snap(_) | Op::Transform(_) => 1,
+            Op::End => -1,
+            _ => 0,
+        };
+        if open == 0 {
+            return;
+        }
+    }
 }
 
 impl<C: Canvas> Encoder<'_, C> {
@@ -491,7 +658,7 @@ impl<C: Canvas> Encoder<'_, C> {
             return ops;
         }
         let mut ops = Vec::new();
-        record(picture.items(), &mut self.caches.outlines, &mut ops);
+        record(picture.items(), &mut self.caches.outlines, &mut ops, None);
         let ops: Arc<[Op]> = ops.into();
         self.caches
             .pictures
@@ -499,13 +666,12 @@ impl<C: Canvas> Encoder<'_, C> {
         ops
     }
 
-    fn visible(&self, bounds: Option<Rect>, transform: Affine) -> bool {
-        bounds.is_some_and(|bounds| {
-            !transform
-                .transform_rect_bbox(rect(bounds))
-                .intersect(self.viewport)
-                .is_zero_area()
-        })
+    fn reaches(&self, bounds: kurbo::Rect, transform: Affine) -> bool {
+        Reach {
+            drawn: &self.drawn,
+            transform,
+        }
+        .touches(bounds)
     }
 
     fn punch(&mut self, hole: &BezPath, base: Affine) {
@@ -536,18 +702,23 @@ impl<C: Canvas> Encoder<'_, C> {
     fn replay(&mut self, ops: &[Op], mut transform: Affine) {
         let mut scopes = Vec::new();
         self.canvas.set_transform(transform);
-        for op in ops {
+        let mut ops = ops.iter();
+        while let Some(op) = ops.next() {
             match op {
-                Op::Fill { path, paint } => {
+                Op::Fill { path, paint } if self.reaches(path.control_box(), transform) => {
                     self.canvas.set_paint(paint.clone());
                     self.canvas.fill_path(path);
                 }
+                Op::Fill { .. } => {}
                 Op::Image {
                     path,
                     image,
                     sampler,
                     placement,
                 } => {
+                    if !self.reaches(path.control_box(), transform) {
+                        continue;
+                    }
                     let Some(id) = self.caches.images.get(image.id()) else {
                         continue;
                     };
@@ -565,6 +736,10 @@ impl<C: Canvas> Encoder<'_, C> {
                     std_dev,
                     color,
                 } => {
+                    let reach = f64::from(*std_dev) * SHADOW_DEVIATIONS;
+                    if !self.reaches(rect.inflate(reach, reach), transform) {
+                        continue;
+                    }
                     self.canvas.set_paint((*color).into());
                     self.canvas
                         .fill_blurred_rounded_rect(rect, *radius, *std_dev);
@@ -572,15 +747,20 @@ impl<C: Canvas> Encoder<'_, C> {
                 Op::Outlines { color, glyphs } => {
                     self.canvas.set_paint((*color).into());
                     for (outline, at) in glyphs {
-                        self.canvas
-                            .set_transform(transform * Affine::translate(*at));
-                        self.canvas.fill_path(outline);
+                        let placed = transform * Affine::translate(*at);
+                        if self.reaches(outline.bounds, placed) {
+                            self.canvas.set_transform(placed);
+                            self.canvas.fill_path(&outline.path);
+                        }
                     }
                     self.canvas.set_transform(transform);
                 }
                 Op::Glyphs { run, glyphs } => {
                     self.canvas.set_paint(color(run.color).into());
                     self.canvas.fill_glyphs(run, glyphs);
+                }
+                Op::Clip(clip) if !self.reaches(clip.control_box(), transform) => {
+                    skip_scope(&mut ops);
                 }
                 Op::Clip(clip) => {
                     self.canvas.push_clip_layer(clip);
@@ -631,7 +811,10 @@ impl<C: Canvas> Encoder<'_, C> {
                     }
                 }
                 Op::Picture(picture) => {
-                    if self.visible(picture.bounds(), transform) {
+                    if picture
+                        .bounds()
+                        .is_some_and(|bounds| self.reaches(rect(bounds), transform))
+                    {
                         let ops = self.recording(picture);
                         self.replay(&ops, transform);
                         self.canvas.set_transform(transform);
@@ -639,5 +822,72 @@ impl<C: Canvas> Encoder<'_, C> {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::text::{TextAlign, TextStyle, TextSystem};
+
+    #[derive(Default)]
+    struct Counted(usize);
+
+    impl Canvas for Counted {
+        fn set_paint(&mut self, _: PaintType) {}
+        fn set_transform(&mut self, _: Affine) {}
+        fn set_paint_transform(&mut self, _: Affine) {}
+        fn reset_paint_transform(&mut self) {}
+        fn fill_path(&mut self, _: &BezPath) {
+            self.0 += 1;
+        }
+        fn fill_blurred_rounded_rect(&mut self, _: &kurbo::Rect, _: f32, _: f32) {}
+        fn push_clip_layer(&mut self, _: &BezPath) {}
+        fn push_layer(&mut self, _: BlendMode, _: f32) {}
+        fn pop_layer(&mut self) {}
+        fn push_clip_path(&mut self, _: &BezPath) {}
+        fn pop_clip(&mut self) {}
+        fn clear_path(&mut self, _: &BezPath) {}
+        fn fill_glyphs(&mut self, _: &GlyphRun, _: &[Glyph]) {}
+    }
+
+    #[test]
+    fn a_changed_line_encodes_only_the_glyphs_near_it() {
+        const LINES: u16 = 50;
+        const COLUMNS: usize = 100;
+        const LINE_HEIGHT: u16 = 20;
+        let mut text = TextSystem::new();
+        let style = TextStyle::new(13.0, Color::BLACK).monospace();
+        let paragraph = text.paragraph(&"m".repeat(COLUMNS), style, None, TextAlign::Start);
+        let items: Vec<Item> = (0..LINES)
+            .map(|line| Item::Text {
+                origin: Point::new(0.0, f32::from(line * LINE_HEIGHT)),
+                paragraph: paragraph.clone(),
+            })
+            .collect();
+        let changed = Region {
+            x: 0,
+            y: u32::from(10 * LINE_HEIGHT),
+            width: 2000,
+            height: u32::from(LINE_HEIGHT),
+        };
+        let mut canvas = Counted::default();
+        let frame = Frame {
+            scale: 1.0,
+            origin: (0, 0),
+            size: (2000, LINES * LINE_HEIGHT),
+        };
+        encode(
+            &mut canvas,
+            &mut Caches::default(),
+            &items,
+            &frame,
+            Some(&[changed]),
+        );
+        assert!(
+            (COLUMNS..=3 * COLUMNS).contains(&canvas.0),
+            "{} glyphs were encoded for one line",
+            canvas.0
+        );
     }
 }

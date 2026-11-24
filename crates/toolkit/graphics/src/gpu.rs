@@ -438,7 +438,7 @@ impl GpuRenderer {
                 origin: (0, 0),
                 size: (width, height),
             },
-            damage.map(outline),
+            damage,
         );
         let cleared: Vec<RectU16> = damage
             .unwrap_or_default()
@@ -619,23 +619,6 @@ impl GpuRenderer {
     }
 }
 
-fn outline(regions: &[Region]) -> BezPath {
-    let mut path = BezPath::new();
-    for region in regions {
-        let (left, top) = (f64::from(region.x), f64::from(region.y));
-        let (right, bottom) = (
-            left + f64::from(region.width),
-            top + f64::from(region.height),
-        );
-        path.move_to((left, top));
-        path.line_to((right, top));
-        path.line_to((right, bottom));
-        path.line_to((left, bottom));
-        path.close_path();
-    }
-    path
-}
-
 struct GpuCanvas<'a> {
     scene: &'a mut vello_gpu::Scene,
     resources: &'a mut Resources,
@@ -714,10 +697,11 @@ mod tests {
 
     use super::*;
     use crate::dmabuf::SharedPlane;
-    use crate::scene::{Item, Paint, Rect, Shape};
+    use crate::scene::{Item, Paint, Point, Rect, Shape};
     use bande_design::Color;
 
     const LINEAR: u64 = 0;
+    const LAYER_ROUNDING: u8 = 1;
     const SIDE: u32 = 64;
     const DMA_BUF_IOCTL_SYNC: libc::c_ulong = 0x4008_6200;
     const SYNC_READ_START: u64 = 1;
@@ -847,6 +831,83 @@ mod tests {
         assert_eq!(
             pixels(&image, &[inside, outside]),
             [bgra(blue), bgra(Color::hex(0xff0000))]
+        );
+    }
+
+    fn crowded(moved: f32) -> Scene {
+        let dot = |x: f32, y: f32, side: f32, color: u32| Item::Fill {
+            shape: Shape::rounded(Rect::new(x, y, side, side), side / 2.0),
+            paint: Paint::Solid(Color::hex(color).with_opacity(0.7)),
+        };
+        let row =
+            |y: f32| (0..6).map(move |column| dot(column as f32 * 10.3 + 0.4, y, 11.0, 0x3060c0));
+        Scene {
+            width: SIDE,
+            height: SIDE,
+            background: Color::hex(0xffffff),
+            items: vec![
+                Item::Shadow {
+                    shape: Shape::rect(Rect::new(6.0, 4.0, 20.0, 6.0)),
+                    offset: Point::new(0.0, 2.0),
+                    blur_radius: 8.0,
+                    color: Color::BLACK,
+                },
+                Item::Clip {
+                    shape: Shape::rounded(Rect::new(2.0, 2.0, 60.0, 60.0), 9.0),
+                    items: (0..6).flat_map(|line| row(line as f32 * 9.7)).collect(),
+                },
+                Item::Clip {
+                    shape: Shape::rect(Rect::new(0.0, 0.0, 64.0, 8.0)),
+                    items: row(1.0).collect(),
+                },
+                Item::Opacity {
+                    alpha: 0.6,
+                    items: vec![dot(20.0 + moved, 28.0, 14.0, 0xd02020)],
+                },
+            ],
+        }
+    }
+
+    #[test]
+    fn a_partial_frame_is_the_whole_frame_s_pixels() {
+        let _turn = device_turn();
+        let linear = [vec![LINEAR]];
+        let Some(gpu) = GpuDevice::shared(false, None)
+            .ok()
+            .filter(|gpu| gpu.shares_images(&linear))
+        else {
+            eprintln!("skipped, no GPU to share images from");
+            return;
+        };
+        let mut renderer = GpuRenderer::with_device(Arc::clone(&gpu), (SIDE, SIDE));
+        let image = || {
+            gpu.shared_image((SIDE, SIDE), &linear)
+                .expect("a shared image")
+        };
+        let (partial, whole) = (image(), image());
+        let (before, after) = (crowded(0.0), crowded(3.3));
+        let damage = crate::damage::damage(&before, &after, 1.0).expect("little damage");
+        renderer
+            .present(&before, 1.0, &partial, None)
+            .expect("the first frame");
+        renderer
+            .present(&after, 1.0, &partial, Some(&damage))
+            .expect("the partial frame");
+        renderer
+            .present(&after, 1.0, &whole, None)
+            .expect("the whole frame");
+        let everywhere: Vec<(u32, u32)> = (0..SIDE)
+            .flat_map(|y| (0..SIDE).map(move |x| (x, y)))
+            .collect();
+        let furthest = pixels(&partial, &everywhere)
+            .iter()
+            .flatten()
+            .zip(pixels(&whole, &everywhere).iter().flatten())
+            .map(|(partial, whole)| partial.abs_diff(*whole))
+            .max();
+        assert!(
+            furthest.is_some_and(|furthest| furthest <= LAYER_ROUNDING),
+            "a channel differs by {furthest:?}"
         );
     }
 

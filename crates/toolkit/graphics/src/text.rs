@@ -744,6 +744,14 @@ impl Paragraph {
             .fold(self.layout.width(), f32::max)
     }
 
+    pub(crate) fn largest_size(&self) -> f32 {
+        self.layout
+            .lines()
+            .flat_map(|line| line.runs())
+            .map(|run| run.font_size())
+            .fold(0.0, f32::max)
+    }
+
     pub fn line_count(&self) -> usize {
         self.layout.len()
     }

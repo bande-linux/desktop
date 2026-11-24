@@ -75,7 +75,10 @@ On the GPU an app's window costs two window-sized dma-bufs, its image atlas, Vel
 buffer and the device's 8–64 MiB allocation blocks: under `bande-footprint` on an Intel UHD 630,
 Calculator holds about 26 MiB of GPU memory and Files and Settings about 50 MiB. A frame damages
 only what changed, so pointing at Calculator's close button makes the compositor repaint about
-1 200 pixels a frame.
+1 200 pixels a frame. It also encodes only the items and glyphs that reach what changed, so a
+small change costs the same CPU in a full window as in an empty one: Terminal with a spinner and a
+line of streamed text (25 frames/s, headless compositor, two changed lines) takes about 2.4 ms of
+CPU a frame.
 
 Under `bande-session-bench` on that GPU, on two cores (`taskset -c 0,1`) of a loaded machine, a
 frame of a menu that opens or closes takes the GPU at most 3.7 ms and repaints 0.22 Mpx on average,

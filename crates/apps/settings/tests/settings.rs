@@ -231,6 +231,7 @@ fn two_displays_of_one_model_are_told_apart_and_arranged_from_the_keyboard() {
         position: (x, 0),
         scale: 1.0,
         rotation: 0,
+        hdr: false,
     };
     let mut view = SettingsView::new(Palette::for_scheme(Scheme::Light), TextSystem::new());
     view.set_displays(vec![display("DP-1", 0), display("DP-2", 1920)]);

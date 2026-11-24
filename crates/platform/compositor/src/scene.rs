@@ -29,7 +29,7 @@ use bande_graphics::{
     BackdropTone, Color, Elevation, Palette, Radius, Scheme, window_edge_opacity,
 };
 use bande_render::{
-    Blur, RenderError, RoundedRect, Shadow, VulkanFrame, VulkanRenderer, VulkanTexture,
+    Backdrop, Blur, RenderError, RoundedRect, Shadow, VulkanFrame, VulkanRenderer, VulkanTexture,
 };
 
 pub(crate) const CORNER_RADIUS: f64 = Radius::XL as f64;
@@ -479,6 +479,7 @@ const BLUR_OFFSET: f64 = 1.5;
 pub struct BlurElement {
     id: Id,
     blur: Blur,
+    backdrop: Option<Backdrop>,
     params: u64,
     below: u64,
     commit: CommitCounter,
@@ -510,7 +511,6 @@ impl BlurElement {
             offset: (BLUR_OFFSET * scale) as f32,
             alpha,
             tone,
-            backdrop: None,
         };
         let mut hasher = DefaultHasher::new();
         for value in [
@@ -526,6 +526,7 @@ impl BlurElement {
         Self {
             id,
             blur,
+            backdrop: None,
             params,
             below: 0,
             commit: CommitCounter::from(params as usize),
@@ -554,7 +555,7 @@ impl BlurElement {
     pub(crate) fn keep(
         &mut self,
         renderer: &mut VulkanRenderer,
-        view: &str,
+        view: (&str, bool),
         covered: &[Rectangle<i32, Physical>],
     ) {
         let mut owner = DefaultHasher::new();
@@ -566,7 +567,7 @@ impl BlurElement {
         }
         let backdrop = renderer.backdrop(owner.finish(), below.finish());
         self.commit = CommitCounter::from((self.params ^ backdrop.drawing) as usize);
-        self.blur.backdrop = Some(backdrop);
+        self.backdrop = Some(backdrop);
     }
 }
 
@@ -602,7 +603,8 @@ impl RenderElement<VulkanRenderer> for BlurElement {
         damage: &[Rectangle<i32, Physical>],
         _opaque_regions: &[Rectangle<i32, Physical>],
     ) -> Result<(), RenderError> {
-        frame.draw_blur(&self.blur, damage)
+        let backdrop = self.backdrop.ok_or(RenderError::NothingRendered)?;
+        frame.draw_blur(&self.blur, backdrop, damage)
     }
 }
 

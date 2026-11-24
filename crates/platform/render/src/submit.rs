@@ -411,9 +411,7 @@ impl VulkanRenderer {
             // SAFETY: every fence belongs to a pending submission of this device.
             let waited = unsafe { self.device.wait_for_fences(&fences, true, GPU_HANG_NANOS) };
             if let Err(error) = waited {
-                if matches!(error, vk::Result::ERROR_DEVICE_LOST | vk::Result::TIMEOUT) {
-                    self.lost.store(true, Ordering::Relaxed);
-                }
+                self.lost.store(true, Ordering::Relaxed);
                 return Err(error.into());
             }
         }

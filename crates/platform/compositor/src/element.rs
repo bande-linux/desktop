@@ -94,7 +94,8 @@ pub(crate) fn keep_backdrops_whole(
     elements: &mut Vec<ScreenElement>,
     scale: f64,
     output: Rectangle<i32, Physical>,
-    mut kept: Option<(&mut VulkanRenderer, &str)>,
+    renderer: &mut VulkanRenderer,
+    view: (&str, bool),
 ) {
     let scale = Scale::from(scale);
     let mut hidden = Vec::new();
@@ -142,11 +143,9 @@ pub(crate) fn keep_backdrops_whole(
                 .map_or(reach, |(inset, _)| inset.max(reach));
             above.opaque_inset = Some((inset, output));
         }
-        if let Some((renderer, view)) = &mut kept {
-            let covered = covered(above);
-            if let OutputElement::Blur(blur) = &mut rest[0].inner {
-                blur.keep(renderer, view, &covered);
-            }
+        let covered = covered(above);
+        if let OutputElement::Blur(blur) = &mut rest[0].inner {
+            blur.keep(renderer, view, &covered);
         }
     }
     for index in hidden.into_iter().rev() {

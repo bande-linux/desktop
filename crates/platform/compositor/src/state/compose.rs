@@ -125,7 +125,7 @@ impl Compositor {
         self.state.prepare_switcher(screen);
         self.state.prepare_window_menu(screen);
         self.state.prepare_force_quit(screen);
-        let (elements, drawn, icon) = self.compose(renderer, screen, true, true);
+        let (elements, drawn, icon) = self.compose(renderer, screen, true, false);
         self.state.remember_lock_frame(renderer, screen);
         if self.state.pointer_screen() == screen {
             self.state.remember_drag_icon(icon);
@@ -149,7 +149,7 @@ impl Compositor {
         screen: usize,
         with_cursor: bool,
     ) -> Vec<ScreenElement> {
-        self.compose(renderer, screen, with_cursor, false).0
+        self.compose(renderer, screen, with_cursor, true).0
     }
 
     fn compose(
@@ -157,7 +157,7 @@ impl Compositor {
         renderer: &mut VulkanRenderer,
         screen: usize,
         with_cursor: bool,
-        keep_backdrops: bool,
+        captured: bool,
     ) -> Composed {
         let (mut elements, drawn, icon) = self.compose_view(renderer, screen, with_cursor);
         let shown = &self.state.screens[screen];
@@ -171,7 +171,8 @@ impl Compositor {
             &mut elements,
             scale,
             Rectangle::from_size(area),
-            keep_backdrops.then_some((renderer, name.as_str())),
+            renderer,
+            (&name, captured),
         );
         (elements, drawn, icon)
     }

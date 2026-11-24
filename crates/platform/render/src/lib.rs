@@ -117,10 +117,11 @@ impl fmt::Display for RenderError {
 impl std::error::Error for RenderError {}
 
 impl RenderError {
-    pub(crate) fn is_transient(&self) -> bool {
+    pub fn is_transient(&self) -> bool {
         matches!(
             self,
             Self::Io(_)
+                | Self::Interrupted
                 | Self::Vulkan(
                     vk::Result::ERROR_OUT_OF_DEVICE_MEMORY
                         | vk::Result::ERROR_OUT_OF_HOST_MEMORY
@@ -428,7 +429,7 @@ pub struct VulkanRenderer {
     staging: Vec<Staging>,
     copies: Vec<PendingCopy>,
     counters: Counters,
-    blur_chains: HashMap<frame::BlurKey, frame::BlurChain>,
+    blur_chains: HashMap<u64, frame::BlurChain>,
     lost: AtomicBool,
     exhausted: AtomicBool,
     created: Instant,
@@ -1005,7 +1006,7 @@ impl VulkanRenderer {
         let multisample = vk::PipelineMultisampleStateCreateInfo::default()
             .rasterization_samples(vk::SampleCountFlags::TYPE_1);
         let premultiplied = vk::PipelineColorBlendAttachmentState::default()
-            .blend_enable(true)
+            .blend_enable(!matches!(program, Program::BlurDown | Program::BlurUp))
             .src_color_blend_factor(vk::BlendFactor::ONE)
             .dst_color_blend_factor(vk::BlendFactor::ONE_MINUS_SRC_ALPHA)
             .color_blend_op(vk::BlendOp::ADD)

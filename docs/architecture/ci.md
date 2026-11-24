@@ -148,7 +148,8 @@ cancels the older one, and `source` fails a tag whose commit is not on `main`.
   (`autopkgtest --no-built-binaries <dsc> <debs> -- null`): `desktop`, `every-package`,
   `system-setup`, `display-manager`, `greetd-upgrade`, `coexistence`, `services`, `portal` and
   `metadata` (see
-  [packaging.md](packaging.md#the-source-package)). A Debian package that the release lacks is a
+  [packaging.md](packaging.md#the-source-package)). `login-recovery` needs a booted machine, so
+  it is skipped here and runs on a VM testbed. A Debian package that the release lacks is a
   warning: `bande-desktop` only recommends `bande-backup`, and `every-package` installs it only
   when its dependencies can be.
 - `release-source` (tags only, after `install`): attaches the source package to the tag's GitHub

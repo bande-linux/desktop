@@ -29,7 +29,7 @@ use smithay::reexports::calloop::{EventLoop, Interest, Mode as Trigger, PostActi
 use smithay::reexports::drm::Device as BasicDevice;
 use smithay::reexports::drm::control::atomic::AtomicModeReq;
 use smithay::reexports::drm::control::{
-    AtomicCommitFlags, Device as ControlDevice, Mode, ResourceHandle, ModeFlags, ModeTypeFlags, connector, crtc, framebuffer, property,
+    AtomicCommitFlags, Device as ControlDevice, Mode, ResourceHandle, ModeFlags, ModeTypeFlags, connector, crtc, framebuffer, plane, property,
 };
 use smithay::reexports::input::Libinput;
 use smithay::reexports::rustix::fs::OFlags;
@@ -41,7 +41,7 @@ use bande_render::{RenderError, VulkanRenderer};
 
 use crate::boot_screen::boot_screen_shown;
 use crate::clock::{FrameOutput, Submission, Vblank};
-use crate::element::drawing_everything;
+use crate::element::{ScreenElement, drawing_everything};
 use crate::gamma::Tint;
 use crate::output_format::{
     self, Buffers, Failure, LinkDepth, OutputFormat, Shape, Sink, Step, Wanted,
@@ -73,7 +73,6 @@ struct Head {
     formats: OutputFormat<Mode>,
     link: Option<LinkDepth>,
     signal: Option<HdrSignal>,
-    hdr: Option<bande_edid::Hdr>,
     on_screen: Option<OnPlane>,
     variable_refresh: bool,
     scanned_out: bool,
@@ -114,6 +113,7 @@ pub struct DrmBackend {
     heads: Vec<Head>,
     libinput: Option<Libinput>,
     kelvin: Option<f64>,
+    leaving: Option<Instant>,
     first_mode: FirstMode,
 }
 
@@ -236,6 +236,7 @@ pub struct HeadChanges {
     pub look_again_in: Option<Duration>,
 }
 
+const SWITCH_PATIENCE: Duration = Duration::from_millis(500);
 const MAX_BPC: &[u8] = b"max bpc";
 const COLORSPACE: &[u8] = b"Colorspace";
 const DEFAULT_COLORSPACE: &[u8] = b"Default";
@@ -313,7 +314,8 @@ struct HdrSignal {
     default: u64,
     bt2020: u64,
     metadata: property::Handle,
-    on: bool,
+    ours: bool,
+    left: bool,
 }
 
 fn hdr_signal(device: &DrmDevice, handle: connector::Handle) -> Option<HdrSignal> {
@@ -335,7 +337,8 @@ fn hdr_signal(device: &DrmDevice, handle: connector::Handle) -> Option<HdrSignal
         default,
         bt2020,
         metadata,
-        on: shown != default || blob != 0,
+        ours: false,
+        left: shown != default || blob != 0,
     })
 }
 
@@ -351,6 +354,7 @@ struct HdrMetadata {
     min_luminance: u16,
     max_content: u16,
     max_frame_average: u16,
+    padding: u16,
 }
 
 impl HdrMetadata {
@@ -372,6 +376,7 @@ impl HdrMetadata {
                 .map_or(0, |min| (min * 10_000.0).round() as u16),
             max_content: max,
             max_frame_average: whole(display.and_then(|display| display.max_average)),
+            padding: 0,
         }
     }
 }
@@ -382,51 +387,121 @@ struct LinkChange {
     hdr: Option<bool>,
 }
 
-fn set_link(device: &DrmDevice, head: &Head, change: LinkChange) -> io::Result<()> {
+fn set_link(device: &DrmDevice, head: &mut Head, change: LinkChange) -> io::Result<()> {
     if !device.is_atomic() {
         return Err(io::Error::other("the display has no atomic modesetting"));
     }
-    let metadata = match change.hdr {
-        Some(true) => Some(device.create_property_blob(&HdrMetadata::of(head.hdr.as_ref()))?),
-        _ => None,
+    let Some(on) = change.hdr else {
+        return set_depth(device, head, change);
     };
-    let set = set_link_with(device, head, change, metadata);
-    if let Some(metadata) = metadata {
-        device.destroy_property_blob(metadata.into())?;
-    }
-    set
+    let pending = device.create_property_blob(&head.compositor.pending_mode())?;
+    let metadata = match on {
+        true => device
+            .create_property_blob(&HdrMetadata::of(head.config.hdr.as_ref()))
+            .map(Some),
+        false => Ok(None),
+    };
+    let set = metadata.and_then(|metadata| {
+        let set = set_signal(device, head, change, (pending, metadata));
+        match metadata {
+            Some(metadata) => set.and(device.destroy_property_blob(metadata.into())),
+            None => set,
+        }
+    });
+    set.and(device.destroy_property_blob(pending.into()))
 }
 
-fn set_link_with(
+fn set_signal(
     device: &DrmDevice,
-    head: &Head,
+    head: &mut Head,
     change: LinkChange,
-    metadata: Option<property::Value<'static>>,
+    (mode, metadata): (property::Value<'static>, Option<property::Value<'static>>),
 ) -> io::Result<()> {
+    let signal = head
+        .signal
+        .ok_or_else(|| io::Error::other("the connector sends no HDR signal"))?;
+    let (connector, crtc) = (head.connector, head.compositor.crtc());
+    let shown: Vec<plane::Handle> = device
+        .plane_handles()?
+        .into_iter()
+        .filter(|plane| {
+            device
+                .get_plane(*plane)
+                .is_ok_and(|plane| plane.crtc() == Some(crtc))
+        })
+        .collect();
+    let request = |black: bool| -> io::Result<AtomicModeReq> {
+        let mut request = AtomicModeReq::new();
+        add_depth(device, connector, change, &mut request)?;
+        let colorspace = match metadata {
+            Some(_) => signal.bt2020,
+            None => signal.default,
+        };
+        request.add_property(
+            connector,
+            signal.colorspace,
+            property::Value::Unknown(colorspace),
+        );
+        request.add_property(
+            connector,
+            signal.metadata,
+            metadata.unwrap_or(property::Value::Blob(0)),
+        );
+        if black {
+            request.add_property(crtc, property_of(device, crtc, b"MODE_ID")?, mode);
+            for plane in &shown {
+                request.add_property(
+                    *plane,
+                    property_of(device, *plane, b"FB_ID")?,
+                    property::Value::Framebuffer(None),
+                );
+                request.add_property(
+                    *plane,
+                    property_of(device, *plane, b"CRTC_ID")?,
+                    property::Value::CRTC(None),
+                );
+            }
+        }
+        Ok(request)
+    };
+    let black = !shown.is_empty();
+    let flags = AtomicCommitFlags::ALLOW_MODESET;
+    if black
+        && device
+            .atomic_commit(flags | AtomicCommitFlags::TEST_ONLY, request(true)?)
+            .is_ok()
+    {
+        device.atomic_commit(flags, request(true)?)?;
+        return head.compositor.reset_state().map_err(io::Error::other);
+    }
+    device.atomic_commit(flags | AtomicCommitFlags::TEST_ONLY, request(false)?)?;
+    if black {
+        head.darken()
+            .map_err(|error| io::Error::other(error.to_string()))?;
+        head.dark = false;
+    }
+    device.atomic_commit(flags, request(false)?)
+}
+
+fn add_depth(
+    device: &DrmDevice,
+    connector: connector::Handle,
+    change: LinkChange,
+    request: &mut AtomicModeReq,
+) -> io::Result<()> {
+    if let Some(bits) = change.bits {
+        let max_bpc = property_of(device, connector, MAX_BPC)?;
+        request.add_property(connector, max_bpc, property::Value::UnsignedRange(bits));
+    }
+    Ok(())
+}
+
+fn set_depth(device: &DrmDevice, head: &Head, change: LinkChange) -> io::Result<()> {
     let (connector, crtc) = (head.connector, head.compositor.crtc());
     let commit = |mode: Option<property::Value<'static>>| {
         let request = || -> io::Result<AtomicModeReq> {
             let mut request = AtomicModeReq::new();
-            if let Some(bits) = change.bits {
-                let max_bpc = property_of(device, connector, MAX_BPC)?;
-                request.add_property(connector, max_bpc, property::Value::UnsignedRange(bits));
-            }
-            if let (Some(on), Some(signal)) = (change.hdr, head.signal) {
-                let colorspace = match on {
-                    true => signal.bt2020,
-                    false => signal.default,
-                };
-                request.add_property(
-                    connector,
-                    signal.colorspace,
-                    property::Value::Unknown(colorspace),
-                );
-                request.add_property(
-                    connector,
-                    signal.metadata,
-                    metadata.unwrap_or(property::Value::Blob(0)),
-                );
-            }
+            add_depth(device, connector, change, &mut request)?;
             if let Some(mode) = mode {
                 request.add_property(crtc, property_of(device, crtc, b"MODE_ID")?, mode);
             }
@@ -581,7 +656,7 @@ fn head_config(
             .unwrap_or((0, 0))
             .into(),
         modes: modes.iter().map(output_mode).collect(),
-        hdr: false,
+        hdr: None,
     }
 }
 
@@ -840,6 +915,7 @@ impl DrmBackend {
             heads: Vec::new(),
             libinput: None,
             kelvin: None,
+            leaving: None,
             first_mode,
         })
     }
@@ -1018,7 +1094,7 @@ impl DrmBackend {
         Ok(Some(Head {
             connector: info.handle(),
             config: OutputConfig {
-                hdr,
+                hdr: edid.as_ref().and_then(|edid| edid.hdr).filter(|_| hdr),
                 ..head_config(&self.device, info, &modes)
             },
             modes,
@@ -1027,7 +1103,6 @@ impl DrmBackend {
             formats,
             link: link_depth(&self.device, info.handle()),
             signal,
-            hdr: edid.as_ref().and_then(|edid| edid.hdr),
             on_screen: None,
             variable_refresh,
             scanned_out: false,
@@ -1273,6 +1348,7 @@ impl DrmBackend {
         match event {
             SessionEvent::PauseSession => {
                 self.suspend_input();
+                self.leaving = None;
                 self.device.pause();
                 Ok(())
             }
@@ -1314,6 +1390,12 @@ impl DrmBackend {
                 .map_err(|()| "libinput cannot resume its devices")?;
         }
         Ok(())
+    }
+}
+
+impl Drop for DrmBackend {
+    fn drop(&mut self) {
+        self.stop_hdr();
     }
 }
 
@@ -1541,7 +1623,7 @@ impl FrameOutput for DrmBackend {
         let frames: Vec<(String, OnScreen)> = self
             .heads
             .iter()
-            .filter(|head| !head.signal.is_some_and(|signal| signal.on))
+            .filter(|head| !head.signal.is_some_and(|signal| signal.ours || signal.left))
             .filter_map(|head| {
                 let name = &head.config.name;
                 match shown_frame(&self.device, head.connector) {
@@ -1593,9 +1675,10 @@ impl FrameOutput for DrmBackend {
     }
 
     fn switch_virtual_terminal(&mut self, number: i32) {
-        self.stop_hdr();
+        self.leaving = self.stop_hdr().then(Instant::now);
         if let Err(error) = self.session.change_vt(number) {
             tracing::warn!("cannot switch to virtual terminal {number}: {error}");
+            self.leaving = None;
         }
     }
 
@@ -1736,9 +1819,15 @@ impl DrmBackend {
             head.shape = shape;
             return Ok(true);
         }
-        if shape.is_deep()
-            && let Err(error) = self.renderer.prepare(shape.format)
-        {
+        let prepared = match (shape.is_deep(), shape.hdr) {
+            (true, true) => self
+                .renderer
+                .prepare(shape.format)
+                .and_then(|()| self.renderer.prepare_hdr()),
+            (true, false) => self.renderer.prepare(shape.format),
+            (false, _) => Ok(()),
+        };
+        if let Err(error) = prepared {
             return match error.is_transient() {
                 true => Err(error.into()),
                 false => Ok(false),
@@ -1778,7 +1867,7 @@ impl DrmBackend {
             .and_then(|link| link.change(shape.bits(), wanted.deep || shape.is_deep()));
         let hdr = head
             .signal
-            .filter(|signal| signal.on != shape.hdr)
+            .filter(|signal| signal.ours != shape.hdr || signal.left)
             .map(|_| shape.hdr);
         if bits.is_none() && hdr.is_none() {
             return Ok(());
@@ -1792,7 +1881,8 @@ impl DrmBackend {
             );
         }
         if let (Some(signal), Some(on)) = (&mut head.signal, hdr) {
-            signal.on = on;
+            signal.ours = on;
+            signal.left = false;
             tracing::info!("{} HDR signal: {on}", head.config.name);
         }
         Ok(())
@@ -1801,19 +1891,23 @@ impl DrmBackend {
     fn stop_hdr(&mut self) -> bool {
         let mut stopped = false;
         for head in &mut self.heads {
-            if !head.shape.hdr || !head.signal.is_some_and(|signal| signal.on) {
+            if !head.shape.hdr || !head.signal.is_some_and(|signal| signal.ours) {
                 continue;
             }
+            let found = head.link.filter(|link| link.found != link.current);
             let off = LinkChange {
-                bits: None,
+                bits: found.map(|link| link.found),
                 hdr: Some(false),
             };
             match set_link(&self.device, head, off) {
                 Ok(()) => {
                     stopped = true;
+                    if let Some(link) = &mut head.link {
+                        link.current = link.found;
+                    }
                     head.formats.forget_refusals();
                     if let Some(signal) = &mut head.signal {
-                        signal.on = false;
+                        signal.ours = false;
                     }
                 }
                 Err(error) => {
@@ -1858,7 +1952,11 @@ impl DrmBackend {
                 continue;
             }
             if let Err(error) = self.try_link(index, shape, wanted) {
-                if !shape.hdr && self.heads[index].signal.is_some_and(|signal| signal.on) {
+                if !shape.hdr
+                    && self.heads[index]
+                        .signal
+                        .is_some_and(|signal| signal.ours || signal.left)
+                {
                     return Err(error.into());
                 }
                 tracing::warn!("{name} keeps its bits per channel: {error}");
@@ -1905,6 +2003,13 @@ impl DrmBackend {
         if !self.session.is_active() {
             return Ok(Submission::Paused);
         }
+        if self
+            .leaving
+            .is_some_and(|since| since.elapsed() < SWITCH_PATIENCE)
+        {
+            return Ok(Submission::Retry);
+        }
+        self.leaving = None;
         if compositor.holds_frames() {
             compositor.import_awaited(&mut self.renderer);
             return Ok(Submission::Unchanged);
@@ -1952,7 +2057,7 @@ impl DrmBackend {
         }
         let wanted = Wanted {
             deep: compositor.deep_colour(output),
-            hdr: compositor.wants_hdr(output) && head.config.hdr,
+            hdr: compositor.wants_hdr(output) && head.config.hdr.is_some(),
         };
         if head
             .formats
@@ -1998,11 +2103,12 @@ impl DrmBackend {
             .output_colour
             .as_ref()
             .and_then(|(_, conversion)| conversion.clone());
+        let elements = compositor.render_elements_on(&mut self.renderer, output);
         let conversion = match head.shape.hdr {
             true => Some(crate::colour::hdr(
-                head.hdr.as_ref(),
+                head.config.hdr.as_ref(),
                 self.kelvin.map_or([1.0; 3], crate::night::gains),
-                compositor.shows_hdr_content(output),
+                elements.iter().any(ScreenElement::shows_hdr),
             )),
             false => conversion,
         };
@@ -2017,7 +2123,6 @@ impl DrmBackend {
             None if whole => FrameFlags::empty(),
             None => FrameFlags::DEFAULT | FrameFlags::ALLOW_PRIMARY_PLANE_SCANOUT_ANY,
         };
-        let elements = compositor.render_elements_on(&mut self.renderer, output);
         self.renderer.measure_frames_of(Some(output));
         let (rendered, drew_everything) = drawing_everything(|| {
             self.renderer

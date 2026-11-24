@@ -15,87 +15,89 @@ use smithay::utils::{Physical, Rectangle, Transform};
 type Outcome<T = ()> = Result<T, Box<dyn Error>>;
 
 const CELL: i32 = 16;
-const COLUMNS: i32 = 16;
-const SIZE: (i32, i32) = (CELL * COLUMNS, CELL * 4);
-const WHITE: f64 = 203.0;
-const PEAK: f64 = 600.0;
-const MASTERED: f64 = 1000.0;
-const TO_2020: [[f64; 3]; 3] = [
-    [0.6274039, 0.3292830, 0.0433131],
-    [0.0690973, 0.9195404, 0.0113623],
-    [0.0163914, 0.0880133, 0.8955953],
-];
-const FROM_2020: [[f64; 3]; 3] = [
-    [1.660491, -0.5876411, -0.0728499],
-    [-0.1245505, 1.1328999, -0.0083494],
-    [-0.0181508, -0.1005789, 1.1187297],
+const SIZE: (i32, i32) = (CELL * 16, CELL);
+const WHITE: f32 = 203.0;
+const PEAK: f32 = 600.0;
+const MASTERED: f32 = 1000.0;
+const TO_2020: [[f32; 3]; 3] = [
+    [0.627_403_9, 0.329_283_04, 0.043_313_066],
+    [0.069_097_29, 0.919_540_4, 0.011_362_316],
+    [0.016_391_44, 0.088_013_31, 0.895_595_25],
 ];
 
-fn pq(nits: f64) -> f64 {
-    let power = (nits / 10000.0).clamp(0.0, 1.0).powf(0.1593017578125);
-    ((0.8359375 + 18.8515625 * power) / (1.0 + 18.6875 * power)).powf(78.84375)
+/// sRGB colours and the 10-bit PQ BT.2020 codes of their light with white at 203 cd/m². All tables
+/// were computed at 40 digits from the constants of SMPTE ST 2084 and BT.2390 and matrices derived
+/// from the primaries, apart from the renderer.
+const ORDINARY: [([u8; 3], [f64; 3]); 10] = [
+    ([0, 0, 0], [0.0, 0.0, 0.0]),
+    ([255, 255, 255], [594.0, 594.0, 594.0]),
+    ([128, 128, 128], [437.7, 437.7, 437.7]),
+    ([255, 0, 0], [544.8, 334.5, 225.1]),
+    ([0, 255, 0], [479.0, 585.1, 355.3]),
+    ([0, 0, 255], [296.3, 201.3, 582.3]),
+    ([12, 34, 200], [274.3, 243.9, 525.1]),
+    ([200, 180, 16], [523.9, 512.7, 314.5]),
+    ([1, 2, 3], [60.2, 68.8, 80.8]),
+    ([250, 128, 114], [552.9, 458.1, 423.1]),
+];
+
+/// PQ BT.2020 codes of content mastered at 1000 cd/m², the codes a 600 cd/m² display gets and the
+/// sRGB values of a capture.
+const BRIGHT: [([u16; 3], [f64; 3], [f64; 3]); 11] = [
+    ([0, 0, 0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]),
+    (
+        [594, 594, 594],
+        [594.0, 594.0, 594.0],
+        [229.0, 229.0, 229.0],
+    ),
+    (
+        [520, 520, 520],
+        [520.0, 520.0, 520.0],
+        [185.9, 185.9, 185.9],
+    ),
+    (
+        [668, 668, 668],
+        [668.0, 668.0, 668.0],
+        [249.8, 249.8, 249.8],
+    ),
+    (
+        [713, 713, 713],
+        [704.2, 704.2, 704.2],
+        [254.1, 254.1, 254.1],
+    ),
+    (
+        [740, 740, 740],
+        [711.2, 711.2, 711.2],
+        [254.9, 254.9, 254.9],
+    ),
+    (
+        [769, 769, 769],
+        [712.3, 712.3, 712.3],
+        [255.0, 255.0, 255.0],
+    ),
+    ([700, 400, 500], [697.2, 397.6, 497.4], [255.0, 0.0, 106.6]),
+    ([300, 650, 450], [300.0, 650.0, 450.0], [0.0, 255.0, 68.0]),
+    ([450, 420, 760], [409.1, 380.4, 712.3], [0.0, 48.1, 255.0]),
+    ([769, 600, 300], [712.3, 546.0, 260.9], [255.0, 96.7, 0.0]),
+];
+
+fn cell(index: usize) -> Rectangle<i32, Physical> {
+    Rectangle::new((index as i32 * CELL, 0).into(), (CELL, CELL).into())
 }
 
-fn nits(code: f64) -> f64 {
-    let power = code.powf(1.0 / 78.84375);
-    let ratio = (power - 0.8359375).max(0.0) / (18.8515625 - 18.6875 * power);
-    10000.0 * ratio.powf(1.0 / 0.1593017578125)
+fn centre(index: usize) -> usize {
+    let (x, y) = (index as i32 * CELL + CELL / 2, CELL / 2);
+    (y * SIZE.0 + x) as usize
 }
 
-fn decoded(value: f64) -> f64 {
-    match value <= 0.04045 {
-        true => value / 12.92,
-        false => ((value + 0.055) / 1.055).powf(2.4),
-    }
-}
-
-fn encoded(value: f64) -> f64 {
-    match value <= 0.0031308 {
-        true => value * 12.92,
-        false => 1.055 * value.powf(1.0 / 2.4) - 0.055,
-    }
-}
-
-fn through(matrix: [[f64; 3]; 3], colour: [f64; 3]) -> [f64; 3] {
-    matrix.map(|row| row.iter().zip(colour).map(|(a, b)| a * b).sum())
-}
-
-fn mapped(brightest: f64, peak: f64) -> f64 {
-    let source = pq(MASTERED);
-    let target = pq(peak) / source;
-    let value = (pq(brightest) / source).min(1.0);
-    let knee = (1.5 * target - 0.5).max(0.0);
-    if value <= knee {
-        return brightest;
-    }
-    let t = (value - knee) / (1.0 - knee);
-    let curved = (2.0 * t.powi(3) - 3.0 * t * t + 1.0) * knee
-        + (t.powi(3) - 2.0 * t * t + t) * (1.0 - knee)
-        + (3.0 * t * t - 2.0 * t.powi(3)) * target;
-    nits(curved * source)
-}
-
-fn toned(content: [f64; 3], peak: f64) -> [f64; 3] {
-    let light = content.map(nits);
-    let brightest = light.into_iter().fold(0.0001, f64::max);
-    light.map(|value| value * mapped(brightest, peak) / brightest)
-}
-
-fn cell(index: i32) -> Rectangle<i32, Physical> {
-    Rectangle::new(
-        ((index % COLUMNS) * CELL, (index / COLUMNS) * CELL).into(),
-        (CELL, CELL).into(),
-    )
-}
-
-fn content(index: i32) -> [f64; 3] {
-    let level = pq(f64::from(index % COLUMNS + 1) / f64::from(COLUMNS) * MASTERED);
-    match index / COLUMNS {
-        0 => [level; 3],
-        1 => [level, level * 0.6, level * 0.7],
-        2 => [level * 0.7, level, level * 0.75],
-        _ => [level * 0.8, level * 0.7, level],
-    }
+fn close(what: &str, found: [f64; 3], wanted: [f64; 3], slack: f64) {
+    assert!(
+        found
+            .iter()
+            .zip(wanted)
+            .all(|(found, wanted)| (found - wanted).abs() <= slack),
+        "{what} shows {found:?}, not {wanted:?}"
+    );
 }
 
 struct Gpu {
@@ -173,21 +175,12 @@ impl Gpu {
 
 fn fill<F: Frame<Error = bande_render::RenderError>>(
     frame: &mut F,
-    colour: impl Fn(i32) -> [f64; 3],
+    colours: impl Iterator<Item = [f32; 3]>,
 ) -> Outcome {
-    for index in 0..COLUMNS * 4 {
-        let [red, green, blue] = colour(index).map(|value| value as f32);
+    for (index, [red, green, blue]) in colours.enumerate() {
         frame.clear(Color32F::new(red, green, blue, 1.0), &[cell(index)])?;
     }
     Ok(())
-}
-
-fn centres() -> impl Iterator<Item = (i32, usize)> {
-    (0..COLUMNS * 4).map(|index| {
-        let at = cell(index).loc;
-        let (x, y) = (at.x + CELL / 2, at.y + CELL / 2);
-        (index, (y * SIZE.0 + x) as usize)
-    })
 }
 
 #[test]
@@ -208,10 +201,10 @@ fn ordinary_content_keeps_its_white_and_hdr_content_its_light_up_to_the_display_
     };
     let whole: Rectangle<i32, Physical> = Rectangle::from_size(SIZE.into());
     let colour = |extended| OutputColour {
-        matrix: TO_2020.map(|row| row.map(|value| value as f32)),
+        matrix: TO_2020,
         encode: Encode::Pq {
-            white: WHITE as f32,
-            peak: PEAK as f32,
+            white: WHITE,
+            peak: PEAK,
         },
         extended,
     };
@@ -222,48 +215,42 @@ fn ordinary_content_keeps_its_white_and_hdr_content_its_light_up_to_the_display_
         let mut frame = gpu
             .renderer
             .render(&mut framebuffer, SIZE.into(), Transform::Normal)?;
-        fill(&mut frame, content)?;
+        let codes = BRIGHT.map(|(codes, ..)| codes.map(|code| f32::from(code) / 1023.0));
+        fill(&mut frame, codes.into_iter())?;
         frame.finish()?.wait()?;
     }
-    let source_codes = gpu.codes(&source)?;
-    let hdr = HdrContent {
-        max_nits: MASTERED as f32,
-    };
+    let drawn = gpu.codes(&source)?;
+    for (index, (codes, ..)) in BRIGHT.iter().enumerate() {
+        close(
+            "the content",
+            drawn[centre(index)],
+            codes.map(f64::from),
+            0.0,
+        );
+    }
     let (_shown, mut display) = gpu.buffer(modifier).ok_or(no_buffer)?;
-
-    let grey = |index: i32| [f64::from(index * 4) / 255.0, f64::from(index) / 64.0, 0.5];
     for extended in [false, true] {
         gpu.renderer
             .converting(Some(&colour(extended)), |renderer| -> Outcome {
                 let mut framebuffer = renderer.bind(&mut display)?;
                 let mut frame =
                     renderer.render(&mut framebuffer, SIZE.into(), Transform::Normal)?;
-                fill(&mut frame, grey)?;
+                let colours = ORDINARY.map(|(rgb, _)| rgb.map(|value| f32::from(value) / 255.0));
+                fill(&mut frame, colours.into_iter())?;
                 frame.finish()?.wait()?;
                 Ok(())
             })??;
         let codes = gpu.codes(&display)?;
-        for (index, at) in centres() {
-            let quantised = grey(index).map(|value| match extended {
-                true => value,
-                false => (value * 1023.0).round() / 1023.0,
-            });
-            let wanted = through(TO_2020, quantised.map(decoded))
-                .map(|value| pq(value.max(0.0) * WHITE) * 1023.0);
-            for (found, wanted) in codes[at].iter().zip(wanted) {
-                assert!(
-                    (found - wanted).abs() <= 3.0,
-                    "cell {index} shows {:?}, not {wanted:.1} (extended {extended})",
-                    codes[at]
-                );
-            }
+        for (index, (rgb, wanted)) in ORDINARY.into_iter().enumerate() {
+            let what = format!("{rgb:?} (extended {extended})");
+            close(&what, codes[centre(index)], wanted, 2.5);
         }
     }
 
     let texture = gpu
         .renderer
         .import_dmabuf(&source, None)?
-        .showing(Some(hdr));
+        .showing(Some(HdrContent { max_nits: MASTERED }));
     let place = Rectangle::from_size((f64::from(SIZE.0), f64::from(SIZE.1)).into());
     gpu.renderer
         .converting(Some(&colour(true)), |renderer| -> Outcome {
@@ -282,16 +269,9 @@ fn ordinary_content_keeps_its_white_and_hdr_content_its_light_up_to_the_display_
             Ok(())
         })??;
     let codes = gpu.codes(&display)?;
-    for (index, at) in centres() {
-        let wanted = toned(source_codes[at].map(|code| code / 1023.0), PEAK);
-        for (found, wanted) in codes[at].iter().zip(wanted) {
-            let wanted = pq(wanted) * 1023.0;
-            assert!(
-                (found - wanted).abs() <= 4.0,
-                "HDR cell {index} shows {:?}, not {wanted:.1}",
-                codes[at]
-            );
-        }
+    for (index, (content, wanted, _)) in BRIGHT.into_iter().enumerate() {
+        let what = format!("HDR {content:?}");
+        close(&what, codes[centre(index)], wanted, 2.5);
     }
 
     let mut capture: OffscreenTarget = gpu.renderer.create_buffer(Fourcc::Argb8888, SIZE.into())?;
@@ -310,17 +290,9 @@ fn ordinary_content_keeps_its_white_and_hdr_content_its_light_up_to_the_display_
     )?;
     frame.finish()?.wait()?;
     let pixels = gpu.renderer.read_target(&capture)?;
-    for (index, at) in centres() {
-        let light = toned(source_codes[at].map(|code| code / 1023.0), WHITE);
-        let wanted = through(FROM_2020, light.map(|value| value / WHITE))
-            .map(|value| encoded(value.clamp(0.0, 1.0)) * 255.0);
-        let found = [2, 1, 0].map(|channel| f64::from(pixels[at * 4 + channel]));
-        for (found, wanted) in found.into_iter().zip(wanted) {
-            assert!(
-                (found - wanted).abs() <= 3.0,
-                "a capture of HDR cell {index} shows {found}, not {wanted:.1}"
-            );
-        }
+    for (index, (content, _, wanted)) in BRIGHT.into_iter().enumerate() {
+        let found = [2, 1, 0].map(|channel| f64::from(pixels[centre(index) * 4 + channel]));
+        close(&format!("a capture of {content:?}"), found, wanted, 2.0);
     }
     assert_eq!(vulkan_errors(), 0, "Vulkan reported errors");
     Ok(())

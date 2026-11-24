@@ -132,7 +132,7 @@ impl Compositor {
         self.state
             .screens
             .iter()
-            .filter(|screen| !screen.parked && screen.config.hdr)
+            .filter(|screen| !screen.parked && screen.config.hdr.is_some())
             .map(|screen| screen.config.name.clone())
             .collect()
     }

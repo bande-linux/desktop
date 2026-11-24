@@ -430,9 +430,7 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
         let pipeline = match self.renderer.pipelines.get(&key) {
             Some(pipeline) => *pipeline,
             None if matches!(program, Program::Hdr | Program::HdrVideo) => {
-                let pipeline = self.renderer.create_pipeline(self.format, program)?;
-                self.renderer.pipelines.insert(key, pipeline);
-                pipeline
+                self.renderer.prepare_pipeline(self.format, program)?
             }
             None => return Err(RenderError::UnsupportedFormat),
         };

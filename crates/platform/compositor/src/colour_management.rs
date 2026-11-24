@@ -1,9 +1,9 @@
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Mutex, PoisonError};
+use std::time::Duration;
 
 use bande_render::{HdrContent, set_hdr_content};
-use smithay::backend::renderer::utils::with_renderer_surface_state;
-use smithay::output::Output;
+use smithay::reexports::calloop::timer::{TimeoutAction, Timer};
 use smithay::reexports::wayland_protocols::wp::color_management::v1::server::{
     wp_color_management_output_v1::{self, WpColorManagementOutputV1},
     wp_color_management_surface_feedback_v1::{self, WpColorManagementSurfaceFeedbackV1},
@@ -24,11 +24,14 @@ use smithay::reexports::wayland_server::{
 };
 use smithay::wayland::compositor::{Cacheable, with_states};
 
+use crate::screen::Screen;
 use crate::state::{Compositor, State};
 
 const VERSION: u32 = 1;
 const BRIGHTEST: u32 = 10_000;
 const REFERENCE_WHITE: u32 = 203;
+const DISPLAY_PEAK: u32 = 1_000;
+const LATE_BINDS: Duration = Duration::from_secs(10);
 const SRGB_WHITE: u32 = 80;
 const CHROMATICITY: f64 = 1_000_000.0;
 const LUMINANCE: f64 = 10_000.0;
@@ -43,20 +46,26 @@ const BT2020: [(f64, f64); 4] = [
 #[derive(Default)]
 pub(crate) struct ColourManagement {
     global: Option<GlobalId>,
-    hdr_surfaces: Vec<Weak<WlSurface>>,
+    offered: bool,
+    outputs: Vec<(WpColorManagementOutputV1, WlOutput, Description)>,
+    feedbacks: Vec<(
+        WpColorManagementSurfaceFeedbackV1,
+        Weak<WlSurface>,
+        Description,
+    )>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Description {
     Srgb,
-    Pq { max_nits: u32 },
+    Pq { max_nits: u32, darkest: u32 },
 }
 
 impl Description {
     fn content(self) -> Option<HdrContent> {
         match self {
             Self::Srgb => None,
-            Self::Pq { max_nits } => Some(HdrContent {
+            Self::Pq { max_nits, .. } => Some(HdrContent {
                 max_nits: max_nits as f32,
             }),
         }
@@ -89,6 +98,7 @@ impl Parameters {
                     .or(self.mastering_max)
                     .unwrap_or(BRIGHTEST)
                     .min(BRIGHTEST),
+                darkest: 0,
             }),
             _ => None,
         }
@@ -112,11 +122,10 @@ impl Cacheable for SurfaceDescription {
 struct Managed(AtomicBool);
 
 pub(crate) fn commit(state: &mut State, surface: &WlSurface) {
-    let management = &mut state.colour_management;
-    if management.global.is_none() && management.hdr_surfaces.is_empty() {
+    if !state.colour_management.offered {
         return;
     }
-    let content = with_states(surface, |states| {
+    with_states(surface, |states| {
         let described = states
             .cached_state
             .get::<SurfaceDescription>()
@@ -124,14 +133,15 @@ pub(crate) fn commit(state: &mut State, surface: &WlSurface) {
             .0
             .and_then(Description::content);
         set_hdr_content(states, described);
-        described
     });
-    management
-        .hdr_surfaces
-        .retain(|known| known.upgrade().is_ok_and(|known| known != *surface));
-    if content.is_some() {
-        management.hdr_surfaces.push(surface.downgrade());
-    }
+}
+
+fn light_of(screen: &Screen) -> Option<Description> {
+    let hdr = screen.config.hdr.filter(|_| screen.hdr)?;
+    Some(Description::Pq {
+        max_nits: hdr.max.map_or(DISPLAY_PEAK, |max| max.round() as u32),
+        darkest: hdr.min.map_or(0, |min| (min * LUMINANCE).round() as u32),
+    })
 }
 
 impl State {
@@ -139,7 +149,8 @@ impl State {
         let wanted = self
             .screens
             .iter()
-            .any(|screen| screen.hdr && screen.config.hdr);
+            .any(|screen| screen.hdr && screen.config.hdr.is_some());
+        self.colour_management.offered |= wanted;
         match (wanted, self.colour_management.global.take()) {
             (true, None) => {
                 self.colour_management.global = Some(
@@ -148,42 +159,79 @@ impl State {
                 );
             }
             (true, kept) => self.colour_management.global = kept,
-            (false, Some(global)) => self.display_handle.remove_global::<State>(global),
+            (false, Some(global)) => self.withdraw(global),
             (false, None) => {}
+        }
+        self.tell_preferences();
+    }
+
+    fn withdraw(&self, global: GlobalId) {
+        self.display_handle.disable_global::<State>(global.clone());
+        let kept = global.clone();
+        let removal =
+            self.blockers
+                .insert_source(Timer::from_duration(LATE_BINDS), move |_, (), state| {
+                    state.display_handle.remove_global::<State>(kept.clone());
+                    TimeoutAction::Drop
+                });
+        if let Err(error) = removal {
+            tracing::warn!("colour management stays disabled but known: {error}");
         }
     }
 
-    fn preferred(&self, output: Option<&Output>) -> Description {
-        let shows_hdr = self.screens.iter().any(|screen| {
-            screen.hdr && screen.config.hdr && output.is_none_or(|output| screen.output == *output)
-        });
-        match shows_hdr {
-            true => Description::Pq {
-                max_nits: BRIGHTEST,
-            },
-            false => Description::Srgb,
+    pub(crate) fn tell_preferences(&mut self) {
+        if !self.colour_management.offered {
+            return;
         }
+        let mut outputs = std::mem::take(&mut self.colour_management.outputs);
+        outputs.retain(|(resource, ..)| resource.is_alive());
+        for (resource, output, told) in &mut outputs {
+            let now = self.description_of(output);
+            if *told != now {
+                *told = now;
+                resource.image_description_changed();
+            }
+        }
+        self.colour_management.outputs = outputs;
+        let mut feedbacks = std::mem::take(&mut self.colour_management.feedbacks);
+        feedbacks.retain(|(resource, surface, _)| resource.is_alive() && surface.upgrade().is_ok());
+        for (resource, surface, told) in &mut feedbacks {
+            let now = self.preferred_for(surface);
+            if *told != now {
+                *told = now;
+                resource.preferred_changed(next_identity());
+            }
+        }
+        self.colour_management.feedbacks = feedbacks;
+    }
+
+    fn description_of(&self, output: &WlOutput) -> Description {
+        self.screen_of_output(output)
+            .and_then(|screen| light_of(&self.screens[screen]))
+            .unwrap_or(Description::Srgb)
+    }
+
+    fn preferred_for(&self, surface: &Weak<WlSurface>) -> Description {
+        surface
+            .upgrade()
+            .ok()
+            .map(|surface| self.screen_of_surface(&surface))
+            .and_then(|screen| light_of(self.screens.get(screen)?))
+            .unwrap_or(Description::Srgb)
     }
 }
 
 impl Compositor {
-    pub fn shows_hdr_content(&self, _output: &str) -> bool {
-        self.state
-            .colour_management
-            .hdr_surfaces
-            .iter()
-            .filter_map(|surface| surface.upgrade().ok())
-            .any(|surface| {
-                with_renderer_surface_state(&surface, |state| state.buffer().is_some())
-                    .unwrap_or(false)
-            })
-    }
-
     pub fn redraw_hdr_displays(&mut self) {
         for screen in &mut self.state.screens {
-            screen.redraw |= screen.hdr && screen.config.hdr;
+            screen.redraw |= screen.hdr && screen.config.hdr.is_some();
         }
     }
+}
+
+fn next_identity() -> u32 {
+    static IDENTITY: AtomicU32 = AtomicU32::new(1);
+    IDENTITY.fetch_add(1, Ordering::Relaxed)
 }
 
 fn init_description(
@@ -192,10 +240,9 @@ fn init_description(
     ours: bool,
     data_init: &mut DataInit<'_, State>,
 ) {
-    static IDENTITY: AtomicU32 = AtomicU32::new(1);
     let resource = data_init.init(id, DescriptionData { description, ours });
     match description {
-        Some(_) => resource.ready(IDENTITY.fetch_add(1, Ordering::Relaxed)),
+        Some(_) => resource.ready(next_identity()),
         None => resource.failed(
             Cause::Unsupported,
             "only sRGB and PQ in BT.2020 are supported".to_owned(),
@@ -226,7 +273,7 @@ impl GlobalDispatch<WpColorManagerV1, ()> for State {
 
 impl Dispatch<WpColorManagerV1, ()> for State {
     fn request(
-        _: &mut Self,
+        state: &mut Self,
         _: &Client,
         manager: &WpColorManagerV1,
         request: wp_color_manager_v1::Request,
@@ -236,7 +283,12 @@ impl Dispatch<WpColorManagerV1, ()> for State {
     ) {
         match request {
             wp_color_manager_v1::Request::GetOutput { id, output } => {
-                data_init.init(id, output);
+                let told = state.description_of(&output);
+                let resource = data_init.init(id, output.clone());
+                state
+                    .colour_management
+                    .outputs
+                    .push((resource, output, told));
             }
             wp_color_manager_v1::Request::GetSurface { id, surface } => {
                 let taken = with_states(&surface, |states| {
@@ -257,7 +309,13 @@ impl Dispatch<WpColorManagerV1, ()> for State {
                 }
             }
             wp_color_manager_v1::Request::GetSurfaceFeedback { id, surface } => {
-                data_init.init(id, surface.downgrade());
+                let surface = surface.downgrade();
+                let told = state.preferred_for(&surface);
+                let resource = data_init.init(id, surface.clone());
+                state
+                    .colour_management
+                    .feedbacks
+                    .push((resource, surface, told));
             }
             wp_color_manager_v1::Request::CreateParametricCreator { obj } => {
                 data_init.init(obj, Mutex::new(Parameters::default()));
@@ -292,10 +350,7 @@ impl Dispatch<WpColorManagementOutputV1, WlOutput> for State {
         if let wp_color_management_output_v1::Request::GetImageDescription { image_description } =
             request
         {
-            let description = match Output::from_resource(output) {
-                Some(output) => state.preferred(Some(&output)),
-                None => Description::Srgb,
-            };
+            let description = state.description_of(output);
             init_description(image_description, Some(description), true, data_init);
         }
     }
@@ -373,7 +428,7 @@ impl Dispatch<WpColorManagementSurfaceFeedbackV1, Weak<WlSurface>> for State {
             _ => return,
         };
         let alive = surface.upgrade().is_ok();
-        let preferred = state.preferred(None);
+        let preferred = state.preferred_for(surface);
         init_description(image_description, Some(preferred), true, data_init);
         if !alive {
             resource.post_error(Error::Inert, "the surface is gone");
@@ -509,19 +564,19 @@ fn describe(information: &WpImageDescriptionInfoV1, description: Description) {
             TransferFunction::Gamma22,
             (SRGB_WHITE, SRGB_WHITE),
         ),
-        Description::Pq { max_nits } => (
+        Description::Pq { .. } => (
             BT2020,
             Primaries::Bt2020,
             TransferFunction::St2084Pq,
-            (max_nits, REFERENCE_WHITE),
+            (BRIGHTEST, REFERENCE_WHITE),
         ),
     };
     let [red, green, blue, white] =
         corners.map(|(x, y)| [x, y].map(|coordinate| (coordinate * CHROMATICITY).round() as i32));
     let minimum = (0.2 * LUMINANCE).round() as u32;
-    let minimum = match description {
-        Description::Srgb => minimum,
-        Description::Pq { .. } => 0,
+    let (minimum, (darkest, brightest)) = match description {
+        Description::Srgb => (minimum, (minimum, max)),
+        Description::Pq { max_nits, darkest } => (0, (darkest, max_nits)),
     };
     information.primaries(
         red[0], red[1], green[0], green[1], blue[0], blue[1], white[0], white[1],
@@ -532,7 +587,7 @@ fn describe(information: &WpImageDescriptionInfoV1, description: Description) {
     information.target_primaries(
         red[0], red[1], green[0], green[1], blue[0], blue[1], white[0], white[1],
     );
-    information.target_luminance(minimum, max);
+    information.target_luminance(darkest, brightest);
     information.done();
 }
 

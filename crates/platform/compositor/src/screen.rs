@@ -59,7 +59,7 @@ pub struct OutputConfig {
     pub serial: String,
     pub physical_size_mm: Size<i32, Raw>,
     pub modes: Vec<OutputMode>,
-    pub hdr: bool,
+    pub hdr: Option<bande_edid::Hdr>,
 }
 
 impl OutputConfig {
@@ -74,7 +74,7 @@ impl OutputConfig {
                 size,
                 refresh: REFRESH,
             }],
-            hdr: false,
+            hdr: None,
         }
     }
 

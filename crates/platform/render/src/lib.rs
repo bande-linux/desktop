@@ -1032,12 +1032,31 @@ impl VulkanRenderer {
         self.prepare_pipelines(texel.format)
     }
 
+    /// Makes what drawing HDR content needs, ahead of the first frame with it.
+    pub fn prepare_hdr(&mut self) -> Result<(), RenderError> {
+        self.prepare_pipelines(EXTENDED_FORMAT)?;
+        for program in [Program::Hdr, Program::HdrVideo] {
+            self.prepare_pipeline(EXTENDED_FORMAT, program)?;
+        }
+        Ok(())
+    }
+
+    fn prepare_pipeline(
+        &mut self,
+        format: vk::Format,
+        program: Program,
+    ) -> Result<vk::Pipeline, RenderError> {
+        if let Some(pipeline) = self.pipelines.get(&(format, program)) {
+            return Ok(*pipeline);
+        }
+        let pipeline = self.create_pipeline(format, program)?;
+        self.pipelines.insert((format, program), pipeline);
+        Ok(pipeline)
+    }
+
     fn prepare_pipelines(&mut self, format: vk::Format) -> Result<(), RenderError> {
         for program in PREPARED_PROGRAMS {
-            if !self.pipelines.contains_key(&(format, program)) {
-                let pipeline = self.create_pipeline(format, program)?;
-                self.pipelines.insert((format, program), pipeline);
-            }
+            self.prepare_pipeline(format, program)?;
         }
         Ok(())
     }

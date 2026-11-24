@@ -81,6 +81,7 @@ struct Globals {
     frames_done: u32,
     released: Vec<WlBuffer>,
     descriptions_ready: u32,
+    preferences_changed: u32,
 }
 
 pub struct TestClient {

@@ -481,6 +481,7 @@ impl Compositor {
     }
 
     pub fn present_on(&mut self, output: &str, vblank: Vblank, flipped: bool) -> io::Result<()> {
+        self.state.tell_preferences();
         match self.state.screen_named(output) {
             Some(screen) => self.present_screen(screen, vblank, flipped),
             None => Ok(()),

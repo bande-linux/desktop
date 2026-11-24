@@ -22,7 +22,7 @@ use smithay::wayland::shm::with_buffer_contents;
 
 use crate::formats::{self, Kind};
 use crate::{
-    BYTES_PER_PIXEL, Image, PendingCopy, Rect, RenderError, Resource, TEXTURE_FOURCCS,
+    BYTES_PER_PIXEL, HdrContent, Image, PendingCopy, Rect, RenderError, Resource, TEXTURE_FOURCCS,
     TextureImage, VulkanRenderer, VulkanTexture, alpha_swizzle, disjoint, is_opaque, target_format,
 };
 
@@ -210,6 +210,21 @@ struct LinearOnly(Cell<u64>);
 #[derive(Default)]
 struct ShownFormat(Cell<Option<Format>>);
 
+#[derive(Default)]
+struct SurfaceContent(Cell<Option<HdrContent>>);
+
+/// Reads the buffers imported for this surface from now on as `content`.
+pub fn set_hdr_content(states: &SurfaceData, content: Option<HdrContent>) {
+    states.data_map.insert_if_missing(SurfaceContent::default);
+    if let Some(shown) = states.data_map.get::<SurfaceContent>() {
+        shown.0.set(content);
+    }
+}
+
+fn hdr_content(surface: Option<&SurfaceData>) -> Option<HdrContent> {
+    surface?.data_map.get::<SurfaceContent>()?.0.get()
+}
+
 struct MemorySource<'a> {
     pool: &'a [u8],
     offset: usize,
@@ -302,6 +317,7 @@ impl VulkanRenderer {
             _owned: Arc::new(self.owned(Resource::Texture(id))),
             id,
             chroma: None,
+            hdr: None,
             renderer: self.id,
             width,
             height,
@@ -335,6 +351,7 @@ impl VulkanRenderer {
             _owned: Arc::new(self.owned(Resource::Texture(id))),
             id,
             chroma: None,
+            hdr: None,
             renderer: self.id,
             width,
             height,
@@ -501,6 +518,7 @@ impl VulkanRenderer {
             _owned: Arc::new(self.owned(Resource::Texture(id))),
             id,
             chroma,
+            hdr: None,
             renderer: self.id,
             width,
             height,
@@ -718,7 +736,7 @@ impl ImportMemWl for VulkanRenderer {
             for rect in upload_rects(fresh, data.width, data.height, Some(damage)) {
                 self.stage(texture.id, &source, rect)?;
             }
-            Ok(texture)
+            Ok(texture.showing(hdr_content(surface)))
         })
         .map_err(|_| RenderError::UnknownBuffer)?
     }
@@ -749,7 +767,9 @@ impl ImportDmaWl for VulkanRenderer {
         let weak = dmabuf.weak();
         let imported = match self.failed_dmabufs.contains(&weak) {
             true => Err(RenderError::FailedBefore),
-            false => self.import_dmabuf_into(dmabuf, surface, Some(damage)),
+            false => self
+                .import_dmabuf_into(dmabuf, surface, Some(damage))
+                .map(|texture| texture.showing(hdr_content(surface))),
         };
         if let Err(error) = &imported
             && !error.is_transient()

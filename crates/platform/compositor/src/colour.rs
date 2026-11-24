@@ -1,12 +1,20 @@
 use std::sync::Arc;
 
 use bande_colour::{Curve, DISPLAY, DISPLAY_P3, Profile, SRGB, UNMANAGED, conversion as convert};
-use bande_edid::Edid;
-use bande_render::OutputColour;
+use bande_edid::{Edid, Hdr};
+use bande_render::{Encode, OutputColour};
 
 const COORDINATE_SCALE: f64 = 1024.0;
 const SRGB_PRIMARIES: [(f64, f64); 3] = [(0.64, 0.33), (0.30, 0.60), (0.15, 0.06)];
 const SAME_AS_SRGB: f64 = 0.02;
+const REFERENCE_WHITE: f64 = 203.0;
+const DISPLAY_PEAK: f64 = 1000.0;
+const GAMMA: f64 = 2.2;
+const SRGB_TO_BT2020: [[f64; 3]; 3] = [
+    [0.627_403_9, 0.329_283_0, 0.043_313_1],
+    [0.069_097_3, 0.919_540_4, 0.011_362_3],
+    [0.016_391_4, 0.088_013_3, 0.895_595_3],
+];
 const NEUTRAL: [f64; 3] = [1.0; 3];
 
 fn point((x, y): (u16, u16)) -> (f64, f64) {
@@ -52,10 +60,27 @@ pub(crate) fn converts(choice: Option<&str>) -> bool {
     !matches!(choice.unwrap_or(UNMANAGED), SRGB | UNMANAGED)
 }
 
+pub(crate) fn hdr(display: Option<&Hdr>, gains: [f64; 3], extended: bool) -> OutputColour {
+    let peak = display
+        .and_then(|display| display.max)
+        .unwrap_or(DISPLAY_PEAK);
+    let light = gains.map(|gain| gain.powf(GAMMA));
+    OutputColour {
+        matrix: SRGB_TO_BT2020
+            .map(|row| std::array::from_fn(|channel| (row[channel] * light[channel]) as f32)),
+        encode: Encode::Pq {
+            white: REFERENCE_WHITE.min(peak) as f32,
+            peak: peak as f32,
+        },
+        extended,
+    }
+}
+
 pub(crate) fn conversion(choice: Option<&str>, display: Option<&Profile>) -> Option<OutputColour> {
     let converted = convert(&profile(choice, display)?, NEUTRAL)?;
     Some(OutputColour {
         matrix: converted.matrix,
-        encode: Some(Arc::from(converted.encode)),
+        encode: Encode::Table(Arc::from(converted.encode)),
+        extended: false,
     })
 }

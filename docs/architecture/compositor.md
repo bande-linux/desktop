@@ -315,6 +315,28 @@ when they reach the screen is Bande's own.
   conversion fails shows colours as sent, and the first frame of a session on a converting display
   does not fade in over what the screen showed, as that may be converted already. While a display
   converts, nothing is scanned out directly or put on a plane. A CPU renderer does not convert.
+- **HDR.** Off unless a display's settings say `hdr` (Settings ▸ Displays ▸ HDR, shown only for displays
+  in `org.bande.Displays`' `Hdr`: the EDID states PQ and BT.2020 RGB and ten or more bits, the connector has
+  `HDR_OUTPUT_METADATA` and a `Colorspace` with BT2020_RGB, and the plane and the GPU share a 10-bit tiled
+  layout). It is a kind of buffer in the depth state machine: 10-bit tiled with the HDR signal first, then
+  everything there is without it, so a refusal ends where the display was. The signal (metadata, colour
+  space, `max bpc` and the mode) is set by one commit that also takes the frame off the planes, so nothing is
+  shown in the wrong signal; a driver that wants its primary plane gets the display switched off around it
+  instead. What another process left on the connector is never taken for Bande's: entering HDR writes
+  everything, and without HDR it is taken back before the first frame. Bande takes its own back when HDR ends,
+  when a key switches the virtual terminal (and draws HDR again only if that did not happen within half a
+  second) and whenever the process leaves, also by an error; a display that was in HDR keeps no last frame. A
+  switch from elsewhere (`chvt`, user switching) cannot be caught: seatd and logind take the device away
+  before they tell, so a text console stays in HDR until Bande returns. Frames are drawn as
+  ever into the buffer's unconverted image, in sRGB with ordinary white at 203 cd/m² (less on a
+  display whose peak is lower), and the conversion pass encodes BT.2020 and PQ; while HDR content is drawn on the
+  display that image is half-float, so light above white and colours outside sRGB survive. Night
+  Light is part of that conversion instead of the gamma ramp, and planes, the cursor plane and direct
+  scanout are not used. Captures, thumbnails and displays without HDR read HDR content tone-mapped
+  (BT.2390) to ordinary white, and it is never put on a plane. While a display has HDR on, `wp_color_manager_v1` is offered with sRGB
+  (gamma 2.2) and PQ in BT.2020, parametric and perceptual only, with each surface's preferred description following its display and
+  a description taking effect with the next buffer; without one, nothing about a
+  session differs: no global, pass, commit or property.
 - **Frame pacing.** Each output has its own scheduler (`clock.rs`) and measured timing (`pacing.rs`); no rate is assumed beyond the mode's. The vblank grid is estimated from page-flip times alone: phase and period follow a slow filter, an error over an eighth of a refresh is an outlier, eight in a row or a long idle re-anchor it, and it owns the sequence number. A frame starts at its slot minus a budget and a commit lead. The budget is the 95th percentile of the last 64 renders or the longest of the last 4 if that is more (so a spike is forgotten in 4 frames while heavier content is priced at once), plus the 99th percentile of how late the timer woke us (1 ms until one is measured; a wake too late for its slot is measured too), plus a pad that grows when a commit comes too late for its slot and decays while none do. The commit lead is how long before its slot a commit must return, learned from which vblank each flip really landed on: it starts at 35 % of a refresh, again on the first real flip, comes down until the first miss, rises when a commit with time to spare still misses (some drivers move a commit that returns too close to the flip to the next refresh), and is lowered slowly afterwards to follow changes. A frame aims at the first slot its typical render and the lead still fit before, so renders longer than a refresh aim further ahead; a wake-up past the start time still goes if that holds, and otherwise takes the next such slot. When over 5 % of 128 frames miss, the pad rises. Without flips (headless) the lead stays at its start. If no frame can start within a second, the output falls back to classic timing and says so in the log. A timer wake dispatches every ready source first, so input right up to the latch counts, and no timer runs without a wanted frame or a frame callback. The default is still the classic rule (the longest of the last 16 frames plus 1 ms); the measured timing above runs only with `BANDE_FRAME_TIMING=learned` until it is measured again on real displays. Frame callbacks are taken when a frame is latched and go out once it is committed, so a client gets the time up to the next frame's start, not what is left after the flip. A client whose time from callback to commit is known (its 95th percentile over at least 8 frames, `frame_callbacks.rs`) gets its callback that long plus 0.5 ms before the next frame starts, so it reads the latest input and its frame is shown at once; a client that misses the latch this way goes back to the early callback for a second. No timer exists unless a callback is waiting. `wp_presentation` feedback (estimated vblank time, refresh, sequence, `vsync`, on DRM also `hw_completion`) is sent at the page-flip event, or the vblank on headless; a superseded commit's feedback is discarded, and a render that overruns its vblank is presented at the next one.
 - **Window motion.** Every window state change is animated by springs on x, y, width, height
   and opacity, sampled at the frame's vblank (`Compositor::animate_on`, called by each output's
@@ -497,7 +519,8 @@ driver with only legacy gamma gets a ramp, and one with only a `CTM` a matrix. W
 there is no table at all (some drivers round to 8 bits with a legacy-size one): nothing is set on a
 display that has none, and a table, matrix or ramp another process left is taken away. Scheduled changes fade over a
 minute, switching fades in 1.5 s and a new warmth applies at once; it wakes every 50 ms only while
-fading. A display that can do none of these is left alone with one log line, and the tint is looked at
+fading. A display that can do none of these is left alone with one log line; a tint
+the display was too busy for is tried again up to five times, after 250 ms and then twice the wait each time, and the tint is looked at
 again after a session switch or wake once the first frame has flipped.
 
 ## Sleep and wake
@@ -608,6 +631,7 @@ Status is what `crates/platform/compositor` serves on `main`.
 | `zwp_pointer_constraints_v1` / `relative_pointer` | Pointer lock for games | implemented |
 | `zwp_pointer_gestures_v1` | Trackpad gestures | implemented, v3: swipes, pinches and holds the compositor does not claim go to the client under the pointer |
 | `zwp_keyboard_shortcuts_inhibit_v1` | Keyboard passthrough for VMs and remote desktop | implemented |
+| `wp_color_management_v1` | HDR video and games | parametric sRGB and PQ/BT.2020 descriptions, perceptual intent; offered only while a display has HDR on |
 | `zwlr_output_power_management_v1` | Display power for idle and lock | implemented |
 | `bande_shell_v1` (own) | Launcher, screenshots, active app, volume keys, Quick Settings, taskbar icon rectangles, apps that stopped responding; for the taskbar: hide, quit and force quit an app, activate one window by its foreign-toplevel identifier, minimized windows, attention requests, rounded blur for shell surfaces, `show_app_menu` to open an app's menus below a window's menu button, `active_menus` (version 4) with the focused window's menu address, `open_terminal` (version 5) for `Ctrl+Alt+T`, `dismiss_on_press_outside` and `move_layer` (version 7, places remembered per display in `$XDG_STATE_HOME/bande/layer-places`) for the launcher; workspaces, the workspace of each window and `show_windows` for the overview and an app's windows | implemented, shell clients only |
 | `bande_app_v1` (own, in `bande-shell-v1.xml`) | App-level requests: `quit_requested` on the bar's or the taskbar's Quit instead of closing every window; `place_window` and `move_to_workspace` for the window menu; `offer_placements` (version 8) for the Tile menu on a toolkit window's maximize control; `keep_running` (version 2) so an app outlives its last window; `end_session` (version 3) opens the Bande menu's Log Out / Restart confirmation for Software Update; `set_menu_button`, `show_menus` and `menus_open` (version 4) for a window's menu button; `kept_on_top` (version 11) when the compositor's window menu changes Keep on Top | implemented, every client |

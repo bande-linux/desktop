@@ -30,15 +30,27 @@ impl fmt::Display for Buffers {
 pub(crate) struct Shape {
     pub(crate) buffers: Buffers,
     pub(crate) format: Fourcc,
+    pub(crate) hdr: bool,
+}
+
+/// What a display's owner asks of it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Wanted {
+    pub(crate) deep: bool,
+    pub(crate) hdr: bool,
 }
 
 impl Shape {
     pub(crate) fn plain(buffers: Buffers) -> [Self; 2] {
-        PLAIN.map(|format| Self { buffers, format })
+        PLAIN.map(|format| Self {
+            buffers,
+            format,
+            hdr: false,
+        })
     }
 
     pub(crate) fn bits(self) -> u8 {
-        match DEEP.contains(&self.format) {
+        match is_deep(self.format) {
             true => 10,
             false => PLAIN_BITS,
         }
@@ -51,8 +63,16 @@ impl Shape {
 
 impl fmt::Display for Shape {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?} {}", self.format, self.buffers)
+        write!(f, "{:?} {}", self.format, self.buffers)?;
+        match self.hdr {
+            true => f.write_str(" in HDR"),
+            false => Ok(()),
+        }
     }
+}
+
+pub(crate) fn is_deep(format: Fourcc) -> bool {
+    DEEP.contains(&format)
 }
 
 pub(crate) fn plain_formats() -> [Fourcc; 2] {
@@ -72,22 +92,30 @@ pub(crate) fn fallback(buffers: Buffers) -> Option<Buffers> {
 pub(crate) struct Sink {
     depth: Option<u8>,
     max_clock_khz: Option<u32>,
+    hdr: bool,
 }
 
 impl Sink {
-    pub(crate) fn new(edid: Option<&Edid>, over_hdmi: bool) -> Self {
+    pub(crate) fn new(edid: Option<&Edid>, over_hdmi: bool, hdr_signal: bool) -> Self {
+        let hdr = hdr_signal && edid.is_some_and(|edid| edid.hdr.is_some());
         match over_hdmi {
             true => edid
                 .and_then(|edid| edid.hdmi)
                 .map_or_else(Self::default, |hdmi| Self {
                     depth: Some(hdmi.depth),
                     max_clock_khz: hdmi.max_clock_khz,
+                    hdr,
                 }),
             false => Self {
                 depth: edid.and_then(|edid| edid.depth),
                 max_clock_khz: None,
+                hdr,
             },
         }
+    }
+
+    pub(crate) fn takes_hdr(self) -> bool {
+        self.hdr && self.depth.is_some_and(|depth| depth > PLAIN_BITS)
     }
 
     #[cfg(test)]
@@ -95,6 +123,7 @@ impl Sink {
         Self {
             depth: Some(depth),
             max_clock_khz: None,
+            hdr: false,
         }
     }
 
@@ -150,10 +179,10 @@ pub(crate) struct OutputFormat<M> {
     start: Buffers,
     unusable: Vec<Shape>,
     refused: Vec<(M, Shape)>,
-    chosen_for: Option<(M, bool)>,
-    asked: Option<bool>,
+    chosen_for: Option<(M, Wanted)>,
+    asked: Option<Wanted>,
     shown: Option<(M, Shape)>,
-    kept: Option<(M, bool, Shape)>,
+    kept: Option<(M, Wanted, Shape)>,
     whole: Option<(M, Shape, Whole)>,
 }
 
@@ -172,18 +201,22 @@ impl<M: Copy + PartialEq> OutputFormat<M> {
         }
     }
 
-    pub(crate) fn needs_choice(&self, mode: M, deep: bool) -> bool {
-        self.chosen_for != Some((mode, deep))
+    pub(crate) fn needs_choice(&self, mode: M, wanted: Wanted) -> bool {
+        self.chosen_for != Some((mode, wanted))
     }
 
-    pub(crate) fn ask(&mut self, deep: bool) {
-        if self.asked.replace(deep).is_some_and(|asked| asked != deep) {
+    pub(crate) fn ask(&mut self, wanted: Wanted) {
+        if self
+            .asked
+            .replace(wanted)
+            .is_some_and(|asked| asked != wanted)
+        {
             self.forget_refusals();
         }
     }
 
-    pub(crate) fn chosen(&mut self, mode: M, deep: bool) {
-        self.chosen_for = Some((mode, deep));
+    pub(crate) fn chosen(&mut self, mode: M, wanted: Wanted) {
+        self.chosen_for = Some((mode, wanted));
     }
 
     pub(crate) fn forget_refusals(&mut self) {
@@ -193,18 +226,23 @@ impl<M: Copy + PartialEq> OutputFormat<M> {
         self.chosen_for = None;
     }
 
-    pub(crate) fn candidates(&self, (mode, clock_khz): (M, u32), deep: bool) -> Vec<Shape> {
-        if let Some((kept_mode, kept_deep, shape)) = self.kept
-            && (kept_mode, kept_deep) == (mode, deep)
+    pub(crate) fn candidates(&self, (mode, clock_khz): (M, u32), wanted: Wanted) -> Vec<Shape> {
+        if let Some((kept_mode, kept_for, shape)) = self.kept
+            && (kept_mode, kept_for) == (mode, wanted)
         {
             return vec![shape];
         }
-        let tiled = DEEP.into_iter().map(|format| Shape {
-            buffers: Buffers::Tiled,
-            format,
-        });
-        tiled
-            .filter(|shape| deep && self.sink.takes(shape.bits(), clock_khz))
+        let tiled = |hdr: bool| {
+            DEEP.into_iter().map(move |format| Shape {
+                buffers: Buffers::Tiled,
+                format,
+                hdr,
+            })
+        };
+        let in_hdr = tiled(true).filter(|_| wanted.hdr && self.sink.takes_hdr());
+        in_hdr
+            .chain(tiled(false).filter(|_| wanted.deep))
+            .filter(|shape| self.sink.takes(shape.bits(), clock_khz))
             .chain(Shape::plain(Buffers::Tiled))
             .filter(|_| self.start == Buffers::Tiled)
             .chain(Shape::plain(Buffers::Linear))
@@ -215,8 +253,8 @@ impl<M: Copy + PartialEq> OutputFormat<M> {
             .collect()
     }
 
-    pub(crate) fn keep(&mut self, mode: M, deep: bool, shape: Shape) {
-        self.kept = Some((mode, deep, shape));
+    pub(crate) fn keep(&mut self, mode: M, wanted: Wanted, shape: Shape) {
+        self.kept = Some((mode, wanted, shape));
     }
 
     pub(crate) fn refuse_depth(&mut self, mode: M, shape: Shape) {
@@ -254,7 +292,7 @@ impl<M: Copy + PartialEq> OutputFormat<M> {
     ) -> Step {
         match failure {
             Failure::Other => Step::Fail,
-            Failure::Buffers if converting => Step::ShowUnconverted,
+            Failure::Buffers if converting && !shape.hdr => Step::ShowUnconverted,
             Failure::Buffers if shape.buffers == Buffers::Dumb && !shape.is_deep() => Step::Fail,
             Failure::Buffers => {
                 let worse = match shape.is_deep() {
@@ -278,8 +316,10 @@ impl<M: Copy + PartialEq> OutputFormat<M> {
             self.whole = Some((mode, shape, Whole::Wanted));
             return Step::CommitWhole;
         }
-        let deep = self.chosen_for.is_none_or(|(_, deep)| deep);
-        if self.kept == Some((mode, deep, shape)) {
+        let wanted = self.asked;
+        if let Some(wanted) = wanted
+            && self.kept == Some((mode, wanted, shape))
+        {
             self.kept = None;
             self.refuse(mode, shape);
             return Step::LeaveMode;
@@ -289,12 +329,12 @@ impl<M: Copy + PartialEq> OutputFormat<M> {
             return Step::ChangeShape;
         }
         self.refuse(mode, shape);
-        match self
+        let shown = self
             .shown
-            .filter(|shown| shown.0 == mode && shown.1 != shape)
-        {
-            Some((_, working)) => {
-                self.keep(mode, deep, working);
+            .filter(|shown| shown.0 == mode && shown.1 != shape);
+        match wanted.zip(shown) {
+            Some((wanted, (_, working))) => {
+                self.keep(mode, wanted, working);
                 Step::ChangeShape
             }
             None => Step::LeaveMode,
@@ -323,10 +363,68 @@ impl LinkDepth {
     }
 }
 
+/// What is known of the HDR signal on a connector: set by this process, or left by another one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Signalled {
+    ours: bool,
+    left: bool,
+}
+
+impl Signalled {
+    pub(crate) fn found(left: bool) -> Self {
+        Self { ours: false, left }
+    }
+
+    /// The signal to set for frames that are HDR or not, if it has to change.
+    pub(crate) fn change(self, hdr: bool) -> Option<bool> {
+        (self.ours != hdr || self.left).then_some(hdr)
+    }
+
+    pub(crate) fn set(&mut self, hdr: bool) {
+        *self = Self {
+            ours: hdr,
+            left: false,
+        };
+    }
+
+    pub(crate) fn is_ours(self) -> bool {
+        self.ours
+    }
+
+    pub(crate) fn is_on(self) -> bool {
+        self.ours || self.left
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    #[test]
+    fn a_signal_of_ours_is_taken_back_until_that_succeeds_and_one_left_there_is_replaced() {
+        let mut signal = Signalled::found(false);
+        assert_eq!((signal.change(false), signal.is_on()), (None, false));
+        signal.set(true);
+        let plain = first(&deep(8), FAST);
+        assert_eq!(signal.change(plain.hdr), Some(false));
+        assert!(signal.is_ours(), "a refused way back leaves it ours");
+        signal.set(false);
+        assert!(!signal.is_ours() && !signal.is_on());
+
+        let left = Signalled::found(true);
+        assert_eq!(left.change(true), Some(true));
+        assert_eq!(left.change(false), Some(false));
+        assert!(left.is_on() && !left.is_ours());
+    }
+
+    const DEEPEST: Wanted = Wanted {
+        deep: true,
+        hdr: false,
+    };
+    const SHALLOW: Wanted = Wanted {
+        deep: false,
+        hdr: false,
+    };
     const FAST: (u8, u32) = (144, 575_030);
     const SLOW: (u8, u32) = (60, 243_480);
 
@@ -335,13 +433,14 @@ mod tests {
     }
 
     fn first(formats: &OutputFormat<u8>, mode: (u8, u32)) -> Shape {
-        formats.candidates(mode, true)[0]
+        formats.candidates(mode, DEEPEST)[0]
     }
 
     fn tiled(format: Fourcc) -> Shape {
         Shape {
             buffers: Buffers::Tiled,
             format,
+            hdr: false,
         }
     }
 
@@ -353,7 +452,7 @@ mod tests {
         for depth in [6, 8] {
             assert_eq!(first(&deep(depth), FAST), tiled(PLAIN[0]));
         }
-        assert_eq!(deep(10).candidates(FAST, false)[0], tiled(PLAIN[0]));
+        assert_eq!(deep(10).candidates(FAST, SHALLOW)[0], tiled(PLAIN[0]));
         for start in [Buffers::Linear, Buffers::Dumb] {
             let untiled = OutputFormat::<u8>::new(deep(10).sink, start);
             assert_eq!(first(&untiled, FAST), Shape::plain(start)[0]);
@@ -362,6 +461,7 @@ mod tests {
             Sink {
                 depth: Some(12),
                 max_clock_khz: Some(600_000),
+                hdr: false,
             },
             Buffers::Tiled,
         );
@@ -371,6 +471,57 @@ mod tests {
             first(&OutputFormat::new(Sink::default(), Buffers::Tiled), SLOW),
             tiled(PLAIN[0])
         );
+    }
+
+    #[test]
+    fn hdr_is_tried_only_when_asked_and_able_and_falls_back_to_what_there_was_without_it() {
+        let asked = Wanted {
+            deep: true,
+            hdr: true,
+        };
+        let able = Sink {
+            hdr: true,
+            ..Sink::of_depth(10)
+        };
+        let hdr = |format| Shape {
+            hdr: true,
+            ..tiled(format)
+        };
+        let mut formats = OutputFormat::new(able, Buffers::Tiled);
+        let without = formats.candidates(FAST, DEEPEST);
+        assert!(without.iter().all(|shape| !shape.hdr));
+        for unable in [
+            OutputFormat::new(Sink::of_depth(10), Buffers::Tiled),
+            OutputFormat::new(able, Buffers::Linear),
+            OutputFormat::new(
+                Sink {
+                    depth: Some(8),
+                    ..able
+                },
+                Buffers::Tiled,
+            ),
+        ] {
+            let offered = unable.candidates(FAST, asked);
+            assert!(offered.iter().all(|shape| !shape.hdr), "{offered:?}");
+        }
+        assert_eq!(
+            formats.candidates(FAST, asked),
+            [vec![hdr(DEEP[0]), hdr(DEEP[1])], without.clone()].concat()
+        );
+        let only_hdr = Wanted {
+            deep: false,
+            ..asked
+        };
+        assert_eq!(formats.candidates(FAST, only_hdr)[0], hdr(DEEP[0]));
+        formats.ask(asked);
+        formats.chosen(FAST.0, asked);
+        assert_eq!(
+            formats.after(Failure::Buffers, (FAST.0, hdr(DEEP[0])), true),
+            Step::ChangeShape,
+            "an HDR signal never carries unconverted frames"
+        );
+        assert_eq!(refuse(&mut formats, FAST, hdr(DEEP[1])), Step::ChangeShape);
+        assert_eq!(formats.candidates(FAST, asked), without);
     }
 
     fn refuse(formats: &mut OutputFormat<u8>, mode: (u8, u32), shape: Shape) -> Step {
@@ -385,10 +536,11 @@ mod tests {
     #[test]
     fn a_refused_depth_keeps_the_mode_and_is_asked_again_in_another() {
         let mut formats = deep(10);
-        formats.chosen(FAST.0, true);
+        formats.ask(DEEPEST);
+        formats.chosen(FAST.0, DEEPEST);
         let deepest = first(&formats, FAST);
         assert_eq!(refuse(&mut formats, FAST, deepest), Step::ChangeShape);
-        assert!(formats.needs_choice(FAST.0, true));
+        assert!(formats.needs_choice(FAST.0, DEEPEST));
         assert_eq!(first(&formats, FAST), tiled(PLAIN[0]));
         assert_eq!(first(&formats, SLOW), tiled(DEEP[0]));
         assert_eq!(refuse(&mut formats, FAST, tiled(PLAIN[0])), Step::LeaveMode);
@@ -400,21 +552,21 @@ mod tests {
     fn a_shape_the_display_never_takes_leaves_the_one_it_shows_in_place() {
         let mut formats = deep(10);
         let (deepest, plain) = (tiled(DEEP[0]), tiled(PLAIN[0]));
-        formats.ask(true);
-        formats.chosen(FAST.0, true);
+        formats.ask(DEEPEST);
+        formats.chosen(FAST.0, DEEPEST);
         formats.flipped(FAST.0, deepest);
-        formats.ask(false);
-        formats.chosen(FAST.0, false);
+        formats.ask(SHALLOW);
+        formats.chosen(FAST.0, SHALLOW);
         assert_eq!(refuse(&mut formats, FAST, plain), Step::ChangeShape);
-        assert_eq!(formats.candidates(FAST, false), [deepest]);
-        formats.chosen(FAST.0, false);
-        assert!(!formats.needs_choice(FAST.0, false));
-        assert_eq!(formats.candidates(FAST, true)[0], deepest);
-        assert_eq!(formats.candidates(SLOW, false)[0], plain);
+        assert_eq!(formats.candidates(FAST, SHALLOW), [deepest]);
+        formats.chosen(FAST.0, SHALLOW);
+        assert!(!formats.needs_choice(FAST.0, SHALLOW));
+        assert_eq!(formats.candidates(FAST, DEEPEST)[0], deepest);
+        assert_eq!(formats.candidates(SLOW, SHALLOW)[0], plain);
         let mut asked_again = formats.clone();
-        asked_again.ask(true);
-        asked_again.ask(false);
-        assert_eq!(asked_again.candidates(FAST, false)[0], plain);
+        asked_again.ask(DEEPEST);
+        asked_again.ask(SHALLOW);
+        assert_eq!(asked_again.candidates(FAST, SHALLOW)[0], plain);
         assert_eq!(
             refuse(&mut formats, FAST, deepest),
             Step::LeaveMode,
@@ -426,7 +578,7 @@ mod tests {
     fn a_shape_that_needs_a_mode_set_is_committed_whole_once_and_shown() {
         let mut formats = deep(10);
         let deepest = tiled(DEEP[0]);
-        formats.chosen(FAST.0, true);
+        formats.chosen(FAST.0, DEEPEST);
         assert_eq!(
             formats.after(Failure::Refused, (FAST.0, deepest), false),
             Step::CommitWhole
@@ -434,7 +586,7 @@ mod tests {
         formats.committed_whole(FAST.0, deepest);
         assert!(!formats.commits_whole(FAST.0, deepest));
         formats.flipped(FAST.0, deepest);
-        assert!(!formats.needs_choice(FAST.0, true));
+        assert!(!formats.needs_choice(FAST.0, DEEPEST));
         assert_eq!(
             formats.after(Failure::Refused, (FAST.0, deepest), false),
             Step::CommitWhole

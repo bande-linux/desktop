@@ -72,6 +72,7 @@ pub struct Display {
     pub position: (i32, i32),
     pub scale: f64,
     pub rotation: u32,
+    pub hdr: bool,
 }
 
 pub const REFRESH_RANGE: (u32, u32) = (60, 240);

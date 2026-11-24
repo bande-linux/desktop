@@ -184,7 +184,10 @@ impl EventSource for StallSource {
 
 fn publish_displays<O: FrameOutput>(app: &App<O>) {
     if let Some(displays) = &app.displays {
-        displays.publish(app.compositor.connected_displays());
+        displays.publish(
+            app.compositor.connected_displays(),
+            app.compositor.hdr_displays(),
+        );
     }
 }
 
@@ -1315,8 +1318,10 @@ where
         if compositor.take_outputs_powered_on() {
             schedulers.iter_mut().for_each(FrameScheduler::resume);
         }
-        if let Some(number) = compositor.take_virtual_terminal() {
-            output.switch_virtual_terminal(number);
+        if let Some(number) = compositor.take_virtual_terminal()
+            && output.switch_virtual_terminal(number)
+        {
+            compositor.redraw_displays();
         }
         if session == Session::Greeter && compositor.awaited_has_not_appeared(now()) {
             let hung = progress
@@ -1412,8 +1417,10 @@ where
         let night = compositor.night_light_tick(now());
         if let Some(kelvin) = night.kelvin {
             output.set_color_temperature(kelvin);
+            compositor.redraw_hdr_displays();
         }
         let night_wait = night.wake_at.map(|at| at.saturating_sub(now()));
+        let tint_wait = output.retry_tint();
         timeout = upkeep
             .retry_in
             .into_iter()
@@ -1423,6 +1430,7 @@ where
             .chain(snap_wait)
             .chain(watchdog_wait)
             .chain(night_wait)
+            .chain(tint_wait)
             .chain(reveal_wait)
             .chain(menu_wait)
             .chain(renewal_wait)

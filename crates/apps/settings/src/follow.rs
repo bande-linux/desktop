@@ -66,6 +66,7 @@ pub enum Update {
     Values(Vec<(SettingId, Value)>),
     Displays(BTreeMap<String, DisplaySettings>),
     DisplayLevels(Vec<DisplayLevel>),
+    HdrDisplays(Vec<String>),
     Arrangements(Vec<Vec<Placement>>),
     Audio(Option<bande_audio::Snapshot>),
     Wifi(Reading<WifiState>),
@@ -468,6 +469,7 @@ impl Services {
     pub fn start(session: &Connection, system: Option<&Connection>, updates: &Updates) -> Self {
         follow_config(session, updates.clone());
         follow_notifications(session, updates.clone());
+        crate::displays::follow_hdr(session, updates.clone());
         let layouts = updates.clone();
         spawn("layouts", move || {
             layouts.send(Update::Layouts(Layouts::load()));

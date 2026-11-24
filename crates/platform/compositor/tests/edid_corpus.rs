@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use bande_colour::{Profile, conversion, inverse};
 use bande_compositor::{edid_profile, refresh_of, sorted_modes};
-use bande_edid::{Edid, Hdmi, Primaries, display_name, identity, parse};
+use bande_edid::{Edid, Hdmi, Hdr, Primaries, display_name, identity, parse};
 use drm_ffi::{DRM_MODE_FLAG_INTERLACE, DRM_MODE_TYPE_DRIVER, DRM_MODE_TYPE_PREFERRED};
 use smithay::reexports::drm::control::{Mode, ModeFlags};
 
@@ -463,6 +463,46 @@ fn the_bits_a_display_takes_come_from_every_block_that_states_them() {
     }
     display_id[BLOCK + 7] = 200;
     assert_eq!(depth(&display_id), None, "a block past its section");
+}
+
+#[test]
+fn a_display_takes_hdr_when_it_states_pq_and_bt2020() {
+    let folder = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/edid");
+    let text = std::fs::read_to_string(folder.join("msi-g274qpx")).expect("a curated EDID");
+    let bytes = hex_lines(&text);
+    let hdr = |bytes: &[u8]| parse(bytes).and_then(|edid| edid.hdr);
+    let stated = hdr(&bytes).expect("HDR");
+    let near = |found: Option<f64>, wanted: f64| {
+        found.is_some_and(|found| (found - wanted).abs() < wanted / 100.0)
+    };
+    assert!(
+        near(stated.max, 417.7) && near(stated.max_average, 391.4),
+        "{stated:?}"
+    );
+    assert!(near(stated.min, 0.06996), "{stated:?}");
+    let at = |tag: &[u8]| {
+        bytes
+            .windows(tag.len())
+            .position(|window| window == tag)
+            .expect("the block")
+    };
+    let metadata = at(&[0xe6, 0x06]);
+    let colorimetry = at(&[0xe3, 0x05]);
+    for (place, value) in [(metadata + 2, 0x03), (colorimetry + 2, 0x40)] {
+        let mut without = bytes.clone();
+        without[place] = value;
+        assert_eq!(hdr(&without), None);
+    }
+    let mut silent = bytes.clone();
+    silent[metadata + 4..metadata + 7].fill(0);
+    assert_eq!(
+        hdr(&silent),
+        Some(Hdr {
+            max: None,
+            max_average: None,
+            min: None
+        })
+    );
 }
 
 #[test]

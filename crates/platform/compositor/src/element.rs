@@ -153,6 +153,17 @@ pub(crate) fn keep_backdrops_whole(
     }
 }
 
+impl ScreenElement {
+    pub fn shows_hdr(&self) -> bool {
+        match &self.inner {
+            OutputElement::Surface(surface) => surface.shows_hdr(),
+            OutputElement::Window(window) => window.inner().shows_hdr(),
+            OutputElement::Closing(closing) => closing.inner().shows_hdr(),
+            _ => false,
+        }
+    }
+}
+
 impl Element for ScreenElement {
     fn id(&self) -> &Id {
         self.inner.id()
@@ -239,6 +250,10 @@ impl From<WaylandSurfaceRenderElement<VulkanRenderer>> for OutputElement {
 }
 
 impl SurfaceElement {
+    pub(crate) fn shows_hdr(&self) -> bool {
+        self.texture().is_some_and(VulkanTexture::is_hdr)
+    }
+
     pub(crate) fn texture(&self) -> Option<&VulkanTexture> {
         match self.0.texture() {
             WaylandSurfaceTexture::Texture(texture) => Some(texture),
@@ -319,6 +334,9 @@ impl RenderElement<VulkanRenderer> for SurfaceElement {
     }
 
     fn underlying_storage(&self, renderer: &mut VulkanRenderer) -> Option<UnderlyingStorage<'_>> {
-        self.0.underlying_storage(renderer)
+        match self.shows_hdr() {
+            true => None,
+            false => self.0.underlying_storage(renderer),
+        }
     }
 }

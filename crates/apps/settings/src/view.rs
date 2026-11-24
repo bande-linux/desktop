@@ -282,6 +282,7 @@ pub struct SettingsView {
     pub(crate) values: HashMap<SettingId, Value>,
     pub(crate) display_settings: BTreeMap<String, DisplaySettings>,
     pub(crate) display_levels: Vec<DisplayLevel>,
+    hdr_displays: Vec<String>,
     pub(crate) arrangements: Vec<Vec<Placement>>,
     pub(crate) displays: Vec<Display>,
     pub(crate) keep: Option<Trial>,
@@ -408,6 +409,7 @@ impl SettingsView {
             values: HashMap::new(),
             display_settings: BTreeMap::new(),
             display_levels: Vec::new(),
+            hdr_displays: Vec::new(),
             arrangements: Vec::new(),
             displays: Vec::new(),
             keep: None,
@@ -627,6 +629,13 @@ impl SettingsView {
     }
 
     pub fn set_displays(&mut self, displays: Vec<Display>) {
+        let displays: Vec<Display> = displays
+            .into_iter()
+            .map(|display| Display {
+                hdr: self.hdr_displays.contains(&display.connector),
+                ..display
+            })
+            .collect();
         if self.displays != displays {
             self.displays = displays;
             self.availability_changed();
@@ -769,6 +778,7 @@ impl SettingsView {
             | Update::PictureChosen(..)
             | Update::AccountCreated(_) => (Some(PaneId::Users), &[SettingId::Accounts]),
             Update::DisplayLevels(_) => (Some(PaneId::Displays), &[SettingId::Brightness]),
+            Update::HdrDisplays(_) => (Some(PaneId::Displays), &[SettingId::Hdr]),
             Update::Passwords(..) | Update::RevealedPassword(..) => {
                 (Some(PaneId::Passwords), &[SettingId::SavedPasswords])
             }
@@ -797,6 +807,10 @@ impl SettingsView {
             }
             Update::Displays(displays) => self.display_settings = displays,
             Update::DisplayLevels(levels) => self.display_levels = levels,
+            Update::HdrDisplays(connectors) => {
+                self.hdr_displays = connectors;
+                self.set_displays(self.displays.clone());
+            }
             Update::Arrangements(arrangements) => self.arrangements = arrangements,
             Update::Audio(snapshot) => self.apply_audio(snapshot),
             Update::Wifi(wifi) => {
@@ -2679,6 +2693,9 @@ impl SettingsView {
             }
             (SettingId::DeepColour, Value::Flag(on)) => {
                 display.deep_colour = (!on).then_some(false);
+            }
+            (SettingId::Hdr, Value::Flag(on)) => {
+                display.hdr = on.then_some(true);
             }
             _ => return,
         }

@@ -83,6 +83,7 @@ pub(crate) struct ExclusiveLayer {
 pub struct State {
     pub(crate) display_handle: DisplayHandle,
     pub(crate) globals: Globals,
+    pub(crate) colour_management: crate::colour_management::ColourManagement,
     pub(crate) blockers: smithay::reexports::calloop::LoopHandle<'static, State>,
     pub(crate) in_flight: crate::drawing::InFlight,
     pub(crate) consent_file: PathBuf,
@@ -263,6 +264,7 @@ impl Compositor {
         let mut state = State {
             display_handle: handle.clone(),
             globals,
+            colour_management: Default::default(),
             blockers: fences.handle(),
             in_flight: crate::drawing::InFlight::default(),
             consent_file: crate::trust::default_consent_file(),
@@ -479,6 +481,7 @@ impl Compositor {
     }
 
     pub fn present_on(&mut self, output: &str, vblank: Vblank, flipped: bool) -> io::Result<()> {
+        self.state.tell_preferences();
         match self.state.screen_named(output) {
             Some(screen) => self.present_screen(screen, vblank, flipped),
             None => Ok(()),

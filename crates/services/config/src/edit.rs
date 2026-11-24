@@ -647,6 +647,7 @@ fn set_display(document: &mut KdlDocument, identity: &str, display: &DisplaySett
             "deep-colour",
             display.deep_colour.map(|on| vec![KdlValue::Bool(on)]),
         ),
+        ("hdr", display.hdr.map(|on| vec![KdlValue::Bool(on)])),
     ];
     let position = document.nodes().iter().position(|node| {
         node.name().value() == "display"

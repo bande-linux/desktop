@@ -6,6 +6,7 @@ pub use separate::{SeparateApp, act_as_separate_app};
 pub use toplevel::PopupRequest;
 pub use wayland_protocols::xdg::shell::client::xdg_positioner::ConstraintAdjustment;
 mod backdrop;
+mod colour;
 mod drive;
 mod frames;
 mod ime;
@@ -79,6 +80,8 @@ struct Globals {
     input_method: ime::InputMethod,
     frames_done: u32,
     released: Vec<WlBuffer>,
+    descriptions_ready: u32,
+    preferences_changed: u32,
 }
 
 pub struct TestClient {

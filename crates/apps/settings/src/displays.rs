@@ -12,6 +12,7 @@ use wayland_protocols_wlr::output_management::v1::client::{
     zwlr_output_mode_v1::{self, ZwlrOutputModeV1},
 };
 
+use crate::follow::{Update, Updates, spawn};
 use crate::state::{Display, Mode};
 
 const MANAGER_VERSION: u32 = 4;
@@ -236,4 +237,34 @@ impl Displays {
         }
         std::mem::take(&mut self.heads.changed).then(|| self.list())
     }
+}
+
+#[zbus::proxy(
+    interface = "org.bande.Displays",
+    default_service = "org.bande.Displays",
+    default_path = "/org/bande/Displays"
+)]
+trait CompositorDisplays {
+    #[zbus(property)]
+    fn hdr(&self) -> zbus::Result<Vec<String>>;
+}
+
+pub fn follow_hdr(session: &zbus::blocking::Connection, updates: Updates) {
+    let session = session.clone();
+    spawn("hdr-displays", move || {
+        let follow = || -> zbus::Result<()> {
+            let displays = CompositorDisplaysProxyBlocking::new(&session)?;
+            let changes = displays.receive_hdr_changed();
+            updates.send(Update::HdrDisplays(displays.hdr()?));
+            for change in changes {
+                if !updates.send(Update::HdrDisplays(change.get()?)) {
+                    break;
+                }
+            }
+            Ok(())
+        };
+        if let Err(error) = follow() {
+            tracing::warn!("cannot learn which displays show HDR: {error}");
+        }
+    });
 }

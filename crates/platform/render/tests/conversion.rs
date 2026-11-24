@@ -3,7 +3,7 @@ use std::fs::OpenOptions;
 use std::os::unix::fs::MetadataExt;
 use std::sync::Arc;
 
-use bande_render::{OffscreenTarget, OutputColour, VulkanRenderer, vulkan_errors};
+use bande_render::{Encode, OffscreenTarget, OutputColour, VulkanRenderer, vulkan_errors};
 use smithay::backend::allocator::dmabuf::{AsDmabuf, Dmabuf};
 use smithay::backend::allocator::gbm::{GbmAllocator, GbmBuffer, GbmBufferFlags, GbmDevice};
 use smithay::backend::allocator::{Allocator, Fourcc, Modifier};
@@ -117,7 +117,8 @@ fn profile(matrix: [[f32; 3]; 3]) -> OutputColour {
         .collect();
     OutputColour {
         matrix,
-        encode: Some(Arc::from(encode)),
+        encode: Encode::Table(Arc::from(encode)),
+        extended: false,
     }
 }
 

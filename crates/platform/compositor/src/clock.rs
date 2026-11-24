@@ -245,7 +245,14 @@ pub trait FrameOutput {
 
     fn set_color_temperature(&mut self, _kelvin: f64) {}
 
-    fn switch_virtual_terminal(&mut self, _number: i32) {}
+    fn retry_tint(&mut self) -> Option<Duration> {
+        None
+    }
+
+    /// Whether displays went dark for it and have to be drawn again.
+    fn switch_virtual_terminal(&mut self, _number: i32) -> bool {
+        false
+    }
 
     fn renew_failed_renderer(&mut self) -> Result<bool, Self::Error> {
         Ok(false)
@@ -683,7 +690,7 @@ impl FrameScheduler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::output_format::{Buffers, Failure, OutputFormat, Shape, Sink};
+    use crate::output_format::{Buffers, Failure, OutputFormat, Shape, Sink, Wanted};
 
     struct Counted(u32);
 
@@ -735,14 +742,18 @@ mod tests {
     }
 
     const MODE: (u8, u32) = (144, 575_030);
+    const DEEP: Wanted = Wanted {
+        deep: true,
+        hdr: false,
+    };
 
     impl FrameOutput for Failing {
         type Error = io::Error;
 
         fn submit(&mut self, _: &mut Compositor, _: &str) -> io::Result<Submission> {
-            if self.formats.needs_choice(MODE.0, true) {
-                self.shape = self.formats.candidates(MODE, true)[0];
-                self.formats.chosen(MODE.0, true);
+            if self.formats.needs_choice(MODE.0, DEEP) {
+                self.shape = self.formats.candidates(MODE, DEEP)[0];
+                self.formats.chosen(MODE.0, DEEP);
             }
             let Some(failure) = self.failures.pop() else {
                 self.shown.push(self.shape);
@@ -763,7 +774,7 @@ mod tests {
         let refresh = Duration::from_secs_f64(1.0 / 60.0);
         let plain = |buffers| Shape::plain(buffers)[0];
         let deep =
-            OutputFormat::<u8>::new(Sink::of_depth(10), Buffers::Tiled).candidates(MODE, true)[0];
+            OutputFormat::<u8>::new(Sink::of_depth(10), Buffers::Tiled).candidates(MODE, DEEP)[0];
         for (start, converting, failure, wanted) in [
             (deep, true, Failure::Buffers, deep),
             (deep, false, Failure::Refused, plain(Buffers::Tiled)),
@@ -781,8 +792,8 @@ mod tests {
             ),
         ] {
             let mut formats = OutputFormat::new(Sink::of_depth(10), Buffers::Tiled);
-            while formats.candidates(MODE, true)[0] != start {
-                let shape = formats.candidates(MODE, true)[0];
+            while formats.candidates(MODE, DEEP)[0] != start {
+                let shape = formats.candidates(MODE, DEEP)[0];
                 formats.after(Failure::Buffers, (MODE.0, shape), false);
             }
             let mut output = Failing {

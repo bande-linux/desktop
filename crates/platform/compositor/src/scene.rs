@@ -241,6 +241,12 @@ pub struct WindowElement<E> {
     clip: RoundedRect,
 }
 
+impl<E> WindowElement<E> {
+    pub(crate) fn inner(&self) -> &E {
+        &self.inner
+    }
+}
+
 impl<E: Element> WindowElement<E> {
     pub(crate) fn new(inner: E, placement: Placement, clip: RoundedRect) -> Self {
         Self {
@@ -409,6 +415,10 @@ pub struct PieceElement {
 }
 
 impl PieceElement {
+    pub(crate) fn shows_hdr(&self) -> bool {
+        self.piece.texture.is_hdr()
+    }
+
     pub(crate) fn new(piece: Piece, alpha: f32) -> Self {
         Self {
             piece,

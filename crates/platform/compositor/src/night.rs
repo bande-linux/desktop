@@ -43,7 +43,7 @@ fn white_point(kelvin: f64) -> [f64; 3] {
     [red, green, blue].map(|gain| gain.clamp(0.0, 1.0))
 }
 
-fn gains(kelvin: f64) -> [f64; 3] {
+pub(crate) fn gains(kelvin: f64) -> [f64; 3] {
     let neutral = white_point(NEUTRAL);
     let warm = white_point(kelvin);
     [0, 1, 2].map(|channel| (warm[channel] / neutral[channel]).min(1.0))

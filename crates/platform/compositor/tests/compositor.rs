@@ -8,8 +8,8 @@ use std::time::{Duration, Instant};
 
 use bande_compositor::background;
 use bande_compositor::{
-    Compositor, KEYBOARD_MONITOR_NAME, OutputConfig, SCREEN_READER_NAME, SessionReport,
-    UNRESPONSIVE_AFTER, serve_keyboard_monitor,
+    Compositor, KEYBOARD_MONITOR_NAME, OutputConfig, SCREEN_READER_NAME, ScreenElement,
+    SessionReport, UNRESPONSIVE_AFTER, serve_keyboard_monitor,
 };
 use bande_render::{OffscreenTarget, VulkanRenderer};
 use bande_test_bus::SessionBus;
@@ -25,7 +25,7 @@ use smithay::backend::allocator::dmabuf::{AsDmabuf, Dmabuf};
 use smithay::backend::allocator::gbm::{GbmAllocator, GbmBufferFlags, GbmDevice};
 use smithay::backend::allocator::{Allocator, Buffer, Fourcc, Modifier};
 use smithay::backend::renderer::damage::OutputDamageTracker;
-use smithay::backend::renderer::element::Element;
+use smithay::backend::renderer::element::{Element, RenderElement};
 use smithay::backend::renderer::{Bind, Offscreen};
 use smithay::utils::{Rectangle, Transform};
 use wayland_client::protocol::wl_shm::Format;
@@ -404,6 +404,91 @@ fn an_idle_window_is_not_drawn_again_and_still_gets_a_frame_when_it_asks() {
 }
 
 #[test]
+fn hdr_content_is_taken_only_while_a_display_shows_hdr_and_stays_visible_elsewhere() {
+    let grey = [148, 148, 148, 0xff].repeat(64 * 64);
+    let image = ShmImage {
+        width: 64,
+        height: 64,
+        stride: 256,
+        format: Format::Argb8888,
+        bytes: &grey,
+    };
+    let mut server = headless(64, 64);
+    let mut client = TestClient::connect(&mut server);
+    assert!(!client.offered_colour_management());
+    let output = server.main_output();
+    let config = OutputConfig {
+        hdr: Some(bande_edid::Hdr {
+            max: Some(400.0),
+            max_average: None,
+            min: Some(0.05),
+        }),
+        ..OutputConfig::virtual_display(&output, (64, 64).into())
+    };
+    let identity = config.identity();
+    server.refit_output(config);
+    let hdr = |on: bool| {
+        bande_config::Config::parse(&format!("display \"{identity}\" {{ hdr #{on} }}"))
+            .expect("a display setting")
+    };
+    server.set_display_config(hdr(true));
+    client.exchange(&mut server);
+    assert!(client.offered_colour_management());
+
+    client.show_window(&mut server, &image);
+    let centre = |server: &mut Compositor| {
+        let mut renderer = bande_compositor::Renderer::new().expect("a renderer");
+        renderer.render(server).expect("a frame");
+        let frame = renderer.snapshot(server).expect("a snapshot");
+        let at = ((frame.size.h / 2 * frame.size.w + frame.size.w / 2) * 4) as usize;
+        frame.rgba[at]
+    };
+    client.make_full_screen(&mut server, 0);
+    client.commit_buffer(0, &image, (0, 0, 64, 64));
+    idle(&mut Frames::start(), &mut server, Duration::from_secs(1));
+    let mut vulkan = VulkanRenderer::new(None).expect("a renderer");
+    let mut shown = |server: &mut Compositor| {
+        let elements = server.render_elements_on(&mut vulkan, &output);
+        let scanned = elements
+            .iter()
+            .filter_map(|element| element.underlying_storage(&mut vulkan))
+            .count();
+        (elements.iter().any(ScreenElement::shows_hdr), scanned)
+    };
+    assert_eq!(shown(&mut server), (false, 1), "a plain buffer for a plane");
+    assert_eq!(centre(&mut server), 148, "plain content as it is");
+    let described = client.describe_as_pq(&mut server, 0, 203);
+    client.commit_buffer(0, &image, (0, 0, 64, 64));
+    client.exchange(&mut server);
+    assert_eq!(
+        shown(&mut server),
+        (true, 0),
+        "HDR content goes to no plane"
+    );
+    assert!(
+        centre(&mut server) >= 253,
+        "PQ 203 cd/m² is the white of an ordinary frame"
+    );
+    described.unset_image_description();
+    client.commit_buffer(0, &image, (0, 0, 64, 64));
+    client.exchange(&mut server);
+    assert_eq!(shown(&mut server), (false, 1));
+    assert_eq!(centre(&mut server), 148);
+
+    let mut late = TestClient::connect(&mut server);
+    late.show_window(&mut server, &image);
+    client.follow_preferences(&mut server, 0);
+    server.set_display_config(hdr(false));
+    late.describe_as_pq(&mut server, 0, 203);
+    client.exchange(&mut server);
+    assert_eq!(client.preferences_changed(), 1);
+    assert!(!TestClient::connect(&mut server).offered_colour_management());
+    server.set_display_config(hdr(true));
+    client.exchange(&mut server);
+    assert_eq!(client.preferences_changed(), 2);
+}
+
+#[test]
 fn a_window_dragged_over_scanout_buffers_leaves_the_frame_a_full_redraw_draws() {
     drag_over_scanout_buffers(None);
 }
@@ -415,7 +500,8 @@ fn a_window_dragged_on_a_wide_gamut_display_leaves_the_frame_a_full_redraw_draws
         .expect("a Display P3 conversion");
     drag_over_scanout_buffers(Some(bande_render::OutputColour {
         matrix: converted.matrix,
-        encode: Some(Arc::from(converted.encode)),
+        encode: bande_render::Encode::Table(Arc::from(converted.encode)),
+        extended: false,
     }));
 }
 

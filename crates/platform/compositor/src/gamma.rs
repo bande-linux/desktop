@@ -1,4 +1,5 @@
 use std::os::fd::AsFd;
+use std::time::Duration;
 use std::{fmt, io};
 
 use smithay::backend::drm::DrmDevice;
@@ -9,13 +10,15 @@ use crate::night::{NEUTRAL, matrix, ramp};
 
 const RAMP_SLACK: u16 = 1;
 const ENTRY: usize = 8;
+const RETRIES: u32 = 5;
+const FIRST_RETRY: Duration = Duration::from_millis(250);
 
 /// How a CRTC is tinted: with a table of its own size, with a legacy ramp where that is all there
 /// is, with a matrix, or not at all.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Tint {
     Table(Table),
-    Ramp(usize),
+    Ramp(Ramp),
     Matrix(property::Handle),
     Fixed,
 }
@@ -24,7 +27,7 @@ impl fmt::Display for Tint {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Table(table) => write!(f, "a table of {} entries", table.size),
-            Self::Ramp(size) => write!(f, "a legacy ramp of {size} entries"),
+            Self::Ramp(ramp) => write!(f, "a legacy ramp of {} entries", ramp.size),
             Self::Matrix(_) => f.write_str("a colour matrix"),
             Self::Fixed => f.write_str("nothing"),
         }
@@ -36,6 +39,39 @@ pub(crate) struct Table {
     gamma: property::Handle,
     size: usize,
     before: Vec<property::Handle>,
+}
+
+/// A legacy ramp. Where it stands in for a table the kernel keeps it in that table, and only the
+/// table's property says whether one is shown.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct Ramp {
+    size: usize,
+    within: Option<Table>,
+}
+
+/// When a tint that failed is tried again by itself: a few times, each after twice the wait.
+#[derive(Debug, Default, Clone, Copy)]
+pub(crate) struct TintRetry {
+    tries: u32,
+    due: Option<Duration>,
+}
+
+impl TintRetry {
+    pub(crate) fn failed(&mut self, now: Duration) {
+        if self.due.is_none() && self.tries < RETRIES {
+            self.due = Some(now + FIRST_RETRY * 2_u32.pow(self.tries));
+        }
+    }
+
+    pub(crate) fn is_due(&mut self, now: Duration) -> bool {
+        let due = self.due.take_if(|due| *due <= now).is_some();
+        self.tries += u32::from(due);
+        due
+    }
+
+    pub(crate) fn wait(self, now: Duration) -> Option<Duration> {
+        self.due.map(|due| due.saturating_sub(now))
+    }
 }
 
 impl Tint {
@@ -63,18 +99,33 @@ impl Tint {
             .get_crtc(crtc)
             .map_or(0, |info| info.gamma_length() as usize);
         match find("CTM") {
-            _ if length > 0 => Self::Ramp(length),
+            _ if length > 0 => Self::Ramp(Ramp {
+                size: length,
+                within: None,
+            }),
             Some((_, property, _)) => Self::Matrix(*property),
             None => Self::Fixed,
         }
     }
 
     pub(crate) fn instead(&self, device: &DrmDevice, crtc: crtc::Handle) -> Option<Self> {
+        if let Self::Table(table)
+        | Self::Ramp(Ramp {
+            within: Some(table),
+            ..
+        }) = self
+            && let Err(error) = table.clear(device, crtc)
+        {
+            tracing::warn!("a colour table stays: {error}");
+        }
         let length = device
             .get_crtc(crtc)
             .map_or(0, |info| info.gamma_length() as usize);
         match self {
-            Self::Table(_) if length > 0 => Some(Self::Ramp(length)),
+            Self::Table(table) if length > 0 => Some(Self::Ramp(Ramp {
+                size: length,
+                within: Some(table.clone()),
+            })),
             Self::Table(_) | Self::Ramp(_) | Self::Matrix(_) => Some(Self::Fixed),
             Self::Fixed => None,
         }
@@ -94,7 +145,11 @@ impl Tint {
                 true => table.clear(device, crtc),
                 false => table.set(device, crtc, kelvin),
             },
-            Self::Ramp(size) => {
+            Self::Ramp(Ramp {
+                within: Some(table),
+                ..
+            }) if neutral => table.clear(device, crtc),
+            Self::Ramp(Ramp { size, .. }) => {
                 if neutral && shows_linear(device, crtc, *size)? {
                     return Ok(());
                 }
@@ -200,6 +255,27 @@ fn entries([red, green, blue]: &[Vec<u16>; 3]) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_failing_tint_is_tried_again_a_few_times_with_growing_waits_and_then_wakes_nothing() {
+        let mut retry = TintRetry::default();
+        let mut now = Duration::ZERO;
+        assert_eq!(retry.wait(now), None);
+        retry.failed(now);
+        let mut waits = Vec::new();
+        while let Some(wait) = retry.wait(now) {
+            assert!(!retry.is_due(now), "not before its time");
+            retry.failed(now);
+            assert_eq!(retry.wait(now), Some(wait), "a flip puts nothing off");
+            waits.push(wait.as_millis());
+            now += wait;
+            assert!(retry.is_due(now));
+            retry.failed(now);
+        }
+        assert_eq!(waits, [250, 500, 1000, 2000, 4000]);
+        retry.failed(now);
+        assert_eq!(retry.wait(now), None, "flips alone do not wake it again");
+    }
 
     #[test]
     fn only_a_straight_ramp_counts_as_none_and_a_table_fills_every_entry() {

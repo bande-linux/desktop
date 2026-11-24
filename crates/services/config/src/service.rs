@@ -470,6 +470,7 @@ fn display_settings(settings: &HashMap<String, OwnedValue>) -> zbus::fdo::Result
             "deep-colour" => {
                 display.deep_colour = Some(bool::try_from(value).map_err(|_| mismatch())?)
             }
+            "hdr" => display.hdr = Some(bool::try_from(value).map_err(|_| mismatch())?),
             _ => return Err(InvalidArgs(format!("unknown display setting `{key}`"))),
         }
     }
@@ -1726,6 +1727,7 @@ impl ConfigInterface {
                         "deep-colour",
                         display.deep_colour.and_then(|on| owned(on.into())),
                     ),
+                    ("hdr", display.hdr.and_then(|on| owned(on.into()))),
                 ]
                 .into_iter()
                 .filter_map(|(key, value)| Some((key.to_owned(), value?)))

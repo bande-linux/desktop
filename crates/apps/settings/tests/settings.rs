@@ -75,7 +75,37 @@ fn moved_settings_are_found_in_their_pane_and_absent_devices_are_not() {
         PaneId::from_keyword("software-update"),
         Some(PaneId::SoftwareUpdate)
     );
-    assert_eq!(PaneId::SoftwareUpdate.parent(), None);
+    assert_eq!(PaneId::from_keyword("passwords"), Some(PaneId::Passwords));
+}
+
+#[test]
+fn a_report_is_described_while_the_pane_updates_and_sent_from_the_keyboard() {
+    let mut view = SettingsView::new(Palette::for_scheme(Scheme::Light), TextSystem::new());
+    view.scene(SIZE.0, SIZE.1);
+    view.select_pane(PaneId::Diagnostics);
+    view.scene(SIZE.0, SIZE.1);
+    let (field, _) = node_labelled(&view, "What happened? (optional)").expect("a description");
+    view.perform(&accesskit::ActionRequest {
+        action: accesskit::Action::Focus,
+        target_tree: accesskit::TreeId::ROOT,
+        target_node: field,
+        data: None,
+    });
+    for character in "It".chars() {
+        press(&mut view, Key::Character(character));
+    }
+    view.apply(vec![Update::ReportFailed]);
+    for character in " hung".chars() {
+        press(&mut view, Key::Character(character));
+    }
+    assert!(shows(&view, "Couldn’t prepare the report. Try again."));
+    view.take_commands();
+    press(&mut view, Key::Tab);
+    press(&mut view, Key::Tab);
+    press(&mut view, Key::Enter);
+    let commands = format!("{:?}", view.take_commands());
+    assert!(commands.contains("Create(\"It hung\", Send)"), "{commands}");
+    assert!(shows(&view, "Preparing the report…"));
 }
 
 #[test]

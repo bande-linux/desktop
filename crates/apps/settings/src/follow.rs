@@ -28,7 +28,7 @@ use crate::brightness::follow_brightness;
 use crate::client::{CONFIG_SETTINGS, SettingsClient};
 use crate::consent::{KeyboardAccess, follow_keyboard_access};
 use crate::defaults::{DefaultApp, DefaultAppCommand, follow_default_apps};
-use crate::diagnostics::{Diagnostics, DiagnosticsCommand, follow_diagnostics};
+use crate::diagnostics::{After, Diagnostics, DiagnosticsCommand, follow_diagnostics};
 use crate::enterprise::Certificate;
 use crate::failure::{explained, pane_failed, sentence};
 use crate::handover::{HandOver, hand_over};
@@ -83,7 +83,8 @@ pub enum Update {
     Storage(Storage),
     Diagnostics(Diagnostics),
     DiagnosticsReport(String, String),
-    ReportCreated(String),
+    ReportCreated(String, After),
+    ReportFailed,
     ReportSaved(String),
     Backup(BackupUpdate),
     Time(Option<TimeState>),

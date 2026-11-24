@@ -27,7 +27,9 @@ use crate::about::{About, AboutCommand};
 use crate::backup::{BackupIntent, BackupView};
 use crate::battery::{BatteryCommand, PowerState};
 use crate::defaults::{DefaultApp, DefaultAppCommand};
-use crate::diagnostics::{Diagnostics, DiagnosticsCommand};
+use crate::diagnostics::{
+    After, DESCRIPTION, Diagnostics, DiagnosticsCommand, Progress, ReportForm,
+};
 use crate::enterprise::{Certificate, EnterpriseField};
 use crate::follow::{Command, Update};
 use crate::forget::Forget;
@@ -139,7 +141,8 @@ pub(crate) enum Intent {
     SendReport(String),
     SetSendingReports(bool),
     DraftReportDescription(String),
-    CreateReport(()),
+    CreateReport(After),
+    OpenPrivacy(String),
     SaveReport((String, String)),
     DefaultPrinter(String),
     Sharing(SharingCommand),
@@ -301,6 +304,7 @@ pub struct SettingsView {
     pub(crate) pointing: PointingDevices,
     pub(crate) about: Option<About>,
     pub(crate) diagnostics: Diagnostics,
+    pub(crate) report_form: ReportForm,
     report_wanted: Option<String>,
     pub(crate) storage: Option<Storage>,
     pub(crate) files_installed: bool,
@@ -426,6 +430,7 @@ impl SettingsView {
             pointing: PointingDevices::default(),
             about: None,
             diagnostics: Diagnostics::default(),
+            report_form: ReportForm::default(),
             report_wanted: None,
             storage: None,
             files_installed: false,
@@ -959,9 +964,7 @@ impl SettingsView {
                 self.availability_changed();
             }
             Update::Diagnostics(diagnostics) => {
-                let open = self.diagnostics.open.take();
                 self.diagnostics = diagnostics;
-                self.diagnostics.open = open;
                 if let Some(wanted) = self.report_wanted.take()
                     && let Some(id) = self
                         .diagnostics
@@ -973,13 +976,21 @@ impl SettingsView {
                     self.open_report(id);
                 }
             }
-            Update::DiagnosticsReport(id, text) => self.diagnostics.open = Some((id, text)),
-            Update::ReportCreated(id) => {
-                self.select_pane(PaneId::Diagnostics);
-                self.detail = Some(Detail::Report(id));
-                self.focus_next = Some(Anchor::Back);
+            Update::DiagnosticsReport(id, text) => self.report_form.open = Some((id, text)),
+            Update::ReportCreated(id, after) => {
+                self.report_form.description.clear();
+                match after {
+                    After::Review => {
+                        self.report_form.progress = Progress::Idle;
+                        if self.pane == PaneId::Diagnostics && self.detail.is_none() {
+                            self.open_report(id);
+                        }
+                    }
+                    After::Send => self.report_form.progress = Progress::Sending(id),
+                }
             }
-            Update::ReportSaved(path) => self.diagnostics.saved = Some(path),
+            Update::ReportFailed => self.report_form.progress = Progress::Failed,
+            Update::ReportSaved(path) => self.report_form.saved = Some(path),
             Update::Storage(storage) => {
                 if storage.trash_items == 0 {
                     self.confirming_empty_trash = false;
@@ -1575,6 +1586,10 @@ impl SettingsView {
                 self.enterprise_intent(intent);
                 continue;
             }
+            if let Intent::DraftReportDescription(text) = intent {
+                self.report_form.description = text;
+                continue;
+            }
             if let Intent::PrinterAddress(address) = intent {
                 self.printer_address = address;
                 continue;
@@ -1585,7 +1600,10 @@ impl SettingsView {
             }
             self.stale = true;
             match intent {
-                Intent::Draft(..) | Intent::OtherName(..) | Intent::PrinterAddress(..) => {}
+                Intent::Draft(..)
+                | Intent::OtherName(..)
+                | Intent::PrinterAddress(..)
+                | Intent::DraftReportDescription(..) => {}
                 Intent::Back => {
                     if matches!(self.detail, Some(Detail::Account(_)))
                         && let Some(name) = self.drafts.remove(&SettingId::FullName)
@@ -1758,12 +1776,19 @@ impl SettingsView {
                 Intent::SetSendingReports(on) => self
                     .commands
                     .push(Command::Diagnostics(DiagnosticsCommand::SetSending(on))),
-                Intent::DraftReportDescription(text) => self.diagnostics.description = text,
-                Intent::CreateReport(()) => {
-                    let description = std::mem::take(&mut self.diagnostics.description);
+                Intent::OpenPrivacy(address) => {
+                    self.commands
+                        .push(Command::Diagnostics(DiagnosticsCommand::OpenPrivacy(
+                            address,
+                        )))
+                }
+                Intent::CreateReport(after) => {
+                    self.report_form.progress = Progress::Preparing;
+                    let description = self.report_form.description.trim().to_owned();
                     self.commands
                         .push(Command::Diagnostics(DiagnosticsCommand::Create(
                             description,
+                            after,
                         )));
                 }
                 Intent::SaveReport((id, text)) => self
@@ -2116,6 +2141,7 @@ impl SettingsView {
         self.commands
             .push(Command::Diagnostics(DiagnosticsCommand::Read(id.clone())));
         self.detail = Some(Detail::Report(id));
+        self.report_form.saved = None;
         self.clear_failure();
         self.focus_next = Some(Anchor::Back);
         *self.scroll.borrow_mut() = ScrollState::default();
@@ -2730,6 +2756,9 @@ impl SettingsView {
         let typed = match &focused {
             Some(Anchor::Picker) => self.picking.as_ref().map(|(_, query)| query.clone()),
             Some(Anchor::Setting(setting, _)) => self.drafts.get(setting).cloned(),
+            Some(Anchor::Item(item)) if item == DESCRIPTION => {
+                Some(self.report_form.description.clone())
+            }
             _ => None,
         };
         let target = focused.and_then(|anchor| {

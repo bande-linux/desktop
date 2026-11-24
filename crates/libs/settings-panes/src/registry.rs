@@ -234,9 +234,7 @@ impl PaneId {
             Self::About => tr!("This computer"),
             Self::Storage => tr!("What fills the disk and how to free up space"),
             Self::SoftwareUpdate => tr!("Updates for Bande, Debian apps and firmware"),
-            Self::Diagnostics => tr!(
-                "What failed on this computer. Read each report, choose whether it is sent, or tell what went wrong."
-            ),
+            Self::Diagnostics => tr!("Problem reports from this computer"),
             Self::Backup => tr!("Hourly encrypted versions on an external disk"),
         }
     }
@@ -477,8 +475,9 @@ pub enum SettingId {
     Region,
     StoragePage,
     DiagnosticsPage,
-    DiagnosticsList,
-    SendReportForm,
+    ReportSending,
+    SendReport,
+    Reports,
     ShortcutsPage,
     Spelling,
     TextReplacements,
@@ -555,8 +554,9 @@ pub enum List {
     Shortcuts,
     About,
     Storage,
-    Diagnostics,
+    ReportSending,
     SendReport,
+    Reports,
     LargeFiles,
     Backup,
     Clock,
@@ -2031,21 +2031,30 @@ fn system_panes() -> Vec<Pane> {
                 section(
                     None,
                     vec![list(
-                        SettingId::DiagnosticsList,
-                        tr!("Reports"),
-                        tr!(
-                            "crash, crashes, freeze, hang, quit unexpectedly, core dump, log, diagnostics, report, send, bug, analytics, privacy, delete"
-                        ),
-                        List::Diagnostics,
+                        SettingId::ReportSending,
+                        tr!("Send reports automatically"),
+                        tr!("automatic, privacy, analytics, telemetry, delete reports"),
+                        List::ReportSending,
                     )],
                 ),
                 section(
                     Some(tr!("Send Report")),
                     vec![list(
-                        SettingId::SendReportForm,
+                        SettingId::SendReport,
                         tr!("Send Report"),
                         tr!("bug, report, problem, freeze, crash, feedback, send, diagnose"),
                         List::SendReport,
+                    )],
+                ),
+                section(
+                    Some(tr!("Reports")),
+                    vec![list(
+                        SettingId::Reports,
+                        tr!("Reports"),
+                        tr!(
+                            "crash, crashes, freeze, hang, quit unexpectedly, core dump, log, diagnostics"
+                        ),
+                        List::Reports,
                     )],
                 ),
             ],

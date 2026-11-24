@@ -5,7 +5,7 @@ use bande_toolkit::{Point, Rect};
 
 pub const HOUR_HEIGHT: f32 = 48.0;
 const SMALLEST_HOUR: f32 = 18.0;
-pub const GUTTER: f32 = 56.0;
+pub const GUTTER: f32 = 72.0;
 pub const DAY_HEADER: f32 = 44.0;
 pub const ALL_DAY_ROW: f32 = 22.0;
 pub const SNAP_MINUTES: i32 = 15;

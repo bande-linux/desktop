@@ -257,8 +257,6 @@ fn app_menus(view: &CalendarView, time_zones: bool) -> Vec<Entry> {
         entry(text!("Go to Today"), "today").shortcut("Ctrl+T"),
         entry(text!("Previous"), "previous"),
         entry(text!("Next"), "next"),
-        Entry::separator(),
-        entry(text!("Find"), "find").shortcut("Ctrl+F"),
     ]);
     vec![
         Entry::submenu(
@@ -277,7 +275,7 @@ fn app_menus(view: &CalendarView, time_zones: bool) -> Vec<Entry> {
                 bande_app_menu::print_item(true),
             ],
         ),
-        edit_submenu(Vec::new()),
+        edit_submenu(vec![entry(text!("Find"), "find").shortcut("Ctrl+F")]),
         Entry::submenu(&tr!("View"), view_menu),
     ]
 }

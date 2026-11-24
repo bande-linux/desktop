@@ -61,9 +61,6 @@ msgstr "Föregående"
 msgid "Next"
 msgstr "Nästa"
 
-msgid "Find"
-msgstr "Sök"
-
 msgid "File"
 msgstr "Arkiv"
 
@@ -87,6 +84,9 @@ msgstr "Importera…"
 
 msgid "Export…"
 msgstr "Exportera…"
+
+msgid "Find"
+msgstr "Sök"
 
 msgid "View"
 msgstr "Visa"

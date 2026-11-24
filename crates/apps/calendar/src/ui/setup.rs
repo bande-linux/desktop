@@ -274,17 +274,21 @@ impl AccountSetup {
         let send = sender(&self.signals);
         let field = panel.add(
             TextField::new(placeholder, value, move |text| send(make(text.to_owned())))
-                .without_text_checking(),
+                .without_text_checking()
+                .named(label, None),
         );
         panel.line(Line::new(Some(label), vec![(field, Width::Fill)], ROW));
     }
 
     fn password_line(&mut self, panel: &mut Panel) {
         let (send, entered) = (sender(&self.signals), sender(&self.signals));
-        let field = panel.add(SecureField::new("", 13.0, move |secret| {
-            send(Signal::Password(secret.to_owned()));
-            entered(Signal::Entered);
-        }));
+        let field = panel.add(
+            SecureField::new("", 13.0, move |secret| {
+                send(Signal::Password(secret.to_owned()));
+                entered(Signal::Entered);
+            })
+            .named(&tr!("Password:"), None),
+        );
         panel.line(Line::new(
             Some(&tr!("Password:")),
             vec![(field, Width::Fill)],

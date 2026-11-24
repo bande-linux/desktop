@@ -1218,6 +1218,7 @@ impl FilesView {
         self.cancel_rename();
         let mut field = TextField::new("", &shown, |_| {})
             .without_text_checking()
+            .named(&tr!("Name"), None)
             .in_place(NAME_SIZE)
             .padding(FIELD_INSET);
         field.select(match hidden_extension {
@@ -1421,12 +1422,14 @@ impl FilesView {
             .map(|folder| folder.display().to_string())
             .unwrap_or_default();
         let send = sender(&self.signals);
+        let title = tr!("Go to the folder:");
         let mut field = TextField::new("", &current, move |text| {
             send(Signal::GoTo(text.to_owned()));
         })
-        .without_text_checking();
+        .without_text_checking()
+        .named(&title, None);
         field.select(0..current.len());
-        let prompt = Prompt::new(&tr!("Go to the folder:"), "", self.choice())
+        let prompt = Prompt::new(&title, "", self.choice())
             .accessory(field)
             .button(&tr!("Cancel"), "cancel", Kind::Cancel)
             .button(&tr!("Go"), "go", Kind::Primary);

@@ -988,11 +988,11 @@ msgstr "Kommandopalett…"
 msgid "Container"
 msgstr "Container"
 
-msgid "File"
-msgstr "Arkiv"
-
 msgid "Find"
 msgstr "Sök"
+
+msgid "File"
+msgstr "Arkiv"
 
 msgid "View"
 msgstr "Visa"
@@ -1006,14 +1006,14 @@ msgstr "backend"
 msgid "Automatic"
 msgstr "Automatiskt"
 
+msgid "Subnet"
+msgstr "Subnät"
+
 msgid "New Network"
 msgstr "Nytt nätverk"
 
 msgid "A bridge network on this computer."
 msgstr "Ett bryggnätverk på den här datorn."
-
-msgid "Subnet"
-msgstr "Subnät"
 
 msgid "Filter networks"
 msgstr "Filtrera nätverk"

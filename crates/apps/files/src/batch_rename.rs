@@ -355,14 +355,19 @@ impl Widget for RenameSheet {
 }
 
 impl FilesView {
-    fn rename_field(&self, field: RenameField, text: &str) -> Box<dyn Widget> {
+    fn rename_field(
+        &self,
+        label: String,
+        field: RenameField,
+        text: &str,
+    ) -> (String, Box<dyn Widget>) {
         let send = sender(&self.signals);
-        Box::new(
-            TextField::new("", text, move |text| {
-                send(Signal::RenameField(field, text.to_owned()));
-            })
-            .without_text_checking(),
-        )
+        let input = TextField::new("", text, move |text| {
+            send(Signal::RenameField(field, text.to_owned()));
+        })
+        .without_text_checking()
+        .named(&label, None);
+        (label, Box::new(input))
     }
 
     fn rename_choice(
@@ -382,20 +387,11 @@ impl FilesView {
         let after = |after: bool| usize::from(!after);
         match state.kind {
             RuleKind::Replace => vec![
-                (
-                    tr!("Find:"),
-                    self.rename_field(RenameField::Find, &state.find),
-                ),
-                (
-                    tr!("Replace with:"),
-                    self.rename_field(RenameField::Replace, &state.replace),
-                ),
+                self.rename_field(tr!("Find:"), RenameField::Find, &state.find),
+                self.rename_field(tr!("Replace with:"), RenameField::Replace, &state.replace),
             ],
             RuleKind::Add => vec![
-                (
-                    tr!("Text:"),
-                    self.rename_field(RenameField::Text, &state.text),
-                ),
+                self.rename_field(tr!("Text:"), RenameField::Text, &state.text),
                 (
                     tr!("Where:"),
                     self.rename_choice(
@@ -422,14 +418,8 @@ impl FilesView {
                         after(state.format_after),
                     ),
                 ),
-                (
-                    tr!("Custom format:"),
-                    self.rename_field(RenameField::Name, &state.name),
-                ),
-                (
-                    tr!("Start numbers at:"),
-                    self.rename_field(RenameField::Start, &state.start),
-                ),
+                self.rename_field(tr!("Custom format:"), RenameField::Name, &state.name),
+                self.rename_field(tr!("Start numbers at:"), RenameField::Start, &state.start),
             ],
         }
     }

@@ -222,8 +222,17 @@ fn edited(
     }
 }
 
-fn field(state: &Shared, text: &str, placeholder: Text, set: fn(&mut Editing, &str)) -> TextField {
-    TextField::new(&placeholder.tr(), text, edited(state, None, set)).without_text_checking()
+fn field_row(
+    state: &Shared,
+    label: Text,
+    text: &str,
+    placeholder: Text,
+    set: fn(&mut Editing, &str),
+) -> FormLine {
+    let field = TextField::new(&placeholder.tr(), text, edited(state, None, set))
+        .without_text_checking()
+        .named(&label.tr(), None);
+    row(label, field)
 }
 
 fn security(state: &Shared, chosen: usize, set: fn(&mut Editing, usize)) -> PopUpButton {
@@ -1003,7 +1012,8 @@ impl SettingsView {
                 if let Some(condition) = state.borrow_mut().rule.conditions.get_mut(index) {
                     condition.1 = text.to_owned();
                 }
-            });
+            })
+            .named(&tr!("contains"), None);
             let label = match (index, rule.every) {
                 (0, _) => text!("If"),
                 (_, true) => text!("And if"),
@@ -1189,14 +1199,16 @@ impl SettingsView {
             edited(&self.state, Some(Signal::Identity), |editing, text| {
                 editing.description = text.to_owned();
             }),
-        );
+        )
+        .named(&tr!("Description"), None);
         let name = TextField::new(
             &tr!("Ann Lee"),
             &editing.name,
             edited(&self.state, Some(Signal::Identity), |editing, text| {
                 editing.name = text.to_owned();
             }),
-        );
+        )
+        .named(&tr!("Full name"), None);
         let signature = TextView::new(
             &tr!("No signature"),
             &editing.signature,
@@ -1204,7 +1216,8 @@ impl SettingsView {
                 editing.signature = text.to_owned();
             }),
         )
-        .visible_lines(SIGNATURE_LINES);
+        .visible_lines(SIGNATURE_LINES)
+        .named(&tr!("Signature"));
         let mut save = Button::new(&tr!("Save"), sender(&self.state, Signal::SaveServers));
         save.set_enabled(self.checking.is_none());
         let mut lines = vec![
@@ -1235,34 +1248,28 @@ impl SettingsView {
         ]);
         lines.extend([
             heading(text!("Server Settings")),
-            row(
+            field_row(
+                &self.state,
                 text!("User name"),
-                field(
-                    &self.state,
-                    &editing.user,
-                    text!("Same as the email address"),
-                    |editing, text| {
-                        editing.user = text.to_owned();
-                    },
-                ),
+                &editing.user,
+                text!("Same as the email address"),
+                |editing, text| {
+                    editing.user = text.to_owned();
+                },
             ),
-            row(
+            field_row(
+                &self.state,
                 text!("Incoming server (IMAP)"),
-                field(
-                    &self.state,
-                    &editing.incoming.0,
-                    text!("imap.example.com"),
-                    |editing, text| editing.incoming.0 = text.to_owned(),
-                ),
+                &editing.incoming.0,
+                text!("imap.example.com"),
+                |editing, text| editing.incoming.0 = text.to_owned(),
             ),
-            row(
+            field_row(
+                &self.state,
                 text!("Port"),
-                field(
-                    &self.state,
-                    &editing.incoming.1,
-                    text!("Port"),
-                    |editing, text| editing.incoming.1 = text.to_owned(),
-                ),
+                &editing.incoming.1,
+                text!("Port"),
+                |editing, text| editing.incoming.1 = text.to_owned(),
             ),
             row(
                 text!("Security"),
@@ -1270,23 +1277,19 @@ impl SettingsView {
                     editing.incoming.2 = index;
                 }),
             ),
-            row(
+            field_row(
+                &self.state,
                 text!("Outgoing server (SMTP)"),
-                field(
-                    &self.state,
-                    &editing.outgoing.0,
-                    text!("smtp.example.com"),
-                    |editing, text| editing.outgoing.0 = text.to_owned(),
-                ),
+                &editing.outgoing.0,
+                text!("smtp.example.com"),
+                |editing, text| editing.outgoing.0 = text.to_owned(),
             ),
-            row(
+            field_row(
+                &self.state,
                 text!("Port"),
-                field(
-                    &self.state,
-                    &editing.outgoing.1,
-                    text!("Port"),
-                    |editing, text| editing.outgoing.1 = text.to_owned(),
-                ),
+                &editing.outgoing.1,
+                text!("Port"),
+                |editing, text| editing.outgoing.1 = text.to_owned(),
             ),
             row(
                 text!("Security"),

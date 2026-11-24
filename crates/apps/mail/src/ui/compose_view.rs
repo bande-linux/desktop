@@ -155,6 +155,12 @@ fn rows(from: bool, bcc: bool) -> Vec<Text> {
     rows
 }
 
+fn header_field(label: &str, text: &str) -> TextField {
+    TextField::new("", text, |_| {})
+        .borderless(FIELD_FONT)
+        .named(label, None)
+}
+
 impl ComposeView {
     pub fn new(
         outgoing: Outgoing,
@@ -207,15 +213,26 @@ impl ComposeView {
         };
         let sign = host.insert(check(&tr!("Sign"), draft.sign), Rect::default());
         let encrypt = host.insert(check(&tr!("Encrypt"), draft.encrypt), Rect::default());
-        let field = |text: &str| TextField::new("", text, |_| {}).borderless(FIELD_FONT);
-        let to = host.insert(field(&joined(&draft.to)), Rect::default());
-        let cc = host.insert(field(&joined(&draft.cc)), Rect::default());
+        let to = host.insert(
+            header_field(&tr!("To:"), &joined(&draft.to)),
+            Rect::default(),
+        );
+        let cc = host.insert(
+            header_field(&tr!("Cc:"), &joined(&draft.cc)),
+            Rect::default(),
+        );
         let bcc_shown = bcc_field || !draft.bcc.is_empty();
         let bcc = match bcc_shown {
-            true => host.insert(field(&joined(&draft.bcc)), Rect::default()),
+            true => host.insert(
+                header_field(&tr!("Bcc:"), &joined(&draft.bcc)),
+                Rect::default(),
+            ),
             false => host.insert(Label::new(""), Rect::default()),
         };
-        let subject = host.insert(field(&draft.subject), Rect::default());
+        let subject = host.insert(
+            header_field(&tr!("Subject:"), &draft.subject),
+            Rect::default(),
+        );
         let sender = senders
             .iter()
             .position(|account| account.email.eq_ignore_ascii_case(&draft.from.email))
@@ -320,10 +337,7 @@ impl ComposeView {
             return;
         };
         let replaced = match shown {
-            true => host.replace(
-                self.bcc,
-                TextField::new("", "", |_| {}).borderless(FIELD_FONT),
-            ),
+            true => host.replace(self.bcc, header_field(&tr!("Bcc:"), "")),
             false => host.replace(self.bcc, Label::new("")),
         };
         if let Some(bcc) = replaced {

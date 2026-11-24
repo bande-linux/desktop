@@ -111,7 +111,11 @@ impl FilesView {
         let mut name = match controls.name.take() {
             Some(name) => name,
             None => NameControls {
-                field: self.insert(TextField::new("", &entry.name, |_| {}).without_text_checking()),
+                field: self.insert(
+                    TextField::new("", &entry.name, |_| {})
+                        .without_text_checking()
+                        .named(&tr!("Name"), None),
+                ),
                 hide: None,
                 name: entry.name.clone(),
             },

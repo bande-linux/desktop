@@ -518,7 +518,8 @@ impl SettingsView {
             &self.printer_address,
             move |text| address(text.to_owned()),
         )
-        .without_text_checking();
+        .without_text_checking()
+        .named(&tr!("Add by address"), None);
         self.anchors
             .push((Anchor::Item("printer-address".to_owned()), field.id()));
         let mut add = intent(&self.intents, |()| Intent::AddPrinterAddress);

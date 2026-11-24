@@ -202,8 +202,12 @@ impl Work {
 }
 
 fn damaged(error: &io::Error) -> bool {
-    matches!(
-        error.kind(),
-        io::ErrorKind::InvalidData | io::ErrorKind::UnexpectedEof
-    )
+    error.raw_os_error().is_none()
+        && matches!(
+            error.kind(),
+            io::ErrorKind::InvalidData
+                | io::ErrorKind::InvalidInput
+                | io::ErrorKind::UnexpectedEof
+                | io::ErrorKind::Other
+        )
 }

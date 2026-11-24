@@ -330,19 +330,20 @@ impl Inspector {
                     )
                     .separated(),
                 );
-                let field = |text: &str, signal: fn(String) -> Signal| {
+                let field = |label: &str, text: &str, signal: fn(String) -> Signal| {
                     let send = sender(signals);
                     TextField::new("", text, move |text| send(signal(text.to_owned())))
+                        .named(label, None)
                 };
-                let start_date = panel.add(field(&texts[0], Signal::StartDate));
-                let start_time = panel.add(field(&texts[1], Signal::StartTime));
+                let start_date = panel.add(field(&tr!("Start date"), &texts[0], Signal::StartDate));
+                let start_time = panel.add(field(&tr!("Start time"), &texts[1], Signal::StartTime));
                 panel.line(Line::new(
                     Some(&tr!("Starts:")),
                     vec![(start_date, Width::Fill), (start_time, Width::Fixed(80.0))],
                     ROW,
                 ));
-                let end_date = panel.add(field(&texts[2], Signal::EndDate));
-                let end_time = panel.add(field(&texts[3], Signal::EndTime));
+                let end_date = panel.add(field(&tr!("End date"), &texts[2], Signal::EndDate));
+                let end_time = panel.add(field(&tr!("End time"), &texts[3], Signal::EndTime));
                 time_fields =
                     [start_date, start_time, end_date, end_time].map(|field| panel.id_of(field));
                 panel.line(Line::new(
@@ -352,9 +353,12 @@ impl Inspector {
                 ));
                 if let Some(zone) = &zone_text {
                     let send = sender(signals);
-                    let field = panel.add(TextField::new(&tr!("Floating"), zone, move |text| {
-                        send(Signal::TimeZone(text.to_owned()))
-                    }));
+                    let field = panel.add(
+                        TextField::new(&tr!("Floating"), zone, move |text| {
+                            send(Signal::TimeZone(text.to_owned()))
+                        })
+                        .named(&tr!("Time zone:"), None),
+                    );
                     panel.line(Line::new(
                         Some(&tr!("Time zone:")),
                         vec![(field, Width::Fill)],
@@ -391,11 +395,12 @@ impl Inspector {
                     move |index| send(Signal::EndRepeatKind(index)),
                 ));
                 let send = sender(signals);
-                let end_field = panel.add(TextField::new(
-                    &tr!("times or date"),
-                    &end_text,
-                    move |text| send(Signal::EndRepeatText(text.to_owned())),
-                ));
+                let end_field = panel.add(
+                    TextField::new(&tr!("times or date"), &end_text, move |text| {
+                        send(Signal::EndRepeatText(text.to_owned()))
+                    })
+                    .named(&tr!("End repeat:"), None),
+                );
                 panel.line(Line::new(
                     Some(&tr!("End repeat:")),
                     vec![(end_choice, Width::Fill), (end_field, Width::Fixed(96.0))],

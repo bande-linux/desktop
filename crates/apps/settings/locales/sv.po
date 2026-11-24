@@ -1610,6 +1610,9 @@ msgstr "Standardskrivare"
 msgid "192.168.1.30 or printer.local"
 msgstr "192.168.1.30 eller printer.local"
 
+msgid "Add by address"
+msgstr "Lägg till via adress"
+
 msgid "Add"
 msgstr "Lägg till"
 
@@ -1618,9 +1621,6 @@ msgstr "Lägger till…"
 
 msgid "For a printer that does not show up: its IP address or host name"
 msgstr "För en skrivare som inte dyker upp: dess IP-adress eller värdnamn"
-
-msgid "Add by address"
-msgstr "Lägg till via adress"
 
 msgid "Installing…"
 msgstr "Installerar…"

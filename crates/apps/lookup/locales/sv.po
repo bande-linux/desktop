@@ -76,6 +76,9 @@ msgstr "Lägg till ordbok…"
 msgid "dict://dict.org/wn"
 msgstr "dict://dict.org/wn"
 
+msgid "Server"
+msgstr "Server"
+
 msgid "Add Server"
 msgstr "Lägg till server"
 

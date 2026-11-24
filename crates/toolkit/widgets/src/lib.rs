@@ -1514,6 +1514,11 @@ impl Ui {
             }
             collect(sheet.widget.as_ref(), &self.cx, &mut nodes);
         }
+        let focus = self.focus_node();
+        let focus = match nodes.iter().any(|(id, _)| *id == focus) {
+            true => focus,
+            false => self.root.id().node(),
+        };
         TreeUpdate {
             nodes,
             tree: Some(TreeInfo {
@@ -1522,7 +1527,7 @@ impl Ui {
                 ..TreeInfo::new(self.root.id().node())
             }),
             tree_id: TreeId::ROOT,
-            focus: self.focus_node(),
+            focus,
         }
     }
 

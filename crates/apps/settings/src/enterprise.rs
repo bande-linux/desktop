@@ -55,7 +55,8 @@ impl SettingsView {
             Intent::EnterpriseText(field, text)
         });
         let input = TextField::new(&placeholder, &text, move |text| typed(text.to_owned()))
-            .without_text_checking();
+            .without_text_checking()
+            .named(&label, None);
         self.anchors
             .push((Anchor::Item(format!("enterprise-{field:?}")), input.id()));
         boxed(Row::new(

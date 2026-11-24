@@ -447,7 +447,8 @@ impl Draft {
                         tr!("Password"),
                         Box::new(
                             SecureField::new(&tr!("Optional"), FIELD_TEXT, |_| {})
-                                .on_edit(field(Field::Password)),
+                                .on_edit(field(Field::Password))
+                                .named(&tr!("Password"), None),
                         ),
                     ),
                     FormLine::Row(tr!("SSH key"), key),

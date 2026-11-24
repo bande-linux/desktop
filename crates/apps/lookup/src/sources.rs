@@ -181,7 +181,8 @@ impl SourcesWindow {
                 text.clone_into(&mut server.borrow_mut());
             },
         )
-        .without_text_checking();
+        .without_text_checking()
+        .named(&tr!("Server"), None);
         let add_server = self.button(text!("Add Server"), Change::AddServer);
         rows.push(Box::new(Stack::new(
             Axis::Vertical,

@@ -317,7 +317,8 @@ impl Prompt {
                     TextField::new("", text, move |text: &str| {
                         *changed.borrow_mut() = text.to_owned()
                     })
-                    .without_text_checking(),
+                    .without_text_checking()
+                    .named(question, None),
                 ),
                 Box::new(Stack::new(Axis::Horizontal, GAP, 0.0, buttons)),
             ],

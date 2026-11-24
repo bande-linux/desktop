@@ -2391,9 +2391,12 @@ impl MailView {
             server_settings: true,
             ready_note: tr!("Mail is downloading your mail; you can start reading now."),
             taken: self
-                .accounts
-                .iter()
-                .map(|(account, _)| account.email.clone())
+                .store
+                .accounts()
+                .inspect_err(|error| tracing::warn!("cannot read the accounts: {error}"))
+                .unwrap_or_default()
+                .into_iter()
+                .map(|account| account.email)
                 .collect(),
             network: self.network.clone(),
             reporter: Arc::new(move |report| notifier.send(MailEvent::Guide(Box::new(report)))),

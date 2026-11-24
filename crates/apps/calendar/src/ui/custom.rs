@@ -94,7 +94,8 @@ impl Custom {
             TextField::new("1", &interval, move |text| {
                 send(Signal::CustomInterval(text.to_owned()))
             })
-            .without_text_checking(),
+            .without_text_checking()
+            .named(&tr!("Every:"), None),
         );
         let units: Vec<String> = [
             text!("days"),

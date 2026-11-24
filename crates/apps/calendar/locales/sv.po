@@ -200,6 +200,9 @@ msgstr "sista"
 msgid "Custom Repeat"
 msgstr "Anpassad upprepning"
 
+msgid "Every:"
+msgstr "Var:"
+
 msgid "days"
 msgstr "dagar"
 
@@ -211,9 +214,6 @@ msgstr "månader"
 
 msgid "years"
 msgstr "år"
-
-msgid "Every:"
-msgstr "Var:"
 
 msgid "On:"
 msgstr "På:"
@@ -494,8 +494,20 @@ msgstr "Lägg till plats"
 msgid "All-day:"
 msgstr "Heldag:"
 
+msgid "Start date"
+msgstr "Startdatum"
+
+msgid "Start time"
+msgstr "Starttid"
+
 msgid "Starts:"
 msgstr "Börjar:"
+
+msgid "End date"
+msgstr "Slutdatum"
+
+msgid "End time"
+msgstr "Sluttid"
 
 msgid "Ends:"
 msgstr "Slutar:"

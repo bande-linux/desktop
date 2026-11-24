@@ -40,7 +40,8 @@ impl SettingsView {
         let field = TextField::new(&tr!("YYYY-MM-DD HH:MM"), &text, move |text| {
             draft(text.to_owned())
         })
-        .without_text_checking();
+        .without_text_checking()
+        .named(&tr!("Date and time"), None);
         self.anchors.push((Anchor::Setting(id, None), field.id()));
         vec![boxed(
             Row::new(

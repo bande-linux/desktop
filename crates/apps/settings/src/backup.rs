@@ -577,7 +577,8 @@ impl SettingsView {
                 let field = SecureField::new(&tr!("Password"), FIELD_SIZE, move |text| {
                     submit(text.to_owned());
                 })
-                .with_go_button();
+                .with_go_button()
+                .named(&tr!("Password on the server"), None);
                 self.anchors
                     .push((Anchor::Item(NETWORK_ANCHOR.to_owned()), field.id()));
                 (tr!("Password on the server"), None, boxed(field))
@@ -601,7 +602,8 @@ impl SettingsView {
                 };
                 let field = TextField::new(&placeholder, &draft.text, move |text| {
                     changed(text.to_owned());
-                });
+                })
+                .named(&title, None);
                 self.anchors
                     .push((Anchor::Item(NETWORK_ANCHOR.to_owned()), field.id()));
                 let next = self.backup_button(&tr!("Next"), BackupIntent::NetworkNext);

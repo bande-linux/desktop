@@ -412,7 +412,7 @@ fn record_picture(picture: &Picture, caches: &mut Caches) {
 
 fn composites(items: &[Item]) -> bool {
     items.iter().any(|item| match item {
-        Item::Blend { .. } | Item::Surface { .. } => true,
+        Item::Surface { .. } => true,
         Item::Clip { items, .. }
         | Item::Translate { items, .. }
         | Item::Opacity { items, .. }
@@ -513,13 +513,6 @@ fn record_item(item: &Item, caches: &mut Caches, ops: &mut Vec<Op>, reach: Optio
             let layer = Op::Layer {
                 blend: BlendMode::default(),
                 alpha: coordinate(*alpha).clamp(0.0, 1.0) as f32,
-            };
-            scoped(layer, items, caches, ops, reach);
-        }
-        Item::Blend { mode, items } => {
-            let layer = Op::Layer {
-                blend: (*mode).into(),
-                alpha: 1.0,
             };
             scoped(layer, items, caches, ops, reach);
         }

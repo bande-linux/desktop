@@ -36,8 +36,7 @@ pub use input::{
 pub use parley::FontData;
 pub use render::{DrawError, Snapshot, pixels};
 pub use scene::{
-    Blend, Image, Item, Paint, Path, PathElement, Picture, Point, Rect, Scene, Shape, Stop,
-    Transform,
+    Image, Item, Paint, Path, PathElement, Picture, Point, Rect, Scene, Shape, Stop, Transform,
 };
 pub use surface::{PlacedSurface, SurfaceId, SurfaceScaling, placed_surfaces, surface_area};
 pub use text::{

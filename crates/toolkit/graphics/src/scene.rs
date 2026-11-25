@@ -7,7 +7,6 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError, Weak};
 
 use resvg::{tiny_skia, usvg};
-pub use vello_cpu::peniko::Mix as Blend;
 use vello_cpu::{PixelMetadata, Pixmap};
 
 use crate::surface::{SurfaceId, SurfaceScaling};
@@ -570,10 +569,6 @@ pub enum Item {
     },
     Opacity {
         alpha: f32,
-        items: Vec<Item>,
-    },
-    Blend {
-        mode: Blend,
         items: Vec<Item>,
     },
     Transform {

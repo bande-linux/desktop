@@ -159,7 +159,7 @@ fn walk(items: &[Item], mapping: Mapping, scale: f64, placed: &mut Vec<PlacedSur
                     walk(items, inner, scale, placed);
                 }
             }
-            Item::Opacity { items, .. } | Item::Blend { items, .. } => {
+            Item::Opacity { items, .. } => {
                 walk(items, mapping, scale, placed);
             }
             Item::Picture(picture) => walk(picture.items(), mapping, scale, placed),

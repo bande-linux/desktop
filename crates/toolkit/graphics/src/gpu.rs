@@ -940,13 +940,6 @@ mod tests {
         }]
     }
 
-    fn blended(items: Vec<Item>) -> Item {
-        Item::Blend {
-            mode: crate::scene::Blend::Multiply,
-            items,
-        }
-    }
-
     fn scene_of(items: &[Item]) -> Scene {
         Scene {
             width: SIDE,
@@ -1057,11 +1050,6 @@ mod tests {
                 },
             ),
             Change::between(
-                "blend",
-                vec![blended(vec![dot(20.0, 20.0, 20.0, 0xd02020)])],
-                vec![blended(vec![dot(23.0, 20.0, 20.0, 0xd02020)])],
-            ),
-            Change::between(
                 "shadows",
                 vec![],
                 vec![
@@ -1078,17 +1066,6 @@ mod tests {
                         color: Color::hex(0x01f0b1).with_opacity(0.4),
                     },
                 ],
-            ),
-            Change::within(
-                "blend in a clip",
-                spot,
-                Item::Clip {
-                    shape: Shape::rect(Rect::new(-8.0, -8.0, 80.0, 80.0)),
-                    items: vec![
-                        dot(10.0, 10.0, 20.0, 0x20d020),
-                        blended(vec![dot(20.0, 20.0, 20.0, 0xd02020)]),
-                    ],
-                },
             ),
         ];
         let mut wrong = Vec::new();

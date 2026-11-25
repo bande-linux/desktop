@@ -4,11 +4,10 @@ use std::ops::Range;
 use std::sync::Arc;
 
 use bande_graphics::{
-    Blend, Color, GlyphRun, Image, Item, Paint, Paragraph, Path, PathElement, Point, Rect, Shape,
-    Stop, TextRun, Transform,
+    Color, GlyphRun, Image, Item, Paint, Paragraph, Path, PathElement, Point, Rect, Shape, Stop,
+    TextRun, Transform,
 };
 use krilla::Document;
-use krilla::blend::BlendMode;
 use krilla::color::rgb;
 use krilla::geom::{self, PathBuilder, Size};
 use krilla::image::Image as PdfImage;
@@ -315,28 +314,6 @@ fn free_path(path: &Path) -> Option<geom::Path> {
     built.finish()
 }
 
-fn blend_of(mode: Blend) -> BlendMode {
-    use Blend as Mix;
-    match mode {
-        Mix::Multiply => BlendMode::Multiply,
-        Mix::Screen => BlendMode::Screen,
-        Mix::Overlay => BlendMode::Overlay,
-        Mix::Darken => BlendMode::Darken,
-        Mix::Lighten => BlendMode::Lighten,
-        Mix::ColorDodge => BlendMode::ColorDodge,
-        Mix::ColorBurn => BlendMode::ColorBurn,
-        Mix::HardLight => BlendMode::HardLight,
-        Mix::SoftLight => BlendMode::SoftLight,
-        Mix::Difference => BlendMode::Difference,
-        Mix::Exclusion => BlendMode::Exclusion,
-        Mix::Hue => BlendMode::Hue,
-        Mix::Saturation => BlendMode::Saturation,
-        Mix::Color => BlendMode::Color,
-        Mix::Luminosity => BlendMode::Luminosity,
-        _ => BlendMode::Normal,
-    }
-}
-
 fn fill_path(surface: &mut Surface<'_>, path: Option<geom::Path>, paint: &Paint) {
     if let Some(path) = path {
         surface.set_stroke(None);
@@ -527,11 +504,6 @@ fn draw(surface: &mut Surface<'_>, fonts: &mut Fonts, item: &Item) {
         }
         Item::Opacity { alpha, items } => {
             surface.push_opacity(opacity(*alpha));
-            draw_all(surface, fonts, items);
-            surface.pop();
-        }
-        Item::Blend { mode, items } => {
-            surface.push_blend_mode(blend_of(*mode));
             draw_all(surface, fonts, items);
             surface.pop();
         }

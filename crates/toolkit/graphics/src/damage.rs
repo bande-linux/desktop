@@ -167,16 +167,6 @@ fn diff_item(before: &Item, after: &Item, damaged: &mut Vec<Rect>) {
             },
         ) if alpha == same => diff(previous, next, damaged),
         (
-            Item::Blend {
-                mode,
-                items: previous,
-            },
-            Item::Blend {
-                mode: same,
-                items: next,
-            },
-        ) if mode == same => diff(previous, next, damaged),
-        (
             Item::Scale {
                 origin,
                 factor,
@@ -303,7 +293,7 @@ fn bounds(item: &Item) -> Option<Rect> {
         Item::Glyphs(run) => crate::outline::ink(std::slice::from_ref(run)),
         Item::Clip { shape, items } => intersect(children(items)?, shape.rect),
         Item::Translate { offset, items } => Some(translated(children(items)?, *offset)),
-        Item::Opacity { items, .. } | Item::Blend { items, .. } => children(items),
+        Item::Opacity { items, .. } => children(items),
         Item::Transform { transform, items } => transformed(children(items)?, *transform),
         Item::Picture(picture) => picture.bounds(),
         Item::Scale {

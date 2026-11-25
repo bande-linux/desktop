@@ -31,6 +31,14 @@ memory settings stay the system's own.
   `MemoryLow=`: when nothing else can be reclaimed, the kernel breaks `MemoryLow=` and the desktop
   stalls. A level where the administrator set a value is left alone. `bande-login` sets
   the values back to 0 when the session ends, `user.slice` only when no other Bande session is left.
+- `MemoryMin=` does not cover the compositor's code: file pages belong to the control group that read
+  them first, the login window's compositor (the same program), which is gone by then. Reading them
+  again took up to 0.3 s each while something swapped. The compositor of a person's session therefore
+  locks the read-only file mappings of itself and its libraries on fault (`mlock2`,
+  `MLOCK_ONFAULT`: only pages that are used, and stay used), itself first, as far as its
+  `LimitMEMLOCK=256M` goes. The user manager may only grant that because `bande-login` raises that
+  process's hard limit while the session runs; other units keep the 8 MiB default. Without it the
+  compositor locks what fits in the limit it has.
 - `app.slice` gets `MemoryHigh=` all memory but a fifth of it, at most 3 GiB: the desktop's guarantee, the
   system and free memory. Apps together above
   that are reclaimed and slowed, so the desktop and the system still find free memory at once.
@@ -133,9 +141,9 @@ background task was stopped because memory ran low", naming the unit.
 - **earlyoom.** It is in Debian, but it acts on free memory and swap, not on stall time, and it
   kills processes, not cgroups. systemd-oomd is the systemd-native, cgroup-aware choice that
   Debian's own defaults build on.
-- **Locking the compositor's pages** (`mlockall`). A locked mapping counts by its size against
-  `RLIMIT_MEMLOCK` (8 MiB for the user manager, which `bande-login` does not start), and mappings
-  above it fail. `MemoryMin=` kept the compositor out of swap in the same load.
+- **Locking all of the compositor's memory** (`mlockall`). `MCL_FUTURE` makes every later mapping
+  above `RLIMIT_MEMLOCK` fail, client buffers included, and `MemoryMin=` already covers the memory
+  the compositor allocates.
 - **Real-time drawing.** See [session.md](../architecture/session.md): 200 ms of computing ends the
   process. Short slices keep the pointer within the target.
 - **Changing weights with the focus.** Each scope already has an equal share; a change on every

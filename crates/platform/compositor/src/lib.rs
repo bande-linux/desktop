@@ -62,6 +62,7 @@ mod recall;
 mod release;
 mod remote_input;
 mod render;
+mod residency;
 mod resume;
 mod reveal;
 mod scanout;
@@ -121,6 +122,7 @@ pub use night::NightTick;
 pub use pointing::PointerSettings;
 pub use progress::Progress;
 pub use render::{FrameStats, Renderer, Snapshot, background};
+pub use residency::keep_code_in_memory;
 pub use reveal::{Awaited, ShownFrame};
 pub use screen::{OutputConfig, OutputMode, OutputSettings, automatic_scale};
 pub use session::{

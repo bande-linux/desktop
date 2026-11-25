@@ -21,7 +21,7 @@ use self::history::{Edit, EditKind, History, Restyle};
 pub use self::layout::PrintedBlock;
 use self::layout::{Block, Misspelled, bounds};
 pub use self::rich::{Alignment, ListMarker, ParagraphAttributes, RichText, TextAttributes};
-use self::rich::{Fragment, attributes_at, cut, joined, normalize};
+use self::rich::{Fragment, attributes_at, cut, joined, line_runs, normalize};
 use self::selection::{Position, Selection};
 use super::{
     ClipboardRequest, Context, DragAction, Event, Key, Menu, MenuItem, Modifiers, PointerButton,
@@ -294,7 +294,7 @@ impl Editor {
 
     pub(crate) fn set_rich_text(&mut self, rich: &RichText) {
         self.set_text(&rich.text);
-        let lines = rich.line_runs();
+        let lines = line_runs(rich);
         for ((block, runs), index) in self.blocks.iter_mut().zip(lines).zip(0..) {
             block.runs = runs;
             block.paragraph = rich.paragraphs.get(index).copied().unwrap_or_default();

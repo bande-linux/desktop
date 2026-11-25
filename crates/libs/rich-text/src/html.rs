@@ -1,14 +1,16 @@
 use std::cell::RefCell;
 
-use bande_toolkit::Color;
-use bande_toolkit::ui::{Alignment, ListMarker, ParagraphAttributes, RichText, TextAttributes};
+use bande_design::Color;
 use html5ever::tendril::StrTendril;
 use html5ever::tokenizer::states::RawKind;
 use html5ever::tokenizer::{
     BufferQueue, Tag, TagKind, Token, TokenSink, TokenSinkResult, Tokenizer, TokenizerOpts,
 };
 
-use crate::{Builder, MAX_NESTING, code, heading, heading_level, is_code, link, paragraphs};
+use crate::{
+    Alignment, Builder, ListMarker, MAX_NESTING, ParagraphAttributes, RichText, TextAttributes,
+    code, heading, heading_level, is_code, link, paragraphs,
+};
 
 const BLOCKS: [&str; 16] = [
     "p",

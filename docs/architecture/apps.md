@@ -8,7 +8,7 @@ are not. `crates/apps/template` is the starting point of a new app (`ci/new-app.
 "<Name>"`), a real app that is checked and tested with the others and never released. Code that
 several apps share is a library in `crates/libs` (`bande-discovery`: DNS SRV and TXT service
 discovery for account setup; `bande-mail-core`: mail accounts, their setup guide, IMAP and SMTP, shared by Mail and Notes;
-`bande-rich-text`: HTML read into the toolkit's rich text, shared by Text Editor and Notes; `bande-terminal-view`: the terminal widget; `bande-vm`: QEMU virtual
+`bande-rich-text`: the rich text model the toolkit's text views hold, with Markdown (and its sanitised form, the `rich_text` of [intents](intents.md)) and, behind the `html` feature, HTML read into it and written back; it needs no toolkit; `bande-terminal-view`: the terminal widget; `bande-vm`: QEMU virtual
 machines in systemd user units; `bande-keyring`: passwords in the Secret Service; `bande-rfb`: VNC, shared by the Screen Sharing service and app). Keys for
 signing and encryption are GnuPG's: an app that signs or encrypts (Mail) asks `gpg-agent` to use
 them and keeps no keys of its own.

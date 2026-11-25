@@ -1669,7 +1669,7 @@ dependencies = [
 name = "bande-rich-text"
 version = "0.2.0"
 dependencies = [
- "bande-toolkit",
+ "bande-design",
  "html5ever",
 ]
 
@@ -2261,6 +2261,7 @@ dependencies = [
  "accesskit",
  "bande-graphics",
  "bande-l10n",
+ "bande-rich-text",
  "bande-spring",
  "parley",
  "zeroize",

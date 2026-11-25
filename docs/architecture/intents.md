@@ -169,7 +169,7 @@ and its `type` is the view's. A thing is declared in the manifest of the program
 | Type | Written as | D-Bus |
 | :--- | :--- | :--- |
 | `text` | plain Unicode, with a limit in bytes | `s` |
-| `rich_text` | Markdown (CommonMark) parsed by its owner and written out again with `bande-rich-text`: no images, no raw HTML, no metadata block, links only to `https`, `http` and `mailto` | `s` |
+| `rich_text` | Markdown (CommonMark) parsed by its owner and written out again with `bande-rich-text`: no images (their description stays), no raw HTML (it is text), no metadata block, links only to `https`, `http` and `mailto` (others lose their target) | `s` |
 | `rows` | CSV (RFC 4180) | `s` |
 | `bool`, `integer`, `number` | | `b`, `x`, `d` |
 | `date`, `time` | `2026-11-24`, `07:30` | `s` |

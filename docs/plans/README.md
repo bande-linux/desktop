@@ -14,14 +14,14 @@ Work that is planned and not built. A plan leaves when it is done; what it built
 | [Recorder](apps/recorder.md) | voice memos |
 | [PDF editing in Viewer](apps/pdf-editing.md) | pages, forms, notes |
 | [Fingerprint and security keys](apps/fingerprint.md) | enrolment, and use at sign-in, lock and polkit |
-| [On-screen keyboard and other input](apps/assistive-input.md) | without which the prompt is not for everyone |
+| [Mouse keys, dwell and colour filters](apps/assistive-input.md) | pointing without a mouse, and colours told apart |
 | [Passwords](apps/passwords.md) | generator, one-time codes, export, in Settings |
 | [Synced folders](apps/synced-folders.md) | a folder here and on the person's server, kept the same |
 
-Not planned: chat, maps, a book reader, news feeds, help pages, phone calls, whiteboard, journal (a
-Notes folder does it), weather (no open protocol without a fixed provider), and an office suite of
-Bande's own (any application serves `documents`, `spreadsheets` and `presentations` as a
-[provider](../architecture/intents/providers.md)).
+Not planned: an on-screen keyboard, chat, maps, a book reader, news feeds, help pages, phone calls,
+whiteboard, journal (a Notes folder does it), weather (no open protocol without a fixed provider),
+and an office suite of Bande's own (any application serves `documents`, `spreadsheets` and
+`presentations` as a [provider](../architecture/intents/providers.md)).
 
 Every app starts with `ci/new-app.sh`, starts without a window when asked, is the only writer of its
 store, and declares its domain from the first commit, so its menus, Search, the command line and

@@ -486,9 +486,8 @@ locked, no output is on, or the person is using the prompt. Only a received Allo
 channel, a crash or logout ends the plan undone.
 
 Virtual keyboards, EIS devices, input methods and accessibility clients do not reach Allow, except
-Bande's own on-screen keyboard and the screen reader the session started. Deny accepts everything.
-Where no Bande session of the person can show the prompt, what must be asked is `Unavailable`;
-nothing falls back to a terminal.
+the screen reader the session started. Deny accepts everything. Where no Bande session of the person
+can show the prompt, what must be asked is `Unavailable`; nothing falls back to a terminal.
 
 ### Critical plans
 

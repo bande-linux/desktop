@@ -160,7 +160,7 @@ Each has a [plan of its own](README.md). The app serves its domain from the firs
 | A6 | [Recorder](apps/recorder.md) | `recordings` | C1 | `crates/apps/recorder` | M |
 | A7 | [PDF editing in Viewer](apps/pdf-editing.md) | part of `documents` | D1c | `crates/apps/viewer`, `crates/toolkit/pdf`, `crates/libs/content` | L |
 | A8 | [Fingerprint and security keys](apps/fingerprint.md) | | D19 | its part of `crates/apps/settings`, `crates/shell/lock`, `crates/services/polkit` | M |
-| A9 | [On-screen keyboard and other input](apps/assistive-input.md) | | C3 | `crates/shell/keyboard`, `crates/platform` | L |
+| A9 | [Mouse keys, dwell and colour filters](apps/assistive-input.md) | | C3 | `crates/platform` | M |
 | A10 | [Passwords](apps/passwords.md) | none | C2 | its part of `crates/apps/settings`, `crates/services/secrets` | M |
 | A11 | [Synced folders](apps/synced-folders.md) | part of `files` | D1a | `crates/services/sync` | L |
 
@@ -183,15 +183,14 @@ mail. An agent that reads, shows and changes needs no prompt.
 `crates/apps/settings` is changed by one package at a time: C2, D1a, C4, D12, D13, C8, A1b, D17,
 D19, A10, A8. `crates/platform`: C3, A9, D8. `crates/libs/content`: D1c, A7.
 `crates/shell/quick-settings`: D7, C8. `crates/apps/{mail,calendar,contacts,notes}`: A1a, then D2,
-D4, D5, A1c, then A1b. Bande's on-screen keyboard follows the prompt by one wave; until then a
-person who needs one cannot Allow, and `send` and `critical` stay off for agents.
+D4, D5, A1c, then A1b.
 
 ## C3 in detail
 
 | Part | What |
 | :--- | :--- |
 | Role | a fifth session-client role, started on demand like the session dialog (`Summoned` in `crates/platform/compositor/src/session.rs`), its program held open from session start; its surface is above every layer, which today go by the newest; no other client can take the name or the keyboard while it is open; hidden while locked |
-| Input | virtual keyboards, EIS, input methods and accessibility clients do not reach it, except Bande's on-screen keyboard and the screen reader the session started; tests press through a backend the release does not have |
+| Input | virtual keyboards, EIS, input methods and accessibility clients do not reach it, except the screen reader the session started; tests press through a backend the release does not have |
 | Channel | `bande_approval_v1.request(fd)`, for verified Bande programs; the fd carries the description's rows one way and the answer the other |
 | Guard | replaces the one function in `bande-intents` |
 | Tests | formatting a loop disk with one Allow; a target swapped between Prepare and Perform is `Conflict`; each refused kind of input; a No at polkit ends as `Declined`; a second critical plan waits; the prompt killed while it waits |

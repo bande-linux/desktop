@@ -381,7 +381,7 @@ fn parse(text: &str, dialect: Dialect) -> RichText {
                 continue;
             }
             reader.start(ParagraphAttributes::default(), false);
-            reader.builder.text(trimmed, &code());
+            reader.builder.text(line, &code());
             reader.close();
             continue;
         }
@@ -491,7 +491,7 @@ fn ends_with_any(written: &str, words: &[&str]) -> bool {
     })
 }
 
-fn escape(text: &str, dialect: Dialect, line_start: usize, out: &mut String) {
+fn escape(text: &str, joined: bool, dialect: Dialect, line_start: usize, out: &mut String) {
     let mut characters = text.chars().peekable();
     while let Some(character) = characters.next() {
         let next = characters.peek();
@@ -500,15 +500,16 @@ fn escape(text: &str, dialect: Dialect, line_start: usize, out: &mut String) {
             '\\' | '*' | '_' | '`' | '[' | ']' | '~' => true,
             _ if dialect == Dialect::Authored => false,
             '<' | '#' => true,
-            '&' => next.is_none_or(|next| *next == '#' || next.is_ascii_alphanumeric()),
-            '!' => next.is_none(),
-            '-' | '+' | '=' | '>' => written.is_empty(),
+            '&' => next.map_or(joined, |next| *next == '#' || next.is_ascii_alphanumeric()),
+            '!' => joined && next.is_none(),
+            '-' => written.bytes().all(|byte| byte == b'*'),
+            '+' | '=' | '>' => written.is_empty(),
             ':' => ends_with_any(written, &AUTOLINKED_SCHEMES),
             '.' => is_list_number(written) || ends_with_any(written, &["www"]),
             ')' => is_list_number(written),
             _ => false,
         };
-        let joined = dialect == Dialect::Sanitised
+        let autolinked = dialect == Dialect::Sanitised
             && character == ':'
             && next != Some(&WORD_JOINER)
             && ends_with_any(written, &["xmpp"]);
@@ -516,7 +517,7 @@ fn escape(text: &str, dialect: Dialect, line_start: usize, out: &mut String) {
             out.push('\\');
         }
         out.push(character);
-        if joined {
+        if autolinked {
             out.push(WORD_JOINER);
         }
     }
@@ -636,6 +637,11 @@ fn line(paragraph: &Paragraph<'_>, number: usize, dialect: Dialect) -> String {
         });
         out.extend(opened.iter().copied());
         open.append(&mut opened);
+        let joined = after.is_empty()
+            && paragraph.spans[index + 1..]
+                .iter()
+                .find_map(|(text, _)| text.chars().next())
+                .is_some_and(|next| !printable(next).is_whitespace());
         match (span_target(span, dialect), is_code(span)) {
             (_, true) => {
                 match code_end == Some(out.len()) {
@@ -648,12 +654,12 @@ fn line(paragraph: &Paragraph<'_>, number: usize, dialect: Dialect) -> String {
             }
             (Some(url), false) => {
                 out.push('[');
-                escape(shown, dialect, line_start, &mut out);
+                escape(shown, joined, dialect, line_start, &mut out);
                 out.push_str("](");
                 out.push_str(&url);
                 out.push(')');
             }
-            (None, false) => escape(shown, dialect, line_start, &mut out),
+            (None, false) => escape(shown, joined, dialect, line_start, &mut out),
         }
     }
     out.extend(open.into_iter().rev());
@@ -832,6 +838,8 @@ mod tests {
             ),
             ("# **T** 2**8", "# T 2\\*\\*8\n"),
             ("*`x`, y*\n> a_b", "*`x`, y*\n\n> a\\_b\n"),
+            ("> R &\n> D! *e*!\n- *\\-*", "> R & D! e!\n\n- *\\-*\n"),
+            ("```\na  \n```", "```\na  \n```\n"),
         ] {
             assert_eq!(sanitise(source), expected, "{source}");
             assert_eq!(sanitise(expected), expected, "{source}");

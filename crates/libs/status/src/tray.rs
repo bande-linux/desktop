@@ -1,10 +1,11 @@
+use std::fs;
 use std::process;
 use std::sync::mpsc::{self, Receiver};
 use std::thread;
 
 use bande_inbox::Outbox;
 use zbus::blocking::fdo::DBusProxy;
-use zbus::blocking::{Connection, MessageIterator};
+use zbus::blocking::{Connection, MessageIterator, Proxy};
 use zbus::fdo::RequestNameFlags;
 use zbus::names::BusName;
 use zbus::proxy::CacheProperties;
@@ -19,6 +20,11 @@ const ITEM_INTERFACE: &str = "org.kde.StatusNotifierItem";
 const WATCHER_INTERFACE: &str = "org.kde.StatusNotifierWatcher";
 const WATCHER: &str = "org.kde.StatusNotifierWatcher";
 const MENU_INTERFACE: &str = "com.canonical.dbusmenu";
+const SYSTEMD: &str = "org.freedesktop.systemd1";
+const SYSTEMD_PATH: &str = "/org/freedesktop/systemd1";
+const SYSTEMD_MANAGER: &str = "org.freedesktop.systemd1.Manager";
+const SYSTEMD_SERVICE: &str = "org.freedesktop.systemd1.Service";
+const AUTOSTARTED: &str = "@autostart.service";
 const ICON_PIXELS: i32 = 32;
 const BUS: &str = "org.freedesktop.DBus";
 
@@ -43,6 +49,8 @@ pub struct TrayItem {
     pub icon: TrayIcon,
     pub menu: Option<String>,
     pub item_is_menu: bool,
+    pub pid: Option<u32>,
+    pub names: Vec<String>,
 }
 
 #[zbus::proxy(
@@ -66,6 +74,11 @@ trait StatusNotifierWatcher {
 )]
 trait StatusNotifierItem {
     fn activate(&self, x: i32, y: i32) -> zbus::Result<()>;
+
+    fn provide_xdg_activation_token(&self, token: &str) -> zbus::Result<()>;
+
+    #[zbus(property)]
+    fn id(&self) -> zbus::Result<String>;
 
     #[zbus(property)]
     fn title(&self) -> zbus::Result<String>;
@@ -123,6 +136,47 @@ fn item_proxy<'a>(connection: &Connection, id: &'a str) -> zbus::Result<StatusNo
         .build()
 }
 
+fn owner_pid(connection: &Connection, id: &str) -> Option<u32> {
+    let owner = BusName::try_from(split(id).0).ok()?;
+    let bus = DBusProxy::new(connection).ok()?;
+    bus.get_connection_unix_process_id(owner).ok()
+}
+
+fn main_pid(connection: &Connection, unit: &str) -> zbus::Result<u32> {
+    let manager = Proxy::new(connection, SYSTEMD, SYSTEMD_PATH, SYSTEMD_MANAGER)?;
+    let path: OwnedObjectPath = manager.call("GetUnit", &unit)?;
+    Proxy::new(connection, SYSTEMD, path, SYSTEMD_SERVICE)?.get_property("MainPID")
+}
+
+fn own_unit(connection: &Connection, pid: u32) -> Option<String> {
+    let cgroup = fs::read_to_string(format!("/proc/{pid}/cgroup")).ok()?;
+    let unit = cgroup
+        .lines()
+        .find_map(|line| line.strip_prefix("0::"))?
+        .rsplit('/')
+        .next()?;
+    let own = match unit.strip_suffix(".scope") {
+        Some(scope) => scope.ends_with(&format!("-{pid}")),
+        None => {
+            unit.ends_with(AUTOSTARTED)
+                && main_pid(connection, unit)
+                    .inspect_err(|error| tracing::debug!("no main process of {unit}: {error}"))
+                    .is_ok_and(|main| main == pid)
+        }
+    };
+    own.then(|| unit.to_owned())
+}
+
+pub fn activate_item(connection: &Connection, id: &str, token: Option<&str>) -> zbus::Result<()> {
+    let item = item_proxy(connection, id)?;
+    if let Some(token) = token
+        && let Err(error) = item.provide_xdg_activation_token(token)
+    {
+        tracing::debug!("a status item takes no activation token: {error}");
+    }
+    item.activate(0, 0)
+}
+
 fn fetch(connection: &Connection, id: &str) -> Option<TrayItem> {
     let item = item_proxy(connection, id).ok()?;
     if item.status().is_ok_and(|status| status == "Passive") {
@@ -150,12 +204,21 @@ fn fetch(connection: &Connection, id: &str) -> Option<TrayItem> {
         .ok()
         .filter(|path| path.as_str() != "/")
         .map(|path| format!("{}{}", split(id).0, path.as_str()));
+    let pid = owner_pid(connection, id);
     Some(TrayItem {
         id: id.to_owned(),
         title: item.title().unwrap_or_default(),
         icon,
         menu,
         item_is_menu: item.item_is_menu().unwrap_or(false),
+        pid,
+        names: pid
+            .and_then(|pid| own_unit(connection, pid))
+            .map(|unit| bande_xdg::unit_app_ids(&unit))
+            .into_iter()
+            .flatten()
+            .chain(item.id())
+            .collect(),
     })
 }
 
@@ -295,20 +358,6 @@ fn tray_event(message: &Message) -> Option<TrayEvent> {
             .map(|sender| TrayEvent::GtkMenuChanged(sender.to_string())),
         _ => None,
     }
-}
-
-pub fn activate_item_of(connection: &Connection, pids: &[u32]) -> zbus::Result<()> {
-    let bus = DBusProxy::new(connection)?;
-    for id in Watcher::new(connection)?.registered_status_notifier_items()? {
-        let owned = BusName::try_from(split(&id).0).is_ok_and(|owner| {
-            bus.get_connection_unix_process_id(owner)
-                .is_ok_and(|pid| pids.contains(&pid))
-        });
-        if owned {
-            return item_proxy(connection, &id)?.activate(0, 0);
-        }
-    }
-    Ok(())
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

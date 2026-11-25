@@ -1,7 +1,10 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use std::fs;
+use std::collections::HashMap;
+use std::fs::{self, OpenOptions};
+use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 use bande_compositor::{Compositor, SessionRole};
@@ -12,6 +15,7 @@ use bande_test_wayland::{
     Frames, SeparateApp, act_as_separate_app, chord, headless, is_separate_app,
 };
 use zbus::blocking::{Connection, connection};
+use zbus::zvariant::{OwnedObjectPath, OwnedValue, Value};
 
 const TEST: &str = "an_app_is_in_the_taskbar_exactly_as_long_as_its_process_runs";
 const PATIENCE: Duration = Duration::from_secs(40);
@@ -28,18 +32,58 @@ const HELPER_NAME: &str = "Example Helper";
 const BANDE: &str = "org.bande.Example";
 const BANDE_NAME: &str = "Example Bande";
 const UNNAMED: &str = "unnamed-dialog";
+const QUIT: i32 = 7;
+const HELPER_SECONDS: &str = "1";
 const ITEM: &str = "org.example.TrayItem";
 
 fn home(name: &str) -> PathBuf {
     PathBuf::from(std::env::var_os("HOME").unwrap()).join(name)
 }
 
-struct Item;
+struct Item(String);
 
 #[zbus::interface(name = "org.kde.StatusNotifierItem")]
 impl Item {
     fn activate(&self, _x: i32, _y: i32) {
-        fs::write(home("activated"), "").unwrap();
+        note("activations", "shown");
+    }
+
+    #[zbus(property)]
+    fn id(&self) -> &str {
+        &self.0
+    }
+
+    #[zbus(property)]
+    fn menu(&self) -> OwnedObjectPath {
+        OwnedObjectPath::try_from("/Menu").unwrap()
+    }
+}
+
+type Layout = (i32, HashMap<String, OwnedValue>, Vec<OwnedValue>);
+
+struct ItemMenu;
+
+#[zbus::interface(name = "com.canonical.dbusmenu")]
+impl ItemMenu {
+    fn get_layout(&self, _parent: i32, _depth: i32, _names: Vec<String>) -> (u32, Layout) {
+        let label = OwnedValue::try_from(Value::from("Leave")).unwrap();
+        let leave: Layout = (
+            QUIT,
+            HashMap::from([("label".to_owned(), label)]),
+            Vec::new(),
+        );
+        let leave = OwnedValue::try_from(Value::from(leave)).unwrap();
+        (1, (0, HashMap::new(), vec![leave]))
+    }
+
+    fn event(&self, id: i32, event: &str, _data: Value<'_>, _time: u32) {
+        if (id, event) == (QUIT, "clicked") {
+            std::process::exit(0);
+        }
+    }
+
+    fn about_to_show(&self, _id: i32) -> bool {
+        false
     }
 }
 
@@ -53,6 +97,53 @@ impl Watcher {
     fn registered_status_notifier_items(&self) -> Vec<String> {
         vec!["org.example.Gone".to_owned(), ITEM.to_owned()]
     }
+}
+
+fn note(file: &str, what: &str) {
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(home(file))
+        .unwrap();
+    writeln!(file, "{what}").unwrap();
+}
+
+fn noted(file: &str) -> String {
+    fs::read_to_string(home(file)).unwrap_or_default()
+}
+
+fn separate_app() {
+    let mut helpers = [HELPER_SECONDS, "30"].map(|seconds| {
+        Command::new("sleep")
+            .arg(seconds)
+            .stdin(Stdio::null())
+            .spawn()
+            .unwrap()
+    });
+    let item = noted("item");
+    let _bus = (!item.is_empty()).then(|| {
+        let bus = connection::Builder::session()
+            .unwrap()
+            .serve_at("/StatusNotifierItem", Item(item))
+            .unwrap()
+            .serve_at("/Menu", ItemMenu)
+            .unwrap()
+            .name(ITEM)
+            .unwrap()
+            .build()
+            .unwrap();
+        bus.emit_signal(
+            None::<&str>,
+            "/StatusNotifierItem",
+            "org.kde.StatusNotifierItem",
+            "NewIcon",
+            &(),
+        )
+        .unwrap();
+        bus
+    });
+    act_as_separate_app();
+    helpers[0].wait().unwrap();
 }
 
 fn install(app_id: &str, name: &str, more: &str) {
@@ -127,7 +218,7 @@ impl Scene {
         self.pass(SETTLED);
     }
 
-    fn quit_from_menu(&mut self, app: &str) {
+    fn choose_last_from_menu(&mut self, app: &str) {
         self.press(app, BTN_RIGHT, 1);
         chord(&mut self.server, &[KEY_UP]);
         self.pass(SETTLED);
@@ -153,12 +244,7 @@ impl Scene {
 #[test]
 fn an_app_is_in_the_taskbar_exactly_as_long_as_its_process_runs() {
     if is_separate_app() {
-        let _item = connection::Builder::session()
-            .and_then(|builder| builder.serve_at("/StatusNotifierItem", Item))
-            .and_then(connection::Builder::build)
-            .inspect(|bus| drop(bus.request_name(ITEM)))
-            .unwrap();
-        act_as_separate_app();
+        separate_app();
         return;
     }
     let bus = SessionBus::start().expect("private session and AT-SPI bus");
@@ -212,33 +298,39 @@ fn an_app_is_in_the_taskbar_exactly_as_long_as_its_process_runs() {
         root: root.expect("the shell's accessible root"),
     };
 
-    let mut tray = scene.app(TRAY);
-    scene.wait("a window marks its app", |scene| scene.marked(TRAY_NAME));
-    scene.closed(&mut tray);
-    assert!(scene.marked(TRAY_NAME), "it still runs");
+    fs::write(home("item"), TRAY).unwrap();
+    let mut hidden = SeparateApp::launch(&mut scene.server, TEST);
+    scene.wait("an app that started in the tray", |scene| {
+        scene.marked(TRAY_NAME)
+    });
     scene.press(TRAY_NAME, BTN_LEFT, 2);
-    let launches = || fs::read_to_string(home("launches")).unwrap_or_default();
-    assert_eq!(launches(), format!("{TRAY}\n"), "opened once");
-    scene.wait("its status item is asked", |_| home("activated").exists());
-    tray.show_window_of(&mut scene.server, 80, TRAY);
-    scene.closed(&mut tray);
-    scene.quit_from_menu(TRAY_NAME);
-    scene.wait("Quit ends it", |scene| scene.button(TRAY_NAME).is_none());
-
-    let mut tray = scene.app(TRAY);
-    scene.closed(&mut tray);
-    assert!(scene.marked(TRAY_NAME));
-    drop(tray);
-    scene.wait("an app that ended leaves", |scene| {
+    scene.wait("its status item is asked", |_| {
+        !noted("activations").is_empty()
+    });
+    scene.pass(SETTLED);
+    assert_eq!(noted("activations"), "shown\n", "asked once");
+    hidden.show_window_of(&mut scene.server, 80, TRAY);
+    scene.closed(&mut hidden);
+    assert!(scene.marked(TRAY_NAME), "it still runs");
+    scene.choose_last_from_menu(TRAY_NAME);
+    scene.wait("its own menu ends it", |scene| {
         scene.button(TRAY_NAME).is_none()
     });
+    assert_eq!(noted("launches"), "");
 
-    let mut tray = scene.app(TRAY);
-    scene.wait("back in the taskbar", |scene| scene.marked(TRAY_NAME));
-    scene.quit_from_menu(TRAY_NAME);
+    fs::remove_file(home("item")).unwrap();
+    let mut plain = scene.app(TRAY);
+    scene.closed(&mut plain);
+    scene.pass(Duration::from_secs(2));
+    assert!(scene.marked(TRAY_NAME), "only a helper ended");
+    scene.press(TRAY_NAME, BTN_LEFT, 2);
+    scene.wait("without a status item it is opened", |_| {
+        !noted("launches").is_empty()
+    });
     scene.pass(SETTLED);
-    tray.close_windows();
-    scene.wait("Quit with a window open ends it too", |scene| {
+    assert_eq!(noted("launches"), format!("{TRAY}\n"), "opened once");
+    drop(plain);
+    scene.wait("a helper left behind is not the app", |scene| {
         scene.button(TRAY_NAME).is_none()
     });
 

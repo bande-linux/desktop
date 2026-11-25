@@ -3,6 +3,7 @@ use bande_l10n::{tr, trn};
 use crate::app_processes::AppProcesses;
 use crate::dialogs::DIALOGS;
 use crate::installed_apps::InstalledApps;
+use crate::menus::app_menu;
 use crate::rail::{BarForm, bar_zone, surface_size};
 use crate::taskbar::{
     MenuTarget, Shared, TaskbarAction, TaskbarApp, TaskbarLayout, TaskbarState, scene, taskbar_ui,
@@ -11,7 +12,9 @@ use accesskit::TreeUpdate;
 use bande_config::{Bar as BarConfig, BarEdge};
 use bande_fs::{FolderWatch, Trash};
 use bande_inbox::Inbox;
-use bande_status::tray::activate_item_of;
+use bande_status::hub::StatusHub;
+use bande_status::tray::{Errand, TrayItem, activate_item};
+use bande_status::{Command, Update};
 use bande_taskbar_model::arrange;
 use bande_taskbar_model::bus::{self, BusEvent};
 use bande_toolkit::ui::{Event, Menu, MenuItem, Ui};
@@ -24,7 +27,6 @@ use bande_xdg::{
     find_app_for_process, find_icon, launch_with_arguments, opens_at_login, path_from_file_uri,
     set_open_at_login, write_launcher,
 };
-use rustix::process::Signal;
 use std::collections::HashMap;
 use std::os::fd::BorrowedFd;
 use std::path::{Path, PathBuf};
@@ -52,13 +54,13 @@ const MENU_WINDOW: &str = "window:";
 const MENU_ACTION: &str = "action:";
 const MENU_OPEN_APP: &str = "open-app:";
 const BANDE_APP_ID: &str = "org.bande.";
-const QUIT_PATIENCE: Duration = Duration::from_secs(30);
-const QUIT_GRACE: Duration = Duration::from_secs(5);
-const REOPEN_PATIENCE: Duration = Duration::from_secs(3);
+const MENU_PATIENCE: Duration = Duration::from_millis(300);
 
-struct Quitting {
+struct WaitingMenu {
+    menu: String,
+    target: MenuTarget,
+    at: Point,
     until: Instant,
-    windows_closed: bool,
 }
 
 struct TrashWatch {
@@ -130,8 +132,10 @@ pub struct Taskbar {
     unresponsive: Vec<String>,
     windowed: Vec<String>,
     processes: AppProcesses,
-    quitting: HashMap<String, Quitting>,
-    reopening: Option<(String, Instant)>,
+    status: StatusHub,
+    updates: Inbox<Update>,
+    status_items: Vec<TrayItem>,
+    waiting_menu: Option<WaitingMenu>,
     keep: Option<Sender<Vec<String>>>,
     autostart: Option<PathBuf>,
     bus: Inbox<BusEvent>,
@@ -202,8 +206,7 @@ impl Taskbar {
             }
         }
         for (window_app, app_id) in &windows {
-            let named = find_app(entries, window_app).is_some();
-            if named
+            if find_app(entries, window_app).is_some()
                 && !app_id.starts_with(BANDE_APP_ID)
                 && let Some(pid) = window.app_pid(window_app)
             {
@@ -265,78 +268,72 @@ impl Taskbar {
         self.processes.run(app_id) && !self.running.iter().any(|running| running == app_id)
     }
 
-    fn quit(&mut self, window: &mut Window, app_id: &str, force: bool) {
-        if self.windowless(app_id) {
-            let signal = if force { Signal::KILL } else { Signal::TERM };
-            self.processes.signal(app_id, signal);
-            return;
-        }
-        if self.processes.run(app_id) {
-            let quitting = Quitting {
-                until: Instant::now() + QUIT_PATIENCE,
-                windows_closed: false,
-            };
-            self.quitting.insert(app_id.to_owned(), quitting);
-        }
-        let window_app = self.window_app(app_id);
-        let asked = if force {
-            window.force_quit_app(&window_app)
-        } else {
-            window.quit_app(&window_app)
-        };
-        if let Err(error) = asked {
-            tracing::warn!("cannot quit {app_id}: {error}");
-        }
+    fn status_item(&self, app_id: &str) -> Option<&TrayItem> {
+        self.status_items.iter().find(|item| {
+            item.pid
+                .is_some_and(|pid| self.processes.is_of(pid, app_id))
+        })
     }
 
-    fn windows_closed(&mut self, app_id: &str, now: Instant) {
-        self.state.borrow_mut().windows_closed(app_id);
-        if let Some(quitting) = self.quitting.get_mut(app_id) {
-            quitting.windows_closed = true;
-            quitting.until = now + QUIT_GRACE;
-        }
-    }
-
-    fn follow_windowless(&mut self, now: Instant) {
-        let due: Vec<String> = self
-            .quitting
-            .extract_if(|_, quitting| quitting.until <= now)
-            .filter(|(_, quitting)| quitting.windows_closed)
-            .map(|(app_id, _)| app_id)
-            .collect();
-        for app_id in due {
-            if self.windowless(&app_id) {
-                self.processes.signal(&app_id, Signal::TERM);
+    fn follow_status_items(&mut self) {
+        for item in &self.status_items {
+            let entries = self.apps.entries();
+            let mut named: Vec<&str> = item
+                .names
+                .iter()
+                .filter_map(|name| entries.iter().find(|entry| entry.app_id() == name))
+                .map(DesktopEntry::app_id)
+                .collect();
+            named.dedup();
+            if let ([app_id], Some(pid)) = (named.as_slice(), item.pid)
+                && !app_id.starts_with(BANDE_APP_ID)
+            {
+                self.processes.follow(app_id, pid);
             }
         }
-        if let Some((app_id, _)) = self.reopening.take_if(|(_, at)| *at <= now)
-            && self.windowless(&app_id)
-        {
-            self.activate_status_item(&app_id);
+    }
+
+    fn receive_status(&mut self, window: &mut Window) {
+        for update in self.updates.drain() {
+            match update {
+                Update::Tray(items) => {
+                    self.status_items = items;
+                    self.follow_status_items();
+                    self.sync();
+                    window.request_redraw();
+                }
+                Update::Menu { menu, root } => {
+                    if let Some(waiting) = self.waiting_menu.take_if(|known| known.menu == menu) {
+                        let own = app_menu(&root, &menu);
+                        self.show_menu_with(window, waiting.target, waiting.at, own.items);
+                    }
+                }
+                _ => {}
+            }
         }
     }
 
-    fn activate_status_item(&self, app_id: &str) {
+    fn show_window(&mut self, window: &mut Window, entry: DesktopEntry, item: TrayItem) {
         let Some(session) = self.session.clone() else {
             return;
         };
-        let pids = self.processes.pids(app_id);
-        let activated = thread::Builder::new()
+        let app_id = entry.app_id().to_owned();
+        let token = window.activation_token(&app_id).ok();
+        let activating = thread::Builder::new()
             .name("activate-status-item".to_owned())
             .spawn(move || {
-                if let Err(error) = activate_item_of(&session, &pids) {
-                    tracing::warn!("cannot activate a status item of {pids:?}: {error}");
+                let Err(error) = activate_item(&session, &item.id, token.as_deref()) else {
+                    return;
+                };
+                tracing::debug!("{} is opened again: {error}", entry.name);
+                if let Err(error) = bande_xdg::launch(&entry, token.as_deref()) {
+                    tracing::warn!("cannot open {}: {error}", entry.name);
                 }
             });
-        if let Err(error) = activated {
-            tracing::warn!("cannot activate the status item of {app_id}: {error}");
+        match activating {
+            Ok(_) => self.state.borrow_mut().launching(&app_id, Instant::now()),
+            Err(error) => tracing::warn!("cannot show {app_id}: {error}"),
         }
-    }
-
-    fn windowless_deadline(&self) -> Option<Instant> {
-        let quitting = self.quitting.values().map(|quitting| quitting.until);
-        let reopening = self.reopening.iter().map(|(_, at)| *at);
-        quitting.chain(reopening).min()
     }
 
     fn load_trash_icons(&mut self) {
@@ -356,6 +353,7 @@ impl Taskbar {
         self.icons.clear();
         self.load_trash_icons();
         self.follow_windows(window);
+        self.follow_status_items();
         self.sync();
         window.request_redraw();
     }
@@ -407,15 +405,15 @@ impl Taskbar {
         let Some(entry) = self.entry(app_id).cloned() else {
             return;
         };
+        if self.windowless(app_id)
+            && let Some(item) = self.status_item(app_id).filter(|item| !item.item_is_menu)
+        {
+            let item = item.clone();
+            return self.show_window(window, entry, item);
+        }
         let token = window.activation_token(app_id).ok();
         match bande_xdg::launch(&entry, token.as_deref()) {
-            Ok(_) => {
-                let now = Instant::now();
-                self.state.borrow_mut().launching(app_id, now);
-                if self.windowless(app_id) {
-                    self.reopening = Some((app_id.to_owned(), now + REOPEN_PATIENCE));
-                }
-            }
+            Ok(_) => self.state.borrow_mut().launching(app_id, Instant::now()),
             Err(error) => tracing::warn!("cannot open {}: {error}", entry.name),
         }
     }
@@ -657,6 +655,33 @@ impl Taskbar {
     }
 
     fn show_menu(&mut self, window: &mut Window, target: MenuTarget, at: Point) {
+        if let MenuTarget::App(app_id) = &target
+            && self.windowless(app_id)
+            && let Some(menu) = self.status_item(app_id).and_then(|item| item.menu.clone())
+        {
+            self.status.errand(Errand::ShowMenu {
+                menu: menu.clone(),
+                parent: 0,
+            });
+            self.waiting_menu = Some(WaitingMenu {
+                menu,
+                target,
+                at,
+                until: Instant::now() + MENU_PATIENCE,
+            });
+            return;
+        }
+        self.show_menu_with(window, target, at, Vec::new());
+    }
+
+    fn show_menu_with(
+        &mut self,
+        window: &mut Window,
+        target: MenuTarget,
+        at: Point,
+        own: Vec<MenuItem>,
+    ) {
+        self.waiting_menu = None;
         self.confirming = false;
         let items = match &target {
             MenuTarget::More(hidden) => hidden
@@ -723,14 +748,13 @@ impl Taskbar {
                     MenuItem::new(&tr!("Show in Files"), MENU_SHOW).enabled(installed),
                 ]);
                 items.push(MenuItem::submenu(&tr!("Options"), options));
-                let windowless = self.windowless(app_id);
-                if running || windowless {
+                if !own.is_empty() {
                     items.push(MenuItem::separator());
+                    items.extend(own);
                 }
                 if running {
+                    items.push(MenuItem::separator());
                     items.push(MenuItem::new(&tr!("Hide"), MENU_HIDE));
-                }
-                if running || windowless {
                     let force_quit = MenuItem::new(&tr!("Force Quit"), MENU_FORCE_QUIT);
                     items.push(if self.unresponsive.contains(app_id) {
                         force_quit
@@ -786,10 +810,14 @@ impl Taskbar {
                 }
             }
             (MenuTarget::App(app_id), MENU_QUIT) => {
-                self.quit(window, &app_id, false);
+                if let Err(error) = window.quit_app(&self.window_app(&app_id)) {
+                    tracing::warn!("cannot quit {app_id}: {error}");
+                }
             }
             (MenuTarget::App(app_id), MENU_FORCE_QUIT) => {
-                self.quit(window, &app_id, true);
+                if let Err(error) = window.force_quit_app(&self.window_app(&app_id)) {
+                    tracing::warn!("cannot force {app_id} to quit: {error}");
+                }
             }
             (MenuTarget::App(app_id), action) if action.starts_with(MENU_ACTION) => {
                 self.run_action(window, &app_id, &action[MENU_ACTION.len()..]);
@@ -806,6 +834,11 @@ impl Taskbar {
                     && let Err(error) = set_open_at_login(dir, &entry.id, &entry.path, open)
                 {
                     tracing::warn!("cannot change whether {app_id} opens at login: {error}");
+                }
+            }
+            (MenuTarget::App(_), action) => {
+                if let Some(Command::Item { item, id }) = Command::parse(action) {
+                    self.status.errand(Errand::Clicked { menu: item, id });
                 }
             }
             _ => {}
@@ -1028,15 +1061,12 @@ impl App for Taskbar {
                     .map(|(_, identity)| identity.clone())
                     .collect();
                 let before = std::mem::replace(&mut self.windowed, windowed);
-                let now = Instant::now();
-                for app_id in &before {
-                    if !self.windowed.contains(app_id) {
-                        self.windows_closed(app_id, now);
-                    }
+                for app_id in before
+                    .iter()
+                    .filter(|app_id| !self.windowed.contains(app_id))
+                {
+                    self.state.borrow_mut().windows_closed(app_id);
                 }
-                let windowed = &self.windowed;
-                self.quitting
-                    .retain(|app_id, _| before.contains(app_id) || !windowed.contains(app_id));
                 self.sync();
                 self.show_active();
                 window.request_redraw();
@@ -1090,6 +1120,7 @@ impl App for Taskbar {
     fn sources(&self) -> Vec<BorrowedFd<'_>> {
         let mut sources = vec![self.bus.fd()];
         sources.extend(self.apps.fd());
+        sources.push(self.updates.fd());
         if let Some(trash) = &self.trash {
             sources.extend([trash.watch.fd(), trash.checked.fd()]);
         }
@@ -1099,16 +1130,18 @@ impl App for Taskbar {
 
     fn source_ready(&mut self, window: &mut Window, index: usize) {
         let watched = 1 + usize::from(self.apps.fd().is_some());
-        let processes = watched + if self.trash.is_some() { 2 } else { 0 };
+        let trash = watched + 1;
+        let processes = trash + if self.trash.is_some() { 2 } else { 0 };
         match index {
             0 => self.receive(window),
+            1 if watched == 2 => self.apps.read(),
+            index if index == watched => self.receive_status(window),
             index if index >= processes => {
                 self.processes.ended(index - processes);
                 self.sync();
                 window.request_redraw();
             }
-            1 if watched == 2 => self.apps.read(),
-            index if index == watched => {
+            index if index == trash => {
                 if let Some(trash) = &mut self.trash {
                     trash.watch.read();
                 }
@@ -1128,11 +1161,12 @@ impl App for Taskbar {
 
     fn deadline(&self) -> Option<Instant> {
         let watch = self.trash.as_ref().and_then(|trash| trash.watch.deadline());
+        let menu = self.waiting_menu.as_ref().map(|waiting| waiting.until);
         [
             self.state.borrow().deadline(),
             watch,
             self.apps.deadline(),
-            self.windowless_deadline(),
+            menu,
         ]
         .into_iter()
         .flatten()
@@ -1142,7 +1176,9 @@ impl App for Taskbar {
     fn tick(&mut self, window: &mut Window, now: Instant) {
         self.state.borrow_mut().tick(now);
         self.follow_installed_apps(window, now);
-        self.follow_windowless(now);
+        if let Some(waiting) = self.waiting_menu.take_if(|waiting| waiting.until <= now) {
+            self.show_menu_with(window, waiting.target, waiting.at, Vec::new());
+        }
         if let Some(trash) = &mut self.trash
             && !trash.watch.take_changed(now).is_empty()
         {
@@ -1179,6 +1215,7 @@ impl Taskbar {
         config: &BarConfig,
         text: TextSystem,
         session: Option<&Connection>,
+        status: &StatusHub,
     ) -> std::io::Result<Self> {
         let edge = config.edge;
         let icon_size = config.icon_size as f32;
@@ -1186,6 +1223,8 @@ impl Taskbar {
         if let Some(session) = session {
             bus::follow(session, inbox.outbox());
         }
+        let updates = Inbox::new()?;
+        status.subscribe(updates.outbox());
         let appearance = window.appearance();
         let form = BarForm::of(config);
         let state = TaskbarState::new(edge, icon_size);
@@ -1214,9 +1253,11 @@ impl Taskbar {
             active: None,
             unresponsive: Vec::new(),
             windowed: Vec::new(),
-            processes: AppProcesses::load(),
-            quitting: HashMap::new(),
-            reopening: None,
+            processes: AppProcesses::known(),
+            status: status.clone(),
+            updates,
+            status_items: Vec::new(),
+            waiting_menu: None,
             keep: session.map(|session| bus::keep_writer(session.clone())),
             autostart: autostart_dir(),
             bus: inbox,

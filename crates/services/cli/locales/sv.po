@@ -1,0 +1,23 @@
+msgid ""
+msgstr ""
+"Language: sv\n"
+"Language-Team: Swedish\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "Nothing installed can do “{intent}”. See “bande”."
+msgstr "Inget som är installerat kan göra ”{intent}”. Se ”bande”."
+
+msgid "Nothing installed can do “{intent}”. See “bande {domain}”."
+msgstr "Inget som är installerat kan göra ”{intent}”. Se ”bande {domain}”."
+
+msgid "There is nothing to undo"
+msgstr "Det finns inget att ångra"
+
+msgid "Undo the last change"
+msgstr "Ångra den senaste ändringen"
+
+msgid "Stopped: {what}"
+msgstr "Stoppades: {what}"

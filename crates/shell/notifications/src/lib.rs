@@ -118,7 +118,7 @@ enum Row {
         clear: Rect,
     },
     Card {
-        card: Card,
+        card: Box<Card>,
         collapsed: bool,
     },
     Empty(Paragraph),
@@ -540,7 +540,7 @@ impl Screen {
                         y,
                         height,
                         row: Row::Card {
-                            card,
+                            card: Box::new(card),
                             collapsed: false,
                         },
                     });
@@ -554,7 +554,7 @@ impl Screen {
                     y,
                     height,
                     row: Row::Card {
-                        card,
+                        card: Box::new(card),
                         collapsed: count > 1,
                     },
                 });

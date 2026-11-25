@@ -45,6 +45,16 @@ fn bande(owned: &Owned, line: &str) -> Result<String, String> {
 fn a_setting_is_changed_on_the_command_line_and_undone_after_the_owner_restarts() {
     let mut owned = Owned::start(PROGRAM);
     let config = Config::serve(owned.connect());
+    let help = bande(&owned, "settings set --help").unwrap();
+    assert!(
+        help.starts_with("bande settings set <setting> <value>"),
+        "{help}"
+    );
+    assert!(
+        bande(&owned, "settings")
+            .unwrap()
+            .contains("bande settings open-pane")
+    );
     assert!(
         bande(&owned, "settings find theme")
             .unwrap()

@@ -199,6 +199,7 @@ pub fn stands<S: Fn() -> String>(
     takes_only_whole_changes_through_crashes(&mut owned, change, state, &before);
     ends_plans_with_their_callers(&mut owned, change, state, &before);
     keeps_to_limits(&owned, change);
+    refuses_sandboxes(&owned);
     reads_past_bad_receipts(&mut owned, change);
     does_without_undo_only_when_told(&mut owned, change, state, &before);
 }
@@ -348,6 +349,38 @@ fn keeps_to_limits(owned: &Owned, change: &Change<'_>) {
     assert_eq!(reason(find(&odd)), Reason::InvalidArgument);
     let posing = limited(limits([("agent", Value::from("Organiser"))]));
     assert_eq!(reason(find(&posing)), Reason::AccessDenied);
+}
+
+fn refuses_sandboxes(owned: &Owned) {
+    let sandboxed = |program: &[&str]| {
+        Command::new("unshare")
+            .args(["--user", "--map-root-user", "--mount"])
+            .args(program)
+            .env("DBUS_SESSION_BUS_ADDRESS", owned.bus.address())
+            .output()
+    };
+    if !sandboxed(&["true"]).is_ok_and(|output| output.status.success()) {
+        eprintln!("no namespaces here, so sandboxes are not tried");
+        return;
+    }
+    let called = sandboxed(&[
+        "busctl",
+        "--user",
+        "call",
+        owned.name(),
+        bande_intents::PATH,
+        "org.bande.Intents",
+        "Receipts",
+        "a{sv}u",
+        "0",
+        "1",
+    ])
+    .expect("busctl");
+    let error = String::from_utf8_lossy(&called.stderr).into_owned();
+    assert!(
+        !called.status.success() && error.contains("sandbox"),
+        "{error}"
+    );
 }
 
 fn reads_past_bad_receipts(owned: &mut Owned, change: &Change<'_>) {

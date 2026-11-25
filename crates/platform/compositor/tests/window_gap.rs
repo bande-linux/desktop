@@ -241,6 +241,32 @@ fn a_maximized_window_leaving_full_screen_follows_what_changed_meanwhile() {
 }
 
 #[test]
+fn a_window_still_growing_to_maximized_stays_clear_of_the_bar_that_appears() {
+    let mut desktop = Desktop::new((1200, 900), 1.0, Anchor::Left, config(true, 8));
+    desktop
+        .shell
+        .set_bar_zone(&mut desktop.server, &desktop.bar, 0);
+    desktop.front.maximize(&mut desktop.server, 0);
+    desktop
+        .shell
+        .set_bar_zone(&mut desktop.server, &desktop.bar, THICKNESS + 16);
+    assert_eq!(desktop.front_frame(), inside((1200, 900), Anchor::Left, 8));
+}
+
+#[test]
+fn a_maximized_window_stays_clear_of_a_bar_that_hides_and_returns_at_once() {
+    let mut desktop = Desktop::new((1200, 900), 1.0, Anchor::Left, config(true, 8));
+    desktop.front.maximize(&mut desktop.server, 0);
+    let area = desktop.front_frame();
+    for zone in [0, THICKNESS + 16] {
+        desktop
+            .shell
+            .set_bar_zone(&mut desktop.server, &desktop.bar, zone);
+    }
+    assert_eq!(desktop.front_frame(), area);
+}
+
+#[test]
 fn every_display_has_the_gap_on_its_own_edges() {
     let mut desktop = Desktop::new((1200, 900), 1.0, Anchor::Left, config(true, 16));
     desktop.server.add_output(OutputConfig::virtual_display(

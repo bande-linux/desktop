@@ -587,18 +587,23 @@ impl State {
             self.screens[screen].fitted_to = area;
             for index in 0..self.windows.len() {
                 let window = &self.windows[index];
+                let (full_screen, maximized) = window.toplevel.with_pending_state(|pending| {
+                    (
+                        pending.states.contains(xdg_toplevel::State::Fullscreen),
+                        pending.states.contains(xdg_toplevel::State::Maximized),
+                    )
+                });
                 if self.screen_of(window) != screen
                     || self.on_full_screen_space(window)
-                    || window.toplevel.with_pending_state(|pending| {
-                        pending.states.contains(xdg_toplevel::State::Fullscreen)
-                    })
+                    || full_screen
                 {
                     continue;
                 }
                 let (fitted, target) = match window.tile {
                     Some((tile, rect)) => (rect == self.tile_rect(screen, tile), Some(tile)),
-                    None if window.has_state(xdg_toplevel::State::Maximized) => {
-                        (window.geometry() == Some(area), None)
+                    None if maximized => {
+                        let settled = window.pending_location.is_none();
+                        (settled && window.geometry() == Some(area), None)
                     }
                     None => continue,
                 };

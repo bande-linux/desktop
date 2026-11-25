@@ -79,6 +79,14 @@ def controls():
 SHEETS = {'theme/colors.css': stylesheet, 'theme/controls.css': controls}
 
 
+def written(path):
+    try:
+        with open(path) as current:
+            return current.read()
+    except FileNotFoundError:
+        return None
+
+
 def main():
     for name, sheet in SHEETS.items():
         with open(os.path.join(BROWSER, name), 'w') as out:
@@ -89,7 +97,7 @@ def check():
     stale = []
     for name, sheet in SHEETS.items():
         path = os.path.join(BROWSER, name)
-        if not os.path.exists(path) or open(path).read() != sheet():
+        if written(path) != sheet():
             stale.append(os.path.relpath(path))
     if stale:
         print(f"{', '.join(stale)} out of date: run browser/scripts/theme-colors.py", file=sys.stderr)

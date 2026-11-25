@@ -1,0 +1,10 @@
+/usr/sbin/mount.cifs cifs-utils optional
+/usr/sbin/mount.nfs nfs-common optional
+btrfs btrfs-progs optional
+mount mount required
+restic restic depends
+systemctl systemd depends
+timeout coreutils required
+tune2fs e2fsprogs optional
+umount mount required
+unshare util-linux required

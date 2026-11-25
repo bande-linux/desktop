@@ -76,13 +76,13 @@ covers the change:
 
 ## Runtime dependencies
 
-`ci/runtime-deps` lists every program Bande runs (`Command::new`) and every system path it
-reads (`/usr/...`, `/bin`, `/sbin`), each with the Debian package that ships it and a kind:
+`ci/runtime-deps/<crate>` lists every program that crate runs (`Command::new`) and every system
+path it reads (`/usr/...`, `/bin`, `/sbin`), each with the Debian package that ships it and a kind:
 `required` (Debian priority required), `depends` (the package that runs or reads it, or for a
 shared library one package using it, declares it in Depends), `optional` (the code checks
 first and shows the user why a feature is off). `ci/check-runtime-deps.py` in `lint` fails on a
-path or program missing from the list and on a `depends` entry its package does not declare, so
-a new one is declared in the change that adds it; the `every-package` autopkgtest checks that
+path or program missing from its crate's file, on a file that names no crate and on a `depends`
+entry its package does not declare, so a new one is declared in the change that adds it; the `every-package` autopkgtest checks that
 every `required` and `depends` entry is on a system installed with `--no-install-recommends`.
 
 ## GitHub CI

@@ -1,0 +1,3 @@
+/usr/lib/NetworkManager/VPN/nm-openvpn-service.name network-manager-openvpn optional
+/usr/sbin/ifdown ifupdown optional
+nmcli network-manager optional

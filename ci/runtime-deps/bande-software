@@ -1,0 +1,4 @@
+/usr/share/applications desktop-file-utils optional
+/usr/share/metainfo appstream depends
+/usr/share/swcatalog appstream optional
+dpkg-query dpkg required

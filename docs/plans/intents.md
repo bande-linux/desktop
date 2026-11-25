@@ -48,7 +48,7 @@ by itself.
 | `Cargo.lock`, `debian/control` build dependencies, `debian/copyright` | never merged by hand: take `main`'s and generate again (`cargo metadata --offline`, `ci/deb/build-depends.py`, `ci/copyright.py`) |
 | Root `Cargo.toml` | members are globbed; only the line of a new library; a new external crate is asked for |
 | `docs/quality/tests.md`, `docs/architecture/{apps,session,packaging,behaviour}.md`, `README.md`, `debian/tests/control`, `ci/release/check-debs.sh`, `data/icons/src/apps.py`, `data/x-bande-mimeapps.list` | the integrator's: the rows go in the hand-off |
-| `ci/runtime-deps` | a file per crate after C0 |
+| `ci/runtime-deps/<crate>` | in the crate it is named after |
 | `debian/control` binary stanzas, `debian/<package>.install` | only the row's package |
 | `debian/rules`, `ci/release/lint.sh`, `crates/libs/app`, `crates/libs/intents`, `crates/testing` | C1; then C3 for the guard and `crates/testing`, then C8 for events; others in the hand-off |
 | `crates/apps/settings`, `crates/shell/launcher`, `crates/shell/shell`, `crates/platform`, `crates/libs/content` | one package at a time, in the [order below](#in-waves) |
@@ -96,8 +96,7 @@ is only added to; a change that breaks a user waits for a wave where the package
 
 | Id | Work | Needs | Owns | Debian package | Done when | Size |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| C0 | `ci/runtime-deps` as a folder with a file per crate | nothing | `ci/runtime-deps*`, `ci/check-runtime-deps.py` | none | the gate passes | S |
-| C1 | `bande-intents` and its macros, manifests, client, harness; `Program::intents()` and `Program::current()`; `bande` from manifests | C0 | `crates/libs/intents*`, `crates/libs/app`, `crates/libs/l10n`, `crates/testing`, `crates/services/cli`, `debian/rules`, `ci/release/lint.sh` | `bande-cli` | with C2 | L |
+| C1 | `bande-intents` and its macros, manifests, client, harness; `Program::intents()` and `Program::current()`; `bande` from manifests | nothing | `crates/libs/intents*`, `crates/libs/app`, `crates/libs/l10n`, `crates/testing`, `crates/services/cli`, `debian/rules`, `ci/release/lint.sh` | `bande-cli` | with C2 | L |
 | C2 | `settings`, and rows in Search with phrases, [step 1](#step-1-in-detail) | C1, by the same agent | `crates/services/settings-intents`, `crates/services/system-intents` (an empty list), `crates/libs/settings-client`, `crates/libs/settings-panes`, `crates/apps/settings` with Activity, `crates/shell/launcher`, `crates/shell/shell` | `bande-settings`, `bande-system-intents` | `bande settings set appearance light`, "dark" in Search with Undo, and `bande undo` after a restart of the owner | L |
 | C3 | Approval prompt, [in detail](#c3-in-detail) | C1 | `crates/shell/approval`, `crates/platform`, `crates/libs/intents`, `crates/testing`, `ci/review` | `bande-shell` | a virtual keyboard, EIS, input method or accessibility client cannot press Allow; one Allow formats a stick; installing a package asks Allow and then polkit's own question | L |
 | C4 | Broker, and Settings ▸ Agents; its log in C2's Activity | C1, C2 | `crates/services/agentd`, its page in `crates/apps/settings` | `bande-agent` | a person adds an agent, gives it Notes and a folder, sees what it did and undoes it, without meeting a word outside the eight | L |
@@ -171,7 +170,7 @@ mail. An agent that reads, shows and changes needs no prompt.
 
 | Wave | At once | Then |
 | :--- | :--- | :--- |
-| 0 | C0; A1a | |
+| 0 | A1a | |
 | 1 | C1 and C2 by one agent; D0 | gate 1 |
 | 2 | D1a, then D1b, then D1c; D2; D6; D21; D5, then A1c | |
 | 3 | C4, then C5 and C6; D23; D4 (drafts, reading); D7; D11; D14; D16; A2 | gate 2 |

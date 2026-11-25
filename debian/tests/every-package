@@ -22,14 +22,14 @@ for package in $(dpkg-query -W -f '${Package}\n' 'bande-*' xdg-desktop-portal-ba
         { echo "$package is $installed, bande-desktop is $version"; exit 1; }
 done
 
-while read -r item package kind; do
+cat ci/runtime-deps/* | while read -r item package kind; do
     [ "$kind" = depends ] || [ "$kind" = required ] || continue
     candidate "$package" || { echo "warning: $item needs $package, which has no candidate"; continue; }
     case $item in
         /*) test -e "$item" ;;
         *) command -v "$item" > /dev/null ;;
     esac || { echo "$item from $package is missing without recommends"; exit 1; }
-done < ci/runtime-deps
+done
 
 apt-cache show bande-desktop | sed -n 's/^Recommends: //p' | tr ',' '\n' | sed 's/^ *//; s/[ (].*//' |
     while read -r recommended; do

@@ -640,6 +640,18 @@ msgstr "Kontots kalendrar tas bort från den här datorn. Inget raderas på serv
 msgid "Do you want to delete only this event, or all events in the series?"
 msgstr "Vill du radera bara den här händelsen eller alla händelser i serien?"
 
+msgid "Sign in at {host}?"
+msgstr "Vill du logga in på {host}?"
+
+msgid "The calendars of {address} are on this server. Check that it belongs to your provider before Calendar sends your password to it."
+msgstr "Kalendrarna för {address} finns på den här servern. Kontrollera att den tillhör din leverantör innan Kalender skickar ditt lösenord till den."
+
+msgid "Not Now"
+msgstr "Inte nu"
+
+msgid "Sign In"
+msgstr "Logga in"
+
 msgid "New Calendar"
 msgstr "Ny kalender"
 
@@ -822,9 +834,6 @@ msgstr "Logga in på ”{name}”"
 
 msgid "Subscribe to a Calendar"
 msgstr "Prenumerera på en kalender"
-
-msgid "Sign In"
-msgstr "Logga in"
 
 msgid "CalDAV account"
 msgstr "CalDAV-konto"

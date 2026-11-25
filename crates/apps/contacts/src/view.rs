@@ -3,10 +3,13 @@ use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 use std::rc::Rc;
 
 use bande_address_book::store::{Account, AccountKind, Found, LOCAL_ACCOUNT, Library};
+use bande_address_book::sync::copied;
 use bande_address_book::vcard::{
     Address, Birthday, Card, Contact, Kind, Photo, display_name, sort_key,
 };
 use bande_datetime::DateFormats as Formats;
+use bande_dav::offer::Offer;
+use bande_fs::{natural_order, same_letter};
 use bande_l10n::{tr, trn};
 use bande_toolkit::ui::{
     Alert, Axis, Button, Cell, Column, Form, FormLine, Heading, Label, Menu, MenuItem, PopUpButton,
@@ -64,6 +67,7 @@ enum Intent {
     Sidebar(String),
     Confirm(String),
     Import(bool),
+    Offer(Offer, bool),
     Open(String),
     Failure(String),
 }
@@ -72,6 +76,7 @@ enum Intent {
 enum Waiting {
     Alert(String, String),
     Import(String, Vec<Card>, usize),
+    Offer(Offer),
 }
 
 type Intents = Rc<RefCell<Vec<Intent>>>;
@@ -120,6 +125,7 @@ pub struct ContactsView {
     opened_books: HashSet<String>,
     waiting: VecDeque<Waiting>,
     asked_password: HashSet<String>,
+    asked_offers: HashSet<String>,
     undo: Vec<Vec<Step>>,
     redo: Vec<Vec<Step>>,
     intents: Intents,
@@ -156,7 +162,13 @@ fn found_by(library: &Library, key: &str) -> Option<Found> {
 
 fn letter_of(name: &str) -> String {
     match name.chars().next() {
-        Some(first) if first.is_alphabetic() => first.to_uppercase().collect(),
+        Some(first) if first.is_alphabetic() => {
+            let letter: String = first.to_uppercase().collect();
+            ('A'..='Z')
+                .map(String::from)
+                .find(|base| same_letter(base, &letter))
+                .unwrap_or(letter)
+        }
         _ => "#".to_owned(),
     }
 }
@@ -217,7 +229,13 @@ fn groups_of(library: &Library, book: usize, contact: &Contact, uid: &str) -> Ve
             }
         }
     }
-    groups.into_iter().collect()
+    in_order(groups)
+}
+
+fn in_order(names: BTreeSet<String>) -> Vec<String> {
+    let mut names: Vec<String> = names.into_iter().filter(|name| !name.is_empty()).collect();
+    names.sort_by(|a, b| natural_order(a, b));
+    names
 }
 
 /// The names of the group cards in `book`, and the `CATEGORIES` of its contacts.
@@ -239,11 +257,7 @@ fn named_groups(library: &Library, book: usize) -> (BTreeSet<String>, BTreeSet<S
 
 fn book_groups(library: &Library, book: usize) -> Vec<String> {
     let (cards, categories) = named_groups(library, book);
-    cards
-        .union(&categories)
-        .filter(|group| !group.is_empty())
-        .cloned()
-        .collect()
+    in_order(cards.union(&categories).cloned().collect())
 }
 
 impl ContactsView {
@@ -347,6 +361,7 @@ impl ContactsView {
             opened_books: HashSet::new(),
             waiting: VecDeque::new(),
             asked_password: HashSet::new(),
+            asked_offers: HashSet::new(),
             undo: Vec::new(),
             redo: Vec::new(),
             intents,
@@ -548,8 +563,14 @@ impl ContactsView {
                 ))
             })
             .collect();
-        shown.sort_by(|a, b| a.0.cmp(&b.0));
+        shown.sort_by(|a, b| natural_order(&a.0, &b.0));
         self.shown = shown.into_iter().map(|(_, shown)| shown).collect();
+        for index in 1..self.shown.len() {
+            let before = self.shown[index - 1].letter.clone();
+            if same_letter(&before, &self.shown[index].letter) {
+                self.shown[index].letter = before;
+            }
+        }
         if self
             .selected
             .as_ref()
@@ -564,7 +585,7 @@ impl ContactsView {
         let mut headings = Vec::new();
         let mut expanded = Vec::new();
         for account in &self.library.accounts {
-            let books: Vec<usize> = self
+            let mut books: Vec<usize> = self
                 .library
                 .books
                 .iter()
@@ -575,6 +596,7 @@ impl ContactsView {
             if books.is_empty() {
                 continue;
             }
+            books.sort_by(|a, b| natural_order(&self.book_name(*a), &self.book_name(*b)));
             headings.push(Heading::new(rows.len(), Self::account_name(account)));
             if account.kind != AccountKind::Local {
                 rows.push(Row::new(
@@ -939,7 +961,7 @@ impl ContactsView {
     }
 
     fn writable_books(&self) -> Vec<(String, String)> {
-        (0..self.library.books.len())
+        let mut books: Vec<(String, String)> = (0..self.library.books.len())
             .filter(|book| self.writable(*book))
             .map(|book| {
                 (
@@ -947,7 +969,9 @@ impl ContactsView {
                     self.book_name(book),
                 )
             })
-            .collect()
+            .collect();
+        books.sort_by(|a, b| natural_order(&a.1, &b.1));
+        books
     }
 
     fn default_book_id(&self) -> String {
@@ -1578,7 +1602,61 @@ impl ContactsView {
             Some(Waiting::Import(name, cards, skipped)) => {
                 self.present_import(&name, cards, skipped)
             }
+            Some(Waiting::Offer(offer)) => self.present_offer(offer),
             None => {}
+        }
+    }
+
+    /// Asks whether to sign in at the server of an account Calendar offered.
+    pub fn ask_offer(&mut self, offer: Offer) {
+        if self.asked_offers.insert(offer.id.clone()) {
+            self.waiting.push_back(Waiting::Offer(offer));
+            self.show_waiting();
+        }
+    }
+
+    fn present_offer(&mut self, offer: Offer) {
+        let intents = Rc::clone(&self.intents);
+        let title = tr!("Sign in at {host}?", host = offer.host());
+        let message = tr!(
+            "The contacts of {address} are on this server. Check that it belongs to your provider before Contacts sends your password to it.",
+            address = offer.address.clone()
+        );
+        self.ui.present_sheet(
+            Alert::new(&title, &message, move |action| {
+                push(&intents, Intent::Offer(offer.clone(), action == "accept"))
+            })
+            .cancel(&tr!("Not Now"), "cancel")
+            .primary(&tr!("Sign In"), "accept"),
+        );
+    }
+
+    /// Lets undo, redo and the open editor of contacts that a sync kept as copies change the
+    /// copies.
+    pub fn follow(&mut self, book: &str, moved: &[(String, String)]) {
+        let key = |href: &str| format!("{book}\n{href}");
+        for (from, to) in moved {
+            let Some(uid) = found_by(&self.library, &key(to))
+                .and_then(|found| self.library.card(&found))
+                .map(|card| card.uid().to_owned())
+            else {
+                continue;
+            };
+            for step in self.undo.iter_mut().chain(&mut self.redo).flatten() {
+                if step.book == book && step.href == *from {
+                    step.href.clone_from(to);
+                    step.before = step
+                        .before
+                        .take()
+                        .map(|data| copied(&data, &uid).unwrap_or(data));
+                }
+            }
+            let editing = self.editor.as_mut().and_then(|editor| editor.key.as_mut());
+            for shown in self.selected.as_mut().into_iter().chain(editing) {
+                if *shown == key(from) {
+                    *shown = key(to);
+                }
+            }
         }
     }
 
@@ -1853,6 +1931,16 @@ impl ContactsView {
                 Intent::Import(false) => {
                     self.pending_import.clear();
                     self.import_picker = None;
+                }
+                Intent::Offer(offer, accepted) => {
+                    self.asked_offers.remove(&offer.id);
+                    self.requests.push(Request::Run(match accepted {
+                        true => Job::Accept(offer),
+                        false => Job::Decline(offer),
+                    }));
+                    if accepted {
+                        self.requests.push(Request::Run(Job::Adopt));
+                    }
                 }
                 Intent::Open(url) => self.requests.push(Request::Open(url)),
                 Intent::Row(action, key) => {

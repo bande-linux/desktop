@@ -18,5 +18,6 @@ pub use client::{
 pub use http::{Credentials, Error, Response, join, same_resource};
 pub use store::{href_for, new_uid, read_or_set_aside};
 pub use sync::{
-    Cached, Conflict, Local, Outcome, Pending, Refused, Sent, Upsert, merge, sync_collection,
+    Applied, Cached, Conflict, KeptCopy, Local, Outcome, Pending, Refused, Sent, Upsert, merge,
+    sync_collection,
 };

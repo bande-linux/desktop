@@ -2,7 +2,7 @@ use std::sync::mpsc::{Sender, channel};
 
 use bande_address_book::store::Book;
 use bande_address_book::sync::{Outcome, sync_book};
-use bande_dav::offer::{self, Offer};
+use bande_dav::offer::{self, Answer, Offer};
 use bande_dav::{Client, Credentials, Error, FoundAddressBooks, Service};
 use bande_discovery::Resolver;
 use bande_inbox::Outbox;
@@ -29,6 +29,8 @@ pub enum Job {
     },
     Forget(String),
     Adopt,
+    Accept(Offer),
+    Decline(Offer),
     Offer {
         offer: Offer,
         password: String,
@@ -56,8 +58,7 @@ pub enum Reply {
     },
     Adopted {
         offer: Offer,
-        credentials: Credentials,
-        result: Result<FoundAddressBooks, Error>,
+        answer: Answer<FoundAddressBooks>,
     },
     OfferFailed(String),
 }
@@ -115,14 +116,16 @@ fn run(job: Job, passwords: &mut Passwords, outbox: &Outbox<Reply>) {
             let answered = offer::adopt(Service::CardDav, |client, server| {
                 client.discover_address_books(server)
             });
-            for (offer, credentials, result) in answered {
-                reply(Reply::Adopted {
-                    offer,
-                    credentials,
-                    result,
-                });
+            for (offer, answer) in answered {
+                reply(Reply::Adopted { offer, answer });
             }
         }
+        Job::Accept(offer) => {
+            if let Err(error) = offer::accept(Service::CardDav, &offer) {
+                tracing::warn!("cannot accept the offered account: {error}");
+            }
+        }
+        Job::Decline(offer) => offer::withdraw(Service::CardDav, &offer.id),
         Job::Offer { offer, password } => {
             if let Err(error) = offer::make(Service::CalDav, &offer, &password) {
                 reply(Reply::OfferFailed(error));

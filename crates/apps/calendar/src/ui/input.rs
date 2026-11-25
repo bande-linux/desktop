@@ -1061,6 +1061,11 @@ fn resolve(view: &mut CalendarView, action: &str) {
             }
             return;
         }
+        Some(Confirm::Offer(offer)) => {
+            return view
+                .requests
+                .push(Request::AnswerOffer(offer, action == "accept"));
+        }
         Some(Confirm::Welcome(remembered)) => {
             let choice = match action {
                 "accept" => "account",
@@ -1107,6 +1112,7 @@ fn resolve(view: &mut CalendarView, action: &str) {
         Confirm::Invitation(_)
         | Confirm::Counter { .. }
         | Confirm::Cancelled { .. }
+        | Confirm::Offer(_)
         | Confirm::Welcome(_) => {}
     }
 }

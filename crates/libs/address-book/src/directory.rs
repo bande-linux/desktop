@@ -93,7 +93,7 @@ impl Directory {
             })
             .collect();
         self.people
-            .sort_by_cached_key(|person| person.name.to_lowercase());
+            .sort_by(|a, b| bande_fs::natural_order(&a.name, &b.name));
         self.names = self
             .people
             .iter()

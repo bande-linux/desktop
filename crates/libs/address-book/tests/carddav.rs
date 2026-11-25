@@ -1,9 +1,9 @@
-#![allow(clippy::unwrap_used)]
+#![allow(clippy::unwrap_used, clippy::panic)]
 
-use bande_address_book::store::{Account, AccountKind, BookInfo, Found, Library};
+use bande_address_book::store::{Account, AccountKind, BookInfo, Found, Library, Stored};
 use bande_address_book::sync::{Outcome, apply, sync_book};
 use bande_address_book::vcard::{Card, Contact, Label, Labelled, display_name};
-use bande_dav::{Client, Pending, Precondition, Sent, Service, Upsert};
+use bande_dav::{Client, KeptCopy, Pending, Precondition, Sent, Service, Upsert};
 use bande_test_bus::xandikos::Xandikos;
 
 fn ann() -> Contact {
@@ -22,7 +22,7 @@ fn ann() -> Contact {
 
 fn sync(client: &Client, library: &mut Library) -> Vec<String> {
     let outcome = sync_book(client, &library.books[1].for_sync()).unwrap();
-    apply(library, outcome)
+    apply(library, outcome).conflicts
 }
 
 #[test]
@@ -98,7 +98,7 @@ fn an_offline_edit_that_meets_a_change_on_the_carddav_server_keeps_both_versions
             .all(|stored| stored.pending.is_none())
     );
 
-    let refused = bande_address_book::store::Stored::new(
+    let refused = Stored::new(
         format!("{}refused.vcf", found.books[0].url),
         None,
         "not a card".to_owned(),
@@ -120,7 +120,38 @@ fn an_offline_edit_that_meets_a_change_on_the_carddav_server_keeps_both_versions
         .retain(|stored| stored.pending.is_none());
     let bo = library.books[1].find("bo").unwrap();
     let bo = library.books[1].cards.remove(bo);
-    client.delete(&bo.href, None).unwrap();
+    client
+        .put(&bo.href, &theirs.to_vcf(), &Precondition::None)
+        .unwrap();
+    library.books[1].cards.push(Stored {
+        pending: Some(Pending::Create),
+        etag: None,
+        ..bo.clone()
+    });
+    let outcome = sync_book(&client, &library.books[1].for_sync()).unwrap();
+    let moved = apply(&mut library, outcome).moved;
+    assert_eq!(
+        client.get(&bo.href).unwrap().data,
+        theirs.to_vcf(),
+        "a new card never replaces the one at its address"
+    );
+    let [(from, to)] = &moved[..] else {
+        panic!("the new card is not kept: {moved:?}");
+    };
+    assert_eq!(*from, bo.href);
+    let lost_answer = library.books[1]
+        .cards
+        .iter_mut()
+        .find(|stored| stored.href == *to)
+        .unwrap();
+    client
+        .put(to, &lost_answer.data, &Precondition::Create)
+        .unwrap();
+    assert!(sync(&client, &mut library).is_empty());
+    for href in [&bo.href, to] {
+        client.delete(href, None).unwrap();
+        library.books[1].cards.retain(|stored| stored.href != *href);
+    }
 
     client.delete(&stored.href, None).unwrap();
     sync(&client, &mut library);
@@ -175,15 +206,15 @@ fn what_is_changed_while_a_sync_runs_is_never_undone_by_its_outcome() {
 
     let stale = &mut library.books[book].cards[2];
     stale.pending = Some(Pending::Update);
-    done.copies.push(Upsert {
+    done.copies.push(KeptCopy {
+        replaces: stale.href.clone(),
         href: "/dav/copy.vcf".to_owned(),
-        etag: None,
         data: stale.data.clone(),
-        sent: Some(Sent {
+        sent: Sent {
             pending: Pending::Update,
             data: stale.data.clone(),
             taken: false,
-        }),
+        },
     });
 
     let mut mine = ann();

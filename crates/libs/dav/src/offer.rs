@@ -23,6 +23,23 @@ pub struct Offer {
     pub user: String,
 }
 
+impl Offer {
+    /// The host that would get the password.
+    pub fn host(&self) -> String {
+        host(&self.server).unwrap_or_else(|| self.server.clone())
+    }
+}
+
+/// What became of an offer.
+#[derive(Debug)]
+pub enum Answer<T> {
+    Found(Credentials, T),
+    /// The offer's server does not serve this protocol, and the one that does is outside the
+    /// address's domain: ask whether to sign in there, then [`accept`] or [`withdraw`].
+    Ask,
+    Failed(Error),
+}
+
 fn folder() -> Option<PathBuf> {
     bande_xdg::data_home().map(|home| home.join(FOLDER))
 }
@@ -44,12 +61,17 @@ fn file(service: Service, id: &str) -> Option<PathBuf> {
 
 /// Offers the account to the app that speaks `service`. Blocks on the Secret Service.
 pub fn make(service: Service, offer: &Offer, password: &str) -> Result<(), String> {
-    let path = file(service, &offer.id).ok_or("there is no home folder")?;
     let program = format!("/usr/bin/bande-{}", service.app());
     let keyring = Keyring::shared(KEYRING, vec![program]).map_err(|error| error.to_string())?;
     keyring
         .save(&[("offer", &offer.id)], &offer.user, password)
         .map_err(|error| error.to_string())?;
+    accept(service, offer)
+}
+
+/// Lets the offer sign in at its server at the next [`adopt`].
+pub fn accept(service: Service, offer: &Offer) -> Result<(), String> {
+    let path = file(service, &offer.id).ok_or("there is no home folder")?;
     let text = serde_json::to_string(offer).map_err(|error| error.to_string())?;
     bande_xdg::replace_private_file(&path, &text).map_err(|error| error.to_string())
 }
@@ -97,14 +119,15 @@ fn vouched(address: &str, server: &str) -> bool {
 }
 
 /// Signs in to each waiting offer for `service` and runs `discover` there: on the offered
-/// server, else on the one the offer's address points to (RFC 6764) inside the address's own
-/// domain. Each answered offer names the server that answered. An offer whose server or
-/// password cannot be reached now waits for the next call; every other one is answered and
-/// withdrawn. Blocks on the network and the Secret Service.
+/// server, else on the one the offer's address points to (RFC 6764). Outside the address's own
+/// domain that server gets no password before the person agreed ([`Answer::Ask`]). Each
+/// answered offer names the server that answered. An offer to ask about, or whose server or
+/// password cannot be reached now, waits for the next call; every other one is withdrawn.
+/// Blocks on the network and the Secret Service.
 pub fn adopt<T>(
     service: Service,
     discover: impl Fn(&Client, &str) -> Result<T, Error>,
-) -> Vec<(Offer, Credentials, Result<T, Error>)> {
+) -> Vec<(Offer, Answer<T>)> {
     let mut answered = Vec::new();
     for mut offer in waiting(service) {
         let password = match password(&offer) {
@@ -124,24 +147,29 @@ pub fn adopt<T>(
             password,
         };
         let client = Client::new(service, Some(&credentials));
-        let result = discover(&client, &offer.server).or_else(|error| {
-            let found = Client::find(service, &offer.address, &Resolver::system())
-                .filter(|found| *found != offer.server && vouched(&offer.address, found));
-            match found {
-                Some(found) => {
-                    let result = discover(&client, &found)?;
-                    offer.server = found;
-                    Ok(result)
-                }
-                None => Err(error),
+        let mut result = discover(&client, &offer.server);
+        if result.is_err()
+            && let Some(found) = Client::find(service, &offer.address, &Resolver::system())
+                .filter(|found| *found != offer.server && secure(found))
+        {
+            let known = host(&found) == host(&offer.server);
+            offer.server = found;
+            if !known && !vouched(&offer.address, &offer.server) {
+                answered.push((offer, Answer::Ask));
+                continue;
             }
-        });
-        if let Err(Error::Network(error)) = &result {
-            tracing::info!("the offered account waits for the network: {error}");
-            continue;
+            result = discover(&client, &offer.server);
         }
+        let answer = match result {
+            Err(Error::Network(error)) => {
+                tracing::info!("the offered account waits for the network: {error}");
+                continue;
+            }
+            Ok(found) => Answer::Found(credentials, found),
+            Err(error) => Answer::Failed(error),
+        };
         withdraw(service, &offer.id);
-        answered.push((offer, credentials, result));
+        answered.push((offer, answer));
     }
     answered
 }

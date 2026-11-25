@@ -777,10 +777,6 @@ impl Library {
                 let stored = &mut target.objects[index];
                 stored.pending = match (local, stored.pending) {
                     (true, _) => None,
-                    (false, Some(Pending::Delete)) => {
-                        stored.etag = None;
-                        Some(Pending::Create)
-                    }
                     (false, Some(Pending::Create)) => Some(Pending::Create),
                     (false, _) => Some(Pending::Update),
                 };

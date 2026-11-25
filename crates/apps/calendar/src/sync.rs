@@ -1,4 +1,6 @@
-use bande_dav::{Client, Conflict, Error, Local, Sent, Upsert, merge, sync_collection};
+use bande_dav::{
+    Applied, Client, Conflict, Error, KeptCopy, Local, Sent, Upsert, merge, sync_collection,
+};
 use jiff::Timestamp;
 
 use crate::ical::CalendarObject;
@@ -12,7 +14,7 @@ pub struct Outcome {
     pub upserts: Vec<Upsert>,
     pub removed: Vec<String>,
     pub conflicts: Vec<String>,
-    pub copies: Vec<Upsert>,
+    pub copies: Vec<KeptCopy>,
     pub refused: Vec<(String, u16)>,
     pub error: Option<Error>,
 }
@@ -30,29 +32,32 @@ fn summary(data: &str) -> String {
         .unwrap_or_default()
 }
 
-fn kept_copy(info: &CalendarInfo, conflict: &Conflict) -> Option<Upsert> {
-    let mut object = CalendarObject::parse(&conflict.data)
-        .ok()?
-        .into_iter()
-        .next()?;
-    let uid = new_uid();
+/// The event of `data` as one of its own with `uid`, without the people invited.
+pub fn copied(data: &str, uid: &str) -> Option<String> {
+    let mut object = CalendarObject::parse(data).ok()?.into_iter().next()?;
     for event in &mut object.events {
-        event.uid = uid.clone();
+        uid.clone_into(&mut event.uid);
         event.component.properties.retain(|property| {
             !["ORGANIZER", "ATTENDEE"]
                 .iter()
                 .any(|name| property.name.eq_ignore_ascii_case(name))
         });
     }
-    Some(Upsert {
+    Some(object.to_ics(Timestamp::now()))
+}
+
+fn kept_copy(info: &CalendarInfo, conflict: &Conflict) -> Option<KeptCopy> {
+    let uid = new_uid();
+    let data = copied(&conflict.data, &uid)?;
+    Some(KeptCopy {
         href: href_for(info, &uid),
-        etag: None,
-        data: object.to_ics(Timestamp::now()),
-        sent: Some(Sent {
+        replaces: conflict.href.clone(),
+        data,
+        sent: Sent {
             pending: conflict.pending,
             data: conflict.data.clone(),
             taken: false,
-        }),
+        },
     })
 }
 
@@ -137,9 +142,9 @@ pub fn subscription_outcome(info: &CalendarInfo, data: &str, alerts: bool) -> Op
     })
 }
 
-pub fn apply(library: &mut Library, outcome: Outcome, replace_all: bool) -> Vec<String> {
+pub fn apply(library: &mut Library, outcome: Outcome, replace_all: bool) -> Applied {
     let Some(index) = library.calendar_index(&outcome.calendar) else {
-        return Vec::new();
+        return Applied::default();
     };
     let calendar = &mut library.calendars[index];
     calendar.info.ctag = outcome.ctag;
@@ -147,12 +152,15 @@ pub fn apply(library: &mut Library, outcome: Outcome, replace_all: bool) -> Vec<
     if replace_all {
         calendar.objects.clear();
     }
-    merge(
+    let moved = merge(
         &mut calendar.objects,
         &outcome.removed,
         outcome.upserts,
         outcome.copies,
     );
     library.save(index);
-    outcome.conflicts
+    Applied {
+        conflicts: outcome.conflicts,
+        moved,
+    }
 }

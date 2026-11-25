@@ -17,8 +17,8 @@ use bande_contacts::view::{
 };
 use bande_contacts::widgets::{SIDEBAR_WIDTH, TOOLBAR_HEIGHT};
 use bande_contacts::worker::{Job, Reply, Worker};
-use bande_dav::offer::Offer;
-use bande_dav::{Credentials, Error, FoundAddressBooks, new_uid};
+use bande_dav::offer::{Answer, Offer};
+use bande_dav::{Applied, Credentials, Error, FoundAddressBooks, new_uid};
 use bande_inbox::Inbox;
 use bande_l10n::{tr, trn};
 use bande_toolkit::ui::{Event, Key};
@@ -438,7 +438,9 @@ impl Contacts {
                         ),
                     ));
                 }
-                let conflicts = apply(&mut view.library, outcome);
+                let book = outcome.book.clone();
+                let Applied { conflicts, moved } = apply(&mut view.library, outcome);
+                view.follow(&book, &moved);
                 view.refresh();
                 if !conflicts.is_empty() {
                     view.alert(
@@ -486,12 +488,13 @@ impl Contacts {
                     self.done(cx, done);
                 }
             }
-            Reply::Adopted {
-                offer,
-                credentials,
-                result,
-            } => match result {
-                Ok(found) => {
+            Reply::Adopted { offer, answer } => match answer {
+                Answer::Ask => {
+                    if let Some(view) = self.view(cx) {
+                        view.ask_offer(offer);
+                    }
+                }
+                Answer::Found(credentials, found) => {
                     let known = self.view(cx).is_some_and(|view| {
                         view.library.accounts.iter().any(|account| {
                             matches!(&account.kind, AccountKind::CardDav { user, home, .. }
@@ -512,7 +515,7 @@ impl Contacts {
                     );
                     self.sync(cx);
                 }
-                Err(error) => {
+                Answer::Failed(error) => {
                     if let Some(view) = self.view(cx) {
                         view.alert(
                             &tr!(

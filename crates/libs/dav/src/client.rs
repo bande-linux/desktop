@@ -418,7 +418,7 @@ impl Client {
         let mut token = token.map(str::to_owned);
         for _ in 0..MAX_SYNC_PAGES {
             let body = xml::sync_collection(token.as_deref());
-            let (url, status) = self.multistatus("REPORT", collection, "1", &body)?;
+            let (url, status) = self.multistatus("REPORT", collection, "0", &body)?;
             let mut truncated = false;
             for entry in status.entries {
                 let href = join(&url, &entry.href);

@@ -393,8 +393,8 @@ UI.
   `org.bande.AccountOffers` (attribute `offer`) with the server and user in
   `~/.local/share/bande/account-offers/`; the item names the other app in `bande:shared`, so it
   reads the password without a question when it adopts the account, saves it as its own and removes
-  the offer. The password goes to the offered server, else only to an HTTPS server inside the
-  address's own domain. Removing the account first withdraws the offer.
+  the offer. The password goes to the offered server, else to the HTTPS server the address's
+  domain points to; when that is outside the domain, the app first asks "Sign in at …?". Removing the account first withdraws the offer.
 
 ### Updates during a session
 

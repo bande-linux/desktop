@@ -16,6 +16,7 @@ bande-app-menu.workspace = true
 bande-content-lines.workspace = true
 bande-datetime.workspace = true
 bande-dav.workspace = true
+bande-fs.workspace = true
 bande-discovery.workspace = true
 bande-inbox.workspace = true
 bande-keyring.workspace = true

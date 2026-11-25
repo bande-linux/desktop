@@ -23,7 +23,8 @@ offline and in sync. Packaged as `bande-contacts`.
   View ▸ Refresh. Sync uses `sync-collection` (RFC 6578), else ctag and etags; contacts are
   fetched with `addressbook-multiget`. Creates use `If-None-Match: *`, edits and deletes
   `If-Match`: when an edit meets a contact changed elsewhere, the server's version stays and the
-  edit is kept as a second contact to merge. A contact the server refuses stays pending and is sent
+  edit is kept as a second contact to merge, as is a new contact whose address on the server is
+  taken; Undo then changes that second contact. A contact the server refuses stays pending and is sent
   again at the next sync, while the others sync. The title bar says Offline, or Not Synced with the
   reason and the contacts refused, Try Again and Server Settings….
 - **vCard.** 3.0 and 4.0 (and 2.1 with quoted-printable, kept as 3.0) through `bande-address-book`: folding,

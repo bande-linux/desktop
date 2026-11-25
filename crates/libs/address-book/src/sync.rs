@@ -1,6 +1,6 @@
 use bande_dav::{
-    Client, Conflict, Error, Local, Pending, Sent, Upsert, href_for, merge, new_uid,
-    sync_collection,
+    Applied, Client, Conflict, Error, KeptCopy, Local, Pending, Sent, Upsert, href_for, merge,
+    new_uid, sync_collection,
 };
 
 use crate::store::{Book, Library};
@@ -14,7 +14,7 @@ pub struct Outcome {
     pub upserts: Vec<Upsert>,
     pub removed: Vec<String>,
     pub conflicts: Vec<String>,
-    pub copies: Vec<Upsert>,
+    pub copies: Vec<KeptCopy>,
     pub refused: Vec<(String, u16)>,
     pub error: Option<Error>,
 }
@@ -27,19 +27,25 @@ fn name_of(data: &str) -> String {
         .unwrap_or_default()
 }
 
-fn kept_copy(book: &Book, conflict: &Conflict) -> Option<Upsert> {
-    let mut card = parse_cards(&conflict.data).cards.into_iter().next()?;
+/// The card of `data` as one of its own with `uid`.
+pub fn copied(data: &str, uid: &str) -> Option<String> {
+    let mut card = parse_cards(data).cards.into_iter().next()?;
+    card.set_uid(uid);
+    Some(card.to_vcf())
+}
+
+fn kept_copy(book: &Book, conflict: &Conflict) -> Option<KeptCopy> {
     let uid = new_uid();
-    card.set_uid(&uid);
-    Some(Upsert {
+    let data = copied(&conflict.data, &uid)?;
+    Some(KeptCopy {
         href: href_for(book.info.url.as_deref(), &uid, "vcf"),
-        etag: None,
-        data: card.to_vcf(),
-        sent: Some(Sent {
+        replaces: conflict.href.clone(),
+        data,
+        sent: Sent {
             pending: conflict.pending,
             data: conflict.data.clone(),
             taken: false,
-        }),
+        },
     })
 }
 
@@ -95,21 +101,24 @@ pub fn sync_book(client: &Client, book: &Book) -> Result<Outcome, Error> {
     })
 }
 
-/// Applies a sync's outcome to the offline copy, keeping what was edited meanwhile; returns
-/// the names of the contacts that met a conflict.
-pub fn apply(library: &mut Library, outcome: Outcome) -> Vec<String> {
+/// Applies a sync's outcome to the offline copy, keeping what was edited meanwhile; tells
+/// which contacts met a conflict.
+pub fn apply(library: &mut Library, outcome: Outcome) -> Applied {
     let Some(index) = library.book_index(&outcome.book) else {
-        return Vec::new();
+        return Applied::default();
     };
     let book = &mut library.books[index];
     book.info.ctag = outcome.ctag;
     book.info.sync_token = outcome.sync_token;
-    merge(
+    let moved = merge(
         &mut book.cards,
         &outcome.removed,
         outcome.upserts,
         outcome.copies,
     );
     library.save(index);
-    outcome.conflicts
+    Applied {
+        conflicts: outcome.conflicts,
+        moved,
+    }
 }

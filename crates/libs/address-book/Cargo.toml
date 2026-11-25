@@ -11,6 +11,7 @@ publish = false
 [dependencies]
 bande-content-lines.workspace = true
 bande-dav.workspace = true
+bande-fs.workspace = true
 bande-xdg.workspace = true
 base64.workspace = true
 jiff.workspace = true

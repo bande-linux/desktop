@@ -485,6 +485,7 @@ version = "0.2.0"
 dependencies = [
  "bande-content-lines",
  "bande-dav",
+ "bande-fs",
  "bande-test-bus",
  "bande-xdg",
  "base64 0.22.1",
@@ -841,6 +842,7 @@ dependencies = [
  "bande-datetime",
  "bande-dav",
  "bande-discovery",
+ "bande-fs",
  "bande-inbox",
  "bande-keyring",
  "bande-l10n",

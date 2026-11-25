@@ -26,7 +26,7 @@ use bande_calendar::wake::WallAlarm;
 use bande_calendar::worker::{Job, Reply, Worker};
 use bande_content_lines::read_file;
 use bande_datetime::DateFormats;
-use bande_dav::offer::{self, Offer};
+use bande_dav::offer::{self, Answer, Offer};
 use bande_dav::{Discovered, RemoteCalendar, Service};
 use bande_design::{Accent, Scheme};
 use bande_inbox::Inbox;
@@ -641,7 +641,10 @@ impl CalendarApp {
                             status = *status
                         ));
                     }
-                    for title in apply(view.library_mut(), outcome, false) {
+                    let calendar = outcome.calendar.clone();
+                    let applied = apply(view.library_mut(), outcome, false);
+                    view.follow(&calendar, &applied.moved);
+                    for title in applied.conflicts {
                         self.sync_again = true;
                         self.errors.push(tr!(
                             "“{title}” was changed elsewhere; both versions are kept.",
@@ -750,12 +753,13 @@ impl CalendarApp {
                     };
                     view.set_status(Some(status));
                 }
-                Reply::Adopted {
-                    offer,
-                    credentials,
-                    result,
-                } => match result {
-                    Ok(found)
+                Reply::Adopted { offer, answer } => match answer {
+                    Answer::Ask => {
+                        if self.main.is_some() {
+                            view.ask_offer(offer);
+                        }
+                    }
+                    Answer::Found(credentials, found)
                         if view.library().accounts.iter().any(|account| {
                             matches!(&account.kind, AccountKind::CalDav { user, home, .. }
                                 if *user == credentials.user && *home == found.home)
@@ -763,7 +767,7 @@ impl CalendarApp {
                     {
                         tracing::info!("Calendar already has the offered account");
                     }
-                    Ok(found) => self.setup_done(
+                    Answer::Found(credentials, found) => self.setup_done(
                         view,
                         Done::Added {
                             address: offer.address,
@@ -774,7 +778,7 @@ impl CalendarApp {
                             also_contacts: false,
                         },
                     ),
-                    Err(error) => {
+                    Answer::Failed(error) => {
                         tracing::warn!("cannot use {} for Calendar: {error}", offer.address);
                         view.set_status(Some(tr!(
                             "{address} could not be used for Calendar: {error}",
@@ -836,6 +840,15 @@ impl CalendarApp {
                 Request::RemoveAccount(id) => {
                     view.library_mut().remove_account(&id);
                     self.worker.send(Job::Forget(id));
+                }
+                Request::AnswerOffer(offer, accepted) => {
+                    self.worker.send(match accepted {
+                        true => Job::Accept(offer),
+                        false => Job::Decline(offer),
+                    });
+                    if accepted {
+                        self.worker.send(Job::Adopt);
+                    }
                 }
                 Request::Changed => {
                     self.push_soon(PUSH_DELAY);

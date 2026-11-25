@@ -46,6 +46,23 @@ pub struct Upsert {
     pub sent: Option<Sent>,
 }
 
+/// A local edit kept under a new address `href` beside the server's version of `replaces`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KeptCopy {
+    pub replaces: String,
+    pub href: String,
+    pub data: String,
+    pub sent: Sent,
+}
+
+/// What applying a sync changed that the app tells about: the names of the resources that met
+/// a conflict, and the addresses that edits moved from and to as copies.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Applied {
+    pub conflicts: Vec<String>,
+    pub moved: Vec<(String, String)>,
+}
+
 /// A local change that the server refused because the resource changed there first
 /// (`412 Precondition Failed`); the server's version is in the outcome's upserts.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -77,6 +94,21 @@ pub struct Outcome {
     pub error: Option<Error>,
 }
 
+fn same_content(a: &str, b: &str) -> bool {
+    let lines = |text: &str| {
+        let text = text.replace("\r\n", "\n");
+        let text = text.replace("\n ", "").replace("\n\t", "");
+        let mut lines: Vec<String> = text
+            .lines()
+            .filter(|line| !line.is_empty())
+            .map(str::to_owned)
+            .collect();
+        lines.sort();
+        lines
+    };
+    lines(a) == lines(b)
+}
+
 fn conflict(
     client: &Client,
     local: &Local<'_>,
@@ -84,17 +116,30 @@ fn conflict(
     outcome: &mut Outcome,
 ) -> Result<(), Error> {
     match client.get(local.href) {
-        Ok(Resource { etag, data, .. }) => outcome.upserts.push(Upsert {
-            href: local.href.to_owned(),
-            etag,
-            data,
-            sent: Some(Sent {
-                pending,
+        Ok(Resource { etag, data, .. }) => {
+            let taken = pending != Pending::Delete && same_content(&data, local.data);
+            outcome.upserts.push(Upsert {
+                href: local.href.to_owned(),
+                etag,
+                data,
+                sent: Some(Sent {
+                    pending,
+                    data: local.data.to_owned(),
+                    taken,
+                }),
+            });
+            if taken {
+                return Ok(());
+            }
+        }
+        Err(Error::Status { status: 404, .. }) if pending == Pending::Create => {
+            outcome.refused.push(Refused {
+                href: local.href.to_owned(),
                 data: local.data.to_owned(),
-                taken: false,
-            }),
-        }),
-        Err(Error::Status { status: 404, .. }) if pending == Pending::Create => return Ok(()),
+                status: 412,
+            });
+            return Ok(());
+        }
         Err(Error::Status { status: 404, .. }) => {
             outcome.removed.push(local.href.to_owned());
             if pending == Pending::Delete {
@@ -121,16 +166,9 @@ fn push(client: &Client, items: &[Local<'_>], outcome: &mut Outcome) -> Result<(
             continue;
         };
         let result = match pending {
-            Pending::Create => match client.put(local.href, local.data, &Precondition::Create) {
-                Err(Error::PreconditionFailed) => client.get(local.href).and_then(|existing| {
-                    let precondition = existing
-                        .etag
-                        .map_or(Precondition::None, Precondition::Match);
-                    client.put(local.href, local.data, &precondition)
-                }),
-                other => other,
-            }
-            .map(Some),
+            Pending::Create => client
+                .put(local.href, local.data, &Precondition::Create)
+                .map(Some),
             Pending::Update => {
                 let precondition = local.etag.map_or(Precondition::None, |etag| {
                     Precondition::Match(etag.to_owned())
@@ -337,15 +375,15 @@ pub trait Cached: Sized {
 /// Applies what a sync found to `items`: removes what the server removed, takes the server's
 /// version of what changed, and adds `copies` (local edits kept beside a conflict) as new
 /// resources to push. What was edited or deleted while the sync ran stays a pending change,
-/// without a copy of the edit it replaced.
+/// without a copy of the edit it replaced. Returns the addresses the copies moved from and to.
 pub fn merge<T: Cached>(
     items: &mut Vec<T>,
     removed: &[String],
     upserts: Vec<Upsert>,
-    copies: Vec<Upsert>,
-) {
-    let holds = |copy: &Upsert, item: &T| copy.sent.as_ref().is_some_and(|sent| sent.still(item));
-    let copies: Vec<Upsert> = copies
+    copies: Vec<KeptCopy>,
+) -> Vec<(String, String)> {
+    let holds = |copy: &KeptCopy, item: &T| copy.replaces == item.href() && copy.sent.still(item);
+    let copies: Vec<KeptCopy> = copies
         .into_iter()
         .filter(|copy| items.iter().any(|item| holds(copy, item)))
         .collect();
@@ -391,9 +429,12 @@ pub fn merge<T: Cached>(
             }
         }
     }
-    items.extend(
-        copies
-            .into_iter()
-            .map(|copy| T::fresh(copy.href, None, copy.data, Some(Pending::Create))),
-    );
+    copies
+        .into_iter()
+        .map(|copy| {
+            let moved = (copy.replaces, copy.href.clone());
+            items.push(T::fresh(copy.href, None, copy.data, Some(Pending::Create)));
+            moved
+        })
+        .collect()
 }

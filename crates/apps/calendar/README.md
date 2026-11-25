@@ -41,7 +41,7 @@ views. Packaged as `bande-calendar`.
   without a network and pushes changes as soon as the network is back (`bande_network::follow_online`).
   Sync is incremental with `sync-token` (RFC 6578), falling back to ctag + etag listings on servers without it. Creates use
   `If-None-Match: *`, edits and deletes `If-Match`; when an edit meets a 412, the server's
-  version stays and the local edit is kept beside it as a new event, and the sidebar says so.
+  version stays and the local edit is kept beside it as a new event (also a new event whose address is taken), and the sidebar says so.
   An event the server refuses stays pending and is sent again at the next sync, while the others
   sync. Undo (Ctrl+Z) takes back a delete, a move or a change of length, and Redo (Shift+Ctrl+Z) does
   it again: a deleted event comes back

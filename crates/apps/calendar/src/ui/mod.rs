@@ -22,6 +22,7 @@ use std::rc::Rc;
 
 use accesskit::{ActionRequest, TreeUpdate};
 use bande_datetime::DateFormats;
+use bande_dav::offer::Offer;
 use bande_inbox::Outbox;
 use bande_l10n::{tr, trn};
 use bande_toolkit::ui::{Alert, ClipboardRequest, Context, Cursor, FreeLayout, Menu, Ui, WidgetId};
@@ -109,6 +110,7 @@ pub enum Request {
         url: String,
         change: crate::worker::Change,
     },
+    AnswerOffer(Offer, bool),
     Changed,
     Mail(String),
     Read(Vec<std::path::PathBuf>),
@@ -258,6 +260,7 @@ pub(crate) enum Confirm {
     Import(Vec<CalendarObject>, usize),
     DeleteCalendar(usize),
     Welcome(PathBuf),
+    Offer(Offer),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1555,6 +1558,51 @@ impl CalendarView {
         };
         keep(&mut self.undo, snapshot);
         self.redo.clear();
+    }
+
+    /// Lets undo and redo of events that a sync kept as copies change the copies.
+    pub fn follow(&mut self, calendar: &str, moved: &[(String, String)]) {
+        let Some(index) = self.library.calendar_index(calendar) else {
+            return;
+        };
+        for (from, to) in moved {
+            let Some(uid) = self
+                .stored_at(index, to)
+                .and_then(|object| self.library.object(index, object))
+                .map(|object| object.uid().to_owned())
+            else {
+                continue;
+            };
+            for step in self.undo.iter_mut().chain(&mut self.redo) {
+                if step.calendar == calendar && step.href == *from {
+                    step.href.clone_from(to);
+                    step.data = step
+                        .data
+                        .take()
+                        .map(|data| crate::sync::copied(&data, &uid).unwrap_or(data));
+                }
+            }
+        }
+    }
+
+    /// Asks whether to sign in at the server of an account Contacts offered; asked again at a
+    /// later sync when another dialog is open.
+    pub fn ask_offer(&mut self, offer: Offer) {
+        if self.ui.has_sheet() || self.confirm.is_some() {
+            return;
+        }
+        let alert = Alert::new(
+            &tr!("Sign in at {host}?", host = offer.host()),
+            &tr!(
+                "The calendars of {address} are on this server. Check that it belongs to your provider before Calendar sends your password to it.",
+                address = offer.address.clone()
+            ),
+            self.choice(),
+        )
+        .cancel(&tr!("Not Now"), "cancel")
+        .primary(&tr!("Sign In"), "accept");
+        self.confirm = Some(Confirm::Offer(offer));
+        self.ui.present_dialog(alert);
     }
 
     fn stored_at(&self, calendar: usize, href: &str) -> Option<usize> {

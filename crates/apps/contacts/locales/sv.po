@@ -408,6 +408,12 @@ msgstr "Importera"
 msgid "OK"
 msgstr "OK"
 
+msgid "Sign in at {host}?"
+msgstr "Vill du logga in på {host}?"
+
+msgid "The contacts of {address} are on this server. Check that it belongs to your provider before Contacts sends your password to it."
+msgstr "Kontakterna för {address} finns på den här servern. Kontrollera att den tillhör din leverantör innan Kontakter skickar ditt lösenord till den."
+
 msgid "Remove “{name}”?"
 msgstr "Vill du ta bort ”{name}”?"
 

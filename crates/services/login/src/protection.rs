@@ -1,3 +1,4 @@
+use std::fs::{File, TryLockError};
 use std::os::fd::OwnedFd;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Sender};
@@ -19,6 +20,7 @@ const MOST: u64 = 512 << 20;
 const SHARE: u64 = 10;
 const RUNTIME_PROPERTIES: &str = "/run/systemd/system.control";
 const MEMORY_MIN_DROP_IN: &str = "50-MemoryMin.conf";
+const LOCKS: &str = "/run/bande-login";
 const ANSWER_PATIENCE: Duration = Duration::from_secs(2);
 const LOCKABLE: u64 = 256 << 20;
 
@@ -45,6 +47,7 @@ pub struct Protection {
     ended: Option<Sender<()>>,
     kept: Option<JoinHandle<()>>,
     lockable: Option<Lockable>,
+    _only_session: File,
 }
 
 struct Kept {
@@ -116,8 +119,26 @@ fn user_manager_of(uid: u32) -> String {
     format!("user@{uid}.service")
 }
 
+fn only_session_of(uid: u32) -> Option<File> {
+    let lock = File::create(Path::new(LOCKS).join(format!("desktop-{uid}.lock")))
+        .inspect_err(|error| tracing::warn!("no memory is kept for the desktop: {error}"))
+        .ok()?;
+    match lock.try_lock() {
+        Ok(()) => Some(lock),
+        Err(TryLockError::WouldBlock) => {
+            tracing::info!("memory is kept for this person's desktop already");
+            None
+        }
+        Err(TryLockError::Error(error)) => {
+            tracing::warn!("no memory is kept for the desktop: {error}");
+            None
+        }
+    }
+}
+
 impl Protection {
     pub fn of(uid: u32) -> Option<Self> {
+        let only_session = only_session_of(uid)?;
         let system = connection::Builder::system()
             .and_then(|builder| builder.method_timeout(ANSWER_PATIENCE).build())
             .inspect_err(|error| tracing::warn!("no memory is kept for the desktop: {error}"))
@@ -143,6 +164,7 @@ impl Protection {
             ended: Some(ended),
             kept,
             lockable,
+            _only_session: only_session,
         })
     }
 }

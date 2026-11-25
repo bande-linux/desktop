@@ -22,7 +22,7 @@ const UNREAD_INPUT_CAP: usize = 1 << 20;
 const WRAPPER: &str = "/bin/sh";
 const ENTER: u8 = b'\r';
 const LEAVE_PROGRAM: &[u8] =
-    b"\x1b[?1049l\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?2004l\x1b[?25l\x1b[0m\r\n";
+    b"\x1b[?2026l\x1b[?1049l\x1b7\x1b[r\x1b8\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?2004l\x1b[?25l\x1b[?7h\x1b(B\x0f\x1b[0m\r\n";
 const OUT_OF_MEMORY: u8 = 1;
 const TITLE_SEPARATOR: &str = " — ";
 
@@ -115,12 +115,14 @@ fn place_and_start(shell: u32) {
     }
 }
 
-fn kill_stopped(shell: u32) {
+fn signal_unreaped(shell: u32, signals: &[Signal]) {
     let Some(pid) = i32::try_from(shell).ok().and_then(Pid::from_raw) else {
         return;
     };
-    if let Err(error) = kill_process(pid, Signal::KILL) {
-        tracing::warn!("cannot end the stopped shell: {error}");
+    for signal in signals {
+        if let Err(error) = kill_process(pid, *signal) {
+            tracing::warn!("cannot end the shell: {error}");
+        }
     }
 }
 
@@ -174,6 +176,12 @@ fn enter_server_folder_in_the_shell(
     (Some(("/bin/sh".to_owned(), wrapped)), None)
 }
 
+impl Drop for Session {
+    fn drop(&mut self) {
+        signal_unreaped(self.shell, &[Signal::HUP, Signal::CONT]);
+    }
+}
+
 impl Session {
     pub fn spawn(
         terminal: Terminal,
@@ -197,7 +205,7 @@ impl Session {
         std::thread::Builder::new()
             .name("tab-scope".to_owned())
             .spawn(move || place_and_start(shell))
-            .inspect_err(|_| kill_stopped(shell))?;
+            .inspect_err(|_| signal_unreaped(shell, &[Signal::KILL]))?;
         let readiness = epoll::create(CreateFlags::CLOEXEC)?;
         epoll::add(
             &readiness,
@@ -248,7 +256,7 @@ impl Session {
 
     pub fn send(&mut self, bytes: &[u8]) -> bool {
         if self.ended() {
-            self.exited |= self.stopped && bytes.contains(&ENTER);
+            self.exited |= self.stopped && bytes == [ENTER];
             return true;
         }
         if self.output.len() >= UNREAD_INPUT_CAP {
@@ -380,7 +388,7 @@ impl Session {
         }
         self.output.clear();
         self.foreground = None;
-        self.finish_command(None);
+        self.command = None;
         let notice = tr!(
             "Everything in this tab was stopped because memory ran low. Press Return to close it."
         );

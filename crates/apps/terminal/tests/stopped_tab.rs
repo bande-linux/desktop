@@ -10,6 +10,7 @@ use bande_toolkit::Appearance;
 
 const TIMEOUT: Duration = Duration::from_secs(20);
 const START: Duration = Duration::from_millis(3500);
+const CLOSE: Duration = Duration::from_secs(1);
 
 fn read_until(
     session: &mut Session,
@@ -27,7 +28,8 @@ fn read_until(
 }
 
 #[test]
-fn a_tab_starts_beside_a_silent_bus_closes_when_its_shell_is_killed_and_says_what_cannot_start() {
+fn a_tab_closes_at_once_starts_beside_a_silent_bus_closes_when_its_shell_is_killed_and_says_what_cannot_start()
+ {
     let folder = tempfile::tempdir().expect("a folder");
     let socket = folder.path().join("bus");
     let _silent = UnixListener::bind(&socket).expect("a bus that never answers");
@@ -44,6 +46,22 @@ fn a_tab_starts_beside_a_silent_bus_closes_when_its_shell_is_killed_and_says_wha
     };
     let theme = Theme::new(Appearance::default(), Profile::default());
     let shell = ("/bin/sleep".to_owned(), vec!["60".to_owned()]);
+    let mut unplaced =
+        Session::spawn(Terminal::new(grid), Some(shell.clone()), None).expect("a shell");
+    let shell_status = format!("/proc/{}/stat", unplaced.id());
+    let stopped =
+        || std::fs::read_to_string(&shell_status).is_ok_and(|status| status.contains(") T "));
+    read_until(
+        &mut unplaced,
+        &theme,
+        START,
+        "the shell never waited for its scope",
+        |_| stopped(),
+    );
+    let closing = Instant::now();
+    drop(unplaced);
+    assert!(closing.elapsed() < CLOSE, "closing a waiting tab blocked");
+
     let mut session = Session::spawn(Terminal::new(grid), Some(shell), None).expect("a shell");
     let shell = session.id();
     let started = || {

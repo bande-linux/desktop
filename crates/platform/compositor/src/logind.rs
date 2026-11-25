@@ -78,6 +78,7 @@ trait RealtimeKit {
 }
 
 const HIGH_PRIORITY_NICE_LEVEL: i32 = -11;
+const SHORT_SLICE: Duration = Duration::from_micros(100);
 
 pub fn raise_priority(connection: &Connection) {
     let normal = match rustix::process::getpriority_process(None) {
@@ -91,31 +92,39 @@ pub fn raise_priority(connection: &Connection) {
     let raised = RealtimeKitProxyBlocking::new(connection).and_then(|rtkit| {
         rtkit.make_thread_high_priority(thread.unsigned_abs().into(), HIGH_PRIORITY_NICE_LEVEL)
     });
-    if let Err(error) = raised {
-        tracing::debug!("drawing and input keep the normal priority: {error}");
-        return;
-    }
-    match keep_priority_from_new_threads() {
-        Ok(()) => tracing::info!("drawing and input run at a higher priority"),
+    let level = match &raised {
+        Ok(()) => HIGH_PRIORITY_NICE_LEVEL,
+        Err(error) => {
+            tracing::debug!("drawing and input keep the normal priority: {error}");
+            normal
+        }
+    };
+    match run_soon_after_waking(level) {
+        Ok(()) if raised.is_ok() => {
+            tracing::info!("drawing and input run at a higher priority");
+        }
+        Ok(()) => {}
         Err(error) => {
             tracing::warn!("drawing and input keep the normal priority: {error}");
-            if let Err(error) = rustix::process::setpriority_process(None, normal) {
+            if raised.is_ok()
+                && let Err(error) = rustix::process::setpriority_process(None, normal)
+            {
                 tracing::warn!("cannot return to the normal priority: {error}");
             }
         }
     }
 }
 
-fn keep_priority_from_new_threads() -> io::Result<()> {
-    let parameters = libc::sched_param { sched_priority: 0 };
-    // SAFETY: sched_setscheduler only reads parameters, which outlives the call.
-    let set = unsafe {
-        libc::sched_setscheduler(
-            0,
-            libc::SCHED_OTHER | libc::SCHED_RESET_ON_FORK,
-            &raw const parameters,
-        )
-    };
+fn run_soon_after_waking(level: i32) -> io::Result<()> {
+    // SAFETY: an all-zero sched_attr is a valid value.
+    let mut wanted: libc::sched_attr = unsafe { std::mem::zeroed() };
+    wanted.size = size_of::<libc::sched_attr>() as u32;
+    wanted.sched_policy = libc::SCHED_OTHER as u32;
+    wanted.sched_flags = libc::SCHED_FLAG_RESET_ON_FORK as u64;
+    wanted.sched_nice = level;
+    wanted.sched_runtime = SHORT_SLICE.as_nanos() as u64;
+    // SAFETY: sched_setattr only reads wanted, which outlives the call and holds its own size.
+    let set = unsafe { libc::syscall(libc::SYS_sched_setattr, 0, &raw const wanted, 0) };
     match set {
         0 => Ok(()),
         _ => Err(io::Error::last_os_error()),

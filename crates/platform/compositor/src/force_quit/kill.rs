@@ -2,11 +2,11 @@ use std::fs;
 use std::io;
 use std::os::fd::{AsFd, AsRawFd, FromRawFd, OwnedFd};
 use std::os::unix::net::UnixStream;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Child;
 use std::time::Duration;
 
-use bande_xdg::unit_app_ids;
+use bande_xdg::{is_tab, unit_app_ids};
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use rustix::io::Errno;
 use rustix::net::sockopt::socket_peercred;
@@ -97,7 +97,7 @@ impl Process {
             Ok(()) | Err(Errno::SRCH) => {}
             Err(error) => return Err(error.into()),
         }
-        let killed = scope.map(|scope| kill_scope(Path::new(CGROUPS), scope));
+        let killed = scope.map(|scope| kill_app(Path::new(CGROUPS), scope));
         self.release_memory();
         killed.unwrap_or(Ok(()))
     }
@@ -122,7 +122,7 @@ impl Process {
                     Err(error) => tracing::warn!("cannot end a hung app: {error}"),
                 }
                 if let Some(scope) = scope
-                    && let Err(error) = kill_scope(Path::new(CGROUPS), &scope)
+                    && let Err(error) = kill_app(Path::new(CGROUPS), &scope)
                 {
                     tracing::debug!("cannot end the rest of a hung app: {error}");
                 }
@@ -174,9 +174,58 @@ pub(crate) fn app_scope<'a>(theirs: &'a str, own: &str, app_ids: &[String]) -> O
         .then_some(path)
 }
 
-pub(crate) fn kill_scope(root: &Path, scope: &str) -> io::Result<()> {
-    fs::write(
-        root.join(scope.trim_start_matches('/')).join(KILL_FILE),
-        "1",
-    )
+fn tabs_of(scope: &Path) -> Vec<PathBuf> {
+    let unit = |path: &Path| Some(path.file_name()?.to_str()?.to_owned());
+    let Some(app) = unit(scope).filter(|app| !is_tab(app)) else {
+        return Vec::new();
+    };
+    scope
+        .parent()
+        .and_then(|slice| fs::read_dir(slice).ok())
+        .into_iter()
+        .flatten()
+        .filter_map(|entry| Some(entry.ok()?.path()))
+        .filter(|path| {
+            unit(path).is_some_and(|tab| is_tab(&tab) && unit_app_ids(&tab) == unit_app_ids(&app))
+        })
+        .collect()
+}
+
+pub(crate) fn kill_app(root: &Path, scope: &str) -> io::Result<()> {
+    let scope = root.join(scope.trim_start_matches('/'));
+    let tabs = tabs_of(&scope);
+    let killed = fs::write(scope.join(KILL_FILE), "1");
+    for tab in tabs {
+        match fs::write(tab.join(KILL_FILE), "1") {
+            Err(error) if error.kind() != io::ErrorKind::NotFound => {
+                tracing::warn!("cannot end what runs in {}: {error}", tab.display());
+            }
+            _ => {}
+        }
+    }
+    killed
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn force_quitting_terminal_ends_what_runs_in_its_tabs_and_nothing_else() {
+        let root = tempfile::tempdir().expect("a folder");
+        let units = [
+            "app-bande-org.bande.Terminal-10.scope",
+            "app-bande-org.bande.Terminal-tab11.scope",
+            "app-bande-org.bande.Files-12.scope",
+            "app-bande-org.bande.Terminal-13.scope",
+        ];
+        for unit in units {
+            fs::create_dir(root.path().join(unit)).expect(unit);
+        }
+        kill_app(root.path(), units[0]).expect("kill");
+        let killed = units.map(|unit| root.path().join(unit).join(KILL_FILE).exists());
+        assert_eq!(killed, [true, true, false, false]);
+        kill_app(root.path(), units[1]).expect("kill");
+    }
 }

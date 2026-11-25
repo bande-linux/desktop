@@ -34,7 +34,8 @@ pub use installed::{InstallWatch, is_installed};
 pub use launch::{
     ACTIVATION_TOKEN, ExecError, LaunchError, OpenError, TERMINAL, TERMINAL_APP_ID,
     adopt_service_oom_score, follow_oom_kills, launch, launch_action, launch_with,
-    launch_with_arguments, open, open_with, spawn_detached, wait_for_exit,
+    launch_with_arguments, open, open_with, place_tab_in_scope, spawn_detached,
+    tab_ran_out_of_memory, wait_for_exit,
 };
 pub use mime::{DIRECTORY, MimeDatabase, OCTET_STREAM, TEXT_PLAIN, escape_xml, unescape_xml};
 pub use mimeapps::{
@@ -47,5 +48,5 @@ pub use reopen::{
     running_apps_contents, running_apps_file, saved_windows_file, set_aside_apps_of_unclean_end,
     take_apps_to_reopen,
 };
-pub use units::unit_app_ids;
+pub use units::{is_tab, unit_app_ids};
 pub use uri::{file_uri, path_from_file_uri, percent_decode, percent_encode};

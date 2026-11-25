@@ -1,3 +1,4 @@
+const TAB: &str = "tab";
 const UNIT_PATH: &str = "/org/freedesktop/systemd1/unit/";
 
 fn unescape(text: &str, marker: &str) -> String {
@@ -24,7 +25,7 @@ fn unescape(text: &str, marker: &str) -> String {
     String::from_utf8_lossy(&bytes).into_owned()
 }
 
-pub(crate) fn scope_name(app_id: &str, pid: u32) -> String {
+pub(crate) fn scope_name(app_id: &str, instance: &str) -> String {
     let mut escaped = String::with_capacity(app_id.len());
     for byte in app_id.bytes() {
         if byte.is_ascii_alphanumeric() || matches!(byte, b':' | b'_' | b'.') {
@@ -33,7 +34,17 @@ pub(crate) fn scope_name(app_id: &str, pid: u32) -> String {
             escaped.push_str(&format!("\\x{byte:02x}"));
         }
     }
-    format!("app-bande-{escaped}-{pid}.scope")
+    format!("app-bande-{escaped}-{instance}.scope")
+}
+
+pub(crate) fn tab_instance(pid: u32) -> String {
+    format!("{TAB}{pid}")
+}
+
+pub fn is_tab(unit: &str) -> bool {
+    unit.strip_suffix(".scope")
+        .and_then(|scope| scope.rsplit_once('-'))
+        .is_some_and(|(_, instance)| instance.starts_with(TAB))
 }
 
 pub fn unit_app_ids(unit: &str) -> Vec<String> {

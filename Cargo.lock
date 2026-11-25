@@ -792,6 +792,7 @@ dependencies = [
  "serde_json",
  "signal-hook",
  "smithay",
+ "tempfile",
  "tracing",
  "wayland-client",
  "zbus",
@@ -1983,6 +1984,7 @@ dependencies = [
  "bande-xdg",
  "rustix 1.1.6",
  "serde",
+ "tempfile",
  "tracing",
  "zbus",
 ]

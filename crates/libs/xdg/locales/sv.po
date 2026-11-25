@@ -22,6 +22,12 @@ msgstr "{app} avslutades oväntat"
 msgid "Click to open it again."
 msgstr "Klicka för att öppna den igen."
 
+msgid "A tab in {app} was stopped because memory ran low"
+msgstr "En flik i {app} stoppades eftersom minnet höll på att ta slut"
+
+msgid "Your computer ran out of memory and stopped what ran in the tab to keep everything else working."
+msgstr "Datorn fick slut på minne och stoppade det som kördes i fliken så att allt annat fortsätter att fungera."
+
 msgid "{app} was closed because memory ran low"
 msgstr "{app} stängdes eftersom minnet höll på att ta slut"
 

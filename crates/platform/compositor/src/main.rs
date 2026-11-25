@@ -13,9 +13,10 @@ use bande_compositor::{
     SessionUpkeep, Shutdown, Sleep, boot_screen_has_display, boot_screen_shown,
     export_session_environment, follow_alerts, follow_appearance, follow_input_settings,
     follow_lid, follow_login_settings, follow_session, follow_shutdown, follow_sleep,
-    handle_power_key, lid_closed, notify_service_manager, raise_priority, render_material,
-    serve_app_states, serve_displays, serve_global_shortcuts, serve_keyboard_monitor,
-    take_display_from_boot_screen, user_config, watchdog_keepalive_interval,
+    handle_power_key, keep_code_in_memory, lid_closed, notify_service_manager, raise_priority,
+    render_material, serve_app_states, serve_displays, serve_global_shortcuts,
+    serve_keyboard_monitor, take_display_from_boot_screen, user_config,
+    watchdog_keepalive_interval,
 };
 use bande_config::{BUS_NAME, CARRIED_ACCESSIBILITY, OBJECT_PATH, login_accessibility_file};
 use bande_datetime::ClockChanges;
@@ -801,6 +802,7 @@ fn run_drm(
         if let Some(path) = window_sessions() {
             app.compositor.remember_sessions_in(path);
         }
+        keep_code_in_memory();
     }
     let App {
         compositor, output, ..

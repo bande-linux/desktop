@@ -52,6 +52,9 @@ msgstr "Det gick inte att ansluta till {name}"
 msgid "Bluetooth"
 msgstr "Bluetooth"
 
+msgid "{program} in {app}"
+msgstr "{program} i {app}"
+
 msgid "Are you sure you want to restart your computer now?"
 msgstr "Vill du verkligen starta om datorn nu?"
 

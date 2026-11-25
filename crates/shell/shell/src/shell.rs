@@ -22,7 +22,7 @@ use bande_quick_settings::QuickSettings;
 use bande_status::captive::follow_captive_portal;
 use bande_status::hub::StatusHub;
 use bande_status::memory::{
-    CGROUP_ROOT, MEMINFO, OWN_CGROUP, PressureTrigger, SYSTEM_PRESSURE, Streak, app_slice,
+    CGROUP_ROOT, MEMINFO, OWN_CGROUP, PressureTrigger, Streak, app_slice, apps_at_limit,
     memory_exhausted,
 };
 use bande_status::time_zone::suggest_time_zones;
@@ -248,8 +248,9 @@ impl Shell {
     }
 
     fn memory_stalled(&mut self) {
-        let exhausted =
-            std::fs::read_to_string(MEMINFO).is_ok_and(|meminfo| memory_exhausted(&meminfo));
+        let exhausted = std::fs::read_to_string(MEMINFO)
+            .is_ok_and(|meminfo| memory_exhausted(&meminfo))
+            || self.context.app_slice.as_deref().is_some_and(apps_at_limit);
         if self.streak.stalled(Instant::now(), exhausted) {
             tracing::warn!("memory is running low");
             self.reconcile = true;
@@ -448,8 +449,8 @@ fn report_reopening(root: &mut Window, app: &str) {
     }
 }
 
-fn pressure_trigger() -> Option<PressureTrigger> {
-    PressureTrigger::open(Path::new(SYSTEM_PRESSURE))
+fn pressure_trigger(app_slice: Option<&Path>) -> Option<PressureTrigger> {
+    PressureTrigger::of_apps(app_slice)
         .inspect_err(|error| tracing::warn!("no warning when memory runs low: {error}"))
         .ok()
 }
@@ -480,7 +481,8 @@ pub fn run() -> Result<(), Box<dyn Error>> {
             suggest_time_zones(system, session);
         }
     }
-    let mut shell = Shell::start(context, root, pressure_trigger())?;
+    let pressure = pressure_trigger(context.app_slice.as_deref());
+    let mut shell = Shell::start(context, root, pressure)?;
     bande_toolkit::run_surfaces(&mut shell)?;
     Ok(())
 }

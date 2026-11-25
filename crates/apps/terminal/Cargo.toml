@@ -15,7 +15,7 @@ accesskit.workspace = true
 bande-app.workspace = true
 alacritty_terminal.workspace = true
 tracing.workspace = true
-rustix = { workspace = true, features = ["event"] }
+rustix = { workspace = true, features = ["event", "process"] }
 zbus.workspace = true
 bande-app-menu.workspace = true
 bande-app-settings.workspace = true

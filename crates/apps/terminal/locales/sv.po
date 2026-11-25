@@ -190,6 +190,9 @@ msgstr "Redigera"
 msgid "View"
 msgstr "Visa"
 
+msgid "Everything in this tab was stopped because memory ran low. Press Return to close it."
+msgstr "Allt i den här fliken stoppades eftersom minnet höll på att ta slut. Tryck på Retur för att stänga den."
+
 msgid "Block"
 msgstr "Block"
 

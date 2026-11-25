@@ -233,6 +233,20 @@ fn a_maximized_window_leaving_full_screen_stays_clear_of_the_bar_that_returns() 
 }
 
 #[test]
+fn a_window_made_full_screen_while_still_shrinking_comes_back_where_it_was() {
+    let mut desktop = Desktop::new((1200, 900), 1.0, Anchor::Left, config(true, 8));
+    let floating = desktop.frame(FRONT);
+    desktop.front.maximize(&mut desktop.server, 0);
+    desktop.front_frame();
+    desktop.press(&[KEY_LEFTMETA, KEY_DOWN]);
+    desktop.front.make_full_screen(&mut desktop.server, 0);
+    assert_eq!(desktop.front_frame(), (0, 0, 1200, 900));
+
+    desktop.front.leave_full_screen(&mut desktop.server, 0);
+    assert_eq!(desktop.front_frame(), floating);
+}
+
+#[test]
 fn a_maximized_window_leaving_full_screen_follows_what_changed_meanwhile() {
     let changes: [(Change, Frame); 2] = [
         (

@@ -261,6 +261,19 @@ impl Window {
         location == area.loc && self.requested_size() == Some(area.size)
     }
 
+    fn floating_frame(&self) -> Option<Rectangle<i32, Logical>> {
+        let geometry = self.geometry()?;
+        match self.pending_location {
+            Some((_, location)) if self.placed_states() == (false, false) => {
+                let size = self.requested_size().unwrap_or(geometry.size);
+                Some(Rectangle::new(location, size))
+            }
+            _ => (!self.has_state(xdg_toplevel::State::Maximized)
+                && !self.has_state(xdg_toplevel::State::Fullscreen))
+            .then_some(geometry),
+        }
+    }
+
     pub(crate) fn local_geometry(&self) -> Rectangle<i32, Logical> {
         let surface = self.toplevel.wl_surface();
         let bounds = bbox_from_surface_tree(surface, (0, 0));
@@ -531,13 +544,8 @@ impl State {
         target: Option<Rectangle<i32, Logical>>,
     ) {
         let window = &mut self.windows[index];
-        if window.restore.is_none()
-            && window.tile.is_none()
-            && let Some(geometry) = window.geometry()
-            && !window.has_state(xdg_toplevel::State::Maximized)
-            && !window.has_state(xdg_toplevel::State::Fullscreen)
-        {
-            window.restore = Some(geometry);
+        if window.restore.is_none() && window.tile.is_none() {
+            window.restore = window.floating_frame();
         }
         window.toplevel.with_pending_state(|pending| {
             for placed in [
@@ -625,17 +633,15 @@ impl State {
             return;
         };
         let window = &self.windows[index];
-        if window
-            .toplevel
-            .with_pending_state(|pending| pending.states.contains(xdg_toplevel::State::Fullscreen))
-        {
+        let (full_screen, maximized) = window.placed_states();
+        if full_screen {
             window.toplevel.with_pending_state(|pending| {
                 pending.states.unset(xdg_toplevel::State::Maximized);
             });
             window.configure();
-            return;
+        } else if maximized {
+            self.place(index, xdg_toplevel::State::Maximized, None);
         }
-        self.place(index, xdg_toplevel::State::Maximized, None);
     }
 
     pub(crate) fn fullscreen(&mut self, surface: &WlSurface) {

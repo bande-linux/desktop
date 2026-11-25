@@ -24,6 +24,9 @@ const COLOR_TABLES: [Tag; 4] = [
 const UNUSED_FRAMES: u64 = 64;
 const KNOWN_BOUNDS: usize = 16384;
 const COLOUR_GLYPH: kurbo::Rect = kurbo::Rect::new(-1.0, -2.0, 2.0, 1.0);
+const GLYPH_TOLERANCE: f64 = 1e-5;
+const LARGEST_SIZE: f32 = 1e6;
+const STEEPEST_SKEW: f32 = 89.0;
 const LARGEST_BITMAP: u32 = 2048;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -206,7 +209,18 @@ fn glyph_key(run: &GlyphRun, glyph: u32) -> GlyphKey {
     }
 }
 
+fn drawable(run: &GlyphRun) -> bool {
+    run.size > 0.0
+        && run.size <= LARGEST_SIZE
+        && run
+            .skew_degrees
+            .is_none_or(|degrees| degrees.abs() < STEEPEST_SKEW)
+}
+
 fn coloured(run: &GlyphRun, glyph: u32, scale: f64) -> Option<ColourGlyph> {
+    if !drawable(run) {
+        return None;
+    }
     let font = FontRef::from_index(run.font_bytes(), run.font_index()).ok()?;
     let id = GlyphId::new(glyph);
     if font.color_glyphs().get(id).is_some() {
@@ -303,10 +317,14 @@ fn run_transform(run: &GlyphRun) -> Affine {
 }
 
 fn draw(run: &GlyphRun, glyph: u32) -> Option<BezPath> {
+    if !drawable(run) {
+        return None;
+    }
     let (mut path, units_per_em) = unscaled(run, glyph)?;
     path.apply_affine(run_transform(run) * Affine::scale(1.0 / units_per_em));
+    let tolerance = TOLERANCE.max(f64::from(run.size) * GLYPH_TOLERANCE);
     let mut lines = BezPath::new();
-    kurbo::flatten(path, TOLERANCE, |element| lines.push(element));
+    kurbo::flatten(path, tolerance, |element| lines.push(element));
     Some(lines)
 }
 

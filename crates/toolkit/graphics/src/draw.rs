@@ -31,6 +31,9 @@ pub(crate) trait Canvas {
     fn fill_glyphs(&mut self, run: &GlyphRun, glyphs: &[Glyph]);
 }
 
+const FARTHEST: f64 = 1e8;
+const FARTHEST_ON_SCREEN: f64 = 1e12;
+const RELATIVE_TOLERANCE: f64 = 1e-6;
 const ANTIALIASING_PIXEL: f64 = 1.0;
 const LYING_MARGIN: f64 = 2.0;
 const SHADOW_DEVIATIONS: f64 = 2.5;
@@ -41,8 +44,19 @@ pub(crate) fn color(color: Color) -> AlphaColor<Srgb> {
     AlphaColor::from_rgba8(color.r, color.g, color.b, color.a)
 }
 
+fn coordinate(value: f32) -> f64 {
+    match value.is_nan() {
+        true => 0.0,
+        false => f64::from(value).clamp(-FARTHEST, FARTHEST),
+    }
+}
+
 fn point(point: Point) -> kurbo::Point {
-    kurbo::Point::new(f64::from(point.x), f64::from(point.y))
+    kurbo::Point::new(coordinate(point.x), coordinate(point.y))
+}
+
+fn tolerance(extent: kurbo::Rect) -> f64 {
+    TOLERANCE.max(extent.width().max(extent.height()) * RELATIVE_TOLERANCE)
 }
 
 fn gradient(gradient: Gradient, stops: &[Stop]) -> PaintType {
@@ -82,10 +96,10 @@ fn affine(transform: Transform) -> Affine {
 
 fn rect(rect: Rect) -> kurbo::Rect {
     kurbo::Rect::new(
-        f64::from(rect.x),
-        f64::from(rect.y),
-        f64::from(rect.x + rect.width),
-        f64::from(rect.y + rect.height),
+        coordinate(rect.x),
+        coordinate(rect.y),
+        coordinate(rect.x + rect.width),
+        coordinate(rect.y + rect.height),
     )
 }
 
@@ -93,7 +107,7 @@ fn outline(shape: &Shape) -> BezPath {
     let rect = rect(shape.rect);
     if shape.radius > 0.0 {
         rect.to_rounded_rect(f64::from(shape.radius))
-            .to_path(TOLERANCE)
+            .to_path(tolerance(rect))
     } else {
         rect.to_path(TOLERANCE)
     }
@@ -101,8 +115,14 @@ fn outline(shape: &Shape) -> BezPath {
 
 fn flattened(path: &BezPath) -> BezPath {
     let mut lines = BezPath::new();
-    kurbo::flatten(path, TOLERANCE, |element| lines.push(element));
+    kurbo::flatten(path, tolerance(path.control_box()), |element| {
+        lines.push(element);
+    });
     lines
+}
+
+fn std_deviation(blur_radius: f32) -> f32 {
+    (coordinate(blur_radius).max(0.0) / 2.0 * std::f64::consts::SQRT_2) as f32
 }
 
 fn path(shape: &Shape) -> BezPath {
@@ -110,20 +130,16 @@ fn path(shape: &Shape) -> BezPath {
 }
 
 fn stroke_path(shape: &Shape, width: f32) -> BezPath {
-    flattened(&kurbo::stroke(
-        outline(shape),
-        &Stroke::new(f64::from(width)),
-        &StrokeOpts::default(),
-        TOLERANCE,
-    ))
+    stroked(outline(shape), &Stroke::new(coordinate(width)))
 }
 
-fn stroked(path: impl IntoIterator<Item = kurbo::PathEl>, stroke: &Stroke) -> BezPath {
+fn stroked(path: BezPath, stroke: &Stroke) -> BezPath {
+    let widened = tolerance(path.control_box()).max(stroke.width.abs() * RELATIVE_TOLERANCE);
     flattened(&kurbo::stroke(
         path,
         stroke,
         &StrokeOpts::default(),
-        TOLERANCE,
+        widened,
     ))
 }
 
@@ -298,6 +314,12 @@ fn image_op(
     }
 }
 
+fn drawable(on_screen: kurbo::Rect) -> bool {
+    [on_screen.x0, on_screen.y0, on_screen.x1, on_screen.y1]
+        .iter()
+        .all(|edge| edge.abs() <= FARTHEST_ON_SCREEN)
+}
+
 #[derive(Clone, Copy)]
 struct Reach<'a> {
     drawn: &'a [kurbo::Rect],
@@ -314,7 +336,7 @@ impl Reach<'_> {
             .transform
             .transform_rect_bbox(bounds)
             .inflate(ANTIALIASING_PIXEL, ANTIALIASING_PIXEL);
-        self.drawn.iter().any(|drawn| drawn.overlaps(on_screen))
+        drawable(on_screen) && self.drawn.iter().any(|drawn| drawn.overlaps(on_screen))
     }
 
     fn lies_within(self, shape: &Shape, inset: f32) -> bool {
@@ -365,7 +387,7 @@ impl Reach<'_> {
                 blur_radius,
                 ..
             } => {
-                let reach = f64::from(*blur_radius * 4.0 + offset.x.abs() + offset.y.abs());
+                let reach = coordinate(*blur_radius * 4.0 + offset.x.abs() + offset.y.abs());
                 !self.touches(rect(shape.rect).inflate(reach, reach))
                     || self.lies_within(shape, 0.0)
             }
@@ -455,9 +477,9 @@ fn record_item(item: &Item, caches: &mut Caches, ops: &mut Vec<Op>, reach: Optio
             blur_radius,
             color: shadow,
         } => ops.push(Op::Shadow {
-            rect: rect(shape.rect) + Vec2::new(f64::from(offset.x), f64::from(offset.y)),
-            radius: shape.radius,
-            std_dev: blur_radius / 2.0 * std::f32::consts::SQRT_2,
+            rect: rect(shape.rect) + point(*offset).to_vec2(),
+            radius: coordinate(shape.radius) as f32,
+            std_dev: std_deviation(*blur_radius),
             color: color(*shadow),
         }),
         Item::CastShadow {
@@ -466,15 +488,15 @@ fn record_item(item: &Item, caches: &mut Caches, ops: &mut Vec<Op>, reach: Optio
             blur_radius,
             color: shadow,
         } => {
-            let reach = f64::from(*blur_radius * 4.0 + offset.x.abs() + offset.y.abs());
+            let reach = coordinate(*blur_radius * 4.0 + offset.x.abs() + offset.y.abs());
             let around = rect(shape.rect).inflate(reach, reach);
             let mut outside = kurbo::Shape::to_path(&around, TOLERANCE);
             outside.extend(path(shape).reverse_subpaths().iter());
             ops.push(Op::Clip(outside));
             ops.push(Op::Shadow {
-                rect: rect(shape.rect) + Vec2::new(f64::from(offset.x), f64::from(offset.y)),
-                radius: shape.radius,
-                std_dev: blur_radius / 2.0 * std::f32::consts::SQRT_2,
+                rect: rect(shape.rect) + point(*offset).to_vec2(),
+                radius: coordinate(shape.radius) as f32,
+                std_dev: std_deviation(*blur_radius),
                 color: color(*shadow),
             });
             ops.push(Op::End);
@@ -490,13 +512,14 @@ fn record_item(item: &Item, caches: &mut Caches, ops: &mut Vec<Op>, reach: Optio
             scoped(Op::Clip(clip), items, caches, ops, reach);
         }
         Item::Translate { offset, items } => {
-            let reach = reach.map(|reach| reach.through(snapped(reach.transform, *offset)));
-            scoped(Op::Snap(*offset), items, caches, ops, reach);
+            let offset = Point::new(coordinate(offset.x) as f32, coordinate(offset.y) as f32);
+            let reach = reach.map(|reach| reach.through(snapped(reach.transform, offset)));
+            scoped(Op::Snap(offset), items, caches, ops, reach);
         }
         Item::Opacity { alpha, items } => {
             let layer = Op::Layer {
                 blend: BlendMode::default(),
-                alpha: *alpha,
+                alpha: coordinate(*alpha).clamp(0.0, 1.0) as f32,
             };
             scoped(layer, items, caches, ops, reach);
         }
@@ -509,6 +532,9 @@ fn record_item(item: &Item, caches: &mut Caches, ops: &mut Vec<Op>, reach: Optio
         }
         Item::Transform { transform, items } => {
             let local = affine(*transform);
+            if !local.is_finite() {
+                return;
+            }
             let reach = reach.map(|reach| reach.through(reach.transform * local));
             scoped(Op::Transform(local), items, caches, ops, reach);
         }
@@ -521,6 +547,9 @@ fn record_item(item: &Item, caches: &mut Caches, ops: &mut Vec<Op>, reach: Optio
             let scaled = Affine::translate(pivot)
                 * Affine::scale(f64::from(*factor))
                 * Affine::translate(-pivot);
+            if !scaled.is_finite() {
+                return;
+            }
             let reach = reach.map(|reach| reach.through(reach.transform * scaled));
             scoped(Op::Transform(scaled), items, caches, ops, reach);
         }
@@ -531,8 +560,8 @@ fn record_item(item: &Item, caches: &mut Caches, ops: &mut Vec<Op>, reach: Optio
             paint: stroke,
         } => ops.push(Op::Fill {
             path: stroked(
-                kurbo::Line::new(point(*from), point(*to)).path_elements(TOLERANCE),
-                &Stroke::new(f64::from(*width)).with_caps(kurbo::Cap::Round),
+                kurbo::Line::new(point(*from), point(*to)).to_path(TOLERANCE),
+                &Stroke::new(coordinate(*width)).with_caps(kurbo::Cap::Round),
             ),
             paint: paint(stroke),
         }),
@@ -547,7 +576,7 @@ fn record_item(item: &Item, caches: &mut Caches, ops: &mut Vec<Op>, reach: Optio
         } => ops.push(Op::Fill {
             path: stroked(
                 bezier(path),
-                &Stroke::new(f64::from(*width))
+                &Stroke::new(coordinate(*width))
                     .with_caps(kurbo::Cap::Round)
                     .with_join(kurbo::Join::Round),
             ),
@@ -813,8 +842,13 @@ impl<C: Canvas> Encoder<'_, C> {
                     self.canvas.fill_glyphs(run, glyphs);
                 }
                 Op::Clip(clip) => {
-                    self.canvas.push_clip_layer(clip);
-                    self.clips.push((clip.clone(), transform));
+                    let shown = drawable(transform.transform_rect_bbox(clip.control_box()));
+                    let clip = match shown {
+                        true => clip.clone(),
+                        false => BezPath::new(),
+                    };
+                    self.canvas.push_clip_layer(&clip);
+                    self.clips.push((clip, transform));
                     scopes.push(Scope::Clip);
                 }
                 Op::Layer { blend, alpha } => {
@@ -853,8 +887,12 @@ impl<C: Canvas> Encoder<'_, C> {
                     size,
                     scaling,
                 } => {
+                    let backing = rect(*frame);
+                    if !drawable(transform.transform_rect_bbox(backing)) {
+                        continue;
+                    }
                     self.canvas.set_paint(color(Color::BLACK).into());
-                    self.canvas.fill_path(&path(&Shape::rect(*frame)));
+                    self.canvas.fill_path(&backing.to_path(TOLERANCE));
                     let scale = transform.as_coeffs()[0];
                     if let Some(area) = surface_area(*frame, *size, *scaling, scale) {
                         self.punch(&path(&Shape::rect(area)), transform);
@@ -879,12 +917,14 @@ impl<C: Canvas> Encoder<'_, C> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::scene::Scene;
     use crate::text::{TextAlign, TextStyle, TextSystem};
 
     #[derive(Default)]
     struct Counted(usize);
 
     impl Canvas for Counted {
+        fn fill_glyphs(&mut self, _: &GlyphRun, _: &[Glyph]) {}
         fn set_paint(&mut self, _: PaintType) {}
         fn set_transform(&mut self, _: Affine) {}
         fn set_paint_transform(&mut self, _: Affine) {}
@@ -899,7 +939,6 @@ mod tests {
         fn push_clip_path(&mut self, _: &BezPath) {}
         fn pop_clip(&mut self) {}
         fn clear_path(&mut self, _: &BezPath) {}
-        fn fill_glyphs(&mut self, _: &GlyphRun, _: &[Glyph]) {}
     }
 
     #[test]
@@ -936,5 +975,76 @@ mod tests {
             "{} glyphs were encoded for one line",
             canvas.0
         );
+    }
+
+    #[test]
+    fn absurd_sizes_and_places_are_drawn_or_left_out() {
+        let mut text = TextSystem::new();
+        let mut items = Vec::new();
+        for value in [1e30, -1e30, 1e9, f32::INFINITY, f32::NEG_INFINITY, f32::NAN] {
+            let shapes = [
+                Shape::rounded(Rect::new(0.0, 0.0, value, value), value),
+                Shape::rounded(Rect::new(value, value, 40.0, 40.0), 9.0),
+            ];
+            for shape in shapes {
+                let black: Paint = Color::BLACK.into();
+                items.push(Item::Fill {
+                    shape,
+                    paint: black.clone(),
+                });
+                items.push(Item::Stroke {
+                    shape,
+                    width: value,
+                    paint: black.clone(),
+                });
+                items.push(Item::Shadow {
+                    shape,
+                    offset: Point::new(value, value),
+                    blur_radius: value,
+                    color: Color::BLACK,
+                });
+                items.push(Item::Clip {
+                    shape,
+                    items: vec![Item::Opacity {
+                        alpha: value,
+                        items: vec![Item::Scale {
+                            origin: Point::new(value, 0.0),
+                            factor: value,
+                            items: vec![Item::Line {
+                                from: Point::new(0.0, value),
+                                to: Point::new(value, 1.0),
+                                width: value,
+                                paint: black,
+                            }],
+                        }],
+                    }],
+                });
+            }
+            let style = TextStyle::new(value, Color::BLACK);
+            items.push(Item::Text {
+                origin: Point::new(0.0, 0.0),
+                paragraph: text.paragraph("absurd", style, Some(100.0), TextAlign::Start),
+            });
+        }
+        let scene = |width, height| Scene {
+            width,
+            height,
+            background: Color::WHITE,
+            items: items.clone(),
+        };
+        let mut renderer = crate::cpu::CpuRenderer::new();
+        assert!(renderer.render(&scene(64, 64)).is_ok());
+        let endless = Scene {
+            items: vec![Item::Fill {
+                shape: Shape::rect(Rect::new(-1e30, -1e30, 2e30, f32::INFINITY)),
+                paint: Color::BLACK.into(),
+            }],
+            ..scene(4, 4)
+        };
+        let mut filled = vec![0; 8 * 8 * 4];
+        assert!(renderer.render_into(&endless, 2.0, &mut filled).is_ok());
+        assert_eq!(&filled[..4], [0, 0, 0, 255]);
+        assert!(renderer.render(&scene(u32::from(u16::MAX), 1)).is_err());
+        assert!(crate::damage::damage(&scene(64, 64), &scene(64, 65), 1.0).is_none());
     }
 }

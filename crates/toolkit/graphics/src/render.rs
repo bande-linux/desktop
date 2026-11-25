@@ -2,6 +2,8 @@ use std::fmt;
 
 use crate::scene::Scene;
 
+pub(crate) const LONGEST_SIDE: u16 = u16::MAX - 3;
+
 #[derive(Debug)]
 pub enum DrawError {
     TooLarge {
@@ -23,7 +25,7 @@ impl fmt::Display for DrawError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::TooLarge { width, height } => {
-                write!(f, "a {width}x{height} scene exceeds 65535 pixels per side")
+                write!(f, "a {width}x{height} scene exceeds 65532 pixels per side")
             }
             Self::BufferSize => write!(f, "the target buffer does not match the scene's size"),
             #[cfg(feature = "gpu")]
@@ -52,10 +54,13 @@ pub struct Snapshot {
 pub(crate) fn extent(scene: &Scene, scale: f64) -> Result<(u16, u16), DrawError> {
     let (width, height) = (pixels(scene.width, scale), pixels(scene.height, scale));
     let too_large = || DrawError::TooLarge { width, height };
-    Ok((
-        u16::try_from(width).map_err(|_| too_large())?,
-        u16::try_from(height).map_err(|_| too_large())?,
-    ))
+    let side = |length: u32| {
+        u16::try_from(length)
+            .ok()
+            .filter(|side| *side <= LONGEST_SIDE)
+            .ok_or_else(too_large)
+    };
+    Ok((side(width)?, side(height)?))
 }
 
 pub fn pixels(points: u32, scale: f64) -> u32 {

@@ -69,8 +69,13 @@ impl CpuRenderer {
             width: region.width,
             height: region.height,
         };
-        let width = u16::try_from(region.width).map_err(|_| too_large())?;
-        let height = u16::try_from(region.height).map_err(|_| too_large())?;
+        let side = |length: u32| {
+            u16::try_from(length)
+                .ok()
+                .filter(|side| *side <= crate::render::LONGEST_SIDE)
+                .ok_or_else(too_large)
+        };
+        let (width, height) = (side(region.width)?, side(region.height)?);
         self.context.reset_and_resize(width, height);
         let frame = Frame {
             scale,

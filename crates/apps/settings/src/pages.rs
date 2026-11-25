@@ -1003,6 +1003,7 @@ impl SettingsView {
             List::SearchExcluded => self.excluded_rows(),
             List::Permissions(permission) => self.permission_rows(permission),
             List::Passwords => self.saved_password_rows(),
+            List::Activity => self.activity_rows(),
         }
     }
 

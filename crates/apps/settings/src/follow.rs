@@ -10,9 +10,11 @@ use std::thread;
 use bande_app::{choose_file, choose_folder};
 use bande_bus::Reading;
 use bande_config::{BUS_NAME, DisplaySettings, OBJECT_PATH, Placement};
+use bande_intents::{Manifests, Receipt};
 use bande_keyboard::Layouts;
 use bande_l10n::{text, tr};
 use bande_network::{import_vpn, missing_vpn_plugin};
+use bande_settings_client::{CONFIG_SETTINGS, SettingsClient};
 use bande_settings_panes::{PaneId, SettingId, Value};
 use bande_status::brightness::{DisplayLevel, LevelRequest};
 use bande_status::devices::can_sleep;
@@ -21,10 +23,10 @@ use zbus::blocking::Connection;
 use zbus::blocking::fdo::PropertiesProxy;
 
 use crate::about::{About, AboutCommand, follow_about};
+use crate::activity::{ActivityCommand, follow_activity};
 use crate::backup::{BackupCommand, BackupUpdate, follow_backup};
 use crate::battery::{BatteryCommand, PowerState, follow_battery};
 use crate::brightness::follow_brightness;
-use crate::client::{CONFIG_SETTINGS, SettingsClient};
 use crate::consent::{KeyboardAccess, follow_keyboard_access};
 use crate::defaults::{DefaultApp, DefaultAppCommand, follow_default_apps};
 use crate::diagnostics::{After, Diagnostics, DiagnosticsCommand, follow_diagnostics};
@@ -103,6 +105,7 @@ pub enum Update {
     DefaultApps(Vec<DefaultApp>),
     Permissions(Grants),
     KeyboardAccess(Vec<KeyboardAccess>),
+    Activity(Vec<Receipt>),
     Spelling(SpellingState),
     Security(SecurityStatus),
     Printers(PrintersState),
@@ -146,6 +149,7 @@ pub enum Command {
     DefaultApp(DefaultAppCommand),
     Permission(PermissionCommand),
     KeyboardAccess(String, bool),
+    Activity(ActivityCommand),
     Spelling(SpellingCommand),
     Printers(PrinterCommand),
     Sharing(SharingCommand),
@@ -363,6 +367,12 @@ fn replaces(queued: &Command, command: &Command) -> bool {
     }
 }
 
+fn preview(session: &Connection, id: SettingId, value: &Value) {
+    if let (SettingId::AlertSound, Value::Keyword(sound)) = (id, value) {
+        bande_sound::play(session, &format!("alert-{sound}"));
+    }
+}
+
 pub fn worker(session: &Connection, updates: Updates) -> Sender<Command> {
     let (sender, receiver) = mpsc::channel::<Command>();
     let session = session.clone();
@@ -382,7 +392,13 @@ pub fn worker(session: &Connection, updates: Updates) -> Sender<Command> {
             }
             for command in commands {
                 let (result, restore) = match &command {
-                    Command::Set(id, value) => (client.set(*id, value), vec![*id]),
+                    Command::Set(id, value) => {
+                        let set = client.set(*id, value);
+                        if set.is_ok() {
+                            preview(&session, *id, value);
+                        }
+                        (set, vec![*id])
+                    }
                     Command::Display(identity, display) => {
                         (client.set_display(identity, display), Vec::new())
                     }
@@ -448,6 +464,7 @@ pub struct Services {
     default_apps: Sender<DefaultAppCommand>,
     permissions: Sender<PermissionCommand>,
     keyboard_access: Sender<(String, bool)>,
+    activity: Sender<ActivityCommand>,
     spelling: Sender<SpellingCommand>,
     passwords: Sender<PasswordCommand>,
     brightness: Option<Sender<LevelRequest>>,
@@ -496,6 +513,7 @@ impl Services {
             default_apps: follow_default_apps(updates.clone()),
             permissions: follow_permissions(session, updates.clone()),
             keyboard_access: follow_keyboard_access(updates.clone()),
+            activity: follow_activity(session, Manifests::installed, updates.clone()),
             spelling: follow_spelling(updates.clone()),
             passwords: follow_passwords(session, system, updates.clone()),
             brightness: follow_brightness(session, updates.clone()),
@@ -546,6 +564,7 @@ impl Services {
             Command::DefaultApp(command) => self.default_apps.send(command).is_ok(),
             Command::Permission(command) => self.permissions.send(command).is_ok(),
             Command::KeyboardAccess(line, on) => self.keyboard_access.send((line, on)).is_ok(),
+            Command::Activity(command) => self.activity.send(command).is_ok(),
             Command::Spelling(command) => self.spelling.send(command).is_ok(),
             Command::Passwords(command) => self.passwords.send(command).is_ok(),
             Command::Users(command) => self.users.send(command).is_ok(),

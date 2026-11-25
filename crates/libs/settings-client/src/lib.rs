@@ -5,11 +5,11 @@ use bande_config::{
     SearchCategory,
 };
 use bande_notify::client::NotificationsProxy;
+use bande_settings_panes::{POINTER_SPEEDS, SettingId, Value, WITH_DISPLAY};
+use serde::{Deserialize, Serialize};
 use zbus::blocking::Connection;
 use zbus::proxy::CacheProperties;
 use zbus::zvariant::OwnedValue;
-
-use bande_settings_panes::{POINTER_SPEEDS, SettingId, Value, WITH_DISPLAY};
 
 #[zbus::proxy(
     interface = "org.bande.Config",
@@ -500,14 +500,53 @@ fn search_category(id: SettingId) -> Option<SearchCategory> {
 
 const ZOOM_WHEN_TURNED_ON: f64 = 2.0;
 
-pub fn speed_stop(speed: f64) -> u32 {
+fn speed_stop(speed: f64) -> u32 {
     let stops = f64::from(POINTER_SPEEDS);
     ((speed.clamp(-1.0, 1.0) + 1.0) / 2.0 * stops).round() as u32
 }
 
-pub fn stop_speed(stop: u32) -> f64 {
+fn stop_speed(stop: u32) -> f64 {
     let stops = f64::from(POINTER_SPEEDS);
     f64::from(stop.min(POINTER_SPEEDS)) / stops * 2.0 - 1.0
+}
+
+/// What a setting is stored as. [`Value`] is what Settings shows, which rounds some of them.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Stored {
+    Flag(bool),
+    Number(u32),
+    Seconds(u64),
+    Real(f64),
+    Keyword(String),
+    Text(String),
+    Codes(Vec<String>),
+}
+
+impl Stored {
+    fn of(value: Value) -> Option<Self> {
+        Some(match value {
+            Value::Flag(on) => Self::Flag(on),
+            Value::Number(number) => Self::Number(number),
+            Value::Seconds(seconds) => Self::Seconds(seconds),
+            Value::Keyword(keyword) => Self::Keyword(keyword),
+            Value::Text(text) => Self::Text(text),
+            Value::Codes(codes) => Self::Codes(codes),
+            Value::Fraction(_) | Value::Pictures { .. } => return None,
+        })
+    }
+
+    fn value(&self) -> Option<Value> {
+        Some(match self {
+            Self::Flag(on) => Value::Flag(*on),
+            Self::Number(number) => Value::Number(*number),
+            Self::Seconds(seconds) => Value::Seconds(*seconds),
+            Self::Keyword(keyword) => Value::Keyword(keyword.clone()),
+            Self::Text(text) => Value::Text(text.clone()),
+            Self::Codes(codes) => Value::Codes(codes.clone()),
+            Self::Real(_) => return None,
+        })
+    }
 }
 
 pub struct SettingsClient {
@@ -715,6 +754,42 @@ impl SettingsClient {
         })
     }
 
+    /// The setting as it is stored.
+    pub fn stored(&self, id: SettingId) -> zbus::Result<Stored> {
+        Ok(match id {
+            SettingId::Zoom => Stored::Real(self.config.zoom()?),
+            SettingId::TrackpadSpeed => Stored::Real(self.config.trackpad_speed()?),
+            SettingId::MouseSpeed => Stored::Real(self.config.mouse_speed()?),
+            SettingId::AlertVolume => Stored::Real(self.config.alert_volume()?),
+            _ => Stored::of(self.get(id)?).ok_or(zbus::Error::Unsupported)?,
+        })
+    }
+
+    /// What Settings shows for a stored value.
+    pub fn shown(id: SettingId, stored: &Stored) -> Option<Value> {
+        match (id, stored) {
+            (SettingId::Zoom, Stored::Real(zoom)) => Some(Value::Flag(*zoom > 1.0)),
+            (SettingId::TrackpadSpeed | SettingId::MouseSpeed, Stored::Real(speed)) => {
+                Some(Value::Number(speed_stop(*speed)))
+            }
+            (SettingId::AlertVolume, Stored::Real(volume)) => Some(Value::Fraction(*volume as f32)),
+            _ => stored.value(),
+        }
+    }
+
+    /// Puts back what [`Self::stored`] gave.
+    pub fn restore(&self, id: SettingId, stored: &Stored) -> zbus::Result<()> {
+        match (id, stored) {
+            (SettingId::Zoom, Stored::Real(zoom)) => self.config.set_zoom(*zoom),
+            (SettingId::TrackpadSpeed, Stored::Real(speed)) => {
+                self.config.set_trackpad_speed(*speed)
+            }
+            (SettingId::MouseSpeed, Stored::Real(speed)) => self.config.set_mouse_speed(*speed),
+            (SettingId::AlertVolume, Stored::Real(volume)) => self.config.set_alert_volume(*volume),
+            _ => self.set(id, &stored.value().ok_or(zbus::Error::Unsupported)?),
+        }
+    }
+
     pub fn read(&self, ids: &[SettingId]) -> Vec<(SettingId, Value)> {
         ids.iter()
             .copied()
@@ -868,12 +943,7 @@ impl SettingsClient {
                 self.config.set_system_layout_switch(*on)
             }
             (SettingId::AlertSound, Value::Keyword(keyword)) => {
-                self.config.set_alert_sound(keyword)?;
-                bande_sound::play(
-                    self.config.inner().connection(),
-                    &format!("alert-{keyword}"),
-                );
-                Ok(())
+                self.config.set_alert_sound(keyword)
             }
             (SettingId::AlertVolume, Value::Fraction(volume)) => {
                 self.config.set_alert_volume(f64::from(*volume))

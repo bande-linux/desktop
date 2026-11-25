@@ -1,0 +1,32 @@
+[package]
+name = "bande-settings-intents"
+description = "The settings of the desktop as Bande Intents"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+bande-bus.workspace = true
+bande-intents.workspace = true
+bande-l10n.workspace = true
+bande-log.workspace = true
+bande-settings-client.workspace = true
+bande-settings-panes.workspace = true
+bande-status.workspace = true
+bande-xdg.workspace = true
+jiff.workspace = true
+serde_json.workspace = true
+zbus.workspace = true
+
+[dev-dependencies]
+bande-cli.workspace = true
+bande-config.workspace = true
+bande-notify.workspace = true
+bande-test-bus.workspace = true
+bande-test-intents.workspace = true
+tempfile.workspace = true
+
+[lints]
+workspace = true

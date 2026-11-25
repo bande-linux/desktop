@@ -1,9 +1,9 @@
 mod about;
+mod activity;
 mod arrangement;
 mod backup;
 mod battery;
 mod brightness;
-mod client;
 mod clock;
 mod consent;
 mod crypt;
@@ -48,10 +48,11 @@ mod widgets;
 mod wifi;
 
 pub use about::{About, AboutCommand, chip_name, memory_bytes, static_hostname, system_version};
+pub use activity::{ActivityCommand, follow_activity};
 pub use backup::{BackupCommand, BackupUpdate};
+pub use bande_settings_client::{CONFIG_SETTINGS, SettingsClient};
 pub use bande_settings_panes::{PaneId, SettingId, Value};
 pub use battery::{BatteryCommand, Charge, PowerState, charge_of, follow_battery};
-pub use client::{CONFIG_SETTINGS, SettingsClient};
 pub use defaults::{DefaultApp, DefaultAppCommand, choose_default, default_apps};
 pub use displays::Displays;
 pub use follow::{Command, Feed, Services, Update, Updates, feed, follow_config, worker};

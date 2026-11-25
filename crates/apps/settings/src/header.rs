@@ -266,6 +266,7 @@ impl SettingsView {
             | PaneId::Screenshots
             | PaneId::ScreenSharing
             | PaneId::Backup
+            | PaneId::Activity
             | PaneId::Sharing
             | PaneId::Location => None,
         };

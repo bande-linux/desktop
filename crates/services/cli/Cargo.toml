@@ -1,0 +1,23 @@
+[package]
+name = "bande-cli"
+description = "The bande command line: what the installed programs can do"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "bande"
+path = "src/main.rs"
+
+[dependencies]
+bande-bus.workspace = true
+bande-intents.workspace = true
+bande-l10n.workspace = true
+bande-log.workspace = true
+serde_json.workspace = true
+zbus.workspace = true
+
+[lints]
+workspace = true

@@ -21,6 +21,8 @@ const SECOND: &str = "Second";
 const PATIENCE: Duration = Duration::from_secs(40);
 const HELD: Duration = Duration::from_millis(60);
 const SETTLED: Duration = Duration::from_millis(700);
+const STARTED: Duration = Duration::from_secs(3);
+const ANSWERED: Duration = Duration::from_millis(1200);
 const CARD: (i32, i32) = (WIDTH / 2 - 360, 176);
 const LOGO: (i32, i32) = (40, 34);
 const QUICK_SETTINGS: (i32, i32) = (28, HEIGHT - 110);
@@ -168,7 +170,7 @@ impl Session {
         };
         let bar = |shown: &Snapshot| (0..64).any(|x| pixel(shown, (8 + x, LOGO.1))[0] > 200);
         session.wait("the taskbar", bar);
-        session.pass(SETTLED);
+        session.pass(STARTED);
         session
     }
 
@@ -201,12 +203,20 @@ impl Session {
         self.frames.snapshot(&self.server)
     }
 
-    fn click(&mut self, (x, y): (i32, i32)) {
+    fn click(&mut self, at: (i32, i32)) {
+        self.hold(at, HELD);
+    }
+
+    fn click_at_once(&mut self, at: (i32, i32)) {
+        self.hold(at, Duration::ZERO);
+    }
+
+    fn hold(&mut self, (x, y): (i32, i32), held: Duration) {
         self.server
             .move_pointer_to(Point::from((f64::from(x), f64::from(y))), 0);
         self.pass(HELD);
         self.server.press_button(BTN_LEFT, true, 0);
-        self.pass(HELD);
+        self.pass(held);
         self.server.press_button(BTN_LEFT, false, 0);
     }
 
@@ -258,13 +268,15 @@ fn the_background_of_search_never_flickers_while_results_load() {
         .build()
         .unwrap();
     let mut session = Session::open();
+    let empty = card(&session.settled());
     chord(&mut session.server, &[KEY_LEFTMETA]);
+    session.wait("Search", |shown| card(shown).1 > empty.1 + 200);
     let mut before = card(&session.settled());
     let typed = [KEY_A; 6].into_iter().chain([KEY_BACKSPACE; 5]);
     let mut heights = vec![before.1];
     for (step, key) in typed.enumerate() {
         chord(&mut session.server, &[key]);
-        let shown: Vec<_> = session.pass(SETTLED).iter().map(card).collect();
+        let shown: Vec<_> = session.pass(ANSWERED).iter().map(card).collect();
         let after = *shown.last().expect("a frame for the character");
         let mut changes: Vec<i32> = [before].iter().chain(&shown).map(|card| card.1).collect();
         changes.dedup();
@@ -292,17 +304,28 @@ fn a_click_on_what_opened_a_panel_closes_it() {
     let mut session = Session::open();
     let displays = [session.server.main_output(), SECOND.to_owned()];
     let picture = |session: &mut Session| {
-        session.pass(SETTLED);
         displays
             .each_ref()
             .map(|output| session.frames.snapshot_output(output))
     };
+    session.pass(SETTLED);
     let empty = picture(&mut session);
-    let open = |shown: &[Snapshot; 2], area| {
-        empty
-            .iter()
-            .zip(shown)
-            .any(|(empty, shown)| differs(empty, shown, area))
+    let found = |session: &mut Session, expected: (bool, bool)| {
+        let deadline = Instant::now() + PATIENCE;
+        loop {
+            session.pass(SETTLED);
+            let shown = picture(session);
+            let open = |area| {
+                empty
+                    .iter()
+                    .zip(&shown)
+                    .any(|(empty, shown)| differs(empty, shown, area))
+            };
+            let found = (open(SEARCH_AREA), open(PANEL_AREA));
+            if found == expected || Instant::now() > deadline {
+                return found;
+            }
+        }
     };
     let (nothing, search, panel) = ((false, false), (true, false), (false, true));
     let steps = [
@@ -317,23 +340,22 @@ fn a_click_on_what_opened_a_panel_closes_it() {
         ("the logo while Notifications are open", LOGO, search),
         ("the desktop", DESKTOP, nothing),
     ];
-    let presses: [(&str, i32, Press); 3] = [
+    let presses: [(&str, i32, Press); 4] = [
         ("a click", 0, Session::click),
+        ("a press and release at once", 0, Session::click_at_once),
         ("a click on the second display", WIDTH, Session::click),
         ("a tap", 0, Session::tap),
     ];
     for (press, left, act) in presses {
         for (what, (x, y), expected) in steps {
             act(&mut session, (left + x, y));
-            let shown = picture(&mut session);
-            let found = (open(&shown, SEARCH_AREA), open(&shown, PANEL_AREA));
+            let found = found(&mut session, expected);
             assert_eq!(found, expected, "(Search, a panel) after {press} on {what}");
         }
     }
     for shows in [search, nothing] {
         chord(&mut session.server, &[KEY_LEFTMETA]);
-        let shown = picture(&mut session);
-        let found = (open(&shown, SEARCH_AREA), open(&shown, PANEL_AREA));
+        let found = found(&mut session, shows);
         assert_eq!(found, shows, "(Search, a panel) after a tap of Super");
     }
 }

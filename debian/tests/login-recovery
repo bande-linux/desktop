@@ -2,8 +2,9 @@
 # bande-login on a booted machine, with a scripted login window and session: a session that ends
 # at once, or after its first frame, gives its virtual terminal back and the login window the
 # screen; guessing is slowed down although each guess is cancelled; an account without a password
-# waits to be asked; stopping ends the session; and a login window that takes seconds to fail
-# still ends in a text console.
+# waits to be asked; a session that stopped its terminal's output still ends; a message to
+# everyone stays off the session's terminal; stopping ends the session; and a login window that
+# takes seconds to fail still ends in a text console.
 set -euo pipefail
 state=/run/login-recovery
 install -d -m 1777 "$state"
@@ -79,6 +80,7 @@ cat > /usr/bin/bande-session <<'SESSION'
 env > /run/login-recovery/environment
 case $(cat /run/login-recovery/session) in
 exit) exit 3 ;;
+stopped) python3 -I -c 'import termios; termios.tcflow(0, termios.TCOOFF)' && touch /run/login-recovery/stopped ;;
 esac
 touch "$XDG_RUNTIME_DIR/bande-desktop-shown"
 while [ ! -e /run/login-recovery/leave ]; do sleep 0.1; done
@@ -108,6 +110,7 @@ wait_for() {
 trap 'echo "login-recovery: line $LINENO failed"' ERR
 on_screen() { [ "$(cat /sys/class/tty/tty0/active)" = "tty$1" ]; }
 session_tty() { sed -n "s/^XDG_VTNR=//p" "$state/environment"; }
+session_id() { sed -n "s/^XDG_SESSION_ID=//p" "$state/environment"; }
 given_back() { [ "$(terminal "$(session_tty)")" = "text auto" ]; }
 session_on_screen() { on_screen "$(session_tty)"; }
 said() { [ -s "$state/said" ]; }
@@ -145,13 +148,33 @@ wait_for 10 signed_out
 [ -z "$(systemctl list-units --plain --no-legend 'getty@*' 'autovt@*')" ] || { systemctl list-units 'getty@*' 'autovt@*'; exit 1; }
 echo "logging out brings the login window back"
 
+restart sign-in stopped
+wait_for 30 signed_in
+wait_for 30 no_login_window
+[ -e "$state/stopped" ]
+echo sit > "$state/mode"
+touch "$state/leave"
+wait_for 20 has_login_window
+wait_for 10 on_screen 1
+wait_for 5 given_back
+echo "a session that stopped its terminal's output gives the screen back too"
+
 restart sign-in show
 wait_for 30 signed_in
 wait_for 30 no_login_window
 wait_for 5 session_on_screen
+[ -z "$(loginctl show-session --property TTY --value "$(session_id)")" ]
+[ "$(loginctl show-session --property VTNr --value "$(session_id)")" = "$(session_tty)" ]
+wall "everyone should read this"
+sleep 1
+[ -z "$(tr -d ' \n' < "/dev/vcs$(session_tty)")" ]
+[ -z "$(tr -d ' \n' < /dev/vcs1)" ]
+echo "a message to everyone stays off the screen"
 systemctl stop bande-greeter.service
 wait_for 5 given_back
 wait_for 10 signed_out
+on_screen 1
+[ -z "$(tr -d ' \n' < /dev/vcs1)" ]
 echo "stopping ends the session and gives its terminal back"
 
 restart guess

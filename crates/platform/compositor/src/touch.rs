@@ -390,9 +390,15 @@ impl Compositor {
         match (press, tool) {
             (Some((PenPress::Client, true)), Some(tool)) => {
                 let serial = SERIAL_COUNTER.next_serial();
-                let touched = self.state.touch.pen_focus.as_ref();
-                self.state
-                    .press_outside(touched.map(|(surface, _)| surface), serial);
+                let state = &self.state;
+                let menu_open = state
+                    .popup_grab
+                    .as_ref()
+                    .is_some_and(|grab| !grab.has_ended());
+                if !menu_open {
+                    let touched = state.touch.pen_focus.as_ref();
+                    state.press_outside(touched.map(|(surface, _)| surface), serial);
+                }
                 tool.tip_down(serial, time);
             }
             (Some((PenPress::Client, false)), Some(tool)) => tool.tip_up(time),

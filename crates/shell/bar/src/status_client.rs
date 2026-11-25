@@ -525,7 +525,7 @@ impl StatusClient {
             self.open_tray(window, index, anchor, true);
             return;
         }
-        self.open(window, slot, window.input_serial());
+        self.open(window, slot, window.press_serial());
     }
 }
 

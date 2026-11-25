@@ -99,7 +99,7 @@ pub struct Glance {
     pan: Point,
     scroll: Point,
     size: (f32, f32),
-    opened_at: (f32, f32),
+    opened_at: Option<(f32, f32)>,
     presence: Animated,
     closing: bool,
     reduce_motion: bool,
@@ -166,7 +166,7 @@ impl Glance {
             pan: Point::default(),
             scroll: Point::default(),
             size,
-            opened_at: size,
+            opened_at: (!windowed || full_screen).then_some(size),
             presence,
             closing: false,
             reduce_motion,
@@ -326,7 +326,7 @@ impl Glance {
         self.closing = true;
         self.resizing = None;
         self.moving = None;
-        let resized = self.size != self.opened_at;
+        let resized = self.opened_at.is_some_and(|opened| opened != self.size);
         if resized && (!self.windowed || !self.full_screen) {
             remember_size(self.size);
         }
@@ -662,6 +662,7 @@ impl Glance {
     pub fn resized_window(&mut self, size: (f32, f32)) {
         if self.windowed && !self.full_screen {
             self.size = size;
+            self.opened_at.get_or_insert(size);
         }
     }
 }

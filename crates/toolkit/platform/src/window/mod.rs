@@ -346,6 +346,7 @@ pub(crate) struct State {
     configured: bool,
     configure_unapplied: bool,
     suggested_size: Option<(u32, u32)>,
+    bounds: Option<(u32, u32)>,
     closed: bool,
     pub(crate) toplevel: ToplevelState,
     frame_pending: bool,
@@ -726,9 +727,14 @@ impl Window {
         } else {
             (0, 0)
         };
+        let resizable = chrome.as_ref().is_some_and(|chrome| !chrome.fixed);
+        let bounds = state
+            .bounds
+            .filter(|_| resizable)
+            .unwrap_or((u32::MAX, u32::MAX));
         let size = state.suggested_size.unwrap_or((
-            size.0.saturating_add(extra_width),
-            size.1.saturating_add(extra_height),
+            size.0.saturating_add(extra_width).min(bounds.0),
+            size.1.saturating_add(extra_height).min(bounds.1),
         ));
         let scale = match surface_scale {
             Some(_) => state.scaling.scale(),

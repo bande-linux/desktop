@@ -402,6 +402,7 @@ pub struct Model {
     pub inserts: bool,
     pub skin_tone: Option<usize>,
     pub selected: usize,
+    picked: bool,
     pub copied: bool,
     pub actions: Vec<Action>,
     pub revision: u64,
@@ -451,6 +452,7 @@ impl Model {
             inserts: false,
             skin_tone: None,
             selected: 0,
+            picked: false,
             copied: false,
             actions: Vec::new(),
             revision: 0,
@@ -537,6 +539,7 @@ impl Model {
         if self.files_complete {
             self.rebuild(None);
         } else {
+            self.picked = false;
             self.held_since.get_or_insert_with(Instant::now);
         }
     }
@@ -548,17 +551,21 @@ impl Model {
 
     pub fn stop_holding(&mut self) {
         if self.held_since.is_some() {
-            self.rebuild(None);
+            self.rebuild(self.kept());
         }
+    }
+
+    fn kept(&self) -> Option<Target> {
+        (self.picked && self.selected > 0)
+            .then(|| self.selection().map(|hit| hit.target.clone()))
+            .flatten()
     }
 
     pub fn set_files(&mut self, results: FileResults) {
         if results.generation != self.generation {
             return;
         }
-        let keep = (self.held_since.is_none() && self.selected > 0)
-            .then(|| self.selection().map(|hit| hit.target.clone()))
-            .flatten();
+        let keep = self.kept();
         self.files = results.hits;
         self.items = results.items;
         self.files_complete = true;
@@ -1062,6 +1069,7 @@ impl Model {
     }
 
     pub fn select(&mut self, index: usize) {
+        self.picked = true;
         if index < self.hits.len() && index != self.selected {
             self.selected = index;
             self.copied = false;

@@ -6,7 +6,7 @@ Work that is planned and not built. A plan leaves when it is done; what it built
 | Plan | What |
 | :--- | :--- |
 | [Bande Intents](intents.md) | the interface, the prompt, the broker, the MCP server, every domain, and how many agents do it at once |
-| [Contacts and shared accounts](apps/contacts.md) | address book and one place for accounts; on a branch |
+| [Contacts and shared accounts](apps/contacts.md) | address book and one place for accounts; accounts on a branch |
 | [Tasks](apps/tasks.md) | to-do lists over CalDAV |
 | [Photos](apps/photos.md) | a library over plain folders |
 | [Music](apps/music.md) | a library for Player |

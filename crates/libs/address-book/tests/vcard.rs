@@ -24,6 +24,8 @@ const CARDS: &str = concat!(
     "N;CHARSET=ISO-8859-1;ENCODING=QUOTED-PRINTABLE:J=F8rgensen;Bj=\r\n",
     "=F8rn\r\n",
     "TEL;WORK;VOICE:+45 33 12 34 56\r\n",
+    "NOTE;ENCODING=QUOTED-PRINTABLE:Two=0D=0Alines\r\n",
+    "BDAY:\u{20ac}\u{20ac}12\r\n",
     "ADR;HOME;ENCODING=QUOTED-PRINTABLE;CHARSET=UTF-8:;;Gade 1;K=C3=B8benhavn;;1000;Danmark\r\n",
     "END:VCARD\r\n",
     "BEGIN:VCARD\r\n",
@@ -73,7 +75,15 @@ fn tricky_vcards_are_read_kept_whole_and_written_back_with_only_the_edit_changed
         })
     );
 
-    let bjorn = bjorn.contact();
+    let written = parse_cards(&bjorn.to_vcf());
+    assert_eq!(
+        written.cards.len(),
+        1,
+        "a decoded line break stays in its card"
+    );
+    let bjorn = written.cards[0].contact();
+    assert_eq!(bjorn.note, "Two\nlines");
+    assert_eq!(bjorn.birthday, None);
     assert_eq!(bjorn.name.family, "Jørgensen");
     assert_eq!(bjorn.name.given, "Bjørn");
     assert_eq!(bjorn.phones[0].label, Label::Work);

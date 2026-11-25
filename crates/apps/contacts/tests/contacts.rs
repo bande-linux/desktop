@@ -9,7 +9,8 @@ use bande_toolkit::ui::{Event, Key, Modifiers};
 
 const FILE: &str = "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:ann\r\nFN:Ann Lindqvist\r\n\
 N:Lindqvist;Ann;;;\r\nEMAIL:ann@fjord.example\r\nEND:VCARD\r\nBEGIN:VCARD\r\nVERSION:3.0\r\n\
-UID:bo\r\nFN:Bo Ek\r\nN:Ek;Bo;;;\r\nCATEGORIES:Family\r\nEND:VCARD\r\n";
+UID:bo\r\nFN:Bo Ek\r\nN:Ek;Bo;;;\r\nCATEGORIES:Family\r\nEND:VCARD\r\nBEGIN:VCARD\r\nVERSION:3.0\r\n\
+UID:bo2\r\nFN:Bo Ek\r\nN:Ek;Bo;;;\r\nEMAIL:bo@fjord.example\r\nEND:VCARD\r\n";
 
 fn tree(view: &mut ContactsView) -> Vec<(NodeId, Node)> {
     view.ui().scene(980, 640);
@@ -82,7 +83,7 @@ fn a_typed_contact_is_undone_and_redone_and_imported_duplicates_merge_into_one()
     click(&mut view, "Import");
     assert_eq!(
         listed(&mut view),
-        ["Bo Ek", "Ann Lindqvist", "Ann Lindqvist"]
+        ["Bo Ek", "Bo Ek", "Ann Lindqvist", "Ann Lindqvist"]
     );
     click(&mut view, "Merge Duplicates…");
     click(&mut view, "Merge");
@@ -95,5 +96,5 @@ fn a_typed_contact_is_undone_and_redone_and_imported_duplicates_merge_into_one()
         .flat_map(|(_, card)| card.contact().emails)
         .map(|email| email.value)
         .collect();
-    assert_eq!(emails, ["ann@fjord.example"]);
+    assert_eq!(emails, ["ann@fjord.example", "bo@fjord.example"]);
 }

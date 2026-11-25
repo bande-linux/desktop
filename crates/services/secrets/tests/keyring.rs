@@ -247,6 +247,29 @@ fn another_apps_item_opens_only_with_the_store_password_and_until_settings_locks
         b"wifi-secret"
     );
 
+    let program = std::env::current_exe().unwrap();
+    let properties = HashMap::from([(
+        "org.freedesktop.Secret.Item.Attributes",
+        Value::from(HashMap::from([
+            ("network", "home"),
+            (ALLOWED, program.to_str().unwrap()),
+        ])),
+    )]);
+    let secret: WireSecret = (
+        session.clone(),
+        Vec::new(),
+        b"wifi-secret".to_vec(),
+        "text/plain".to_owned(),
+    );
+    let (replaced, _): (OwnedObjectPath, OwnedObjectPath) = call(
+        &client,
+        collection_path("login").as_str(),
+        "org.freedesktop.Secret.Collection",
+        "CreateItem",
+        &(properties, secret, true),
+    );
+    assert_eq!(replaced, item);
+
     let () = call(&client, SERVICE_PATH, EXTENSION, "Conceal", &());
     assert!(
         read_secret(&client, &item, &session).is_err(),

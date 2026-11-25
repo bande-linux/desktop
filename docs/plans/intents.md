@@ -11,7 +11,7 @@ by itself.
 | `bande-intents`, owners, command line, rows in Search, broker, sandbox, MCP server, routines | not built |
 | Approval prompt with its own compositor role | not built |
 | Apps that serve without a window | Calendar, Clock, Velox and Installer run in the background, Dictionary waits for activation; the rest is tied to a window |
-| Contacts and shared accounts | on branch `accounts`, with more on it that is not committed |
+| Contacts | built; shared accounts are on branch `accounts-wip` |
 | Undo of mail flags, of event creation, history of a note; delayed send and outbox | not built |
 | File operations with progress and undo; servers and volumes; text search | built (`bande-fs`, `org.bande.Mounts`, `org.bande.Search`) |
 
@@ -60,7 +60,6 @@ by itself.
 - Land `responsive-3`, which contains `next`.
 - Decide what is uncommitted in the worktrees of `perf-compositor-2`, `reopen-apps` and
   `diag-magenta`.
-- Commit what is uncommitted on `accounts` to a branch of its own. It exists in one worktree only.
 - Free build space; 60 GB stay free.
 
 ## Running many agents

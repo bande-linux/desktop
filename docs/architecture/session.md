@@ -885,7 +885,8 @@ what the one before could not save:
   computer up for over 5 minutes when it cannot reach the display for 15 s.
 - **The compositor crashes or hangs**: `bande-compositor.service` has `WatchdogSec=20s`, pinged
   from the event loop and, while that is late, by a thread of its own only as long as a thread of the
-  compositor waits for a device (at most two minutes), so a busy disk does not end the session, and `TimeoutAbortSec=10s`; the session ends, `bande-login` shows the login window
+  compositor waits for a device or its first thread is kept in a driver's call (at most two minutes), so
+  a busy disk, or a driver reading swapped pictures back from it, does not end the session, and `TimeoutAbortSec=10s`; the session ends, `bande-login` shows the login window
   and the next session offers the open apps again. The login window's compositor arms
   `alarm(20)` every 10 s. `Ctrl+Alt+F1`…`F12` switch virtual terminals through logind while the
   compositor runs.

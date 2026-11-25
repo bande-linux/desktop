@@ -62,9 +62,20 @@ fn any_waits_for_a_device(tasks: &Path) -> bool {
         .any(|stat| work_in(&stat).is_some_and(|work| work.waits_for_a_device))
 }
 
-/// Whether a thread of this process waits for a device, such as a disk that is busy.
+fn is_in_a_driver(syscall: &str) -> bool {
+    syscall
+        .split_whitespace()
+        .next()
+        .is_some_and(|number| number.parse() == Ok(libc::SYS_ioctl))
+}
+
+/// Whether a thread of this process waits for a device, such as a disk that is busy, or its first
+/// thread is kept in a driver's call.
 pub(crate) fn waits_for_a_device() -> bool {
+    let first = Path::new(OWN_TASKS).join(std::process::id().to_string());
     any_waits_for_a_device(Path::new(OWN_TASKS))
+        || std::fs::read_to_string(first.join("syscall"))
+            .is_ok_and(|syscall| is_in_a_driver(&syscall))
 }
 
 #[cfg(test)]
@@ -121,6 +132,13 @@ mod tests {
         };
         add("1", "S")?;
         assert!(!any_waits_for_a_device(tasks.path()));
+        assert!(is_in_a_driver(
+            "16 0x9 0xc0406469 0x7ffd 0x0 0x0 0x0 0x7ffd 0x7f12\n"
+        ));
+        assert!(!is_in_a_driver(
+            "202 0x7f 0x80 0x2 0x0 0x0 0x0 0x7ffd 0x7f12\n"
+        ));
+        assert!(!is_in_a_driver("running\n"));
         add("2", "D")?;
         assert!(any_waits_for_a_device(tasks.path()));
         Ok(())

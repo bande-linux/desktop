@@ -49,6 +49,8 @@ memory settings stay the system's own.
   administrator allows more, as for audio production), and the compositor returns to that default
   once it has locked, before it starts anything. Without the raised limit the compositor locks what
   fits in the limit it has.
+- While every display is dark the compositor gives back its scanout buffers, blur levels and spare
+  staging memory, so waking makes them anew instead of reading them from swap.
 - With swap, `app.slice` gets `MemoryHigh=` all memory but a fifth of it, at most 3 GiB and at most
   half the swap: the desktop's guarantee, the system and free memory. Apps together above that are
   swapped and slowed, so the desktop and the system still find free memory at once. `MemoryMax=` an eighth of that reserve higher

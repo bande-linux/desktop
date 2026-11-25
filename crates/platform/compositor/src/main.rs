@@ -42,8 +42,8 @@ use smithay::reexports::drm::control::crtc;
 use smithay::reexports::input::{Device as LibinputDevice, DeviceCapability};
 use smithay::utils::{Clock, Monotonic, Size};
 use smithay::wayland::socket::ListeningSocketSource;
-use zbus::blocking::Connection;
 use zbus::blocking::fdo::PropertiesProxy;
+use zbus::blocking::{Connection, connection};
 
 const HEADLESS_SIZE: (i32, i32) = (1920, 1080);
 const SHELL_READY_TIMEOUT: Duration = Duration::from_millis(2500);
@@ -51,6 +51,7 @@ const BEHIND_BOOT_SCREEN_LIMIT: Duration = Duration::from_secs(5);
 const LOGIN_WINDOW_LIMIT: Duration = Duration::from_secs(300);
 const PROGRESS_LOOK: Duration = Duration::from_millis(2500);
 const COMPOSITOR_STALL: &str = "compositor-stall";
+const BUS_PATIENCE: Duration = Duration::from_secs(5);
 const STALL_LIMIT: Duration = Duration::from_secs(6);
 const GREETER_HANG_LIMIT_SECONDS: u32 = 20;
 const GREETER_HANG_CHECK: Duration = Duration::from_secs(10);
@@ -197,13 +198,17 @@ struct Buses {
     system: Option<Connection>,
 }
 
+fn answering_soon(builder: zbus::Result<connection::Builder<'static>>) -> zbus::Result<Connection> {
+    builder?.method_timeout(BUS_PATIENCE).build()
+}
+
 impl Buses {
     fn connect() -> Self {
         Self {
-            session: Connection::session()
+            session: answering_soon(connection::Builder::session())
                 .inspect_err(|error| tracing::warn!("cannot connect to the session bus: {error}"))
                 .ok(),
-            system: Connection::system()
+            system: answering_soon(connection::Builder::system())
                 .inspect_err(|error| tracing::warn!("cannot connect to the system bus: {error}"))
                 .ok(),
         }

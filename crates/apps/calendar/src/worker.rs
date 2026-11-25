@@ -235,7 +235,10 @@ fn run(job: Job, passwords: &mut Passwords, reply: &mut dyn FnMut(Reply)) {
                 calendars,
             });
         }
-        Job::Forget(account) => passwords.forget(&account),
+        Job::Forget(account) => {
+            passwords.forget(&account);
+            offer::withdraw(Service::CardDav, &account);
+        }
         Job::Adopt => {
             let answered = offer::adopt(Service::CalDav, |client, server| {
                 client.discover_calendars(server)

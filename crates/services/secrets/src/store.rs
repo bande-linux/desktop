@@ -11,6 +11,7 @@ pub const SESSION: &str = "session";
 pub const DEFAULT: &str = "default";
 pub const CREATOR: &str = "bande:creator";
 pub const ALLOWED: &str = "bande:allowed";
+pub const SHARED: &str = "bande:shared";
 const CONTENT_TYPE: &str = oo7::CONTENT_TYPE_ATTRIBUTE;
 const EXTENSION: &str = "keyring";
 const OWN_FOLDER: &str = "bande";

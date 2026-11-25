@@ -312,7 +312,7 @@ impl Http {
                 .collect::<Vec<_>>();
             return Err(Error::Unsupported(schemes.join(", ")));
         };
-        if !url.starts_with("https://") && !loopback(url) {
+        if !secure(url) && !loopback(url) {
             return Err(Error::Insecure(origin(url).to_owned()));
         }
         if let Ok(mut session) = self.session.lock() {
@@ -431,13 +431,17 @@ fn digest_header(digest: &Digest, credentials: &Credentials, method: &str, url: 
     header
 }
 
+pub(crate) fn host(url: &str) -> Option<String> {
+    let uri: ureq::http::Uri = url.parse().ok()?;
+    uri.host().map(str::to_ascii_lowercase)
+}
+
+pub(crate) fn secure(url: &str) -> bool {
+    url.starts_with("https://")
+}
+
 fn loopback(url: &str) -> bool {
-    let host = origin(url).split_once("://").map_or("", |(_, host)| host);
-    let host = match host.strip_prefix('[') {
-        Some(bracketed) => bracketed.split(']').next().unwrap_or(""),
-        None => host.split(':').next().unwrap_or(""),
-    };
-    matches!(host, "localhost" | "127.0.0.1" | "::1")
+    host(url).is_some_and(|host| matches!(host.as_str(), "localhost" | "127.0.0.1" | "[::1]"))
 }
 
 pub fn origin(url: &str) -> &str {

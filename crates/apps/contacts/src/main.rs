@@ -313,12 +313,12 @@ impl Contacts {
     fn add_account(
         &mut self,
         cx: &mut Cx<Self>,
+        id: String,
         address: String,
         server: String,
         credentials: Credentials,
         found: FoundAddressBooks,
     ) {
-        let id = new_uid();
         let account = Account {
             id: id.clone(),
             name: address,
@@ -353,10 +353,11 @@ impl Contacts {
                 found,
                 also_calendar,
             } => {
+                let id = new_uid();
                 if also_calendar {
                     self.worker.send(Job::Offer {
                         offer: Offer {
-                            id: new_uid(),
+                            id: id.clone(),
                             address: address.clone(),
                             server: server.clone(),
                             user: credentials.user.clone(),
@@ -364,7 +365,7 @@ impl Contacts {
                         password: credentials.password.clone(),
                     });
                 }
-                self.add_account(cx, address, server, credentials, found);
+                self.add_account(cx, id, address, server, credentials, found);
             }
             Done::Updated {
                 account,
@@ -460,7 +461,24 @@ impl Contacts {
                 result,
             } => match result {
                 Ok(found) => {
-                    self.add_account(cx, offer.address, offer.server, credentials, found);
+                    let known = self.view(cx).is_some_and(|view| {
+                        view.library.accounts.iter().any(|account| {
+                            matches!(&account.kind, AccountKind::CardDav { user, home, .. }
+                                if *user == credentials.user && *home == found.home)
+                        })
+                    });
+                    if known {
+                        tracing::info!("Contacts already has the offered account");
+                        return;
+                    }
+                    self.add_account(
+                        cx,
+                        new_uid(),
+                        offer.address,
+                        offer.server,
+                        credentials,
+                        found,
+                    );
                     self.sync(cx);
                 }
                 Err(error) => {

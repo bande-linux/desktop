@@ -11,7 +11,7 @@ const COLLECTION_INTERFACE: &str = "org.freedesktop.Secret.Collection";
 const ITEM_INTERFACE: &str = "org.freedesktop.Secret.Item";
 const PROMPT_INTERFACE: &str = "org.freedesktop.Secret.Prompt";
 const NO_PROMPT: &str = "/";
-const SHARED_WITH: &str = "bande:allowed";
+const SHARED_WITH: &str = "bande:shared";
 
 type Secret = (OwnedObjectPath, Vec<u8>, Vec<u8>, String);
 
@@ -29,8 +29,8 @@ impl Keyring {
         Self::shared(application, Vec::new())
     }
 
-    /// The keyring for items that the programs at `shared_with` (executable paths) open as
-    /// their own, without asking the user, once this program saves them.
+    /// The keyring for items that the programs at `shared_with` (executable paths) read and
+    /// remove, without asking the user, once this program saves them.
     pub fn shared(application: &'static str, shared_with: Vec<String>) -> Result<Self> {
         let connection = Connection::session()?;
         let (_, session): (OwnedValue, OwnedObjectPath) = connection
@@ -198,7 +198,8 @@ impl Keyring {
 }
 
 /// The passwords of an app's accounts, each kept under its `account` attribute and remembered
-/// once read, for a thread that signs in to servers. The keyring opens on first use.
+/// once read, for a thread that signs in to servers. The keyring opens on first use, and again
+/// after a failure.
 pub struct Passwords {
     application: &'static str,
     keyring: Option<Keyring>,
@@ -214,13 +215,17 @@ impl Passwords {
         }
     }
 
-    fn keyring(&mut self) -> Option<&Keyring> {
-        if self.keyring.is_none() {
-            self.keyring = Keyring::open(self.application)
-                .map_err(|error| tracing::warn!("cannot open the keyring: {error}"))
-                .ok();
-        }
-        self.keyring.as_ref()
+    fn run<T>(&mut self, what: &str, work: impl FnOnce(&Keyring) -> Result<T>) -> Option<T> {
+        let done = match self
+            .keyring
+            .take()
+            .map_or_else(|| Keyring::open(self.application), Ok)
+        {
+            Ok(keyring) => work(&keyring).inspect(|_| self.keyring = Some(keyring)),
+            Err(error) => Err(error),
+        };
+        done.inspect_err(|error| tracing::warn!("cannot {what}: {error}"))
+            .ok()
     }
 
     pub fn get(&mut self, account: &str) -> Option<String> {
@@ -228,30 +233,25 @@ impl Passwords {
             return Some(password.clone());
         }
         let password = self
-            .keyring()?
-            .password(&[("account", account)])
-            .map_err(|error| tracing::warn!("cannot read the password: {error}"))
-            .ok()
+            .run("read the password", |keyring| {
+                keyring.password(&[("account", account)])
+            })
             .flatten()?;
         self.known.insert(account.to_owned(), password.clone());
         Some(password)
     }
 
     pub fn set(&mut self, account: &str, label: &str, password: &str) {
-        if let Some(keyring) = self.keyring()
-            && let Err(error) = keyring.save(&[("account", account)], label, password)
-        {
-            tracing::warn!("cannot keep the password: {error}");
-        }
+        self.run("keep the password", |keyring| {
+            keyring.save(&[("account", account)], label, password)
+        });
         self.known.insert(account.to_owned(), password.to_owned());
     }
 
     pub fn forget(&mut self, account: &str) {
         self.known.remove(account);
-        if let Some(keyring) = self.keyring()
-            && let Err(error) = keyring.forget(&[("account", account)])
-        {
-            tracing::warn!("cannot forget the password: {error}");
-        }
+        self.run("forget the password", |keyring| {
+            keyring.forget(&[("account", account)])
+        });
     }
 }

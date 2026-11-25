@@ -95,7 +95,10 @@ fn run(job: Job, passwords: &mut Passwords, outbox: &Outbox<Reply>) {
             user,
             password,
         } => passwords.set(&account, &format!("Contacts: {user}"), &password),
-        Job::Forget(account) => passwords.forget(&account),
+        Job::Forget(account) => {
+            passwords.forget(&account);
+            offer::withdraw(Service::CalDav, &account);
+        }
         Job::Adopt => {
             let answered = offer::adopt(Service::CardDav, |client, server| {
                 client.discover_address_books(server)

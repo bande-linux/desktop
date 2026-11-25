@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use bande_secrets::pam;
 use bande_secrets::service::{Daemon, SERVICE_PATH, WireSecret, collection_path, item_path};
-use bande_secrets::store::{ALLOWED, CREATOR, Store};
+use bande_secrets::store::{CREATOR, SHARED, Store};
 use bande_test_bus::SessionBus;
 use oo7::{Key, Secret, crypto};
 use zbus::blocking::Connection;
@@ -69,7 +69,7 @@ fn an_app_keeps_a_secret_over_an_encrypted_session_shares_it_by_name_and_cannot_
     let attributes = HashMap::from([
         ("service", "mail"),
         (CREATOR, "/usr/bin/someone-else"),
-        (ALLOWED, "/usr/bin/bande-notes"),
+        (SHARED, "/usr/bin/bande-notes"),
     ]);
     let properties = HashMap::from([
         ("org.freedesktop.Secret.Item.Label", Value::from("Mail")),
@@ -109,7 +109,7 @@ fn an_app_keeps_a_secret_over_an_encrypted_session_shares_it_by_name_and_cannot_
         "a client cannot name another app as the owner"
     );
     assert_eq!(
-        stored.get(ALLOWED).map(String::as_str),
+        stored.get(SHARED).map(String::as_str),
         Some("/usr/bin/bande-notes"),
         "the saving app may open its item to the apps it names"
     );
@@ -135,7 +135,7 @@ fn times_shown(home: &Path) -> usize {
         .unwrap_or_default()
 }
 
-fn another_apps_item(home: &Path) -> OwnedObjectPath {
+fn another_apps_item(home: &Path, shared_with: &str) -> OwnedObjectPath {
     async_io::block_on(async {
         let daemon = Daemon::new(
             Store::load(home.to_path_buf()).await,
@@ -145,7 +145,10 @@ fn another_apps_item(home: &Path) -> OwnedObjectPath {
         daemon
             .store_internal(
                 "Home Wi-Fi",
-                HashMap::from([("network".to_owned(), "home".to_owned())]),
+                HashMap::from([
+                    ("network".to_owned(), "home".to_owned()),
+                    (SHARED.to_owned(), shared_with.to_owned()),
+                ]),
                 Secret::text("wifi-secret"),
             )
             .await;
@@ -230,7 +233,7 @@ fn collection_locked(client: &Connection) -> bool {
 fn another_apps_item_opens_only_with_the_store_password_and_until_settings_locks() {
     let bus = SessionBus::start().unwrap();
     let home = tempfile::tempdir().unwrap();
-    let item = another_apps_item(home.path());
+    let item = another_apps_item(home.path(), "");
     let script = "printf 'allow\\twrong\\n'\nread -r verdict\n[ \"$verdict\" = wrong ] && printf 'allow\\tcorrect horse\\n'\nread -r verdict";
     let (_daemon, _connection) = serve(&bus, home.path(), prompter(home.path(), script));
     let client = bus.connect().unwrap();
@@ -252,7 +255,7 @@ fn another_apps_item_opens_only_with_the_store_password_and_until_settings_locks
         "org.freedesktop.Secret.Item.Attributes",
         Value::from(HashMap::from([
             ("network", "home"),
-            (ALLOWED, program.to_str().unwrap()),
+            (SHARED, program.to_str().unwrap()),
         ])),
     )]);
     let secret: WireSecret = (
@@ -294,10 +297,61 @@ fn another_apps_item_opens_only_with_the_store_password_and_until_settings_locks
 }
 
 #[test]
+fn a_program_reads_and_removes_an_item_shared_with_it_but_never_saves_into_it() {
+    let bus = SessionBus::start().unwrap();
+    let home = tempfile::tempdir().unwrap();
+    let program = std::env::current_exe().unwrap();
+    let item = another_apps_item(home.path(), program.to_str().unwrap());
+    let (daemon, _connection) = serve(&bus, home.path(), PathBuf::from("/nonexistent"));
+    assert!(async_io::block_on(daemon.login(Secret::text(PASSWORD))));
+    let client = bus.connect().unwrap();
+    let session = plain_session(&client);
+
+    assert_eq!(
+        read_secret(&client, &item, &session).unwrap().2,
+        b"wifi-secret"
+    );
+
+    let secret: WireSecret = (
+        session.clone(),
+        Vec::new(),
+        b"my own password".to_vec(),
+        "text/plain".to_owned(),
+    );
+    let properties = HashMap::from([(
+        "org.freedesktop.Secret.Item.Attributes",
+        Value::from(HashMap::from([("network", "home")])),
+    )]);
+    let replaced = client.call_method(
+        Some("org.freedesktop.secrets"),
+        collection_path("login").as_str(),
+        Some("org.freedesktop.Secret.Collection"),
+        "CreateItem",
+        &(&properties, &secret, true),
+    );
+    assert!(replaced.is_err(), "saving must not hand its owner a secret");
+    let set = client.call_method(
+        Some("org.freedesktop.secrets"),
+        item.as_str(),
+        Some(ITEM),
+        "SetSecret",
+        &(&secret,),
+    );
+    assert!(set.is_err(), "nor may it be written directly");
+    assert_eq!(
+        read_secret(&client, &item, &session).unwrap().2,
+        b"wifi-secret"
+    );
+
+    let _: OwnedObjectPath = call(&client, item.as_str(), ITEM, "Delete", &());
+    assert!(read_secret(&client, &item, &session).is_err());
+}
+
+#[test]
 fn an_unlock_that_is_cancelled_or_cannot_be_asked_opens_nothing() {
     let bus = SessionBus::start().unwrap();
     let home = tempfile::tempdir().unwrap();
-    let item = another_apps_item(home.path());
+    let item = another_apps_item(home.path(), "");
     let _cancelling = serve(
         &bus,
         home.path(),
@@ -398,7 +452,7 @@ fn an_ordinary_process_sends_a_login_message() {
 fn only_root_can_pass_a_login_password_and_a_wrong_old_password_changes_nothing() {
     let bus = SessionBus::start().unwrap();
     let home = tempfile::tempdir().unwrap();
-    another_apps_item(home.path());
+    another_apps_item(home.path(), "");
     let (daemon, connection) = serve(&bus, home.path(), PathBuf::from("/nonexistent"));
     let socket = home.path().join("pam");
     let listener = std::os::unix::net::UnixListener::bind(&socket).unwrap();

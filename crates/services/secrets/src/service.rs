@@ -16,7 +16,7 @@ use crate::dialog::{Dialog, Kind, Reply, Request};
 use crate::network::NETWORK_MANAGER;
 use crate::peer;
 use crate::session::{self, Session};
-use crate::store::{self, ALLOWED, CREATOR, LOGIN, SESSION, Store};
+use crate::store::{self, ALLOWED, CREATOR, LOGIN, SESSION, SHARED, Store};
 
 pub const BUS_NAME: &str = "org.freedesktop.secrets";
 pub const SERVICE_PATH: &str = "/org/freedesktop/secrets";
@@ -130,6 +130,14 @@ pub struct Caller {
     pub identity: Option<String>,
 }
 
+impl Caller {
+    fn may_share(&self) -> bool {
+        self.identity
+            .as_deref()
+            .is_some_and(|identity| peer::flatpak_id(identity).is_none())
+    }
+}
+
 #[derive(Default)]
 struct Peer {
     identity: Option<Option<String>>,
@@ -215,6 +223,21 @@ fn open_to(item: &UnlockedItem, identity: Option<&str>) -> bool {
         Some(creator) => identity
             .is_some_and(|identity| identity == creator || allowed_list(item).contains(&identity)),
     }
+}
+
+fn shared_with(item: &UnlockedItem, identity: Option<&str>) -> bool {
+    identity.is_some_and(|identity| {
+        item.attributes()
+            .get(SHARED)
+            .is_some_and(|list| list.lines().any(|shared| shared == identity))
+    })
+}
+
+fn share(attributes: &mut HashMap<String, String>, shared: Option<String>) {
+    match shared {
+        Some(shared) => attributes.insert(SHARED.to_owned(), shared),
+        None => attributes.remove(SHARED),
+    };
 }
 
 fn client_attributes(attributes: HashMap<String, String>) -> HashMap<String, String> {
@@ -490,6 +513,10 @@ impl Daemon {
     }
 
     fn may_use(&self, caller: &Caller, path: &OwnedObjectPath, item: &UnlockedItem) -> bool {
+        shared_with(item, caller.identity.as_deref()) || self.may_change(caller, path, item)
+    }
+
+    fn may_change(&self, caller: &Caller, path: &OwnedObjectPath, item: &UnlockedItem) -> bool {
         open_to(item, caller.identity.as_deref())
             || guard(&self.peers)
                 .get(&caller.sender)
@@ -1564,7 +1591,7 @@ impl CollectionObject {
             .get(ITEM_ATTRIBUTES)
             .and_then(|value| HashMap::<String, String>::try_from(value.try_clone().ok()?).ok())
             .unwrap_or_default();
-        let shared_with = wanted.get(ALLOWED).cloned();
+        let shared = wanted.get(SHARED).filter(|_| caller.may_share()).cloned();
         let mut attributes = client_attributes(wanted);
         let replaced = {
             let mut store = self.daemon.store.lock().await;
@@ -1583,7 +1610,7 @@ impl CollectionObject {
                             (
                                 entry.id,
                                 entry.item.attributes().clone(),
-                                self.daemon.may_use(
+                                self.daemon.may_change(
                                     &caller,
                                     &item_path(&self.name, entry.id),
                                     entry.item,
@@ -1600,19 +1627,8 @@ impl CollectionObject {
                 }
                 Some((id, stored, true)) => {
                     let mut attributes = keep_internal(&stored, attributes.clone());
-                    if let Some(shared_with) = &shared_with
-                        && stored.get(CREATOR) == caller.identity.as_ref()
-                    {
-                        let mut list = stored
-                            .get(ALLOWED)
-                            .map(|list| list.lines().map(str::to_owned).collect::<Vec<_>>())
-                            .unwrap_or_default();
-                        for identity in shared_with.lines() {
-                            if !list.iter().any(|known| known == identity) {
-                                list.push(identity.to_owned());
-                            }
-                        }
-                        attributes.insert(ALLOWED.to_owned(), list.join("\n"));
+                    if stored.get(CREATOR) == caller.identity.as_ref() {
+                        share(&mut attributes, shared.clone());
                     }
                     store
                         .update_item(&self.name, id, |item| {
@@ -1633,9 +1649,7 @@ impl CollectionObject {
         if let Some(identity) = &caller.identity {
             attributes.insert(CREATOR.to_owned(), identity.clone());
         }
-        if let Some(shared_with) = shared_with {
-            attributes.insert(ALLOWED.to_owned(), shared_with);
-        }
+        share(&mut attributes, shared);
         let id = self
             .daemon
             .store
@@ -1739,10 +1753,22 @@ impl ItemObject {
     }
 
     async fn usable(&self, header: &Header<'_>) -> Result<Caller> {
+        self.permitted(header, Daemon::may_use).await
+    }
+
+    async fn changeable(&self, header: &Header<'_>) -> Result<Caller> {
+        self.permitted(header, Daemon::may_change).await
+    }
+
+    async fn permitted(
+        &self,
+        header: &Header<'_>,
+        permits: impl FnOnce(&Daemon, &Caller, &OwnedObjectPath, &UnlockedItem) -> bool,
+    ) -> Result<Caller> {
         let caller = self.daemon.caller(header).await;
         let store = self.daemon.store.lock().await;
         let item = store.find(&self.collection, self.id)?;
-        if self.daemon.may_use(&caller, &self.path(), item) {
+        if permits(&self.daemon, &caller, &self.path(), item) {
             Ok(caller)
         } else {
             Err(Error::IsLocked(
@@ -1757,7 +1783,7 @@ impl ItemObject {
         change: impl FnOnce(&mut UnlockedItem),
     ) -> zbus::fdo::Result<()> {
         if let Some(header) = &header {
-            self.usable(header)
+            self.changeable(header)
                 .await
                 .map_err(|_| zbus::fdo::Error::AccessDenied("the item is locked".to_owned()))?;
         }
@@ -1829,7 +1855,7 @@ impl ItemObject {
         secret: WireSecret,
         #[zbus(header)] header: Header<'_>,
     ) -> Result<()> {
-        let caller = self.usable(&header).await?;
+        let caller = self.changeable(&header).await?;
         let secret = self.daemon.decode(&secret, &caller.sender)?;
         self.change(None, |item| item.set_secret(secret))
             .await

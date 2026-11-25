@@ -365,8 +365,9 @@ UI.
   are agent-owned, so they stay in the keyring.
 - Items record the app that saved them (`bande:creator`); another app sees them locked until the
   user confirms with the keyring password (`bande:allowed` remembers "Always Allow"). The saving
-  app may name in `bande:allowed` the programs that open its item as their own; only it can, and
-  nobody can change who owns the item. Prompts
+  app, unless it is a Flatpak, may name in `bande:shared` the programs that read and remove its
+  item without a question; they never save into it, saving again names them anew, and nobody can
+  change who owns the item. Prompts
   are `bande-secrets-prompt` processes, so the daemon never links the toolkit; the daemon is not
   dumpable.
 - GnuPG's passphrases and smartcard PINs are asked by the same prompt: `pinentry-bande`
@@ -390,9 +391,10 @@ UI.
 - Calendar and Contacts keep their account passwords under their app ids (`bande_keyring::Passwords`,
   attribute `account`). "Also use this account for …" leaves the password under
   `org.bande.AccountOffers` (attribute `offer`) with the server and user in
-  `~/.local/share/bande/account-offers/`; the item names the other app in `bande:allowed`, so it
+  `~/.local/share/bande/account-offers/`; the item names the other app in `bande:shared`, so it
   reads the password without a question when it adopts the account, saves it as its own and removes
-  the offer.
+  the offer. The password goes to the offered server, else only to an HTTPS server inside the
+  address's own domain. Removing the account first withdraws the offer.
 
 ### Updates during a session
 

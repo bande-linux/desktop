@@ -508,10 +508,11 @@ impl CalendarApp {
                 found,
                 also_contacts,
             } => {
+                let id = new_uid();
                 if also_contacts {
                     self.worker.send(Job::Offer {
                         offer: Offer {
-                            id: new_uid(),
+                            id: id.clone(),
                             address,
                             server: server.clone(),
                             user: user.clone(),
@@ -519,7 +520,6 @@ impl CalendarApp {
                         password: password.clone(),
                     });
                 }
-                let id = new_uid();
                 let name = match user.contains('@') {
                     true => user.clone(),
                     false => format!("{user}@{}", host_of(&found.principal)),
@@ -748,6 +748,14 @@ impl CalendarApp {
                     credentials,
                     result,
                 } => match result {
+                    Ok(found)
+                        if view.library().accounts.iter().any(|account| {
+                            matches!(&account.kind, AccountKind::CalDav { user, home, .. }
+                                if *user == credentials.user && *home == found.home)
+                        }) =>
+                    {
+                        tracing::info!("Calendar already has the offered account");
+                    }
                     Ok(found) => self.setup_done(
                         view,
                         Done::Added {

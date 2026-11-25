@@ -584,8 +584,9 @@ impl App for LauncherShell {
                     intent: offer.intent.clone(),
                 })
                 .collect();
-            self.offered = offers;
-            self.launcher.set_offers(generation, infos);
+            if self.launcher.set_offers(generation, infos) {
+                self.offered = offers;
+            }
         }
         let previews = self
             .previewer

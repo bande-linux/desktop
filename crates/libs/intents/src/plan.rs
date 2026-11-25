@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
@@ -212,6 +212,10 @@ pub struct Undo {
     pub(crate) touched: Vec<(String, Vec<String>)>,
 }
 
+fn other_steps() -> Refusal {
+    Refusal::failed("the steps of a job are undone by one intent")
+}
+
 impl Undo {
     /// `intent` is public or registered with [`crate::Domain::private`].
     pub fn by<I: Intent>(intent: I) -> Result<Self, Refusal> {
@@ -233,19 +237,33 @@ impl Undo {
         }
     }
 
-    pub(crate) fn then(&mut self, step: &Self) -> Result<(), Refusal> {
-        let same = || Refusal::failed("the steps of a job are undone by one intent");
-        if self.intent != step.intent {
-            return Err(same());
+    fn fits(&self, step: &Self) -> bool {
+        let (Some(all), Some(more)) = (self.arguments.as_object(), step.arguments.as_object())
+        else {
+            return false;
+        };
+        self.intent == step.intent
+            && all.len() == more.len()
+            && more.iter().all(|(name, value)| {
+                all.get(name)
+                    .is_some_and(|known| known == value || (known.is_array() && value.is_array()))
+            })
+    }
+
+    fn then(&mut self, step: &Self) -> Result<(), Refusal> {
+        if !self.fits(step) {
+            return Err(other_steps());
         }
-        let all = self.arguments.as_object_mut().ok_or_else(same)?;
-        for (name, value) in step.arguments.as_object().ok_or_else(same)? {
-            match (all.get_mut(name), value) {
-                (Some(serde_json::Value::Array(all)), serde_json::Value::Array(more)) => {
+        if let (Some(all), Some(more)) =
+            (self.arguments.as_object_mut(), step.arguments.as_object())
+        {
+            for (name, value) in more {
+                if let (Some(all), Some(more)) = (
+                    all.get_mut(name).and_then(serde_json::Value::as_array_mut),
+                    value.as_array(),
+                ) {
                     all.extend(more.iter().cloned());
                 }
-                (Some(known), value) if known == value => {}
-                _ => return Err(same()),
             }
         }
         self.touched.extend(step.touched.iter().cloned());
@@ -545,6 +563,9 @@ impl Job {
     /// arguments are the same in each. A step is added to what is on disk, which costs one write.
     pub fn keep(&self, step: Undo) -> Result<(), Refusal> {
         let mut steps = locked(&self.steps);
+        if steps.first().is_some_and(|first| !first.fits(&step)) {
+            return Err(other_steps());
+        }
         steps.push(step);
         (self.keep)(&steps, Step::Kept).inspect_err(|_| {
             steps.pop();
@@ -591,23 +612,24 @@ impl Job {
 
     /// Leaves out one of many things; the job goes on.
     pub fn failed(&self, reference: &str, refusal: Refusal) {
-        let mut failed = locked(&self.progress.failed);
-        if failed.len() < FAILURES {
-            failed.push((reference.to_owned(), refusal));
-        }
+        locked(&self.progress.failed).push((reference.to_owned(), refusal));
     }
 
     /// Whether to stop before the next thing. The plan then ends as cancelled, with what was done.
     pub fn cancelled(&self) -> bool {
         let cancelled = self.progress.cancel.load(Ordering::Relaxed);
         if cancelled {
-            self.progress.stopped.store(true, Ordering::Relaxed);
+            self.stop();
         }
         cancelled
     }
 
     pub(crate) fn cancel(&self) {
         self.progress.cancel.store(true, Ordering::Relaxed);
+    }
+
+    pub(crate) fn stop(&self) {
+        self.progress.stopped.store(true, Ordering::Relaxed);
     }
 
     pub(crate) fn was_stopped(&self) -> bool {
@@ -618,6 +640,13 @@ impl Job {
         self.was_stopped() || !locked(&self.progress.failed).is_empty()
     }
 
+    pub(crate) fn left_out(&self) -> HashSet<String> {
+        locked(&self.progress.failed)
+            .iter()
+            .map(|(reference, _)| reference.clone())
+            .collect()
+    }
+
     pub(crate) fn result(
         &self,
         output: Dict,
@@ -626,6 +655,7 @@ impl Job {
         let mut result = output;
         let failed = locked(&self.progress.failed)
             .iter()
+            .take(FAILURES)
             .map(|(reference, refusal)| {
                 let refusal = within(refusal.clone());
                 let mut entry = refusal.details();

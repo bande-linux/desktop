@@ -607,7 +607,7 @@ impl Model {
         let Some(query) = Query::new(&self.query) else {
             return;
         };
-        if gone {
+        if gone || self.hits.is_empty() {
             let keep = self.selection().map(|hit| hit.target.clone());
             self.rebuild(keep);
             return;
@@ -618,11 +618,7 @@ impl Model {
         if late.is_empty() {
             return;
         }
-        let heading = match self.hits.is_empty() {
-            true => Heading::TopHit,
-            false => Heading::Actions,
-        };
-        self.headings.push((self.hits.len(), heading));
+        self.headings.push((self.hits.len(), Heading::Actions));
         self.hits.extend(late);
     }
 

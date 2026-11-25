@@ -72,6 +72,10 @@ impl Running {
         &self.sender
     }
 
+    pub(crate) fn agent(&self) -> Option<&str> {
+        self.job.get().and_then(|job| job.agent())
+    }
+
     pub(crate) fn path(&self) -> &str {
         &self.path
     }

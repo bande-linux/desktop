@@ -2,6 +2,9 @@ use std::os::fd::OwnedFd;
 
 use crate::{Effect, Limits, Reason, Refusal, Store};
 
+/// The most descriptors one message can carry (`SCM_MAX_FD`).
+pub(crate) const MOST_OPENED: usize = 253;
+
 /// What a file is opened for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Access {

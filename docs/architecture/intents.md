@@ -361,7 +361,8 @@ something else changed them. Many things go through `Job::expect`, `advance`, `f
 `cancelled`, and one or more of them are a step with its own `keep`; a step that fails is taken out
 with `Job::not_done`, and `Job::undo` is what takes back the rest, for `Done`. The steps are undone by
 one intent: its lists are those of the steps, one after another and in the order they were done, and
-its other arguments are the same in each. So a step costs one line added to a file. An undo intent
+its other arguments are the same in each. Its lists therefore take as many as a set (`IN_SET`). A step costs one line
+added to a file. An undo intent
 must stand things that are already as it would leave them, since a step cut short may not have been
 done. `Job::still` compares the effects found again before a step with the plan's. `perform` blocks,
 on a thread of its own.
@@ -460,8 +461,9 @@ interface org.bande.Intents.Files      (on the files owner)
   Register (h folder, a(sss) files, a{sv} limits)   -> (as references)
 ```
 
-`access` is `read` or `folder`. Each file opened is its descriptor, its reference, and `name`,
-`media_type` and `size`; each registered is its temporary name, its wanted name, and the reference
+`access` is `read` or `folder`, for at most 253 references, as many descriptors as a message holds.
+Each file opened is its descriptor, its reference, and `name`, `media_type` and `size`, if the limits
+allow the effects of opening it; each registered is its temporary name, its wanted name, and the reference
 it replaces, or nothing. Mail serves `Open` for its attachments. `Subscribe` and `Event` come with
 routines.
 
@@ -488,7 +490,7 @@ routines.
   `kind`: `text`, `rich_text`, `address`, `path`, `size`, `count`, `thing`, `loss`, `copy`;
   `value`), which is all the prompt knows.
 - **Perform** runs a plan once, within ten minutes not counting the wait for Allow. What ends within
-  100 ms is returned at once with job `/`. `Conflict` means the state is no longer what the plan was
+  100 ms is returned at once with job `/`; at most 16 run per caller, and per agent for the broker. `Conflict` means the state is no longer what the plan was
   made for. A plan with an effect that is asked waits for [approval](#approval).
 - **Nothing happens twice, nothing half.** Before its first change the owner stores the plan's token
   and the undo, and for many things each step as it is done. Started again after a crash it finishes

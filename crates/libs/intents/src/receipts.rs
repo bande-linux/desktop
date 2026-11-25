@@ -199,20 +199,20 @@ impl Receipts {
         let before = file.metadata()?.len();
         file.write_all(&line)
             .and_then(|()| file.sync_data())
+            .and_then(|()| match is_new {
+                true => bande_xdg::sync_folder(&folder),
+                false => Ok(()),
+            })
             .inspect_err(|_| {
                 if let Err(error) = file.set_len(before) {
                     tracing::warn!("cannot take back a step that was not kept: {error}");
                 }
-            })?;
-        match is_new {
-            true => bande_xdg::sync_folder(&folder),
-            false => Ok(()),
-        }
+            })
     }
 
     fn kept_steps(&self, token: &str) -> Vec<Option<KeptStep>> {
         let path = self.steps(token);
-        let stored = match fs::read_to_string(&path) {
+        let stored = match fs::read(&path) {
             Ok(stored) => stored,
             Err(error) if error.kind() == io::ErrorKind::NotFound => return Vec::new(),
             Err(error) => {
@@ -221,10 +221,10 @@ impl Receipts {
             }
         };
         stored
-            .split_inclusive('\n')
-            .filter(|line| line.ends_with('\n'))
+            .split_inclusive(|byte| *byte == b'\n')
+            .filter(|line| line.ends_with(b"\n"))
             .map_while(|line| {
-                serde_json::from_str(line)
+                serde_json::from_slice(line)
                     .inspect_err(|error| tracing::warn!("a kept step cannot be read: {error}"))
                     .ok()
             })
@@ -341,9 +341,14 @@ impl Receipts {
         let Some(at) = self.all.iter().position(|receipt| receipt.token == token) else {
             return Ok(());
         };
+        let before = self.all.clone();
         let removed = self.all.remove(at);
+        if let Err(error) = self.save() {
+            self.all = before;
+            return Err(error);
+        }
         self.remove_beside(&removed);
-        self.save()
+        Ok(())
     }
 
     pub(crate) fn kept(&self, token: &str, undo: Undo, left: Vec<String>) -> io::Result<KeptUndo> {
@@ -446,7 +451,7 @@ mod tests {
         let steps = receipts.steps("job");
         drop(receipts);
         let mut file = OpenOptions::new().append(true).open(&steps).unwrap();
-        file.write_all(b"{\"intent\": \"books.re").unwrap();
+        file.write_all(b"{\"intent\": \"b\xc3").unwrap();
 
         let mut receipts = Receipts::open(folder.path(), "books").unwrap();
         let begun = receipts.all()[0].clone();

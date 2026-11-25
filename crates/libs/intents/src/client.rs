@@ -6,6 +6,7 @@ use zbus::blocking::Connection;
 use zbus::proxy::CacheProperties;
 use zbus::zvariant::{Fd, OwnedFd, OwnedObjectPath};
 
+use crate::files::MOST_OPENED;
 use crate::job::{CANCELLED, DONE, FAILED};
 use crate::{
     Access, Dict, Effect, Limits, Manifests, Opened, PATH, Refusal, Written, dict_to_json,
@@ -166,6 +167,23 @@ impl Performed {
             .unwrap_or_default()
     }
 
+    pub(crate) fn failed(&self) -> Vec<(String, Refusal)> {
+        let failed: Vec<Dict> = self
+            .result
+            .get("failed")
+            .and_then(|failed| failed.try_clone().ok()?.try_into().ok())
+            .unwrap_or_default();
+        failed
+            .into_iter()
+            .map(|mut entry| {
+                let reference = taken(&mut entry, "reference");
+                let word: String = taken(&mut entry, "error");
+                let message = taken(&mut entry, "message");
+                (reference, Refusal::from_parts(&word, message, entry))
+            })
+            .collect()
+    }
+
     /// The result as JSON.
     pub fn json(&self) -> Json {
         dict_to_json(&self.result)
@@ -258,20 +276,27 @@ impl Client {
         let Some(kind) = references.first().and_then(|it| it.split(':').next()) else {
             return Ok((Vec::new(), Vec::new()));
         };
-        let (files, words) =
-            self.files(manifests, kind)?
-                .open(references, access.word(), &self.limits)?;
-        let opened = files
-            .into_iter()
-            .map(|(file, reference, mut about)| Opened {
-                file: file.into(),
-                reference,
-                name: taken(&mut about, "name"),
-                media_type: taken(&mut about, "media_type"),
-                size: taken(&mut about, "size"),
-            })
-            .collect();
-        Ok((opened, effects(&words)))
+        let owner = self.files(manifests, kind)?;
+        let mut opened = Vec::new();
+        let mut caused = Vec::new();
+        for some in references.chunks(MOST_OPENED) {
+            let (files, words) = owner.open(some, access.word(), &self.limits)?;
+            opened.extend(
+                files
+                    .into_iter()
+                    .map(|(file, reference, mut about)| Opened {
+                        file: file.into(),
+                        reference,
+                        name: taken(&mut about, "name"),
+                        media_type: taken(&mut about, "media_type"),
+                        size: taken(&mut about, "size"),
+                    }),
+            );
+            caused.extend(effects(&words));
+        }
+        caused.sort();
+        caused.dedup();
+        Ok((opened, caused))
     }
 
     /// Has the files owner check and name what was written in `folder`, and gives the references.

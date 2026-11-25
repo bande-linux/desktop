@@ -1039,8 +1039,11 @@ impl Launcher {
         self.state.borrow_mut().model.ask_offers();
     }
 
-    pub fn set_offers(&mut self, generation: u64, offers: Vec<OfferInfo>) {
-        self.state.borrow_mut().model.set_offers(generation, offers);
+    /// False when they are those of an earlier query, so that the ones it has stay.
+    pub fn set_offers(&mut self, generation: u64, offers: Vec<OfferInfo>) -> bool {
+        let model = &mut self.state.borrow_mut().model;
+        model.set_offers(generation, offers);
+        model.generation == generation
     }
 
     pub fn preview_request(&mut self) -> Option<PathBuf> {

@@ -39,6 +39,10 @@ impl<P: Program> Clone for MainLoop<P> {
     }
 }
 
+fn busy() -> Refusal {
+    Refusal::unavailable(tr!("The app is busy. Try again in a moment."))
+}
+
 impl<P: Program> MainLoop<P> {
     /// Runs `errand` on the program's own thread and waits for its answer: `None` when the process
     /// only serves intents, so nothing is open, and `Unavailable` when the program is busy, in which
@@ -68,16 +72,17 @@ impl<P: Program> MainLoop<P> {
             Err(RecvTimeoutError::Disconnected) => Ok(None),
             Err(RecvTimeoutError::Timeout) => match taken.swap(true, Ordering::AcqRel) {
                 true => Ok(answered.recv().ok()),
-                false => Err(Refusal::unavailable(tr!(
-                    "The app is busy. Try again in a moment."
-                ))),
+                false => Err(busy()),
             },
         }
     }
 
     /// Opens `arguments` as a launch with them does, for an intent that shows something.
-    pub fn launch(&self, arguments: Vec<String>) {
-        self.messages.send(Message::Launch(arguments));
+    pub fn launch(&self, arguments: Vec<String>) -> Result<(), Refusal> {
+        match self.messages.send(Message::Launch(arguments)) {
+            true => Ok(()),
+            false => Err(busy()),
+        }
     }
 }
 

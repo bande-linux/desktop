@@ -77,7 +77,7 @@ Calculator holds about 26 MiB of GPU memory and Files and Settings about 50 MiB.
 only what changed, so pointing at Calculator's close button makes the compositor repaint about
 1 200 pixels a frame. It also encodes only the items and glyphs that reach what changed, so a
 small change costs the same CPU in a full window as in an empty one: Terminal with a spinner and a
-line of streamed text (25 frames/s, headless compositor, two changed lines) takes about 2.4 ms of
+line of streamed text (25 frames/s, headless compositor, two changed lines) takes about 1.6 ms of
 CPU a frame.
 
 Under `bande-session-bench` on that GPU, on two cores (`taskset -c 0,1`) of a loaded machine, a

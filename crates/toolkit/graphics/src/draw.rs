@@ -221,7 +221,10 @@ fn bezier(path: &Path) -> BezPath {
 }
 
 fn snapped(base: Affine, offset: Point) -> Affine {
-    let [scale, _, _, _, x, y] = base.as_coeffs();
+    let [scale, skew_y, skew_x, scale_y, x, y] = base.as_coeffs();
+    if skew_x != 0.0 || skew_y != 0.0 || scale != scale_y {
+        return base * Affine::translate((f64::from(offset.x), f64::from(offset.y)));
+    }
     let device = |origin: f64, by: f32| (origin + scale * f64::from(by)).round();
     Affine::translate((device(x, offset.x), device(y, offset.y))) * Affine::scale(scale)
 }

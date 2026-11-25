@@ -691,7 +691,7 @@ mod tests {
 
     use super::*;
     use crate::dmabuf::SharedPlane;
-    use crate::scene::{Item, Paint, Point, Rect, Shape};
+    use crate::scene::{Item, Paint, Point, Rect, Shape, Transform};
     use crate::text::{TextAlign, TextStyle, TextSystem};
     use bande_design::Color;
 
@@ -889,6 +889,19 @@ mod tests {
         ]
     }
 
+    fn turned(moved: f32) -> Vec<Item> {
+        vec![Item::Transform {
+            transform: Transform::rotate(-0.7),
+            items: vec![Item::Translate {
+                offset: Point::new(-20.0 + moved, 30.0),
+                items: vec![Item::Fill {
+                    shape: Shape::rect(Rect::new(10.0, 10.0, 24.0, 4.0)),
+                    paint: Color::BLACK.into(),
+                }],
+            }],
+        }]
+    }
+
     fn blended(items: Vec<Item>) -> Item {
         Item::Blend {
             mode: crate::scene::Blend::Multiply,
@@ -967,6 +980,7 @@ mod tests {
                 vec![marks],
                 vec![dot(0.0, 0.0, 4.0, 0x00ff00)],
             ),
+            Change::between("translated in a rotation", turned(0.0), turned(4.0)),
             Change::within(
                 "pill",
                 across_the_end,

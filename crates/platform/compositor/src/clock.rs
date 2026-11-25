@@ -2,7 +2,9 @@ use std::collections::VecDeque;
 use std::io;
 use std::time::Duration;
 
+use crate::keepalive::LONGEST_DEVICE_WAIT;
 use crate::pacing::{Commit, FramePacing};
+use crate::progress::waits_for_a_device;
 use crate::reveal::ShownFrame;
 use crate::state::Compositor;
 
@@ -291,14 +293,32 @@ pub enum RecoveryStep {
 #[derive(Debug, Default)]
 pub struct FrameRecovery {
     restarted: bool,
+    excused: Duration,
 }
 
 impl FrameRecovery {
     pub fn step(&mut self, stalled_for: Option<Duration>) -> RecoveryStep {
-        let Some(stalled_for) = stalled_for else {
-            self.restarted = false;
+        self.step_unless(stalled_for, waits_for_a_device)
+    }
+
+    fn step_unless(
+        &mut self,
+        stalled_for: Option<Duration>,
+        waits_for_a_device: impl FnOnce() -> bool,
+    ) -> RecoveryStep {
+        let Some(whole) = stalled_for else {
+            *self = Self::default();
             return RecoveryStep::Wait;
         };
+        let stalled_for = whole.saturating_sub(self.excused);
+        let next = match self.restarted {
+            true => GIVE_UP_AFTER,
+            false => RESTART_DISPLAY_AFTER,
+        };
+        if stalled_for >= next && whole < LONGEST_DEVICE_WAIT && waits_for_a_device() {
+            self.excused = whole;
+            return RecoveryStep::Wait;
+        }
         if stalled_for >= GIVE_UP_AFTER {
             RecoveryStep::GiveUp
         } else if stalled_for >= RESTART_DISPLAY_AFTER && !self.restarted {
@@ -900,5 +920,42 @@ mod tests {
         assert_eq!(failed_at.len(), 2);
         assert!(failed_at[1] - failed_at[0] >= FAILED_FRAME_RETRY);
         Ok(())
+    }
+
+    #[test]
+    fn a_busy_disk_puts_off_giving_up_on_the_display_but_not_for_ever() {
+        let mut recovery = FrameRecovery::default();
+        let after = |seconds| Some(Duration::from_secs(seconds));
+        for seconds in [3, 6, 60, 119] {
+            assert_eq!(
+                recovery.step_unless(after(seconds), || true),
+                RecoveryStep::Wait
+            );
+        }
+        assert_eq!(
+            recovery.step_unless(after(121), || true),
+            RecoveryStep::Wait
+        );
+        assert_eq!(
+            recovery.step_unless(after(122), || true),
+            RecoveryStep::RestartDisplay
+        );
+        assert_eq!(
+            recovery.step_unless(after(134), || true),
+            RecoveryStep::GiveUp
+        );
+        assert_eq!(recovery.step_unless(None, || true), RecoveryStep::Wait);
+        assert_eq!(
+            recovery.step_unless(after(3), || false),
+            RecoveryStep::RestartDisplay
+        );
+        assert_eq!(
+            recovery.step_unless(after(14), || false),
+            RecoveryStep::Wait
+        );
+        assert_eq!(
+            recovery.step_unless(after(15), || false),
+            RecoveryStep::GiveUp
+        );
     }
 }

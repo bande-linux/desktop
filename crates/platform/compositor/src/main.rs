@@ -8,9 +8,9 @@ use std::time::{Duration, Instant};
 use bande_compositor::{
     Awaited, BehindBootScreen, CLIPBOARD_DAEMON, Compositor, CursorTheme, DisplaysHandle,
     DrmBackend, DrmNotifiers, FirstMode, FrameClock, FrameOutput, FrameRecovery, FrameScheduler,
-    GREETER, InputSettings, OutputConfig, Progress, REFRESH, REVIEW, RecoveryStep, Renderer,
-    SCREENSHOT, SESSION_CLIENT_RESTART_THROTTLE, SHELL, ScanoutDevice, SessionRequest, SessionRole,
-    SessionUpkeep, Shutdown, Sleep, boot_screen_has_display, boot_screen_shown,
+    GREETER, InputSettings, Keepalive, OutputConfig, Progress, REFRESH, REVIEW, RecoveryStep,
+    Renderer, SCREENSHOT, SESSION_CLIENT_RESTART_THROTTLE, SHELL, ScanoutDevice, SessionRequest,
+    SessionRole, SessionUpkeep, Shutdown, Sleep, boot_screen_has_display, boot_screen_shown,
     export_session_environment, follow_alerts, follow_appearance, follow_input_settings,
     follow_lid, follow_login_settings, follow_session, follow_shutdown, follow_sleep,
     handle_power_key, keep_code_in_memory, lid_closed, notify_service_manager, raise_priority,
@@ -860,14 +860,15 @@ fn listen<O: 'static>(
     if let Err(error) = notify_service_manager(notify_socket.as_deref(), "READY=1") {
         tracing::warn!("cannot tell the service manager it is ready: {error}");
     }
-    if let Some(interval) = watchdog_keepalive_interval(
-        std::env::var_os("WATCHDOG_USEC").as_deref(),
-        std::env::var_os("WATCHDOG_PID").as_deref(),
-    ) {
+    if let Some(notify_socket) = notify_socket
+        && let Some(interval) = watchdog_keepalive_interval(
+            std::env::var_os("WATCHDOG_USEC").as_deref(),
+            std::env::var_os("WATCHDOG_PID").as_deref(),
+        )
+    {
+        let keepalive = Keepalive::start(notify_socket, interval)?;
         handle.insert_source(Timer::immediate(), move |_, _, _| {
-            if let Err(error) = notify_service_manager(notify_socket.as_deref(), "WATCHDOG=1") {
-                tracing::warn!("cannot reassure the service manager's watchdog: {error}");
-            }
+            keepalive.alive();
             TimeoutAction::ToDuration(interval)
         })?;
     }

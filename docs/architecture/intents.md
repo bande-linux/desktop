@@ -357,7 +357,7 @@ pub fn owner() -> Owner {
 `Job::keep` is called **before** each change, with what takes back that one; a crash then leaves what
 was kept to `recover`, which says what is left of it: `None` when nothing was done. `look` gives the
 named properties as text that is equal while they mean the same, which is how undo sees that
-something else changed them. Many things go through `Job::expect`, `advance`, `failed` and
+something else changed them, and `NotFound` for a thing that is gone. Many things go through `Job::expect`, `advance`, `failed` and
 `cancelled`, and one or more of them are a step with its own `keep`; a step that fails is taken out
 with `Job::not_done`, and `Job::undo` is what takes back the rest, for `Done`. The steps are undone by
 one intent: its lists are those of the steps, one after another and in the order they were done, and

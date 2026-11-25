@@ -674,11 +674,23 @@ pub trait Referent: 'static {
 }
 
 impl<A: Referent, B: Referent> Referent for (A, B) {
-    const TYPES: &'static [&'static str] = &[A::TYPES[0], B::TYPES[0]];
+    const TYPES: &'static [&'static str] = {
+        assert!(
+            A::TYPES.len() == 1 && B::TYPES.len() == 1,
+            "each in a tuple names one type"
+        );
+        &[A::TYPES[0], B::TYPES[0]]
+    };
 }
 
 impl<A: Referent, B: Referent, C: Referent> Referent for (A, B, C) {
-    const TYPES: &'static [&'static str] = &[A::TYPES[0], B::TYPES[0], C::TYPES[0]];
+    const TYPES: &'static [&'static str] = {
+        assert!(
+            A::TYPES.len() == 1 && B::TYPES.len() == 1 && C::TYPES.len() == 1,
+            "each in a tuple names one type"
+        );
+        &[A::TYPES[0], B::TYPES[0], C::TYPES[0]]
+    };
 }
 
 /// The token of `reference` when it is of the type `kind`.

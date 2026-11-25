@@ -62,6 +62,10 @@ pub(crate) struct KeptUndo {
 }
 
 impl Receipt {
+    pub(crate) fn is_old(&self) -> bool {
+        self.made < now().saturating_sub(LASTS)
+    }
+
     pub(crate) fn wire(&self, domain: &str) -> Result<Dict, Refusal> {
         let mut dict = Dict::new();
         plan::put(&mut dict, "receipt", format!("{domain}:{}", self.token))?;
@@ -261,14 +265,13 @@ impl Receipts {
     }
 
     fn forget_old(&mut self) {
-        let oldest = now().saturating_sub(LASTS);
         let mut beside = 0;
         let mut kept = Vec::new();
         let mut forgotten = Vec::new();
         for receipt in std::mem::take(&mut self.all).into_iter().rev() {
             beside += receipt.undo.as_ref().map_or(0, |undo| undo.beside);
             let begun = receipt.state == State::Begun;
-            if begun || (receipt.made >= oldest && kept.len() < MOST && beside <= MOST_BESIDE) {
+            if begun || (!receipt.is_old() && kept.len() < MOST && beside <= MOST_BESIDE) {
                 kept.push(receipt);
             } else {
                 forgotten.push(receipt);
@@ -300,9 +303,8 @@ impl Receipts {
     }
 
     pub(crate) fn find(&self, token: &str) -> Option<&Receipt> {
-        let oldest = now().saturating_sub(LASTS);
         self.all.iter().find(|receipt| {
-            receipt.token == token && receipt.state == State::Whole && receipt.made >= oldest
+            receipt.token == token && receipt.state == State::Whole && !receipt.is_old()
         })
     }
 

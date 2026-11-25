@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError, mpsc};
@@ -21,7 +21,7 @@ use crate::receipts::{self, KeptUndo, Receipt, Receipts, State, digest, now, uns
 use crate::value::SET_PREFIX;
 use crate::{
     Access, Client, Definition, Dict, Domain, Effect, IN_SET, Job, Kind, LISTED, Limits, Parameter,
-    Reason, Refusal, Row, RowKind, Store, Undo, Wanted, Written, domain,
+    Prepared, Reason, Refusal, Row, RowKind, Store, Undo, Wanted, Written, domain,
 };
 
 /// The object every owner serves its intents at.
@@ -39,6 +39,7 @@ const ONLY: &str = "only";
 const MOST_FOUND: u32 = 100;
 const PROPERTIES: &str = "properties";
 const CURRENT: &str = "current";
+const GONE: &str = "gone";
 
 /// The references of one thing type that an app's last focused window shows.
 pub type Current = Arc<dyn Fn(&str) -> Vec<String> + Send + Sync>;
@@ -426,7 +427,7 @@ impl Shared {
             receipts.interrupted.push(receipt.plan.clone());
             let left = match receipts.undo(&receipt) {
                 Some(undo) => match self.left(of, undo) {
-                    Err(refusal) if refusal.reason == Reason::NotFound => {
+                    Err(refusal) if refusal.reason == Reason::NotFound || receipt.is_old() => {
                         tracing::warn!("{} cannot be undone: {refusal}", receipt.intent);
                         None
                     }
@@ -489,7 +490,7 @@ impl Shared {
         let store = self.store(of)?;
         undo.touched
             .iter()
-            .map(|(reference, properties)| Ok(digest(&store.look(reference, properties)?)))
+            .map(|(reference, properties)| look(&*store, reference, properties))
             .collect()
     }
 
@@ -953,21 +954,52 @@ impl Shared {
         let (manifest, definition) = manifests.intent(&undo.intent).ok_or_else(|| {
             Refusal::unavailable(tr!("The program that can undo this is not installed"))
         })?;
-        let arguments = undo_arguments(definition, undo)?;
         let client = Client::passing(&self.connection, limits)?;
-        let prepared = client.prepare(&manifest.bus, &undo.intent, &arguments)?;
+        let prepared = undo
+            .in_calls(definition)
+            .into_iter()
+            .map(|(undo, references)| {
+                let arguments = undo_arguments(definition, &undo)?;
+                let prepared = client.prepare(&manifest.bus, &undo.intent, &arguments)?;
+                Ok((prepared, references))
+            })
+            .collect::<Result<Vec<(Prepared, Vec<String>)>, Refusal>>()?;
+        let plans = || prepared.iter().map(|(prepared, _)| prepared);
+        let summaries: Vec<&str> = plans().map(|plan| plan.summary.as_str()).collect();
         Ok(Ready {
-            effects: prepared.effects.clone(),
-            summary: prepared.summary.clone(),
-            rows: prepared.rows.iter().map(Row::from_wire).collect(),
+            effects: plans()
+                .flat_map(|plan| plan.effects.clone())
+                .collect::<BTreeSet<_>>()
+                .into_iter()
+                .collect(),
+            summary: summaries.join("; "),
+            rows: plans()
+                .flat_map(|plan| &plan.rows)
+                .map(Row::from_wire)
+                .collect(),
             references: Vec::new(),
             run: Box::new(move |job, _| {
-                let performed = client.perform(prepared)?;
-                for (reference, refusal) in performed.failed() {
-                    job.failed(&reference, refusal);
-                }
-                if performed.cancelled {
-                    job.stop();
+                for (call, (prepared, references)) in prepared.into_iter().enumerate() {
+                    if job.cancelled() {
+                        break;
+                    }
+                    let performed = match client.perform(prepared) {
+                        Ok(performed) => performed,
+                        Err(refusal) if call == 0 => return Err(refusal),
+                        Err(refusal) => {
+                            for reference in references {
+                                job.failed(&reference, refusal.clone());
+                            }
+                            continue;
+                        }
+                    };
+                    for (reference, refusal) in performed.failed() {
+                        job.failed(&reference, refusal);
+                    }
+                    if performed.cancelled {
+                        job.stop();
+                        break;
+                    }
                 }
                 Ok((Dict::new(), None))
             }),
@@ -1102,7 +1134,7 @@ impl Shared {
             .map(
                 |((reference, properties), left)| match left_out.contains(reference) {
                     true => Ok(left),
-                    false => Ok(digest(&store.look(reference, properties)?)),
+                    false => look(&*store, reference, properties),
                 },
             )
             .collect::<Result<Vec<_>, Refusal>>()?;
@@ -1289,7 +1321,7 @@ impl Shared {
             return Err(Refusal::invalid("references", Vec::new()));
         }
         let mut opened = Vec::new();
-        let mut effects = std::collections::BTreeSet::new();
+        let mut effects = BTreeSet::new();
         for reference in references {
             limits.check(domain(reference), &[Effect::Read])?;
             let (file, caused) = files.open(reference, access, limits)?;
@@ -1349,6 +1381,14 @@ impl Shared {
             .take(count as usize)
             .map(|(_, receipt)| receipt)
             .collect())
+    }
+}
+
+fn look(store: &dyn Store, reference: &str, properties: &[String]) -> Result<String, Refusal> {
+    match store.look(reference, properties) {
+        Ok(look) => Ok(digest(&look)),
+        Err(refusal) if refusal.reason == Reason::NotFound => Ok(GONE.to_owned()),
+        Err(refusal) => Err(refusal),
     }
 }
 

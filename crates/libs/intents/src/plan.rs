@@ -7,8 +7,8 @@ use zbus::zvariant::OwnedValue;
 
 use crate::client::text;
 use crate::{
-    Dict, Effect, Intent, Kind, Limits, Ref, Referent, Refusal, Returns, Thing, Value,
-    dict_to_json, domain,
+    Definition, Dict, Effect, Intent, Kind, LISTED, Limits, Ref, Referent, Refusal, Returns, Thing,
+    Value, dict_to_json, domain,
 };
 
 pub(crate) const FAILURES: usize = 100;
@@ -279,6 +279,27 @@ impl Undo {
         Ok(Some(all))
     }
 
+    pub(crate) fn in_calls(&self, definition: &Definition) -> Vec<(Self, Vec<String>)> {
+        let listed = definition.parameters.iter().find_map(|parameter| {
+            let is_list = matches!(parameter.kind, Kind::List { .. });
+            let references = self.arguments.get(&parameter.name)?.as_array()?;
+            (is_list && parameter.kind.names_things() && references.len() > LISTED)
+                .then_some((&parameter.name, references))
+        });
+        let Some((name, references)) = listed else {
+            return vec![(self.clone(), Vec::new())];
+        };
+        references
+            .chunks(LISTED)
+            .map(|some| {
+                let mut call = self.clone();
+                call.arguments[name.as_str()] = some.into();
+                let references = some.iter().filter_map(|it| it.as_str().map(str::to_owned));
+                (call, references.collect())
+            })
+            .collect()
+    }
+
     /// The change touched these properties of `thing`; undo is refused when [`Store::look`] then
     /// tells them differently.
     pub fn touching<T: Referent>(mut self, thing: &Ref<T>, properties: &[&str]) -> Self {
@@ -304,7 +325,7 @@ impl Undo {
 /// What an owner keeps the things of its domains in.
 pub trait Store: Send + Sync + 'static {
     /// The named properties of a thing as text that is the same as long as they mean the same; also
-    /// of another program's thing, when an undo touches one.
+    /// of another program's thing, when an undo touches one. `NotFound` is a thing that is gone.
     fn look(&self, reference: &str, properties: &[String]) -> Result<String, Refusal>;
 
     /// What is left to undo of a change that a crash or a failure cut short, after the owner has

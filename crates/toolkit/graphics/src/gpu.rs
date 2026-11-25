@@ -834,38 +834,86 @@ mod tests {
         );
     }
 
-    fn crowded(moved: f32) -> Scene {
-        let dot = |x: f32, y: f32, side: f32, color: u32| Item::Fill {
+    struct Change {
+        name: &'static str,
+        before: Vec<Item>,
+        after: Vec<Item>,
+        damage: Option<Region>,
+    }
+
+    impl Change {
+        fn between(name: &'static str, before: Vec<Item>, after: Vec<Item>) -> Self {
+            Self {
+                name,
+                before,
+                after,
+                damage: None,
+            }
+        }
+
+        fn within(name: &'static str, damage: Region, item: Item) -> Self {
+            Self {
+                name,
+                before: vec![item.clone()],
+                after: vec![item],
+                damage: Some(damage),
+            }
+        }
+    }
+
+    fn dot(x: f32, y: f32, side: f32, color: u32) -> Item {
+        Item::Fill {
             shape: Shape::rounded(Rect::new(x, y, side, side), side / 2.0),
             paint: Paint::Solid(Color::hex(color).with_opacity(0.7)),
-        };
+        }
+    }
+
+    fn crowded(moved: f32) -> Vec<Item> {
         let row =
             |y: f32| (0..6).map(move |column| dot(column as f32 * 10.3 + 0.4, y, 11.0, 0x3060c0));
+        vec![
+            Item::Shadow {
+                shape: Shape::rect(Rect::new(6.0, 4.0, 20.0, 6.0)),
+                offset: Point::new(0.0, 2.0),
+                blur_radius: 8.0,
+                color: Color::BLACK,
+            },
+            Item::Clip {
+                shape: Shape::rounded(Rect::new(2.0, 2.0, 60.0, 60.0), 9.0),
+                items: (0..6).flat_map(|line| row(line as f32 * 9.7)).collect(),
+            },
+            Item::Clip {
+                shape: Shape::rect(Rect::new(0.0, 0.0, 64.0, 8.0)),
+                items: row(1.0).collect(),
+            },
+            Item::Opacity {
+                alpha: 0.6,
+                items: vec![dot(20.0 + moved, 28.0, 14.0, 0xd02020)],
+            },
+        ]
+    }
+
+    fn scene_of(items: &[Item]) -> Scene {
         Scene {
             width: SIDE,
             height: SIDE,
-            background: Color::hex(0xffffff),
-            items: vec![
-                Item::Shadow {
-                    shape: Shape::rect(Rect::new(6.0, 4.0, 20.0, 6.0)),
-                    offset: Point::new(0.0, 2.0),
-                    blur_radius: 8.0,
-                    color: Color::BLACK,
-                },
-                Item::Clip {
-                    shape: Shape::rounded(Rect::new(2.0, 2.0, 60.0, 60.0), 9.0),
-                    items: (0..6).flat_map(|line| row(line as f32 * 9.7)).collect(),
-                },
-                Item::Clip {
-                    shape: Shape::rect(Rect::new(0.0, 0.0, 64.0, 8.0)),
-                    items: row(1.0).collect(),
-                },
-                Item::Opacity {
-                    alpha: 0.6,
-                    items: vec![dot(20.0 + moved, 28.0, 14.0, 0xd02020)],
-                },
-            ],
+            background: Color::hex(0xe8e0d8),
+            items: items.to_vec(),
         }
+    }
+
+    fn everywhere() -> Vec<(u32, u32)> {
+        (0..SIDE)
+            .flat_map(|y| (0..SIDE).map(move |x| (x, y)))
+            .collect()
+    }
+
+    fn furthest(one: &[[u8; 4]], other: &[[u8; 4]]) -> Option<u8> {
+        one.iter()
+            .flatten()
+            .zip(other.iter().flatten())
+            .map(|(one, other)| one.abs_diff(*other))
+            .max()
     }
 
     #[test]
@@ -884,31 +932,87 @@ mod tests {
             gpu.shared_image((SIDE, SIDE), &linear)
                 .expect("a shared image")
         };
-        let (partial, whole) = (image(), image());
-        let (before, after) = (crowded(0.0), crowded(3.3));
-        let damage = crate::damage::damage(&before, &after, 1.0).expect("little damage");
-        renderer
-            .present(&before, 1.0, &partial, None)
-            .expect("the first frame");
-        renderer
-            .present(&after, 1.0, &partial, Some(&damage))
-            .expect("the partial frame");
-        renderer
-            .present(&after, 1.0, &whole, None)
-            .expect("the whole frame");
-        let everywhere: Vec<(u32, u32)> = (0..SIDE)
-            .flat_map(|y| (0..SIDE).map(move |x| (x, y)))
-            .collect();
-        let furthest = pixels(&partial, &everywhere)
-            .iter()
-            .flatten()
-            .zip(pixels(&whole, &everywhere).iter().flatten())
-            .map(|(partial, whole)| partial.abs_diff(*whole))
-            .max();
-        assert!(
-            furthest.is_some_and(|furthest| furthest <= LAYER_ROUNDING),
-            "a channel differs by {furthest:?}"
-        );
+        let pill = Shape::rounded(Rect::new(10.0, 20.0, 44.0, 12.0), 30.0);
+        let ink: Paint = Color::hex(0x2040ff).into();
+        let across_the_end = Region {
+            x: 14,
+            y: 16,
+            width: 20,
+            height: 20,
+        };
+        let spot = Region {
+            x: 24,
+            y: 24,
+            width: 8,
+            height: 8,
+        };
+        let sheet = Shape::rect(Rect::new(0.0, 0.0, 64.0, 64.0));
+        let changes = [
+            Change::between("crowded", crowded(0.0), crowded(3.3)),
+            Change::within(
+                "pill",
+                across_the_end,
+                Item::Fill {
+                    shape: pill,
+                    paint: ink.clone(),
+                },
+            ),
+            Change::within(
+                "pill clip",
+                across_the_end,
+                Item::Clip {
+                    shape: pill,
+                    items: vec![Item::Fill {
+                        shape: sheet,
+                        paint: ink.clone(),
+                    }],
+                },
+            ),
+            Change::within(
+                "pill outline",
+                across_the_end,
+                Item::Stroke {
+                    shape: pill,
+                    width: 2.0,
+                    paint: ink.clone(),
+                },
+            ),
+            Change::within(
+                "stroke wider than its shape",
+                spot,
+                Item::Stroke {
+                    shape: Shape::rect(Rect::new(16.0, 16.0, 24.0, 24.0)),
+                    width: 26.0,
+                    paint: ink,
+                },
+            ),
+        ];
+        let mut wrong = Vec::new();
+        for change in changes {
+            let (partial, whole) = (image(), image());
+            let (before, after) = (scene_of(&change.before), scene_of(&change.after));
+            let damage = match change.damage {
+                Some(region) => vec![region],
+                None => crate::damage::damage(&before, &after, 1.0).expect("little damage"),
+            };
+            renderer
+                .present(&before, 1.0, &partial, None)
+                .expect("the first frame");
+            renderer
+                .present(&after, 1.0, &partial, Some(&damage))
+                .expect("the partial frame");
+            renderer
+                .present(&after, 1.0, &whole, None)
+                .expect("the whole frame");
+            let differs = furthest(
+                &pixels(&partial, &everywhere()),
+                &pixels(&whole, &everywhere()),
+            );
+            if differs.is_none_or(|differs| differs > LAYER_ROUNDING) {
+                wrong.push((change.name, differs));
+            }
+        }
+        assert!(wrong.is_empty(), "channels differ: {wrong:?}");
     }
 
     #[test]

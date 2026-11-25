@@ -325,8 +325,13 @@ impl Reach<'_> {
         if skew_x != 0.0 || skew_y != 0.0 || scale_x <= 0.0 || scale_y <= 0.0 {
             return false;
         }
-        let corner = f64::from((shape.radius - inset).max(0.0));
-        let inside = rect(shape.rect).inflate(-f64::from(inset), -f64::from(inset));
+        let half = f64::from(shape.rect.width.min(shape.rect.height)) / 2.0;
+        let inset = f64::from(inset);
+        if inset >= half {
+            return false;
+        }
+        let corner = (f64::from(shape.radius).min(half) - inset).max(0.0);
+        let inside = rect(shape.rect).inflate(-inset, -inset);
         let part = |x: f64, y: f64| {
             self.transform
                 .transform_rect_bbox(inside.inflate(-x, -y))

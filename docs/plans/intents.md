@@ -156,18 +156,13 @@ Each has a [plan of its own](README.md). The app serves its domain from the firs
 | A2 | [Tasks](apps/tasks.md) | `tasks` | A1a, D5 | `crates/apps/tasks`, `crates/libs/{dav,content-lines}` | M |
 | A3 | [Photos](apps/photos.md) | `photos` | D1c | `crates/apps/photos` | L |
 | A4 | [Music](apps/music.md) | `music` | C1 | `crates/apps/music` | L |
-| A5 | [Books](apps/books.md) | `books` | C1 | `crates/apps/books` | L |
-| A6 | [Camera](apps/camera.md) | `camera` | C3, a computer with a camera | `crates/apps/camera` | M |
-| A7 | [Recorder](apps/recorder.md) | `recordings` | C1 | `crates/apps/recorder` | M |
-| A8 | [Messages](apps/messages.md) | `messages` | A1b, C3 | `crates/apps/messages`, `crates/libs/xmpp` | XL |
-| A9 | [Maps](apps/maps.md) | `maps` | C1 | `crates/apps/maps`, `crates/libs/maps` | XL |
-| A10 | [PDF editing in Viewer](apps/pdf-editing.md) | part of `documents` | D1c | `crates/apps/viewer`, `crates/toolkit/pdf`, `crates/libs/content` | L |
-| A11 | [Fingerprint and security keys](apps/fingerprint.md) | | D19 | its part of `crates/apps/settings`, `crates/shell/lock`, `crates/services/polkit` | M |
-| A12 | [On-screen keyboard and other input](apps/assistive-input.md) | | C3 | `crates/shell/keyboard`, `crates/platform` | L |
-| A13 | [Feeds](apps/feeds.md) | `feeds` | C1 | `crates/apps/feeds` | M |
-| A14 | [Passwords](apps/passwords.md) | none | C2 | its part of `crates/apps/settings`, `crates/services/secrets` | M |
-| A15 | [Synced folders](apps/synced-folders.md) | part of `files` | D1a | `crates/services/sync` | L |
-| A16 | [Help](apps/help.md) | none | C2 | `crates/apps/help` | M |
+| A5 | [Camera](apps/camera.md) | `camera` | C3, a computer with a camera | `crates/apps/camera` | M |
+| A6 | [Recorder](apps/recorder.md) | `recordings` | C1 | `crates/apps/recorder` | M |
+| A7 | [PDF editing in Viewer](apps/pdf-editing.md) | part of `documents` | D1c | `crates/apps/viewer`, `crates/toolkit/pdf`, `crates/libs/content` | L |
+| A8 | [Fingerprint and security keys](apps/fingerprint.md) | | D19 | its part of `crates/apps/settings`, `crates/shell/lock`, `crates/services/polkit` | M |
+| A9 | [On-screen keyboard and other input](apps/assistive-input.md) | | C3 | `crates/shell/keyboard`, `crates/platform` | L |
+| A10 | [Passwords](apps/passwords.md) | none | C2 | its part of `crates/apps/settings`, `crates/services/secrets` | M |
+| A11 | [Synced folders](apps/synced-folders.md) | part of `files` | D1a | `crates/services/sync` | L |
 
 ### In waves
 
@@ -180,13 +175,13 @@ mail. An agent that reads, shows and changes needs no prompt.
 | 1 | C1 and C2 by one agent; D0 | gate 1 |
 | 2 | D1a, then D1b, then D1c; D2; D6; D21; D5, then A1c | |
 | 3 | C4, then C5 and C6; D23; D4 (drafts, reading); D7; D11; D14; D16; A2 | gate 2 |
-| 4 | C3; D12; D15; D18; A4; A7; A10 | |
-| 5 | A12; D4 (sending); D9; D10; D13; D20; D22; C8; A3; A5 | |
-| 6 | A1b, then D3; D8; C9; D17, then D19; A13; A14; A15; A16 | |
-| 7 | A11; C7, A6, A8, A9 as decided | |
+| 4 | C3; D12; D15; D18; A4; A6; A7 | |
+| 5 | A9; D4 (sending); D9; D10; D13; D20; D22; C8; A3 | |
+| 6 | A1b, then D3; D8; C9; D17, then D19; A10; A11 | |
+| 7 | A8; C7 and A5 as decided | |
 
 `crates/apps/settings` is changed by one package at a time: C2, D1a, C4, D12, D13, C8, A1b, D17,
-D19, A14, A11. `crates/platform`: C3, A12, D8. `crates/libs/content`: D1c, A10.
+D19, A10, A8. `crates/platform`: C3, A9, D8. `crates/libs/content`: D1c, A7.
 `crates/shell/quick-settings`: D7, C8. `crates/apps/{mail,calendar,contacts,notes}`: A1a, then D2,
 D4, D5, A1c, then A1b. Bande's on-screen keyboard follows the prompt by one wave; until then a
 person who needs one cannot Allow, and `send` and `critical` stay off for agents.
@@ -230,7 +225,7 @@ package.
 | Decision | Proposal | When |
 | :--- | :--- | :--- |
 | Tests for the prompt, the sandbox and destructive intents beyond the usual budget | allowed, as security boundaries | before C3 |
-| Which of the planned apps to build, and their order | A1, A2, A7, A4, A10, A3, A5, A14, A16, then the rest | before wave 4 |
+| Which of the planned apps to build, and their order | A1, A2, A6, A4, A7, A3, A10, then the rest | before wave 4 |
 | Whether MCP is an open protocol in the sense of the project rules | yes, for an optional adapter only | before C6 |
 | Whether a direct connection may read foreign content | off, and the person may turn it on | before C4 |
 | Whether the sandbox's network proxy is unsolicited traffic | no: it forwards only what the person's agent sends, to the host the person named | before C5 |
@@ -238,5 +233,4 @@ package.
 | Whether the desktop may show an agent's conversation itself (the Agent Client Protocol) | not now: it is a chat window | after C6 |
 | Whether an application installed only for the person may be a provider | no: any of their programs can replace it | before C7 |
 | Whether a mandate may ever send | not until drafts have been used | after C9 |
-| Messages over XMPP or Matrix | XMPP: the parts are packaged, and sign-in is a password | before A8 |
 | Limits for children, and sending files to a nearby device | not planned yet | |

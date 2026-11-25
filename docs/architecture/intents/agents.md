@@ -59,14 +59,13 @@ accounts or calendars are one list and share its level and Ask.
 | Tasks | `tasks` | lists | making and changing |
 | Contacts | `contacts` | people | (asks) |
 | Mail | `mail` | messages, text from strangers included, or *Drafts Only*, without them | filing, flags, drafts; the person sends |
-| Messages | `messages` | conversations, text from strangers included | drafts, read |
 | Settings | `settings` | settings | changing those that are safe |
 | Apps and Windows | `apps`, `windows`, `desktop`, `terminal`, `browser` | what is open and in front | arranging windows, opening |
-| Music, Video and Books | `media`, `music`, `books`, `recordings` | players and libraries | playing, playlists |
+| Music and Video | `media`, `music`, `recordings` | players and libraries | playing, playlists |
 | Clock | `clock` | alarms and timers | making and changing |
 | This Computer | `session`, `network`, `devices`, `print`, `scanners`, `disks`, `processes`, `software`, `backups`, `machines`, `containers`, `accounts` | state and names | staying awake, default printer |
 | Notices | `notifications`, `clipboard` | notices of what it may read | its own notices, rules, one line on the clipboard |
-| Knowledge | `calculator`, `dictionary`, `maps`, `feeds` | results | opening |
+| Knowledge | `calculator`, `dictionary` | results | opening |
 | Screen and Sound | `screen`, `sharing`, `camera`, `speech` | status | (asks) |
 | Routines | `routines` | routines | (asks) |
 

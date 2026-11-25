@@ -366,8 +366,8 @@ interface org.bande.Intents.Files      (on the files owner)
 
 `access` is `read` or `folder`. Each file opened is its descriptor, its reference, and `name`,
 `media_type` and `size`; each registered is its temporary name, its wanted name, and the reference
-it replaces, or nothing. Mail and Messages serve `Open` for their attachments. `Subscribe` and
-`Event` come with routines.
+it replaces, or nothing. Mail serves `Open` for its attachments. `Subscribe` and `Event` come with
+routines.
 
 - **Find** and **Get** serve the rows with those verbs whose effects are only `read` and
   `read_foreign`; arguments that cause another effect go through Prepare. `count` is at most 100,
@@ -541,7 +541,7 @@ Each intent is reviewed for what it makes possible together with the others.
 | :--- | :--- | :--- |
 | `files.*` | reading keys and sessions | hidden files, other users' files and anything outside granted folders do not exist for an agent |
 | every intent that makes, renames, restores or changes the content of a file | code that runs | for an agent: only files whose extension and content are in one fixed list in `bande-fs` (pictures, sound, video, PDF, RTF, ODF and OOXML without macros, CSV, Markdown, `.txt`, archives of these), before and after, whole trees; never a name a build tool reads (a list there too); no executables or hidden names; nothing in or below a folder with a version-control folder, nor on the person's `PATH`; a rename keeps the extension; it restores only what it trashed |
-| `files.open`, `documents.open`, `books.open` | a page or playlist that fetches an address with data in it, an installer | pictures, PDF, sound, video and plain text, without external references, in Bande's viewers; for an agent anything else is refused and `files.reveal` offered |
+| `files.open`, `documents.open` | a page or playlist that fetches an address with data in it, an installer | pictures, PDF, sound, video and plain text, without external references, in Bande's viewers; for an agent anything else is refused and `files.reveal` offered |
 | `files.trash` | deletion where there is no Trash | refused |
 | `files.find` by text, `documents.update` | guessing what a file contains | matching content is `read_foreign` |
 | `files.set_access` | letting others in | wider for group or others is `critical`; never adds execute |
@@ -549,7 +549,7 @@ Each intent is reviewed for what it makes possible together with the others.
 | `notifications.find`, `windows.find`, `browser.*` | reading another domain's content, codes | only of domains the agent may read, never excluded apps, concealed previews, private windows or form contents |
 | `files.connect_location`, `network.connect` | a stored password given to an impostor | only locations the person saved; only known networks |
 | `accounts.add`, `network.add` | a password typed for someone else's server | `critical`; the host is shown before the password field; an open network is refused for an agent |
-| `mail.open`, `messages.open`, `settings.open_pane`, `software.open`, `maps.open` | remote images, read receipts, scanning, tiles | load, mark and scan nothing until the person clicks |
+| `mail.open`, `settings.open_pane`, `software.open` | remote images, scanning | load and scan nothing until the person clicks |
 | `mail.create_rule` | mail hidden or forwarded | no forwarding action; `disrupt` |
 | `mail.set_signature`, `mail.set_away` | text in every later mail | `send` |
 | `apps.open`, `browser.open`, `terminal.open_folder` | a connection, an address with data in it, startup files | for an agent `disrupt`, and an address is `send`; for other programs `show`, as they could start it anyway |

@@ -1,6 +1,6 @@
 # Fingerprint and security keys
 
-Package A11, after D19. Size M.
+Package A8, after D19. Size M.
 
 **There is.** Sign-in and the lock screen relay the whole PAM conversation, so they use a
 fingerprint where PAM is set up for it. The polkit agent hides a message that comes before a prompt.

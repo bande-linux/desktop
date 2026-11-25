@@ -1,6 +1,6 @@
 # On-screen keyboard and other input
 
-Package A12, after C3. Size L.
+Package A9, after C3. Size L.
 
 **There is.** Screen reader support, zoom, contrast, sticky, slow and bounce keys. No on-screen
 keyboard, mouse keys, dwell click, switch input or colour filters was found.

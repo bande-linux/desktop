@@ -3,7 +3,7 @@
 Part of [Bande Intents](../../intents.md). Main nouns `document`, `workbook`, `presentation`. Owner:
 `documents.get` `bande-files-intents`; `create`, `append` and `update` the Text Editor app;
 `create_from_pages`, `update_form`, `create_export` and `open` the Viewer app;
-[providers](../providers.md) for the rest. Work package D1c, D23, A10, C7.
+[providers](../providers.md) for the rest. Work package D1c, D23, A7, C7.
 
 | Thing | Properties (* foreign, ~ name) | In `find` |
 | :--- | :--- | :--- |

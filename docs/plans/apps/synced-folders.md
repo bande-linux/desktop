@@ -1,6 +1,6 @@
 # Synced folders
 
-Domain: [files](../../architecture/intents/domains/files.md). Package A15, after D1a. Size L.
+Domain: [files](../../architecture/intents/domains/files.md). Package A11, after D1a. Size L.
 
 **There is.** Servers mounted by Files; no synchronisation.
 

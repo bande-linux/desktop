@@ -1,6 +1,6 @@
 # Passwords
 
-Package A14. Size M. No domain: secrets never have intents.
+Package A10. Size M. No domain: secrets never have intents.
 
 **There is.** Settings ▸ Passwords over the Secret Service.
 

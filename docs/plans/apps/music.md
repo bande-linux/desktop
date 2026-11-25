@@ -10,7 +10,7 @@ process; artists, albums, songs, playlists (M3U); a queue; gapless where the eng
 offers. Covers from the files; looking one up only when asked, from a server the person set.
 
 **Decide first.** Player with a library, or a second app. Proposal: an app, so that Player stays a
-player. Podcasts from [Feeds](feeds.md) play in its queue.
+player.
 
 **Done when** 20,000 tracks are listed at once, and "play the new album" works with MPRIS and
 intents alike.

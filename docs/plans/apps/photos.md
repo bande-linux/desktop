@@ -7,10 +7,9 @@ confined import, thumbnails, the index service, Viewer.
 
 **Work.** Facts as typed values (date with zone, dimensions, camera, place) in the confined importer
 and the index; the app over plain folders, copying from a camera or card into folders by date when
-asked: by date, album, favourite, and a map only with [Maps](maps.md)' installed regions; albums and
-favourites in a small open file beside the library; edits through the same operations as the domain
-(rotate, crop, copy without place); ratings and keywords in a sidecar (XMP); duplicates. Writing
-metadata only to a copy.
+asked: by date, album, favourite and camera; albums and favourites in a small open file beside the
+library; edits through the same operations as the domain (rotate, crop, copy without place); ratings
+and keywords in a sidecar (XMP); duplicates. Writing metadata only to a copy.
 
 **Not.** Recognising people or things: it needs a model the person chooses, and is decided apart.
 

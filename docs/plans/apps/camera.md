@@ -1,6 +1,6 @@
 # Camera
 
-Domain: [camera](../../architecture/intents/domains/camera.md). Package A6. Size M.
+Domain: [camera](../../architecture/intents/domains/camera.md). Package A5. Size M.
 
 **There is.** PipeWire and GStreamer in the screenshot tool, the Access portal. No camera code, and
 no camera on the development computer.

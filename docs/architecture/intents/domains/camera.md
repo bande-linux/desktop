@@ -1,7 +1,7 @@
 # Camera
 
 Part of [Bande Intents](../../intents.md). Main noun `camera`. Owner: the Camera app. Work package
-A6.
+A5.
 
 | Thing | Properties (* foreign, ~ name) | In `find` |
 | :--- | :--- | :--- |

@@ -1,7 +1,7 @@
 # Recordings and speech
 
 Part of [Bande Intents](../../intents.md). Main nouns `recording` and `reading`. Owner: the Recorder
-app; `bande-system-intents` for speech. Work package A7, D22.
+app; `bande-system-intents` for speech. Work package A6, D22.
 
 | Thing | Properties (* foreign, ~ name) | In `find` |
 | :--- | :--- | :--- |

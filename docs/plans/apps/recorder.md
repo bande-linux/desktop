@@ -1,6 +1,6 @@
 # Recorder
 
-Domain: [recordings](../../architecture/intents/domains/recordings.md). Package A7. Size M.
+Domain: [recordings](../../architecture/intents/domains/recordings.md). Package A6. Size M.
 
 **There is.** `bande-audio`, the media engine, recording in the screenshot tool.
 

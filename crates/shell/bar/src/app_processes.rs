@@ -27,8 +27,6 @@ impl AppProcess {
     }
 }
 
-/// The running processes that showed an app's windows or status item, as far as every Taskbar of
-/// this shell knows them. A process that stood for two apps counts for neither.
 pub struct AppProcesses(Vec<AppProcess>);
 
 impl AppProcesses {

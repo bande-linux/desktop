@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 use bande_compositor::{Compositor, SessionRole};
 use bande_test_bus::SessionBus;
 use bande_test_bus::atspi::{FakeRegistry, ObjectRef, accessible, find_named};
-use bande_test_wayland::keys::{KEY_ENTER, KEY_UP};
+use bande_test_wayland::keys::{KEY_DOWN, KEY_ENTER, KEY_ESC, KEY_UP};
 use bande_test_wayland::{
     Frames, SeparateApp, act_as_separate_app, chord, headless, is_separate_app,
 };
@@ -32,6 +32,8 @@ const HELPER_NAME: &str = "Example Helper";
 const BANDE: &str = "org.bande.Example";
 const BANDE_NAME: &str = "Example Bande";
 const UNNAMED: &str = "unnamed-dialog";
+const ITEM_NAME: &str = "Example Item";
+const SEARCH: &str = "Search";
 const QUIT: i32 = 7;
 const HELPER_SECONDS: &str = "1";
 const ITEM: &str = "org.example.TrayItem";
@@ -45,7 +47,13 @@ struct Item(String);
 #[zbus::interface(name = "org.kde.StatusNotifierItem")]
 impl Item {
     fn activate(&self, _x: i32, _y: i32) {
+        wait("slow-activation");
         note("activations", "shown");
+    }
+
+    #[zbus(property)]
+    fn title(&self) -> &str {
+        ITEM_NAME
     }
 
     #[zbus(property)]
@@ -66,6 +74,7 @@ struct ItemMenu;
 #[zbus::interface(name = "com.canonical.dbusmenu")]
 impl ItemMenu {
     fn get_layout(&self, _parent: i32, _depth: i32, _names: Vec<String>) -> (u32, Layout) {
+        wait("slow-menu");
         let label = OwnedValue::try_from(Value::from("Leave")).unwrap();
         let leave: Layout = (
             QUIT,
@@ -106,6 +115,12 @@ fn note(file: &str, what: &str) {
         .open(home(file))
         .unwrap();
     writeln!(file, "{what}").unwrap();
+}
+
+fn wait(file: &str) {
+    if let Ok(milliseconds) = noted(file).trim().parse() {
+        std::thread::sleep(Duration::from_millis(milliseconds));
+    }
 }
 
 fn noted(file: &str) -> String {
@@ -200,13 +215,23 @@ impl Scene {
         }
     }
 
-    fn press(&mut self, app: &str, button: u32, times: u32) {
+    fn middle(&self, app: &str) -> (f64, f64) {
         let found = self.button(app).expect("in the taskbar");
         let (x, y, width, height): (i32, i32, i32, i32) =
             accessible(&self.atspi, &found, "org.a11y.atspi.Component")
                 .and_then(|component| component.call("GetExtents", &(WINDOW_COORDINATES,)))
                 .expect("where the taskbar button is");
-        let middle = (f64::from(x + width / 2), f64::from(y + height / 2));
+        (f64::from(x + width / 2), f64::from(y + height / 2))
+    }
+
+    fn right_click_at_once(&mut self, at: (f64, f64)) {
+        self.server.move_pointer_to(at.into(), 0);
+        self.server.press_button(BTN_RIGHT, true, 0);
+        self.server.press_button(BTN_RIGHT, false, 0);
+    }
+
+    fn press(&mut self, app: &str, button: u32, times: u32) {
+        let middle = self.middle(app);
         self.server.move_pointer_to(middle.into(), 0);
         self.pass(SETTLED);
         for _ in 0..times {
@@ -312,6 +337,33 @@ fn an_app_is_in_the_taskbar_exactly_as_long_as_its_process_runs() {
     hidden.show_window_of(&mut scene.server, 80, TRAY);
     scene.closed(&mut hidden);
     assert!(scene.marked(TRAY_NAME), "it still runs");
+
+    scene.wait("its status item is shown", |scene| {
+        scene.button(ITEM_NAME).is_some()
+    });
+    scene.press(ITEM_NAME, BTN_LEFT, 1);
+    chord(&mut scene.server, &[KEY_ESC]);
+    scene.pass(SETTLED);
+    fs::write(home("slow-menu"), "1500").unwrap();
+    let (icon, logo) = (scene.middle(TRAY_NAME), scene.middle(SEARCH));
+    scene.right_click_at_once(icon);
+    scene.right_click_at_once(logo);
+    scene.pass(Duration::from_secs(3));
+    chord(&mut scene.server, &[KEY_DOWN]);
+    chord(&mut scene.server, &[KEY_ENTER]);
+    scene.pass(Duration::from_secs(1));
+    assert!(
+        scene.marked(TRAY_NAME),
+        "a late menu took the place of the one that was open"
+    );
+    assert_eq!(noted("activations"), "shown\n", "nor did the icon menu");
+    fs::remove_file(home("slow-menu")).unwrap();
+
+    fs::write(home("slow-activation"), "28000").unwrap();
+    scene.press(TRAY_NAME, BTN_LEFT, 1);
+    scene.pass(Duration::from_secs(30));
+    assert_eq!(noted("launches"), "", "a slow status item opens nothing");
+    fs::remove_file(home("slow-activation")).unwrap();
     scene.choose_last_from_menu(TRAY_NAME);
     scene.wait("its own menu ends it", |scene| {
         scene.button(TRAY_NAME).is_none()
@@ -331,6 +383,29 @@ fn an_app_is_in_the_taskbar_exactly_as_long_as_its_process_runs() {
     assert_eq!(noted("launches"), format!("{TRAY}\n"), "opened once");
     drop(plain);
     scene.wait("a helper left behind is not the app", |scene| {
+        scene.button(TRAY_NAME).is_none()
+    });
+
+    let mut first = scene.app(TRAY);
+    let mut second = SeparateApp::launch(&mut scene.server, TEST);
+    second.show_window_of(&mut scene.server, 80, TRAY);
+    scene.pass(SETTLED);
+    first.close_windows();
+    scene.wait("the first closes", |scene| {
+        scene.server.windows().len() == 1
+    });
+    drop(second);
+    scene.wait("the second ends", |scene| scene.server.windows().is_empty());
+    scene.pass(SETTLED);
+    assert!(scene.marked(TRAY_NAME), "the first still runs");
+    let mut third = SeparateApp::launch(&mut scene.server, TEST);
+    third.show_window_of(&mut scene.server, 72, TRAY);
+    scene.pass(SETTLED);
+    drop(first);
+    scene.pass(SETTLED);
+    assert!(scene.marked(TRAY_NAME), "the third has a window");
+    drop(third);
+    scene.wait("an ended process never comes back", |scene| {
         scene.button(TRAY_NAME).is_none()
     });
 

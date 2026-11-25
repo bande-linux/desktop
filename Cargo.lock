@@ -792,6 +792,7 @@ dependencies = [
  "serde_json",
  "signal-hook",
  "smithay",
+ "tempfile",
  "tracing",
  "wayland-client",
  "zbus",

@@ -9,6 +9,7 @@ use bande_test_wayland::keys::{
 use bande_test_wayland::{Anchor, Bar, TestClient, chord, headless, roundtrip};
 
 type Frame = (i32, i32, i32, i32);
+type Change = fn(&mut Compositor);
 
 const THICKNESS: i32 = 64;
 const FRONT: usize = 1;
@@ -211,6 +212,32 @@ fn a_maximized_window_leaving_full_screen_stays_clear_of_the_bar_that_returns() 
         .shell
         .set_bar_zone(&mut desktop.server, &desktop.bar, THICKNESS + 16);
     assert_eq!(desktop.front_frame(), area);
+}
+
+#[test]
+fn a_maximized_window_leaving_full_screen_follows_what_changed_meanwhile() {
+    let changes: [(Change, Frame); 2] = [
+        (
+            |server| server.set_display_config(config(true, 24)),
+            (24, 24, 1152, 852),
+        ),
+        (|server| server.set_output_scale(2.0), (8, 8, 584, 434)),
+    ];
+    for (change, area) in changes {
+        let mut desktop = Desktop::new((1200, 900), 1.0, Anchor::Left, config(true, 8));
+        desktop
+            .shell
+            .set_bar_zone(&mut desktop.server, &desktop.bar, 0);
+        desktop.front.maximize(&mut desktop.server, 0);
+        assert_eq!(desktop.front_frame(), (8, 8, 1184, 884));
+        desktop.front.make_full_screen(&mut desktop.server, 0);
+        desktop.front_frame();
+        change(&mut desktop.server);
+        desktop.front_frame();
+
+        desktop.front.leave_full_screen(&mut desktop.server, 0);
+        assert_eq!(desktop.front_frame(), area);
+    }
 }
 
 #[test]

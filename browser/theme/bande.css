@@ -88,7 +88,7 @@ panelview toolbarbutton.subviewbutton:not([disabled]):is(:hover, :focus-visible)
     --bande-controls-order: -1;
     &:-moz-locale-dir(rtl) { --bande-controls-order: 1; }
   }
-  &[inFullscreen] {
+  &:is([inFullscreen], :not([customtitlebar])) {
     --bande-space-left: 0px;
     --bande-space-right: 0px;
   }
@@ -104,10 +104,13 @@ panelview toolbarbutton.subviewbutton:not([disabled]):is(:hover, :focus-visible)
 :root[inFullscreen] .titlebar-max,
 :root[inFullscreen] .titlebar-close,
 :root[inFullscreen] #toolbar-menubar .titlebar-buttonbox-container,
-:root[inFullscreen] #nav-bar .titlebar-buttonbox-container { display: none !important; }
-:root[inFullscreen] #TabsToolbar .titlebar-buttonbox-container { display: flex !important; }
-:root[inFullscreen] #TabsToolbar .titlebar-buttonbox-container { order: calc(2 * var(--bande-controls-order)) !important; }
-:root[inFullscreen] #TabsToolbar .titlebar-restore {
+:root[inFullscreen] #navigator-toolbox:not([tabs-hidden]) > #nav-bar > .titlebar-buttonbox-container { display: none !important; }
+:root[inFullscreen] #navigator-toolbox:not([tabs-hidden]) > #TabsToolbar > .titlebar-buttonbox-container,
+:root[inFullscreen] #navigator-toolbox[tabs-hidden] > #nav-bar > .titlebar-buttonbox-container {
+  display: flex !important;
+  order: calc(2 * var(--bande-controls-order)) !important;
+}
+:root[inFullscreen] .titlebar-restore {
   display: flex !important;
   padding-inline: 12px !important;
   color: var(--bande-ink2);

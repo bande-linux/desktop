@@ -200,6 +200,7 @@ impl Screen {
             Some(settings.position),
         );
         layer_map_for_output(&self.output).arrange();
+        self.fitted_to = Rectangle::default();
         self.redraw = true;
     }
 

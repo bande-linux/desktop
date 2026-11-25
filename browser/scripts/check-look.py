@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """check-look.py [browser]: under scripts/session.sh: fails when the window's colours aren't Datum's, when
 anything but empty title bar lies under the compositor's control well, or when the menu button isn't
-beside it: light and dark, buttons on either side, changed while the browser runs, in both writing
-directions, with vertical tabs and full screen."""
+beside it, or when full screen leaves the well room or has no button to leave it: light and dark, buttons
+on each side the desktop offers, changed while the browser runs, in both writing directions, with vertical
+tabs and full screen."""
 import os
 import re
 import subprocess
@@ -38,6 +39,14 @@ return {
   tab: getComputedStyle(gBrowser.selectedTab.querySelector(".tab-background")).backgroundColor,
   panel: content && getComputedStyle(content).backgroundColor,
   item: item && getComputedStyle(item).color,
+};
+"""
+FULL_SCREEN = """
+const row = document.getElementById(arguments[0]);
+const style = getComputedStyle(row);
+return {
+  space: Math.max(parseFloat(style.paddingLeft), parseFloat(style.paddingRight)) >= arguments[1],
+  restore: row.querySelector(".titlebar-restore").getBoundingClientRect().width > 0,
 };
 """
 PAGE = "return getComputedStyle(document.documentElement).backgroundColor;"
@@ -82,10 +91,27 @@ def config(name, value):
          "string:org.bande.Config", f"string:{name}", f"variant:string:{value}")
 
 
+def portal(namespace, key):
+    return dbus("org.freedesktop.portal.Desktop", "/org/freedesktop/portal/desktop",
+                "org.freedesktop.portal.Settings.ReadOne", f"string:{namespace}", f"string:{key}")
+
+
 def portal_accent():
-    reply = dbus("org.freedesktop.portal.Desktop", "/org/freedesktop/portal/desktop",
-                 "org.freedesktop.portal.Settings.ReadOne", "string:org.freedesktop.appearance", "string:accent-color")
+    reply = portal("org.freedesktop.appearance", "accent-color")
     return "rgb({}, {}, {})".format(*(round(float(part) * 255) for part in re.findall(r"double ([\d.]+)", reply)))
+
+
+def offered_sides():
+    settings = dbus("org.bande.Config", "/org/bande/Config", "org.freedesktop.DBus.Introspectable.Introspect")
+    if 'name="WindowButtons"' in settings:
+        return ("left", "right")
+    left, _, _ = portal("org.gnome.desktop.wm.preferences", "button-layout").partition(":")
+    return ("left",) if "close" in left else ("right",)
+
+
+def place_buttons(side):
+    if len(SIDES) > 1:
+        config("WindowButtons", side)
 
 
 def check_row(browser, case, side):
@@ -118,18 +144,28 @@ def check_colors(browser, case, scheme):
     browser.chrome()
 
 
+def check_full_screen(browser, case, row):
+    browser.js("window.fullScreen = true;")
+    good = lambda look: look["restore"] and not look["space"]
+    look = settle(lambda: browser.js(FULL_SCREEN, row, SIZES["well-span"]), good)
+    expect(case, "room left for the well", look["space"], False)
+    expect(case, "a button to leave it", look["restore"], True)
+    browser.js("window.fullScreen = false;")
+    time.sleep(1)
+
+
 def check(direction, shots):
     prefs = {"bande.search.asked": True}
     if direction == "rtl":
         prefs["intl.l10n.pseudo"] = "bidi"
-    config("WindowButtons", "left")
+    place_buttons(SIDES[0])
     browser = Browser(BINARY, prefs)
     try:
         browser.go("about:preferences")
         browser.chrome()
         browser.js("for (let i = 0; i < 12; i++) gBrowser.addTrustedTab('about:blank');")
-        for side in ("left", "right"):
-            config("WindowButtons", side)
+        for side in SIDES:
+            place_buttons(side)
             for scheme in ("light", "dark"):
                 config("Appearance", scheme)
                 case = f"{direction}, buttons {side}, {scheme}"
@@ -142,19 +178,16 @@ def check(direction, shots):
                 time.sleep(1)
             browser.js("Services.prefs.setBoolPref('sidebar.verticalTabs', true);")
             check_row(browser, f"{direction}, buttons {side}, vertical tabs", side)
+            check_full_screen(browser, f"{direction}, buttons {side}, full screen with vertical tabs", "nav-bar")
             browser.js("Services.prefs.setBoolPref('sidebar.verticalTabs', false);")
-            browser.js("window.fullScreen = true;")
-            space = "const s = getComputedStyle(document.getElementById('TabsToolbar')); return [s.paddingLeft, s.paddingRight];"
-            expect(f"{direction}, buttons {side}, full screen", "the space left for the well",
-                   settle(lambda: browser.js(space), lambda got: got == ["0px", "0px"]), ["0px", "0px"])
-            browser.js("window.fullScreen = false;")
-            time.sleep(1)
+            check_full_screen(browser, f"{direction}, buttons {side}, full screen", "TabsToolbar")
     finally:
         browser.quit()
 
 
 BINARY = sys.argv[1] if len(sys.argv) > 1 else "/usr/lib/bande-browser/bande-browser"
 SIZES = {name: float(value[:-2]) for name, value in declared("controls.css")[0].items() if value.endswith("px")}
+SIDES = offered_sides()
 for direction in ("ltr", "rtl"):
     check(direction, os.environ.get("LOOK_SHOTS"))
 if failures:

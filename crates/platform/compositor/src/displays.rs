@@ -700,6 +700,11 @@ impl Compositor {
 
     pub fn set_display_config(&mut self, config: bande_config::Config) {
         self.state.night_light.configure(config.night_light);
+        if self.state.display_config.bar != config.bar {
+            for screen in &mut self.state.screens {
+                screen.fitted_to = Rectangle::default();
+            }
+        }
         self.state.display_config = config;
         self.state.arrange_screens();
         self.state.fit_to_placement_areas();

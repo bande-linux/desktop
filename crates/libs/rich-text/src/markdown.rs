@@ -12,7 +12,8 @@ const MAX_BRACKETS: usize = 32;
 const MAX_NUMBER_DIGITS: usize = 9;
 const MIN_FENCE: usize = 3;
 const BYTE_ORDER_MARK: char = '\u{feff}';
-const FOREIGN_AUTOLINKS: [&str; 2] = ["ftp", "xmpp"];
+const WORD_JOINER: char = '\u{2060}';
+const AUTOLINKED_SCHEMES: [&str; 3] = ["http", "https", "ftp"];
 const MARKERS: [&str; 3] = ["**", "*", "~~"];
 
 #[derive(Clone, Copy, PartialEq)]
@@ -124,6 +125,7 @@ fn label_end(text: &str, from: usize, dialect: Dialect) -> Option<usize> {
 fn destination_end(text: &str, from: usize) -> Option<usize> {
     let mut depth = 0;
     let mut quote = None;
+    let mut leading = true;
     let mut characters = text[from..].char_indices();
     while let Some((at, character)) = characters.next() {
         if at > SEARCH_LIMIT {
@@ -133,7 +135,7 @@ fn destination_end(text: &str, from: usize) -> Option<usize> {
             ('\\', _) => {
                 characters.next();
             }
-            ('<', None) if text[from..from + at].trim().is_empty() => quote = Some('>'),
+            ('<', None) if leading => quote = Some('>'),
             ('"', None) if text[from..from + at].ends_with(' ') => quote = Some('"'),
             ('<', Some('>')) => return None,
             (character, Some(end)) if character == end => quote = None,
@@ -144,6 +146,7 @@ fn destination_end(text: &str, from: usize) -> Option<usize> {
             (')', None) => depth -= 1,
             _ => {}
         }
+        leading &= character.is_whitespace();
     }
     None
 }
@@ -183,7 +186,7 @@ fn percent_encoded(url: &str) -> String {
             '(' | ')' | '<' | '>' | '"' | '\\' | '`' => {
                 out.push_str(&format!("%{:02X}", u32::from(character)));
             }
-            character if character.is_control() || character.is_whitespace() => {
+            character if printable(character) != character || character.is_whitespace() => {
                 for byte in character.encode_utf8(&mut [0; 4]).bytes() {
                     out.push_str(&format!("%{byte:02X}"));
                 }
@@ -479,35 +482,53 @@ fn is_list_number(text: &str) -> bool {
     (1..=MAX_NUMBER_DIGITS).contains(&text.len()) && text.bytes().all(|byte| byte.is_ascii_digit())
 }
 
-fn is_foreign_autolink(written: &str) -> bool {
-    let word = written
-        .rsplit(|character: char| !character.is_ascii_alphabetic())
-        .next()
-        .unwrap_or_default();
-    FOREIGN_AUTOLINKS
-        .iter()
-        .any(|scheme| word.eq_ignore_ascii_case(scheme))
+fn ends_with_any(written: &str, words: &[&str]) -> bool {
+    words.iter().any(|word| {
+        written
+            .len()
+            .checked_sub(word.len())
+            .is_some_and(|at| written.as_bytes()[at..].eq_ignore_ascii_case(word.as_bytes()))
+    })
 }
 
 fn escape(text: &str, dialect: Dialect, line_start: usize, out: &mut String) {
     let mut characters = text.chars().peekable();
     while let Some(character) = characters.next() {
         let next = characters.peek();
+        let written = &out[line_start..];
         let special = match character {
             '\\' | '*' | '_' | '`' | '[' | ']' | '~' => true,
             _ if dialect == Dialect::Authored => false,
             '<' | '#' => true,
             '&' => next.is_none_or(|next| *next == '#' || next.is_ascii_alphanumeric()),
             '!' => next.is_none(),
-            '-' | '+' | '=' | '>' => out.len() == line_start,
-            ':' => is_foreign_autolink(&out[line_start..]),
-            '.' | ')' => is_list_number(&out[line_start..]),
+            '-' | '+' | '=' | '>' => written.is_empty(),
+            ':' => ends_with_any(written, &AUTOLINKED_SCHEMES),
+            '.' => is_list_number(written) || ends_with_any(written, &["www"]),
+            ')' => is_list_number(written),
             _ => false,
         };
+        let joined = dialect == Dialect::Sanitised
+            && character == ':'
+            && next != Some(&WORD_JOINER)
+            && ends_with_any(written, &["xmpp"]);
         if special {
             out.push('\\');
         }
         out.push(character);
+        if joined {
+            out.push(WORD_JOINER);
+        }
+    }
+}
+
+fn is_blank(paragraph: &Paragraph<'_>, dialect: Dialect) -> bool {
+    match dialect {
+        Dialect::Authored => paragraph.is_empty(),
+        Dialect::Sanitised => paragraph.spans.iter().all(|(text, span)| {
+            text.is_empty()
+                || !is_code(span) && text.chars().all(|text| printable(text).is_whitespace())
+        }),
     }
 }
 
@@ -567,6 +588,7 @@ fn line(paragraph: &Paragraph<'_>, number: usize, dialect: Dialect) -> String {
     let line_start = out.len();
     let mut open: Vec<&str> = Vec::new();
     let mut gap = String::new();
+    let mut code_end = None;
     for (index, (text, span)) in paragraph.spans.iter().enumerate() {
         let text: Cow<'_, str> = match dialect {
             Dialect::Authored => Cow::Borrowed(text),
@@ -616,9 +638,13 @@ fn line(paragraph: &Paragraph<'_>, number: usize, dialect: Dialect) -> String {
         open.append(&mut opened);
         match (span_target(span, dialect), is_code(span)) {
             (_, true) => {
-                out.push('`');
+                match code_end == Some(out.len()) {
+                    true => out.truncate(out.len() - 1),
+                    false => out.push('`'),
+                }
                 out.push_str(&shown.replace('`', "'"));
                 out.push('`');
+                code_end = Some(out.len());
             }
             (Some(url), false) => {
                 out.push('[');
@@ -705,7 +731,7 @@ fn compose(rich: &RichText, dialect: Dialect) -> String {
         if let Some(code) = block.take() {
             write_block(&code, &mut out);
         }
-        if paragraph.is_empty() {
+        if is_blank(paragraph, dialect) {
             gap = true;
             continue;
         }
@@ -764,7 +790,7 @@ mod tests {
             ("&#60;b> R&D", "\\&\\#60;b> R\\&D\n"),
             (
                 "<https://e.org> <file:///x>",
-                "[https://e.org](https://e.org) \\<file:///x>\n",
+                "[https\\://e.org](https://e.org) \\<file:///x>\n",
             ),
             ("[x](JavaScript:y) [x](/etc) [x](file:///x)", "x x x\n"),
             ("[x](java&#115;cript:y) [x](<data:y> \"t\")", "x x\n"),
@@ -786,8 +812,19 @@ mod tests {
             ("a\u{2028}b", "a b\n"),
             (
                 "see FTP://e.org or https://e.org",
-                "see FTP\\://e.org or https://e.org\n",
+                "see FTP\\://e.org or https\\://e.org\n",
             ),
+            (
+                "https://e.org/<img src=x>",
+                "https\\://e.org/\\<img src=x>\n",
+            ),
+            (
+                "xwww.e.org/`a <img src=x>`",
+                "xwww\\.e.org/`a <img src=x>`\n",
+            ),
+            ("xmpp:a@e.org", "xmpp:\u{2060}a@e.org\n"),
+            ("- a\n  - [ ](https://e.org)", "- a\n"),
+            ("x [`a`](https://e.org)`b`", "x `ab`\n"),
             ("\u{0}\u{feff}---\na: b\n---\ntext", "text\n"),
             (
                 "[![p](https://e.org/p.png)](https://e.org)",
@@ -804,7 +841,7 @@ mod tests {
         builder.text("\u{feff}---", &TextAttributes::default());
         builder.end_paragraph(ParagraphAttributes::default());
         builder.text("!", &TextAttributes::default());
-        builder.text("x", &link("https://e.org/) <img src=x>"));
+        builder.text("x", &link("https://e.org/) \u{feff}<img src=x>"));
         builder.text("y", &link("javascript:z"));
         builder.end_paragraph(ParagraphAttributes::default());
         builder.text("```", &code());
@@ -812,7 +849,7 @@ mod tests {
         builder.text("<img>", &code());
         assert_eq!(
             write_sanitised(&builder.finish()),
-            "\\---\n\n\\![x](https://e.org/%29%20%3Cimg%20src=x%3E)y\n\n````\n```\n<img>\n````\n"
+            "\\---\n\n\\![x](https://e.org/%29%20%EF%BB%BF%3Cimg%20src=x%3E)y\n\n````\n```\n<img>\n````\n"
         );
 
         for hostile in [

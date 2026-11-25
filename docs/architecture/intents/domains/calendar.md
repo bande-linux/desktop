@@ -20,7 +20,7 @@ Calendar app. Work package D5.
 | `calendar.trash`, `calendar.restore` | `event`, `span` | as `create` | each other | app | A |
 | `calendar.set_answer` | `event`, `answer` (`accept`, `tentative`, `decline`) | `send` |  | app | A |
 | `calendar.open` | `event` or `date` | `show` |  | app | A |
-| `calendar.compute_free_time` | `starts`, `until`, `length` | `read` |  | app; `free_slots` is UI-free inside the app | B |
+| `calendar.compute_free_time` | `starts`, `until`, `length`; gives starts and ends | `read` |  | app; `free_slots` is UI-free inside the app | B |
 | `calendar.compute_busy_time` | `people`, `starts`, `until` (RFC 6638) | `send`, foreign |  | app | B |
 | `calendar.create_calendar` | `name`, `colour`, `account` | `change`; shared: `send` | removes it while empty | app (`worker.rs`) | B |
 | `calendar.update_calendar` | `calendar`, `name`, `colour`, `shown` | as `create_calendar` | the earlier values | app | B |
@@ -31,8 +31,6 @@ Calendar app. Work package D5.
 | `calendar.add_subscription` | `url` | `send` | `calendar.remove_subscription` | app | C |
 | `calendar.remove_subscription` | `calendar` | `change` | adds it again | app | C |
 | `calendar.create_export` | `calendar`, `within` | `change`; shared: `send` | `files.trash` | app | C |
-
-Phrases in Search: "new event {text}".
 
 `repeats` is an RFC 5545 rule, `alerts` are durations before. `compute_free_time` uses the person's
 calendars only.

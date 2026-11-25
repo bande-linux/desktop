@@ -10,8 +10,8 @@ Part of [Bande Intents](../../intents.md). Main noun `photo`; `photos.album`. Ow
 
 | Intent | Parameters | Effects | Undo | Code | P |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| `photos.find` | `taken_after`, `taken_before`, `camera`, `lens`, `rating`, `favourite`, `album`, `within`, `near` (`place`), `order` | foreign; `near` needs the scope "places" |  | part: facts are read, not indexed | A |
-| `photos.get` | `photos`, `properties` | foreign; `place` needs the scope "places" |  | part: facts are display text, not typed values | A |
+| `photos.find` | `taken_after`, `taken_before`, `camera`, `lens`, `rating`, `favourite`, `album`, `within`, `near` (`place`), `order` | foreign; `near` needs the permission Places |  | part: facts are read, not indexed | A |
+| `photos.get` | `photos`, `properties` | foreign; `place` needs the permission Places |  | part: facts are display text, not typed values | A |
 | `photos.find_album` | `text` | `read` |  | new, with the Photos app | B |
 | `photos.create_copy` | `photos`, `format` (`jpeg`, `png`, `pdf`), `width`, `crop`, `rotation`, `flip`, `within` | `change`; shared: `send` | `files.trash` | part: PNG copy in Viewer, PDF writing in the toolkit | A |
 | `photos.update` | `photos`, `rotation` (`0`, `90`, `180`, `270`), `flip`, `rating` | `change`; shared: `send` | the earlier values | app; a JPEG's orientation | B |
@@ -20,7 +20,7 @@ Part of [Bande Intents](../../intents.md). Main noun `photo`; `photos.album`. Ow
 | `photos.set_favourite` | `photos`, `favourite` | `change` | the earlier value | new | B |
 
 A photo is its file, so `files.move` and `files.trash` work on it. `create_copy` leaves out place
-and camera. The scope "places" is a permission of its own. Facts are read in the confined importer
-and indexed as typed values: today the date has no zone and dimensions need a decode. There is no
-photo library app, album or favourite: see the [plan](../../../plans/apps/photos.md). Finding by
-what a picture shows needs a model the person installs, and is not decided.
+and camera.  Facts are read in the confined importer and indexed as typed values: today the date has
+no zone and dimensions need a decode. There is no photo library app, album or favourite: see the
+[plan](../../../plans/apps/photos.md). Finding by what a picture shows needs a model the person
+installs, and is not decided.

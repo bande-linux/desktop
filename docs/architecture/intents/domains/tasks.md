@@ -22,7 +22,7 @@ Work package A2.
 | `tasks.update_list` | `list`, `name`, `colour` | `change`; shared: `send` | the earlier values | new | B |
 | `tasks.delete_list` | `list` | `critical`; shared: also `send` |  | new | C |
 
-Phrases in Search: "add task {text}".
+Phrases in Search: "add task {title}".
 
 There is no Tasks app and no VTODO model: see the [plan](../../../plans/apps/tasks.md). Calendar
 drops collections without events, and a resource with only a VTODO gives it nothing; one beside an

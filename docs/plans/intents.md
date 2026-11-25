@@ -32,7 +32,9 @@ by itself.
 2. **A package owns its paths** and changes nothing else; what it needs elsewhere goes in its
    hand-off.
 3. **Guards are stubs until built.** An intent whose guard is missing answers `Unavailable`, through
-   one function in `bande-intents` that C3 replaces, so a domain does not wait for the prompt.
+   one function in `bande-intents` that C3 replaces, so a domain does not wait for the prompt. An
+   argument that makes a plan wait (`at`, and an `until` that puts something back) is `Unavailable`,
+   and no events are declared, until C8 builds both in `bande-intents`.
 4. **`bande-intents` is only added to** after C1. A thing, property, parameter or enum word that two
    packages share is in the specification first.
 5. **Its test harness is every owner's**: killed after Prepare, at each step of Perform and before
@@ -47,7 +49,7 @@ by itself.
 | `docs/quality/tests.md`, `docs/architecture/{apps,session,packaging,behaviour}.md`, `README.md`, `debian/tests/control`, `ci/release/check-debs.sh`, `data/icons/src/apps.py`, `data/x-bande-mimeapps.list` | the integrator's: the rows go in the hand-off |
 | `ci/runtime-deps` | a file per crate after C0 |
 | `debian/control` binary stanzas, `debian/<package>.install` | only the row's package |
-| `debian/rules`, `ci/release/lint.sh`, `crates/libs/app`, `crates/libs/intents`, `crates/testing` | C1; then C3 for the guard and `crates/testing`; others in the hand-off |
+| `debian/rules`, `ci/release/lint.sh`, `crates/libs/app`, `crates/libs/intents`, `crates/testing` | C1; then C3 for the guard and `crates/testing`, then C8 for events; others in the hand-off |
 | `crates/apps/settings`, `crates/shell/launcher`, `crates/shell/shell`, `crates/platform`, `crates/libs/content` | one package at a time, in the [order below](#in-waves) |
 | `locales/*.po` | in the crate that owns the string, with Swedish, made by `bande-l10n-tool` |
 | A domain's page | its own; a row's Code becomes `done` in the same commit |
@@ -99,11 +101,11 @@ is only added to; a change that breaks a user waits for a wave where the package
 | C1 | `bande-intents` and its macros, manifests, client, harness; `Program::intents()`; `bande` from manifests | C0 | `crates/libs/intents*`, `crates/libs/app`, `crates/libs/l10n`, `crates/testing`, `crates/services/cli`, `debian/rules`, `ci/release/lint.sh` | `bande-cli` | with C2 | L |
 | C2 | `settings`, and rows in Search with phrases, [step 1](#step-1-in-detail) | C1, by the same agent | `crates/services/settings-intents`, `crates/services/system-intents` (an empty list), `crates/libs/settings-client`, `crates/libs/settings-panes`, `crates/apps/settings` with Activity, `crates/shell/launcher`, `crates/shell/shell` | `bande-settings`, `bande-system-intents` | `bande settings set appearance light`, "dark" in Search with Undo, and `bande undo` after a restart of the owner | L |
 | C3 | Approval prompt, [in detail](#c3-in-detail) | C1 | `crates/shell/approval`, `crates/platform`, `crates/libs/intents`, `crates/testing`, `ci/review` | `bande-shell` | a virtual keyboard, EIS, input method or accessibility client cannot press Allow; one Allow formats a stick; installing a package asks Allow and then polkit's own question | L |
-| C4 | Broker, and Settings ▸ Agents with Activity | C1, C2 | `crates/services/agentd`, its page in `crates/apps/settings` | `bande-agent` | a person adds an agent, gives it Notes and a folder, sees what it did and undoes it, without meeting a word outside the five | L |
-| C5 | Sandbox `bande-agent run` and its network proxy | C4 | `crates/services/agent-run` | `bande-agent` | escape tests (bus, Wayland, accessibility, keyring, paths, links, network) fail closed | L |
+| C4 | Broker, and Settings ▸ Agents with Activity | C1, C2 | `crates/services/agentd`, its page in `crates/apps/settings` | `bande-agent` | a person adds an agent, gives it Notes and a folder, sees what it did and undoes it, without meeting a word outside the eight | L |
+| C5 | Sandbox `bande-agent run` and its network proxy | C4 | `crates/services/agent-run` | `bande-agent` | escape tests (session and system bus, Wayland, accessibility, keyring, CUPS, PipeWire, devices, processes, paths, links, network, an OSC 52 write) fail closed | L |
 | C6 | `bande-mcp`, skill, `bande agent add` and `test`, evaluation set | C4 | `crates/services/mcp`, `crates/services/cli`, `data/skills` | `bande-agent` | three unrelated agent programs do the 30 requests without a line about any of them | L |
 | C7 | Providers, when an application wants it | C3, D23 | `crates/services/intents-providers` | `bande-intents-providers` | two unrelated applications serve `documents` with no line about either in Bande | L |
-| C8 | Events, timed plans, routines; keys; tiles; Settings ▸ Routines | C2 | `crates/services/routines`, its page in `crates/apps/settings`, `crates/shell/quick-settings` | `bande-routines` | "back up every Friday" and a key for "new note" work with no agent installed | L |
+| C8 | Events, timed plans, routines; keys; tiles; Settings ▸ Routines | C3 | `crates/services/routines`, `crates/libs/intents`, its page in `crates/apps/settings`, `crates/shell/quick-settings` | `bande-routines` | "back up every Friday" and a key for "new note" work with no agent installed | L |
 | C9 | Mandates | C5, C6, C8, D4 | `crates/services/agentd/src/mandates` | `bande-agent` | a hostile message gets nothing but its own thread | M |
 
 ### Domains
@@ -120,10 +122,10 @@ Search or a menu use it.
 | D1a | `files`, with Open and Register | C2 | `crates/services/files-intents`, `crates/libs/fs`, `crates/apps/settings/src/storage.rs` | L |
 | D1b | `archives` | D1a | `crates/services/files-intents` | M |
 | D1c | facts for `photos`, `documents.get` | D1b | `crates/services/files-intents`, `crates/services/index`, `crates/libs/content` | M |
-| D2 | `notes` | D0 | `crates/apps/notes` | M |
+| D2 | `notes`, with IMAP `NAMESPACE` and ACL | D0, A1a | `crates/apps/notes`, `crates/libs/mail-core` | M |
 | D3 | `accounts` | A1b | `crates/libs/intents-accounts` (`crates/libs/accounts` has no toolkit) | M |
 | D4 | `mail`: drafts with a store of their own, then reading, attachments with D1a; with C3 the outbox and sending | A1a, D1a | `crates/apps/mail` | L |
-| D5 | `calendar` | A1a | `crates/apps/calendar` | M |
+| D5 | `calendar`, with `DAV:owner` and sharees | A1a | `crates/apps/calendar`, `crates/libs/dav` | M |
 | D6 | `clock` | | `crates/apps/clock` | S |
 | D7 | `media` | | `crates/libs/intents-media`, `crates/shell/quick-settings` | S |
 | D8 | `apps`, `windows`, `desktop` | C3 | `crates/libs/intents-apps`, `crates/platform` | M |
@@ -149,9 +151,9 @@ Each has a [plan of its own](README.md). The app serves its domain from the firs
 
 | Id | App | Domain | Needs | Owns | Size |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| A1a | [Contacts](apps/contacts.md): land what is committed | | nothing; alone in mail, calendar, keyring | `crates/apps/{contacts,calendar,mail}`, `crates/libs/{address-book,dav,content-lines,keyring,search}`, `crates/services/secrets` | L |
-| A1b | [Shared accounts](apps/contacts.md) | | A1a, C2 | `crates/libs/accounts`, `crates/libs/mail-core`, `crates/apps/{mail,notes,calendar,contacts}`, its pane in `crates/apps/settings` | L |
-| A1c | [Contacts' domain](apps/contacts.md) | `contacts` | A1a, C1 | `crates/apps/contacts`, `crates/libs/address-book` | M |
+| A1a | [Contacts](apps/contacts.md): land what is committed | | nothing; alone in mail, calendar, keyring, search and secrets | `crates/apps/{contacts,calendar,mail}`, `crates/libs/{address-book,dav,content-lines,keyring,search}`, `crates/services/secrets` | L |
+| A1b | [Shared accounts](apps/contacts.md) | | A1a, C2 | `crates/libs/accounts`, `crates/libs/mail-core`, `crates/apps/{mail,notes,calendar,contacts,tasks}`, its pane in `crates/apps/settings` | L |
+| A1c | [Contacts' domain](apps/contacts.md) | `contacts` | D5 | `crates/apps/contacts`, `crates/libs/address-book` | M |
 | A2 | [Tasks](apps/tasks.md) | `tasks` | A1a, D5 | `crates/apps/tasks`, `crates/libs/{dav,content-lines}` | M |
 | A3 | [Photos](apps/photos.md) | `photos` | D1c | `crates/apps/photos` | L |
 | A4 | [Music](apps/music.md) | `music` | C1 | `crates/apps/music` | L |
@@ -177,7 +179,7 @@ mail. An agent that reads, shows and changes needs no prompt.
 | :--- | :--- | :--- |
 | 0 | C0; A1a | |
 | 1 | C1 and C2 by one agent; D0 | gate 1 |
-| 2 | D1a, then D1b and D1c; D2; D6; D21; A1c; D5 | |
+| 2 | D1a, then D1b, then D1c; D2; D6; D21; D5, then A1c | |
 | 3 | C4, then C5 and C6; D23; D4 (drafts, reading); D7; D11; D14; D16; A2 | gate 2 |
 | 4 | C3; D12; D15; D18; A4; A7; A10 | |
 | 5 | A12; D4 (sending); D9; D10; D13; D20; D22; C8; A3; A5 | |

@@ -10,7 +10,7 @@ noun `entry`. Owner: `bande-system-intents`. Work package D21.
 | Intent | Parameters | Effects | Undo | Code | P |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | `dictionary.find` | `word`, `language` | `read`; foreign from a dictionary the person added |  | ready | A |
-| `calculator.compute` | `expression` | `read` |  | ready (`bande_search::calculate`, units included, no network) | A |
+| `calculator.compute` | `expression`; gives a text | `read` |  | ready (`bande_search::calculate`, units included, no network) | A |
 | `dictionary.open` | `word` | `show`; refused while an online source is on |  | ready | B |
 
 Phrases in Search: "{expression}", "define {word}".

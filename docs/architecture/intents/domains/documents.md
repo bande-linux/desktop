@@ -15,11 +15,10 @@ Part of [Bande Intents](../../intents.md). Main nouns `document`, `workbook`, `p
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | `documents.get` | `document` or a `mail.attachment`, `properties` | foreign |  | part: text, in the confined importer (`bande-content`) | A |
 | `spreadsheets.get` | `workbook`, `sheet`, `range` | foreign |  | part: text only, in the confined importer | B |
-| `spreadsheets.find_sheet` | `workbook` | foreign |  | new | B |
 | `presentations.get` | `presentation`, `properties` | foreign |  | part: text only, in the confined importer | B |
 | `documents.create` | `name`, `within`, `format` (`txt`, `md`, `rtf`, `odt`, `docx`), `body` | `change`; shared: `send` | `files.trash` | app | A |
 | `documents.append` | `document`, `body` | as `create` | the earlier content | new | A |
-| `documents.update` | `document`, `find`, `replace` | as `create`, and foreign | the earlier content | new | A |
+| `documents.update` | `document`, `find`, `replace` (`text`) | as `create`, and foreign | the earlier content | new | A |
 | `documents.create_export` | `document`, `format` (`pdf`, `docx`, `odt`, `html`, `txt`), `within`, `recognise_text`, `language` | as `create` | `files.trash` | new | A |
 | `documents.create_from_pages` | `documents`, `pages`, `rotations`, `name`, `within` | as `create` | `files.trash` | part: the toolkit's PDF writing keeps pages | A |
 | `spreadsheets.create` | `name`, `within`, `format`, `values` | `change`; shared: `send` | `files.trash` | new | B |
@@ -31,9 +30,6 @@ Part of [Bande Intents](../../intents.md). Main nouns `document`, `workbook`, `p
 | `documents.open` | `document`, `page`, `text`; as `files.open` | `show` |  | app | B |
 | `documents.update_form` | `document`, `names`, `values` | as `create`, and foreign | the earlier content | new | B |
 | `presentations.append` | `presentation`, `title`, `body` | as `create` | the earlier content | new | C |
-
-Main nouns `document`, `workbook`, `presentation`; files, served by whichever application the person
-chose.
 
 `body` and `outline` are `rich_text`; a heading starts a section or a slide. `values` are `rows`:
 without `formulas` a value that begins with `=`, `+`, `-` or `@` is text. Text Editor keeps the

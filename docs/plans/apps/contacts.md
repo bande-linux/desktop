@@ -15,7 +15,8 @@ named programs, tests. Not committed there: one accounts store and a Settings pa
    read it.
 4. A1c: Contacts' process owns its store, with a lock; `NICKNAME` and `RELATED`; a kept card for
    Trash.
-5. Whether others can read a collection: `DAV:owner`, sharees, IMAP `NAMESPACE` and ACL.
+5. Whether others can read a collection: D5 for `DAV:owner` and sharees in `bande-dav`, D2 for IMAP
+   `NAMESPACE` and ACL in `bande-mail-core`.
 
 **Done when** one account set up once serves mail, notes, calendar, contacts and tasks, and "email
 mom" finds her.

@@ -7,7 +7,7 @@ D1a, D1b.
 | Thing | Properties (* foreign, ~ name) | In `find` |
 | :--- | :--- | :--- |
 | `files.file` | name\* text, size integer, kind enum, modified, created, used date_time, access `private` `group` `others`, origin\* url, digest text, trashed bool | name, size, modified, kind |
-| `files.location` | name~ text, kind `server` `volume` `folder`, connected bool, free integer | all |
+| `files.location` | name~ text, kind `server` `volume` `folder`, connected bool, free integer, folder ref<files.file> (while connected) | all |
 | `archives.archive` (a view of a file) | items, size integer, names\* list<text> | all |
 
 | Intent | Parameters | Effects | Undo | Code | P |
@@ -25,7 +25,7 @@ D1a, D1b.
 | `archives.create` | `files`, `name`, `format` (`zip`, `tar-gz`, `tar-bz2`, `tar-xz`), `within` | `change`; shared: `send` | `files.trash` | ready | A |
 | `archives.extract` | `archive`, `within` | `change`; shared: `send` | `files.trash` | part: one item gets no folder of its own, and hidden names, desktop entries and executable bits are kept | A |
 | `files.open` | `files`, `app` | `show` |  | ready | A |
-| `files.compute_usage` | `within`, `depth` | `read`; foreign for names outside own folders |  | app (`apps/settings/src/storage.rs`) | A |
+| `files.compute_usage` | `within`, `depth`; gives file and size | `read`; foreign for names outside own folders |  | app (`apps/settings/src/storage.rs`) | A |
 | `files.delete_trash` | `older_than` | `critical` |  | ready | A |
 | `files.connect_location` | `location` (a saved server) | `send` | `files.disconnect_location` | ready, only with a remembered sign-in | B |
 | `files.disconnect_location` | `location` (a server) | `disrupt` |  | ready | B |

@@ -12,7 +12,7 @@ it:
 | Layer | Enforced by | Stops |
 | :--- | :--- | :--- |
 | The agent program offers its model no shell, file, web or other tool | the agent program, by its launch options | a model that is misled |
-| The agent sees only `/usr` read-only, its command's files, a private home kept for it, its own processes, the broker's socket and a proxy to its model's host and port: no other socket, bus, device or terminal, no new privileges, no user namespaces | `bande-agent run` | an agent program that has other tools after all, or is compromised |
+| The agent sees only `/usr` read-only, from `/etc` the loader cache, `alternatives`, CA certificates and a made-up `passwd` and `nsswitch.conf`, its program file and the folders the person was shown when adding it (never the home folder or a parent of it), a private home kept for it, its own processes, `null`, `zero`, `random` and `urandom`, the broker's socket, a proxy to its model's host and port, and in a terminal a pseudo-terminal of its own that passes only text, cursor, colour and screen sequences: no other socket, bus, device or terminal, no new privileges, no user namespaces | `bande-agent run` | an agent program that has other tools after all, or is compromised |
 | The broker offers only permitted intents | `bande-agentd` | everything else |
 
 There is no intent to read a password, so an intents-only agent in the sandbox has no way to ask for
@@ -27,7 +27,8 @@ client can do, so one it did not start itself counts as unsandboxed.
 | Over SSH, or a tunnel the person runs | as given, the same label | never | the same, at this computer, unlocked | no |
 
 The sandbox leaves one way out: what the agent reads goes to its model's host, under any account the
-program chooses. The first connection says so and names it. A model on this computer needs no host
+program chooses. The first connection says so and names it. A model served on this computer is the
+host `localhost` and its port, and nothing else is reachable; one inside the program needs no host
 and gets no network.
 
 ## Broker
@@ -55,15 +56,14 @@ set has an Ask switch for its effects that are asked each time.
 | Calendar | `calendar` | events | events without guests |
 | Tasks | `tasks` | lists | making and changing |
 | Contacts | `contacts` | people | (asks) |
-| Mail | `mail` | messages, text from strangers included | filing, flags |
-| Drafts | `mail`'s drafts | what it wrote | drafts; the person sends |
+| Mail | `mail` | messages, text from strangers included, or *Drafts Only*, without them | filing, flags, drafts; the person sends |
 | Messages | `messages` | conversations, text from strangers included | drafts, read |
-| Settings | `settings`, `notifications`' rules | settings | changing those that are safe |
+| Settings | `settings` | settings | changing those that are safe |
 | Apps and Windows | `apps`, `windows`, `desktop`, `terminal`, `browser` | what is open and in front | arranging windows, opening |
 | Music, Video and Books | `media`, `music`, `books`, `recordings` | players and libraries | playing, playlists |
 | Clock | `clock` | alarms and timers | making and changing |
 | This Computer | `session`, `network`, `devices`, `print`, `scanners`, `disks`, `processes`, `software`, `backups`, `machines`, `containers`, `accounts` | state and names | staying awake, default printer |
-| Notices | `notifications`, `clipboard` | notices of what it may read | its own notices, one line on the clipboard |
+| Notices | `notifications`, `clipboard` | notices of what it may read | its own notices, rules, one line on the clipboard |
 | Knowledge | `calculator`, `dictionary`, `maps`, `feeds` | results | opening |
 | Screen and Sound | `screen`, `sharing`, `camera`, `speech` | status | (asks) |
 | Routines | `routines` | routines | (asks) |
@@ -116,7 +116,8 @@ list overflows them. So the most useful intents are also tools of their own:
 
 - A direct tool is generated from its intent and goes through the same checks. Its name is the id
   with `_` for `.`, at most 40 of `[a-z0-9_]`; its hints come from the intent's effects. One that
-  can need the person says so and works like `ask`.
+  can change something also takes `again`; one that can need the person says so and works like
+  `ask`.
 - They are the A intents of the permitted domains without `find` and `get`, one from each domain in
   turn in the order of their pages, at most 12 and at most 3,500 tokens for the whole list (bytes
   divided by four). The list depends on the agent and its permissions only, has one fixed order with
@@ -158,11 +159,12 @@ to tell the person. Progress is sent when asked for, and a client that declares 
 gets a task backed by the same job. A cancelled request stops the wait, not the job. An approval
 outlives the call and the client; its outcome is kept for an hour. The broker stores a call's key
 before Perform, so after its own or an owner's end a repeat returns `interrupted` with references to
-look at, and acts only with `again`. An identical `run` or `ask` whose outcome is still kept, or
-whose answer may not have arrived, returns that outcome marked `repeated`, so a retry neither asks
-nor acts twice; a deliberate second one carries `again`. Repeating an `undo` returns its first
-outcome. While the prompt is open a notification is not needed; when a job ends after its client has
-gone, one is shown.
+look at, and acts only with `again`. An identical call, whichever tool it came through, with any
+effect besides `read`, `read_foreign` and `show`, whose outcome is still kept and not undone, or
+whose answer may not have arrived, returns that outcome marked `repeated`, with the `call` that has
+`again`, so a retry neither asks nor acts twice; a deliberate second one carries `again`. Repeating
+an `undo` returns its first outcome. While the prompt is open a notification is not needed; when a
+job ends after its client has gone, one is shown.
 
 ### Instructions and context
 

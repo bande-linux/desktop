@@ -24,7 +24,7 @@ Work package D2.
 | `notes.update_folder` | `folder`, `name` | `change`; shared: `send` | the earlier name | new | C |
 | `notes.delete` | `notes` | `critical`; shared: also `send` |  | new | C |
 
-Phrases in Search: "new note {text}", "open note {note}".
+Phrases in Search: "new note {title}", "open note {note}".
 
 The folder may be in the local account, so `notes.create` works offline. Pins, tags and locks do not
 exist.

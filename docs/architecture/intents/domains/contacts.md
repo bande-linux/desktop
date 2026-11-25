@@ -17,7 +17,7 @@ Contacts app. Work package A1c.
 | `contacts.find_group` | `text` | `read` |  | branch | B |
 | `contacts.trash`, `contacts.restore` | `contacts` | as `create` | each other | branch; there is no Trash, the removed card has to be kept | A |
 | `contacts.open` | `contact` | `show` |  | branch | A |
-| `contacts.create` | `name`, `nickname`, `related`, `emails`, `phones`, `addresses`, `organisation`, `job_title`, `birthday`, `note`, `photo`, `address_book` | `change`; shared: `send`; for an agent see [Broker](../agents.md#broker) | `contacts.trash` | branch; nickname and related are new | A |
+| `contacts.create` | `name`, `nickname`, `related`, `emails`, `phones`, `addresses`, `organisation`, `job_title`, `birthday`, `note`, `photo` (`files.file`), `groups`, `address_book` | `change`; shared: `send`; for an agent see [Permissions](../agents.md#permissions) | `contacts.trash` | branch; nickname and related are new | A |
 | `contacts.update` | `contact` and the same | as `create` | the earlier card | branch | A |
 | `contacts.merge` | `contacts`, `into` | `disrupt`; shared: `send` | the earlier cards | branch | B |
 | `contacts.import` | `file`, `address_book` | `disrupt`; shared: `send` | removes those | branch | B |

@@ -20,7 +20,7 @@ D8.
 | `apps.open` | `app` | `show`; for an agent `disrupt` |  | ready | A |
 | `windows.open` | `window` | `show` |  | app | A |
 | `apps.stop` | `app`, `force` | `disrupt`; with `force` `critical` |  | app | A |
-| `windows.move` | `windows`, `workspace`, `tile`, `display`, `on_top`, `minimised`, `full_screen` | `change` | the earlier places | app; only a client's own window | A |
+| `windows.move` | `windows`, `workspace`, `tile` (`left`, `right`, `top-left`, `top-right`, `bottom-left`, `bottom-right`, `maximised`, `none`), `display`, `on_top`, `minimised`, `full_screen` | `change` | the earlier places | app; only a client's own window | A |
 | `apps.remove_permission` | `app`, `permission`; giving one back is the person's | `disrupt` |  | app (`apps/settings/src/permissions.rs`) | B |
 | `windows.stop` | `window`; its app may ask | `disrupt` |  | app | B |
 | `apps.set_pinned` | `app`, `pinned` | `change` | the earlier value | app | B |

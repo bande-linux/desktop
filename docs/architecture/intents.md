@@ -56,9 +56,10 @@ Swedish Activity is Historik, since the Taskbar is Aktivitetsfältet.)
   Settings."
 - **Search** shows what can be done as one typed line: "dark", "timer 10 min", "new note milk",
   "eject stick". An intent with at most one free parameter may declare translated phrases, on its
-  domain's page. A placeholder is a thing (matched by its owner's `find`), an enum word, a duration
-  with a translated unit, a text whose thing has `accepts` (one of those), or one free text at the
-  end; prose is never interpreted. Return performs it. Nothing `critical` is offered there.
+  domain's page. A placeholder is a parameter's name: a thing (matched by its owner's `find`), an
+  enum word, a time, a duration with a translated unit, a text whose thing has `accepts` (one of
+  those), or one free text at the end; a phrase may fix other arguments, and prose is never
+  interpreted. Return performs it. Nothing `critical` is offered there.
 - **Routines** are Settings ▸ Routines, and may have a key or a Quick Settings tile, which the
   person gives.
 
@@ -146,10 +147,12 @@ types come only from their owner.
 
 `find` also returns a **set**, `set:<token>`: exactly what it found (at most 10,000 things, frozen,
 ten minutes; the answer says when it was cut). It is passed as the only element of a list of
-references, and belongs to the connection that found it.
+references, belongs to the connection that found it, and is taken only by the owner that made it.
 
 `files.file` is the only type of a file: photos, documents, workbooks, presentations, recordings and
-archives are views of it. An account is `accounts.account` everywhere.
+archives are views of it: a view's reference is the file's, also where a parameter names the view,
+and its `type` is the view's. A thing is declared in the manifest of the program that serves its
+`get`, else its `find`. An account is `accounts.account` everywhere.
 
 | Thing | What the token maps to | Today |
 | :--- | :--- | :--- |
@@ -157,7 +160,7 @@ archives are views of it. An account is `accounts.account` everywhere.
 | `notes.note` | `NoteId`, which a move keeps | the `uuid` is unique in one folder only and comes from the server |
 | `calendar.event` | calendar id, `UID` and the recurrence instance | search targets carry the `UID` only; some lookups are positions |
 | `contacts.contact` | address book id and card `UID` | |
-| `files.file` | the path and the file's own identity; another file there is `NotFound` | |
+| `files.file` | the path and the file's own identity; a new file at that path whose predecessor is gone (a save) is followed if it has the same type and owner, otherwise `NotFound`; frozen plans and undo still compare identity or content | |
 | `disks.disk`, `disks.volume` | serial and size; UUID and drive | object paths change when a drive is plugged in again |
 | `settings.setting` | a fixed word, with `@<token>` for a setting of one display or device | `SettingId` has no word yet; `PaneId` has |
 
@@ -212,7 +215,8 @@ A parameter naming **another domain's thing** (an attachment, a wallpaper) reach
 owner as a descriptor, never as a path. To read, it calls `Open` of the files owner in Prepare, with
 the caller's limits passed on. To write, it opens the folder there, writes a temporary file, and
 `Register` checks the content, the name and every rule, names it (keeping both) and returns its
-reference.
+reference. With a reference to replace it replaces exactly that file, if it is still the one Open
+gave (else `Conflict`), and the token follows to the new one.
 
 ## Effects
 
@@ -326,7 +330,7 @@ folder changes.
     "properties": { "value": { "type": "text", "foreign": false, "find": true } } } },
   "events": { "settings.changed": { "thing": "settings.setting", "effects": ["read"] } },
   "intents": { "settings.set": { "title": { "en": "Change Setting" }, "effects": ["change", "disrupt", "critical"],
-    "undo": true, "phrases": [{ "en": "{setting} {value}" }],
+    "undo": true, "phrases": [{ "words": { "en": "{setting} {value}" }, "arguments": {} }],
     "parameters": [ { "name": "setting", "type": "ref", "of": ["settings.setting"], "required": true },
                     { "name": "value", "type": "text", "limit": 4096, "required": true } ],
     "returns": { "list": "settings.setting" } } } }
@@ -354,11 +358,15 @@ interface org.bande.Intents.Job
   Result a{sv}
   Error (sa{sv})
   Cancel ()
+
+interface org.bande.Intents.Files      (on the files owner)
+  Open     (as references, s access, a{sv} limits)  -> (a(hsa{sv}) files, as effects)
+  Register (h folder, a(sss) files, a{sv} limits)   -> (as references)
 ```
 
-interface org.bande.Intents.Files, on the files owner Open     (as references, s access, a{sv}
-limits)   -> (a(hsa{sv}) files, as effects)      access: read | folder Register (h folder, a(ss)
-files, a{sv} limits)     -> (as references)                     temporary and wanted name
+`access` is `read` or `folder`. Each file opened is its descriptor, its reference, and `name`,
+`media_type` and `size`; each registered is its temporary name, its wanted name, and the reference
+it replaces, or nothing. `Subscribe` and `Event` come with routines.
 
 - **Find** and **Get** serve the rows with those verbs whose effects are only `read` and
   `read_foreign`; arguments that cause another effect go through Prepare. `count` is at most 100,
@@ -370,12 +378,13 @@ files, a{sv} limits)     -> (as references)                     temporary and wa
   from it is `NotGranted`; an empty `within` contains nothing. They are passed on whole, and each
   owner reads its own entry. An unknown key is `InvalidArgument`. `within` lists containers,
   recursive for folders: folders for files and their views; mailboxes or accounts for mail; folders,
-  lists, calendars, books or accounts for notes, tasks, calendar and contacts; panes for settings. A
-  permission is stored as these and passed unchanged. What is outside is `NotFound`, not matched,
-  counted or offered. `agent` is the registered name; it is accepted only from a caller whose bus
-  name is in a manifest, and from `org.bande.Agents` and `org.bande.Routines`, turns on every rule
-  for an agent, and is kept with what the call makes. Files are opened beneath a held folder
-  (`openat2`, `RESOLVE_BENEATH | RESOLVE_NO_SYMLINKS`, and `RESOLVE_NO_XDEV` for an agent).
+  lists, calendars, books or accounts for notes, tasks, calendar and contacts; panes for settings.
+  Places is an entry `places` with `read`, which no program serves and the owner of `photos` reads
+  too. A permission is stored as these and passed unchanged. What is outside is `NotFound`, not
+  matched, counted or offered. `agent` is the registered name; it is accepted only from a caller
+  whose bus name is in a manifest, and from `org.bande.Agents` and `org.bande.Routines`, turns on
+  every rule for an agent, and is kept with what the call makes. Files are opened beneath a held
+  folder (`openat2`, `RESOLVE_BENEATH | RESOLVE_NO_SYMLINKS`, and `RESOLVE_NO_XDEV` for an agent).
 - **Prepare** checks everything that can be checked and changes nothing. It answers within ten
   seconds: what is too large to copy or digest by then is frozen by identity, size and change time
   and compared again as it is used. The description has `effects`, `summary`, and `rows` (`label`,
@@ -393,9 +402,10 @@ files, a{sv} limits)     -> (as references)                     temporary and wa
   there is none.
 - **Many things.** A job goes on after a failure unless the next would fail the same way. A result
   has `things`, `receipt` (empty if none), `done` and the first 100 of `failed` with their errors,
-  also when the job failed or was cancelled; each thing is whole on one side. A job outlives its
-  connection and ends only by itself, Cancel, Stop or the end of the session, which the owner delays
-  until the thing in hand is whole.
+  also when the job failed or was cancelled; a `compute` has `value` instead of `things`, one value
+  or a list of dictionaries, as its page and `returns` in the manifest say; each thing is whole on
+  one side. A job outlives its connection and ends only by itself, Cancel, Stop or the end of the
+  session, which the owner delays until the thing in hand is whole.
 - **Undo** is prepared by the owner that holds the receipt; where it is another owner's intent, that
   one prepares it with the limits and it is performed inside the plan. Private intents cannot be
   prepared by name (`UnknownIntent`). It is refused while the thing differs from what the plan left
@@ -408,8 +418,8 @@ files, a{sv} limits)     -> (as references)                     temporary and wa
   100 and 1 GB a domain; content over 64 KiB is beside it. One that a newer build cannot read is
   `Expired`.
 
-- A caller whose `ProcessFD` shows another mount namespace or a `/.flatpak-info` is refused, except
-  the broker and owners, whose units make no mount namespace.
+- A caller whose `ProcessFD` shows another mount namespace, or a `/.flatpak-info`, is refused; the
+  broker's and owners' units make none, so they pass.
 
 An owner's bus name is reachable by every unsandboxed program of the same user. The interface keeps
 honest programs honest; the boundary for agents is the broker and the sandbox.
@@ -529,7 +539,7 @@ Each intent is reviewed for what it makes possible together with the others.
 | Intent | What it could become | Rule |
 | :--- | :--- | :--- |
 | `files.*` | reading keys and sessions | hidden files, other users' files and anything outside granted folders do not exist for an agent |
-| every intent that makes, renames, restores or changes the content of a file | code that runs | for an agent: only files whose extension and content are in one fixed list in `bande-intents` (pictures, sound, video, PDF, RTF, ODF and OOXML without macros, CSV, Markdown, `.txt`, archives of these), before and after, whole trees; never a name a build tool reads (a list there too); no executables or hidden names; nothing in or below a folder with a version-control folder, nor on the person's `PATH`; a rename keeps the extension; it restores only what it trashed |
+| every intent that makes, renames, restores or changes the content of a file | code that runs | for an agent: only files whose extension and content are in one fixed list in `bande-fs` (pictures, sound, video, PDF, RTF, ODF and OOXML without macros, CSV, Markdown, `.txt`, archives of these), before and after, whole trees; never a name a build tool reads (a list there too); no executables or hidden names; nothing in or below a folder with a version-control folder, nor on the person's `PATH`; a rename keeps the extension; it restores only what it trashed |
 | `files.open`, `documents.open`, `books.open` | a page or playlist that fetches an address with data in it, an installer | pictures, PDF, sound, video and plain text, without external references, in Bande's viewers; for an agent anything else is refused and `files.reveal` offered |
 | `files.trash` | deletion where there is no Trash | refused |
 | `files.find` by text, `documents.update` | guessing what a file contains | matching content is `read_foreign` |
@@ -553,7 +563,7 @@ Each intent is reviewed for what it makes possible together with the others.
 | `sharing.start` | someone else's input | view only, and every viewer is still asked for |
 | stopping a recording, share, backup or planned shutdown | losing the person's work | `change` for what the caller started, otherwise `disrupt` for an agent |
 | `windows.move` | what the person types goes to the next window | for an agent never changes which window has the focus, else `disrupt` |
-| `notifications.dismiss`, `clock.dismiss_alarm` | hiding what an agent did, a missed alarm | for an agent `disrupt` unless its own, and never a notice about an agent |
+| `notifications.dismiss`, `clock.dismiss_alarm`, any clock intent on an alarm that rings or a timer that is done | hiding what an agent did, a missed alarm | for an agent `disrupt` unless its own, and never a notice about an agent |
 | `clipboard.set` | a command pasted into a terminal, another account number | `disrupt` unless one line of plain text, and for an agent while the current item is concealed or was copied by the person in the last minute; a notice names the agent |
 | `media.*` of other applications' players | seeks read by the page that plays | for an agent `disrupt`, except pause |
 | `containers.start_project` | running a changed compose file | its existing containers, through the engine; its files are never read |

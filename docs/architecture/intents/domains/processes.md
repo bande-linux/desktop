@@ -11,7 +11,7 @@ package D11.
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | `processes.find` | `text`, `order` (`processor`, `memory`, `disk`, `network`, `energy`); returns the ordered value | `read` |  | app; no energy | A |
 | `processes.get` | `processes`, `properties` | `read` |  | app | A |
-| `processes.compute_load` | `properties` | `read` |  | app | A |
+| `processes.compute_load` | `properties`; gives them | `read` |  | app | A |
 | `processes.stop` | `process`, `force` | `disrupt`; with `force` `critical` |  | app | A |
 
 A process is known by its id, start time and boot. Command lines, environments, open files and

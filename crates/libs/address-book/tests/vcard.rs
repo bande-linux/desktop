@@ -26,6 +26,7 @@ const CARDS: &str = concat!(
     "TEL;WORK;VOICE:+45 33 12 34 56\r\n",
     "NOTE;ENCODING=QUOTED-PRINTABLE:Two=0D=0Alines\r\n",
     "BDAY:\u{20ac}\u{20ac}12\r\n",
+    "PHOTO;ENCODING=BASE64;JPEG:/9j/\r\n",
     "ADR;HOME;ENCODING=QUOTED-PRINTABLE;CHARSET=UTF-8:Box 7;;Gade 1;K=C3=B8benhavn;;1000;Danmark\r\n",
     "END:VCARD\r\n",
     "BEGIN:VCARD\r\n",
@@ -84,6 +85,11 @@ fn tricky_vcards_are_read_kept_whole_and_written_back_with_only_the_edit_changed
         written.cards.len(),
         1,
         "a decoded line break stays in its card"
+    );
+    assert!(
+        bjorn
+            .to_vcf()
+            .contains("PHOTO;ENCODING=b;TYPE=JPEG:/9j/\r\n")
     );
     let bjorn = written.cards[0].contact();
     assert_eq!(bjorn.note, "Two\nlines");
@@ -147,6 +153,12 @@ fn tricky_vcards_are_read_kept_whole_and_written_back_with_only_the_edit_changed
     ] {
         assert!(merged.contains(kept), "{kept:?} is lost from {merged}");
     }
+    let mut short =
+        parse_cards("BEGIN:VCARD\r\nVERSION:3.0\r\nUID:a\r\nFN:Ann\r\nN:;Ann;;;\r\nEND:VCARD\r\n")
+            .cards
+            .remove(0);
+    short.absorb(&edited);
+    assert_eq!(short.contact().formatted, changed.formatted);
     assert_eq!(merged.matches("SERVICE=fediverse").count(), 1);
     assert_eq!(merged.matches("X-ABLABEL").count(), 2);
     assert_eq!(edited.contact().emails, changed.emails);

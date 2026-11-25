@@ -95,7 +95,12 @@ fn conflict(
             }),
         }),
         Err(Error::Status { status: 404, .. }) if pending == Pending::Create => return Ok(()),
-        Err(Error::Status { status: 404, .. }) => outcome.removed.push(local.href.to_owned()),
+        Err(Error::Status { status: 404, .. }) => {
+            outcome.removed.push(local.href.to_owned());
+            if pending == Pending::Delete {
+                return Ok(());
+            }
+        }
         Err(error) => return Err(error),
     }
     outcome.conflicts.push(Conflict {
@@ -331,18 +336,20 @@ pub trait Cached: Sized {
 
 /// Applies what a sync found to `items`: removes what the server removed, takes the server's
 /// version of what changed, and adds `copies` (local edits kept beside a conflict) as new
-/// resources to push. What was edited or deleted while the sync ran stays a pending change.
+/// resources to push. What was edited or deleted while the sync ran stays a pending change,
+/// without a copy of the edit it replaced.
 pub fn merge<T: Cached>(
     items: &mut Vec<T>,
     removed: &[String],
     upserts: Vec<Upsert>,
     copies: Vec<Upsert>,
 ) {
-    let kept = |item: &T| {
-        copies
-            .iter()
-            .any(|copy| copy.sent.as_ref().is_some_and(|sent| sent.still(item)))
-    };
+    let holds = |copy: &Upsert, item: &T| copy.sent.as_ref().is_some_and(|sent| sent.still(item));
+    let copies: Vec<Upsert> = copies
+        .into_iter()
+        .filter(|copy| items.iter().any(|item| holds(copy, item)))
+        .collect();
+    let kept = |item: &T| copies.iter().any(|copy| holds(copy, item));
     let removed: HashSet<&str> = removed.iter().map(String::as_str).collect();
     items.retain_mut(|item| {
         if !removed.contains(item.href()) {

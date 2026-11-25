@@ -488,14 +488,14 @@ fn merged_notes(card: &Card, other: &Card) -> String {
 
 fn merge_fields(merged: &mut Contact, theirs: &Contact) {
     let name = &mut merged.name;
+    let before = name.clone();
+    let same = |mine: &str, theirs: &str| !mine.is_empty() && mine.eq_ignore_ascii_case(theirs);
     if *name == Name::default() {
         if theirs.name != Name::default() {
             merged.name = theirs.name.clone();
             merged.formatted = theirs.formatted.clone();
         }
-    } else if name.given.eq_ignore_ascii_case(&theirs.name.given)
-        || name.family.eq_ignore_ascii_case(&theirs.name.family)
-    {
+    } else if same(&name.given, &theirs.name.given) || same(&name.family, &theirs.name.family) {
         for (mine, theirs) in [
             (&mut name.given, &theirs.name.given),
             (&mut name.family, &theirs.name.family),
@@ -506,6 +506,18 @@ fn merge_fields(merged: &mut Contact, theirs: &Contact) {
             if mine.is_empty() {
                 mine.clone_from(theirs);
             }
+        }
+        let spelled = |name: &Name| {
+            display_name(&Contact {
+                name: name.clone(),
+                ..Contact::default()
+            })
+        };
+        if *name != before && merged.formatted.trim() == spelled(&before) {
+            merged.formatted = match *name == theirs.name {
+                true => display_name(theirs),
+                false => spelled(name),
+            };
         }
     }
     for category in &theirs.categories {
@@ -535,6 +547,19 @@ impl Card {
             return;
         }
         self.replace(&["VERSION"], vec![Property::new("VERSION", "3.0")]);
+        for property in &mut self.component.properties {
+            for (name, value) in &mut property.params {
+                if ["ENCODING", "TYPE"].contains(&name.as_str())
+                    && value.eq_ignore_ascii_case("BASE64")
+                {
+                    "ENCODING".clone_into(name);
+                    "b".clone_into(value);
+                }
+            }
+            property
+                .params
+                .retain(|(name, value)| name != "ENCODING" || value.eq_ignore_ascii_case("b"));
+        }
         if self.text("FN").is_empty() {
             let name = display_name(&self.details());
             self.replace(&["FN"], vec![Property::new("FN", escape(&name))]);

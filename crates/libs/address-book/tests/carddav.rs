@@ -173,6 +173,19 @@ fn what_is_changed_while_a_sync_runs_is_never_undone_by_its_outcome() {
     }
     done.removed.push(library.books[book].cards[2].href.clone());
 
+    let stale = &mut library.books[book].cards[2];
+    stale.pending = Some(Pending::Update);
+    done.copies.push(Upsert {
+        href: "/dav/copy.vcf".to_owned(),
+        etag: None,
+        data: stale.data.clone(),
+        sent: Some(Sent {
+            pending: Pending::Update,
+            data: stale.data.clone(),
+            taken: false,
+        }),
+    });
+
     let mut mine = ann();
     mine.note = "Prefers mornings".to_owned();
     let edited = Found { book, card: 2 };

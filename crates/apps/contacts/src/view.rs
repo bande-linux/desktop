@@ -964,6 +964,7 @@ impl ContactsView {
             let selected = self.selected.clone();
             self.save_editor();
             self.selected = selected;
+            self.refresh();
         }
     }
 

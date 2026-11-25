@@ -13,7 +13,6 @@ use crate::text::GlyphRun;
 
 const FOREGROUND: u16 = u16::MAX;
 
-/// Walks a colour glyph's layers to find what it paints and whether all of it can be drawn.
 struct Survey<'a> {
     font: &'a FontRef<'a>,
     coords: &'a [NormalizedCoord],
@@ -118,8 +117,11 @@ impl ColorPainter for Survey<'_> {
     fn push_layer(&mut self, _: CompositeMode) {}
 }
 
-/// The area a colour glyph paints, in font units with y down, when all its layers can be drawn.
-fn painted(font: &FontRef<'_>, run: &GlyphRun, id: GlyphId) -> Option<kurbo::Rect> {
+fn area_painted_in_font_units(
+    font: &FontRef<'_>,
+    run: &GlyphRun,
+    id: GlyphId,
+) -> Option<kurbo::Rect> {
     let coords: Vec<NormalizedCoord> = run
         .variation_coords()
         .iter()
@@ -153,7 +155,6 @@ pub(crate) struct Painted {
     pub(crate) area: kurbo::Rect,
 }
 
-/// A colour glyph's layers drawn at `scale` pixels to the point, around the glyph's origin.
 pub(crate) fn paint(
     font: &FontRef<'_>,
     run: &GlyphRun,
@@ -162,7 +163,7 @@ pub(crate) fn paint(
 ) -> Option<Painted> {
     let units_per_em = f64::from(font.head().ok()?.units_per_em());
     let to_points = Affine::scale(f64::from(run.size) / units_per_em);
-    let painted = to_points.transform_rect_bbox(painted(font, run, id)?);
+    let painted = to_points.transform_rect_bbox(area_painted_in_font_units(font, run, id)?);
     let longest = painted.width().max(painted.height()) * scale + 2.0;
     let scale = scale * (f64::from(LARGEST_BITMAP) / longest).min(1.0);
     let on_screen = Affine::scale(scale).transform_rect_bbox(painted).expand();

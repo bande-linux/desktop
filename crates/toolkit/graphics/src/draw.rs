@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Weak};
 use vello_cpu::color::{AlphaColor, Srgb};
-use vello_cpu::kurbo::{self, Affine, BezPath, Shape as _, Stroke, StrokeOpts, Vec2};
+use vello_cpu::kurbo::{
+    self, Affine, BezPath, ParamCurve as _, PathSeg, Shape as _, Stroke, StrokeOpts, Vec2,
+};
 use vello_cpu::peniko::{BlendMode, Compose, Extend, Gradient, ImageQuality, ImageSampler, Mix};
 use vello_cpu::{ImageId, ImageSource, PaintType};
 
@@ -33,8 +35,10 @@ pub(crate) trait Canvas {
 const TILE: f64 = 4.0;
 const TILE_BYTES: f64 = 16.0;
 const SMALL_TILES: f64 = 64.0;
-const MOST_COVERAGE: f64 = 128.0 * 1024.0 * 1024.0;
+const TILES_PER_LINE: f64 = 3.0;
+const MOST_COVERAGE: f64 = 96.0 * 1024.0 * 1024.0;
 const MOST_PAINTS: u32 = 1 << 20;
+const MOST_GRADIENTS: u32 = 1 << 13;
 const FARTHEST: f64 = 1e8;
 const FARTHEST_TEXEL: f64 = 4e6;
 const FARTHEST_ON_SCREEN: f64 = 1e12;
@@ -60,8 +64,21 @@ fn point(point: Point) -> kurbo::Point {
     kurbo::Point::new(coordinate(point.x), coordinate(point.y))
 }
 
-fn tolerance(extent: kurbo::Rect) -> f64 {
-    TOLERANCE.max(extent.width().max(extent.height()) * RELATIVE_TOLERANCE)
+fn tolerance(longest_curve: f64) -> f64 {
+    TOLERANCE.max(longest_curve * RELATIVE_TOLERANCE)
+}
+
+fn longest_curve(path: &BezPath) -> f64 {
+    path.segments()
+        .filter(|segment| !matches!(segment, PathSeg::Line(_)))
+        .map(|curve| {
+            let curve = curve.to_cubic();
+            let extent = kurbo::Rect::from_points(curve.p0, curve.p3)
+                .union_pt(curve.p1)
+                .union_pt(curve.p2);
+            extent.width().max(extent.height())
+        })
+        .fold(0.0, f64::max)
 }
 
 fn gradient(gradient: Gradient, stops: &[Stop]) -> PaintType {
@@ -111,8 +128,9 @@ fn rect(rect: Rect) -> kurbo::Rect {
 fn outline(shape: &Shape) -> BezPath {
     let rect = rect(shape.rect);
     if shape.radius > 0.0 {
+        let shorter = rect.width().abs().min(rect.height().abs());
         rect.to_rounded_rect(f64::from(shape.radius))
-            .to_path(tolerance(rect))
+            .to_path(tolerance(coordinate(shape.radius).min(shorter)))
     } else {
         rect.to_path(TOLERANCE)
     }
@@ -120,7 +138,7 @@ fn outline(shape: &Shape) -> BezPath {
 
 fn flattened(path: &BezPath) -> BezPath {
     let mut lines = BezPath::new();
-    kurbo::flatten(path, tolerance(path.control_box()), |element| {
+    kurbo::flatten(path, tolerance(longest_curve(path)), |element| {
         lines.push(element);
     });
     lines
@@ -139,7 +157,7 @@ fn stroke_path(shape: &Shape, width: f32) -> BezPath {
 }
 
 fn stroked(path: BezPath, stroke: &Stroke) -> BezPath {
-    let widened = tolerance(path.control_box()).max(stroke.width.abs() * RELATIVE_TOLERANCE);
+    let widened = tolerance(longest_curve(&path).max(stroke.width.abs()));
     flattened(&kurbo::stroke(
         path,
         stroke,
@@ -159,6 +177,11 @@ impl<V, T> Default for Retained<V, T> {
 impl<V: Clone, T> Retained<V, T> {
     pub(crate) fn get(&self, id: u64) -> Option<V> {
         self.0.get(&id).map(|(value, _)| value.clone())
+    }
+
+    #[cfg(feature = "gpu")]
+    pub(crate) fn len(&self) -> usize {
+        self.0.len()
     }
 
     pub(crate) fn insert(&mut self, id: u64, value: V, liveness: Weak<T>) {
@@ -390,6 +413,9 @@ impl Reach<'_> {
                 let at = Vec2::new(f64::from(origin.x), f64::from(origin.y));
                 self.touches(rect(ink) + at)
             }),
+            Item::Image { rect: area, .. } | Item::Tiles { rect: area, .. } => {
+                !self.touches(rect(*area))
+            }
             Item::Picture(picture) => {
                 !picture
                     .bounds()
@@ -712,6 +738,7 @@ impl Recording {
             budget: Budget {
                 coverage: MOST_COVERAGE,
                 paints: MOST_PAINTS,
+                gradients: MOST_GRADIENTS,
             },
         };
         if let Some(clip) = &self.clip {
@@ -726,36 +753,56 @@ impl Recording {
     }
 }
 
-/// What the renderer has room for in one frame.
 struct Budget {
     coverage: f64,
     paints: u32,
+    gradients: u32,
 }
 
 impl Budget {
     fn affords(&mut self, path: &BezPath, transform: Affine, drawn: &[kurbo::Rect]) -> bool {
         let on_screen = transform.transform_rect_bbox(path.control_box());
-        let tiles = |area: kurbo::Rect| {
-            (area.width() / TILE + 2.0).max(0.0) * (area.height() / TILE + 2.0).max(0.0)
-        };
-        let inside: f64 = drawn
+        let tiles: f64 = drawn
             .iter()
-            .map(|drawn| tiles(drawn.intersect(on_screen)))
+            .filter(|drawn| drawn.overlaps(on_screen))
+            .map(|drawn| tiles_covered(path, transform, drawn.intersect(on_screen)))
             .sum();
-        let scale = transform.determinant().abs().sqrt();
-        let along = match inside > SMALL_TILES {
-            true => path.perimeter(1.0) * scale / TILE * 2.0 + 3.0 * path.elements().len() as f64,
-            false => inside,
-        };
-        self.coverage -= inside.min(along) * TILE_BYTES;
+        self.coverage -= tiles * TILE_BYTES;
         self.coverage >= 0.0
     }
 
-    fn affords_paint(&mut self) -> bool {
-        let left = self.paints.checked_sub(1);
-        self.paints = left.unwrap_or_default();
-        left.is_some()
+    fn affords_paint(&mut self, paint: &PaintType) -> bool {
+        match paint {
+            PaintType::Solid(_) => true,
+            PaintType::Gradient(_) => spend(&mut self.gradients) && spend(&mut self.paints),
+            PaintType::Image(_) => spend(&mut self.paints),
+        }
     }
+}
+
+fn spend(left: &mut u32) -> bool {
+    let remaining = left.checked_sub(1);
+    *left = remaining.unwrap_or_default();
+    remaining.is_some()
+}
+
+fn tiles_covered(path: &BezPath, transform: Affine, shown: kurbo::Rect) -> f64 {
+    let inside = (shown.width() / TILE + 2.0) * (shown.height() / TILE + 2.0);
+    if inside <= SMALL_TILES {
+        return inside;
+    }
+    let along: f64 = path
+        .segments()
+        .map(|line| {
+            let line = kurbo::Rect::from_points(transform * line.start(), transform * line.end());
+            if line.x0 > shown.x1 || line.y0 > shown.y1 || line.y1 < shown.y0 {
+                return 0.0;
+            }
+            let crossed = line.intersect(shown);
+            (crossed.width() + crossed.height()) / TILE + TILES_PER_LINE
+        })
+        .sum();
+    inside.min(along)
 }
 
 enum Scope {
@@ -789,10 +836,14 @@ impl<C: Canvas> Encoder<'_, C> {
             .as_coeffs()
             .iter()
             .all(|coefficient| coefficient.abs() <= FARTHEST_TEXEL)
-            && self.drawn.iter().all(|drawn| {
-                let shown = drawn.intersect(on_screen);
-                drawable(to_texels.transform_rect_bbox(shown), FARTHEST_TEXEL)
-            })
+            && self
+                .drawn
+                .iter()
+                .filter(|drawn| drawn.overlaps(on_screen))
+                .all(|drawn| {
+                    let shown = drawn.intersect(on_screen);
+                    drawable(to_texels.transform_rect_bbox(shown), FARTHEST_TEXEL)
+                })
     }
 
     fn punch(&mut self, hole: &BezPath, base: Affine) {
@@ -828,8 +879,7 @@ impl<C: Canvas> Encoder<'_, C> {
                 Op::Fill { path, paint }
                     if self.reaches(path.control_box(), transform)
                         && self.budget.affords(path, transform, self.drawn)
-                        && (matches!(paint, PaintType::Solid(_))
-                            || self.budget.affords_paint()) =>
+                        && self.budget.affords_paint(paint) =>
                 {
                     self.canvas.set_paint(paint.clone());
                     self.canvas.fill_path(path);
@@ -841,16 +891,16 @@ impl<C: Canvas> Encoder<'_, C> {
                     sampler,
                     placement,
                 } => {
-                    if !self.reaches(path.control_box(), transform)
-                        || !self.samples(path, transform, *placement)
-                        || !self.budget.affords(path, transform, self.drawn)
-                        || !self.budget.affords_paint()
-                    {
-                        continue;
-                    }
                     let Some(id) = self.caches.images.get(image.id()) else {
                         continue;
                     };
+                    if !self.reaches(path.control_box(), transform)
+                        || !self.samples(path, transform, *placement)
+                        || !self.budget.affords(path, transform, self.drawn)
+                        || !spend(&mut self.budget.paints)
+                    {
+                        continue;
+                    }
                     self.canvas.set_paint(PaintType::Image(vello_cpu::Image {
                         image: ImageSource::opaque_id(id),
                         sampler: *sampler,
@@ -866,8 +916,11 @@ impl<C: Canvas> Encoder<'_, C> {
                     color,
                 } => {
                     let reach = f64::from(*std_dev) * SHADOW_DEVIATIONS;
-                    if !self.reaches(rect.inflate(reach, reach), transform)
-                        || !self.budget.affords_paint()
+                    let blurred = rect.inflate(reach, reach);
+                    let edge = blurred.to_path(TOLERANCE);
+                    if !self.reaches(blurred, transform)
+                        || !self.budget.affords(&edge, transform, self.drawn)
+                        || !spend(&mut self.budget.paints)
                     {
                         continue;
                     }
@@ -893,6 +946,7 @@ impl<C: Canvas> Encoder<'_, C> {
                         transform.transform_rect_bbox(clip.control_box()),
                         FARTHEST_ON_SCREEN,
                     );
+                    let shown = shown && self.budget.affords(clip, transform, self.drawn);
                     let clip = match shown {
                         true => clip.clone(),
                         false => BezPath::new(),

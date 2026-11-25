@@ -86,9 +86,8 @@ writes a hex value, a corner radius or a font name of its own.
 
 - **Tokens.** See [Design tokens](#design-tokens).
 - **Scene.** A `Scene` of fills, strokes, linear, radial and conic gradients, rounded
-  rectangles, clips, opacity and blend layers (`Item::Blend`, the CSS `mix-blend-mode` set),
-  2D transforms (`Item::Transform`), shadows, text, images (`Image::from_rgba` or
-  `from_premultiplied`, uploaded once per renderer and freed when the last `Image` drops;
+  rectangles, clips, opacity layers, 2D transforms (`Item::Transform`), shadows, text, images
+  (`Image::from_rgba` or `from_premultiplied`, uploaded once per renderer and freed when the last `Image` drops;
   `Image::shared` wraps an app's premultiplied `Arc<[u8]>` and copies it only while a renderer
   needs a CPU pixmap, so the GPU path keeps no second copy; `Item::Tiles` repeats one), and glyph runs laid out elsewhere (`Item::Glyphs`, e.g. a web page's, drawn
   from their own `FontData` without reshaping), which `CpuRenderer` (`vello_cpu`) and
@@ -101,7 +100,10 @@ writes a hex value, a corner radius or a font name of its own.
     within 1/255 of their exact area coverage. Glyph outlines come from `skrifa`, unhinted and in
     font units (no 26.6 rounding), are cached per glyph and size, and are drawn at fractional
     pen positions with grayscale antialiasing. Colour glyphs (COLR,
-    CBDT, sbix, SVG) go through Vello's glyph renderer.
+    CBDT, sbix) are drawn once per size as images on whole pixels; one that cannot be drawn is
+    set as a plain glyph.
+  - What no window can show (absurd sizes and places) is left out, and so is what is over the
+    renderer's room in a frame for coverage, paints, gradients and images.
   - Shadows are Gaussian with σ = blur radius / 2, as CSS `box-shadow`. Vello's blurred rounded
     rectangle falls off as if its `std_dev` were σ/√2 (8 px outside an edge it gives 0.157 of the
     colour where a Gaussian with σ = 12 gives 0.252), so the toolkit passes σ·√2; edges then

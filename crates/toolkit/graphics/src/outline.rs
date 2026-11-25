@@ -17,8 +17,9 @@ use crate::text::GlyphRun;
 
 pub(crate) const TOLERANCE: f64 = 0.004;
 
+const LAYERS_TABLE: Tag = Tag::new(b"COLR");
 const COLOR_TABLES: [Tag; 4] = [
-    Tag::new(b"COLR"),
+    LAYERS_TABLE,
     Tag::new(b"CBDT"),
     Tag::new(b"sbix"),
     Tag::new(b"SVG "),
@@ -65,9 +66,10 @@ struct Entry<T> {
 #[derive(Default)]
 pub(crate) struct GlyphOutlines {
     glyphs: HashMap<GlyphKey, Entry<GlyphOutline>>,
-    coloured: HashMap<(GlyphKey, Color), Entry<GlyphBitmap>>,
+    coloured: HashMap<(GlyphKey, Option<Color>), Entry<GlyphBitmap>>,
     scale: f64,
     color_fonts: HashMap<FontKey, bool>,
+    layered_fonts: HashMap<FontKey, bool>,
     frame: u64,
 }
 
@@ -131,7 +133,14 @@ impl GlyphOutlines {
         *self
             .color_fonts
             .entry(font_key(run))
-            .or_insert_with(|| has_color_tables(run))
+            .or_insert_with(|| has_any_table(run, &COLOR_TABLES))
+    }
+
+    fn is_layered_font(&mut self, run: &GlyphRun) -> bool {
+        *self
+            .layered_fonts
+            .entry(font_key(run))
+            .or_insert_with(|| has_any_table(run, &[LAYERS_TABLE]))
     }
 
     pub(crate) fn outline(&mut self, run: &GlyphRun, glyph: u32) -> Option<Arc<GlyphOutline>> {
@@ -152,9 +161,10 @@ impl GlyphOutlines {
 
     pub(crate) fn coloured(&mut self, run: &GlyphRun, glyph: u32) -> Option<Arc<GlyphBitmap>> {
         let (frame, scale) = (self.frame, self.scale);
+        let foreground = self.is_layered_font(run).then_some(run.color);
         let entry = self
             .coloured
-            .entry((glyph_key(run, glyph), run.color))
+            .entry((glyph_key(run, glyph), foreground))
             .or_insert_with(|| Entry {
                 drawn: coloured(run, glyph, scale).map(Arc::new),
                 used: frame,
@@ -189,12 +199,9 @@ fn font_key(run: &GlyphRun) -> FontKey {
     }
 }
 
-fn has_color_tables(run: &GlyphRun) -> bool {
-    FontRef::from_index(run.font_bytes(), run.font_index()).is_ok_and(|font| {
-        COLOR_TABLES
-            .iter()
-            .any(|tag| font.table_data(*tag).is_some())
-    })
+fn has_any_table(run: &GlyphRun, tables: &[Tag]) -> bool {
+    FontRef::from_index(run.font_bytes(), run.font_index())
+        .is_ok_and(|font| tables.iter().any(|tag| font.table_data(*tag).is_some()))
 }
 
 fn glyph_key(run: &GlyphRun, glyph: u32) -> GlyphKey {
@@ -374,7 +381,7 @@ pub(crate) fn ink(runs: &[GlyphRun]) -> Option<Rect> {
             let (coloured, known) = bounds
                 .fonts
                 .entry(font)
-                .or_insert_with(|| (has_color_tables(run), HashMap::new()));
+                .or_insert_with(|| (has_any_table(run, &COLOR_TABLES), HashMap::new()));
             let known_before = known.len();
             let transform = run_transform(run);
             for glyph in &run.glyphs {

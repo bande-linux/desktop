@@ -291,8 +291,7 @@ fn atlas_size(needed: (u32, u32), limit: u32) -> Option<(u16, u16)> {
     Some((side(needed.0)?, side(needed.1)?))
 }
 
-/// Places images as the renderer will, so that one it has no room for is never handed to it.
-fn room(atlas: (u16, u16), atlas_pixels: u64) -> ImageCache {
+fn room_as_the_renderer_places_images(atlas: (u16, u16), atlas_pixels: u64) -> ImageCache {
     ImageCache::new_with_config(
         atlas_settings(atlas, atlas_pixels)
             .memory_settings
@@ -365,7 +364,7 @@ impl GpuRenderer {
             atlas,
             renderer,
             resources,
-            room: room(atlas, atlas_pixels),
+            room: room_as_the_renderer_places_images(atlas, atlas_pixels),
             atlas_pixels,
             caches: Caches::default(),
             scene: vello_gpu::Scene::new(1, 1),
@@ -537,19 +536,24 @@ impl GpuRenderer {
             }
             self.gpu.queue.submit([clearing.finish()]);
         }
-        if images
+        let held = images
             .iter()
-            .all(|image| self.caches.images.get(image.id()).is_some())
-        {
+            .filter(|image| self.caches.images.get(image.id()).is_some())
+            .count();
+        if held == images.len() {
             return;
         }
+        let holds_others = self.caches.images.len() > held;
         let mut encoder = self
             .gpu
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
         if !self.upload(&images, &mut encoder) {
-            self.empty_atlas();
-            if !self.upload(&images, &mut encoder) {
+            let fitted = holds_others && {
+                self.empty_atlas();
+                self.upload(&images, &mut encoder)
+            };
+            if !fitted {
                 static TOLD: Once = Once::new();
                 TOLD.call_once(|| {
                     tracing::warn!("leaving out images, the GPU has no room for a frame's");
@@ -593,7 +597,7 @@ impl GpuRenderer {
     fn empty_atlas(&mut self) {
         (self.renderer, self.resources) =
             renderer(&self.gpu.device, self.format, self.atlas, self.atlas_pixels);
-        self.room = room(self.atlas, self.atlas_pixels);
+        self.room = room_as_the_renderer_places_images(self.atlas, self.atlas_pixels);
         self.caches.images = Default::default();
     }
 

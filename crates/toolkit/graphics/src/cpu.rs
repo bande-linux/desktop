@@ -62,17 +62,7 @@ impl CpuRenderer {
         rgba: &mut [u8],
     ) -> Result<(), DrawError> {
         crate::render::extent(scene, scale)?;
-        let too_large = || DrawError::TooLarge {
-            width: region.width,
-            height: region.height,
-        };
-        let side = |length: u32| {
-            u16::try_from(length)
-                .ok()
-                .filter(|side| *side <= crate::render::LONGEST_SIDE)
-                .ok_or_else(too_large)
-        };
-        let (width, height) = (side(region.width)?, side(region.height)?);
+        let (width, height) = crate::render::sides(region.width, region.height)?;
         self.context.reset_and_resize(width, height);
         let frame = Frame {
             scale,

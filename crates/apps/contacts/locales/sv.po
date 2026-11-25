@@ -321,9 +321,6 @@ msgstr "Inget namn"
 msgid "All Contacts"
 msgstr "Alla kontakter"
 
-msgid "Account Settings"
-msgstr "Kontoinställningar"
-
 msgid "Offline"
 msgstr "Frånkopplad"
 

@@ -501,12 +501,20 @@ impl Library {
             self.remove_calendar(index);
         }
         for info in calendars {
-            if !self
+            match self
                 .calendars
                 .iter()
-                .any(|calendar| calendar.info.account == id && calendar.info.url == info.url)
+                .position(|calendar| calendar.info.account == id && calendar.info.url == info.url)
             {
-                self.add_calendar(info);
+                Some(index) => {
+                    let kept = &mut self.calendars[index].info;
+                    kept.name = info.name;
+                    kept.read_only = info.read_only;
+                    self.save(index);
+                }
+                None => {
+                    self.add_calendar(info);
+                }
             }
         }
     }

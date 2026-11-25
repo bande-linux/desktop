@@ -215,6 +215,7 @@ pub struct Library {
     pub accounts: Vec<Account>,
     pub books: Vec<Book>,
     held: Option<BTreeSet<usize>>,
+    revision: u64,
 }
 
 impl Library {
@@ -241,6 +242,7 @@ impl Library {
             accounts,
             books,
             held: None,
+            revision: 0,
         };
         library.ensure_local();
         library
@@ -304,7 +306,13 @@ impl Library {
         }
     }
 
+    /// Counts the changes to the books, for those who follow them.
+    pub fn revision(&self) -> u64 {
+        self.revision
+    }
+
     pub fn save(&mut self, index: usize) {
+        self.revision += 1;
         if let Some(held) = &mut self.held {
             held.insert(index);
             return;
@@ -351,12 +359,20 @@ impl Library {
             self.remove_book(index);
         }
         for info in books {
-            if !self
+            match self
                 .books
                 .iter()
-                .any(|book| book.info.account == id && book.info.url == info.url)
+                .position(|book| book.info.account == id && book.info.url == info.url)
             {
-                self.add_book(info);
+                Some(index) => {
+                    let kept = &mut self.books[index].info;
+                    kept.name = info.name;
+                    kept.read_only = info.read_only;
+                    self.save(index);
+                }
+                None => {
+                    self.add_book(info);
+                }
             }
         }
     }
@@ -366,6 +382,7 @@ impl Library {
             return;
         }
         let book = self.books.remove(index);
+        self.revision += 1;
         if let Some(dir) = &self.dir
             && let Err(error) = std::fs::remove_file(book_file(dir, &book.info.id))
         {

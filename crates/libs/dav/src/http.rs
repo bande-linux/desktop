@@ -468,11 +468,11 @@ pub fn join(base: &str, href: &str) -> String {
 }
 
 pub fn same_resource(a: &str, b: &str) -> bool {
-    let normal = |url: &str| {
-        let decoded = percent_decode(url);
-        decoded.trim_end_matches('/').to_owned()
-    };
-    normal(a) == normal(b)
+    resource_key(a) == resource_key(b)
+}
+
+pub(crate) fn resource_key(url: &str) -> String {
+    percent_decode(url).trim_end_matches('/').to_owned()
 }
 
 pub fn percent_decode(text: &str) -> String {

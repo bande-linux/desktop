@@ -569,6 +569,8 @@ impl CalendarView {
     pub fn set_focused(&mut self, focused: bool) {
         if !focused {
             self.press = None;
+        } else if self.settings.birthdays {
+            self.refresh_birthdays();
         }
     }
 

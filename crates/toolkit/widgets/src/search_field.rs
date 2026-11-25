@@ -33,6 +33,10 @@ impl SearchField {
         self.field.text()
     }
 
+    pub fn clear(&mut self) {
+        self.field.clear();
+    }
+
     pub fn selection(&self) -> Range<usize> {
         self.field.selection()
     }

@@ -61,7 +61,7 @@ enum Intent {
     Letter(String),
     Command(&'static str),
     Row(String, String),
-    Sidebar(String, String),
+    Sidebar(String),
     Confirm(String),
     Import(bool),
     Open(String),
@@ -174,11 +174,11 @@ fn photo_image(photo: Option<&Photo>) -> Option<Image> {
 }
 
 fn birthday_text(formats: &Formats, birthday: Birthday) -> String {
-    let date = jiff::civil::date(birthday.year.unwrap_or(2000), birthday.month, birthday.day);
-    match date.to_zoned(jiff::tz::TimeZone::UTC) {
-        Ok(zoned) => formats.date(&zoned, birthday.year.is_some()),
-        Err(_) => String::new(),
-    }
+    birthday
+        .date()
+        .and_then(|date| date.to_zoned(jiff::tz::TimeZone::UTC).ok())
+        .map(|zoned| formats.date(&zoned, birthday.year.is_some()))
+        .unwrap_or_default()
 }
 
 fn address_text(address: &Address) -> String {
@@ -220,21 +220,29 @@ fn groups_of(library: &Library, book: usize, contact: &Contact, uid: &str) -> Ve
     groups.into_iter().collect()
 }
 
-fn book_groups(library: &Library, book: usize) -> Vec<String> {
-    let mut groups = BTreeSet::new();
+/// The names of the group cards in `book`, and the `CATEGORIES` of its contacts.
+fn named_groups(library: &Library, book: usize) -> (BTreeSet<String>, BTreeSet<String>) {
+    let mut cards = BTreeSet::new();
+    let mut categories = BTreeSet::new();
     if let Some(book) = library.books.get(book) {
         for card in book.cards.iter().filter_map(|stored| stored.shown()) {
             match card.kind() {
                 Kind::Group => {
-                    groups.insert(display_name(&card.details()));
+                    cards.insert(display_name(&card.details()));
                 }
-                _ => groups.extend(card.details().categories),
+                _ => categories.extend(card.details().categories),
             }
         }
     }
-    groups
-        .into_iter()
+    (cards, categories)
+}
+
+fn book_groups(library: &Library, book: usize) -> Vec<String> {
+    let (cards, categories) = named_groups(library, book);
+    cards
+        .union(&categories)
         .filter(|group| !group.is_empty())
+        .cloned()
         .collect()
 }
 
@@ -260,14 +268,7 @@ impl ContactsView {
                         MenuItem::new(&tr!("Remove Account…"), &format!("remove:{account}")),
                     ]))
                 },
-                move |action, keys| {
-                    if let Some(key) = keys.first() {
-                        push(
-                            &sidebar_menu,
-                            Intent::Sidebar(action.to_owned(), key.clone()),
-                        );
-                    }
-                },
+                move |action, _| push(&sidebar_menu, Intent::Sidebar(action.to_owned())),
             );
         let sidebar_id = sidebar.id();
         let searching = Rc::clone(&intents);
@@ -457,6 +458,8 @@ impl ContactsView {
     pub fn can(&self, command: &str) -> bool {
         let selected = self.selected_found();
         match command {
+            REFRESH => true,
+            _ if self.ui.has_sheet() => false,
             EDIT_CONTACT | DELETE_CONTACT => {
                 self.editor.is_none() && selected.is_some_and(|found| self.writable(found.book))
             }
@@ -470,6 +473,7 @@ impl ContactsView {
 
     fn in_scope(&self, found: &Found, card: &Card) -> bool {
         match self.scope.split_once(':') {
+            Some(("account", id)) => self.library.books[found.book].info.account == id,
             Some(("book", id)) => self.library.books[found.book].info.id == id,
             Some(("group", rest)) => {
                 let Some((id, group)) = rest.split_once(':') else {
@@ -480,6 +484,21 @@ impl ContactsView {
                         .iter()
                         .any(|name| name == group)
             }
+            _ => true,
+        }
+    }
+
+    fn scope_exists(&self) -> bool {
+        match self.scope.split_once(':') {
+            Some(("account", id)) => self.library.account(id).is_some(),
+            Some(("book", id)) => self.library.book_index(id).is_some(),
+            Some(("group", rest)) => rest.split_once(':').is_some_and(|(id, group)| {
+                self.library.book_index(id).is_some_and(|book| {
+                    book_groups(&self.library, book)
+                        .iter()
+                        .any(|name| name == group)
+                })
+            }),
             _ => true,
         }
     }
@@ -558,13 +577,10 @@ impl ContactsView {
             }
             headings.push(Heading::new(rows.len(), Self::account_name(account)));
             if account.kind != AccountKind::Local {
-                rows.push(
-                    Row::new(
-                        format!("account:{}", account.id),
-                        vec![Cell::new(tr!("Account Settings")).muted()],
-                    )
-                    .dimmed(),
-                );
+                rows.push(Row::new(
+                    format!("account:{}", account.id),
+                    vec![Cell::new(tr!("All Contacts"))],
+                ));
             }
             for book in books {
                 let info = &self.library.books[book].info;
@@ -670,6 +686,45 @@ impl ContactsView {
             )));
         }
         boxed(Stack::new(Axis::Vertical, SPACING, PADDING * 2.0, children))
+    }
+
+    fn account_page(&self, account: &Account) -> Box<dyn Widget> {
+        let button = |title: String, action: &str| {
+            let intents = Rc::clone(&self.intents);
+            let action = format!("{action}:{}", account.id);
+            boxed(Button::new(&title, move || {
+                push(&intents, Intent::Sidebar(action.clone()))
+            }))
+        };
+        boxed(Stack::new(
+            Axis::Vertical,
+            SPACING,
+            PADDING * 2.0,
+            vec![
+                boxed(Label::heading(&Self::account_name(account))),
+                boxed(Stack::new(
+                    Axis::Horizontal,
+                    8.0,
+                    0.0,
+                    vec![
+                        button(tr!("Server Settings…"), "settings"),
+                        button(tr!("Remove Account…"), "remove"),
+                    ],
+                )),
+            ],
+        ))
+    }
+
+    fn nothing_selected(&self) -> Box<dyn Widget> {
+        let account = self
+            .scope
+            .strip_prefix("account:")
+            .filter(|_| self.query.trim().is_empty())
+            .and_then(|account| self.library.account(account));
+        match account {
+            Some(account) => self.account_page(account),
+            None => self.empty_state(),
+        }
     }
 
     fn detail(&self, found: &Found) -> Box<dyn Widget> {
@@ -780,6 +835,9 @@ impl ContactsView {
 
     /// Shows the library as it is now.
     pub fn refresh(&mut self) {
+        if !self.scope_exists() {
+            ALL.clone_into(&mut self.scope);
+        }
         self.rebuild_list();
         self.duplicates = self.duplicates().len();
         let rows: Vec<Row> = self
@@ -799,9 +857,7 @@ impl ContactsView {
         if let Some(list) = self.ui.widget_as::<Table>(self.list) {
             list.set_rows(rows);
             list.set_headings(headings);
-            if let Some(key) = &selected {
-                list.select(std::slice::from_ref(key));
-            }
+            list.select(selected.as_slice());
         }
         if let Some(index) = self.ui.widget_as::<LetterIndex>(self.index) {
             index.set_letters(letters);
@@ -821,7 +877,7 @@ impl ContactsView {
         if self.editor.is_none() {
             let detail = match self.selected_found() {
                 Some(found) => self.detail(&found),
-                None => self.empty_state(),
+                None => self.nothing_selected(),
             };
             self.set_detail(detail);
         }
@@ -840,6 +896,9 @@ impl ContactsView {
     pub fn select_uid(&mut self, uid: &str) {
         self.scope = ALL.to_owned();
         self.query.clear();
+        if let Some(search) = self.ui.widget_as::<SearchField>(self.search) {
+            search.clear();
+        }
         self.rebuild_list();
         if let Some(shown) = self.shown.iter().find(|shown| {
             self.library
@@ -862,7 +921,14 @@ impl ContactsView {
             })
             .and_then(|id| self.library.book_index(id))
             .filter(|book| self.writable(*book));
+        let of_account = || {
+            let account = self.scope.strip_prefix("account:")?;
+            (0..self.library.books.len()).find(|book| {
+                self.library.books[*book].info.account == account && self.writable(*book)
+            })
+        };
         scoped
+            .or_else(of_account)
             .or_else(|| {
                 self.library
                     .books
@@ -964,9 +1030,10 @@ impl ContactsView {
 
     /// Puts the chosen picture into the contact being edited, made small enough for a card.
     pub fn set_photo(&mut self, photo: Photo) {
-        let Some(mut editor) = self.editor.take() else {
+        let Some(mut editor) = self.editor.take_if(|editor| editor.choosing_photo) else {
             return;
         };
+        editor.choosing_photo = false;
         let contact = editor.read(&self.ui);
         editor.photo = Some(photo);
         let contact = Contact {
@@ -1017,12 +1084,8 @@ impl ContactsView {
         }
     }
 
-    fn set_groups(&mut self, book: usize, uid: &str, groups: &[String], steps: &mut Vec<Step>) {
-        if !self.library.books[book].uses_group_cards() {
-            return;
-        }
-        let names = book_groups(&self.library, book);
-        let group_cards: Vec<(usize, Card)> = self.library.books[book]
+    fn group_cards(&self, book: usize) -> Vec<(usize, Card)> {
+        self.library.books[book]
             .cards
             .iter()
             .enumerate()
@@ -1032,8 +1095,41 @@ impl ContactsView {
                     .filter(|card| card.kind() == Kind::Group)
                     .map(|card| (index, card.clone()))
             })
-            .collect();
-        for (index, mut card) in group_cards {
+            .collect()
+    }
+
+    /// Puts `uid` in the place of the `gone` contacts in the group cards that list them.
+    fn replace_members(
+        &mut self,
+        book: usize,
+        gone: &HashSet<String>,
+        uid: &str,
+        steps: &mut Vec<Step>,
+    ) {
+        for (index, mut card) in self.group_cards(book) {
+            let mut members = card.members();
+            let listed = members.len();
+            members.retain(|member| !gone.contains(member));
+            if members.len() == listed {
+                continue;
+            }
+            if !members.iter().any(|member| member == uid) {
+                members.push(uid.to_owned());
+            }
+            card.set_members(&members);
+            if let Some(href) = self.href_of(book, index) {
+                steps.push(self.step_for(book, &href));
+            }
+            self.library.put_card(book, card);
+        }
+    }
+
+    fn set_groups(&mut self, book: usize, uid: &str, groups: &[String], steps: &mut Vec<Step>) {
+        if !self.library.books[book].uses_group_cards() {
+            return;
+        }
+        let names = book_groups(&self.library, book);
+        for (index, mut card) in self.group_cards(book) {
             let name = display_name(&card.details());
             let mut members = card.members();
             let wanted = groups.contains(&name);
@@ -1078,20 +1174,22 @@ impl ContactsView {
         let book = self
             .library
             .book_index(&editor.book)
+            .filter(|book| self.writable(*book))
             .unwrap_or_else(|| self.default_book());
-        let uses_cards = self
-            .library
-            .books
-            .get(book)
-            .is_some_and(|book| book.uses_group_cards());
-        if !uses_cards {
-            contact.categories = editor.groups.clone();
+        contact.categories = editor.groups.clone();
+        if self.library.books[book].uses_group_cards() {
+            let (cards, categories) = named_groups(&self.library, book);
+            contact.categories.retain(|group| {
+                editor.base.categories.contains(group)
+                    || (categories.contains(group) && !cards.contains(group))
+            });
         }
         let mut steps = Vec::new();
         let existing = editor
             .key
             .as_ref()
-            .and_then(|key| found_by(&self.library, key));
+            .and_then(|key| found_by(&self.library, key))
+            .filter(|found| found.book == book);
         let created = existing.is_none();
         let (index, uid) = match existing {
             Some(found) => {
@@ -1310,7 +1408,7 @@ impl ContactsView {
                     continue;
                 };
                 let uid = merged.uid().to_owned();
-                let mut groups = groups_of(&view.library, book, &merged.details(), &uid);
+                let mut gone = HashSet::new();
                 steps.extend(
                     view.href_of(book, kept.card)
                         .map(|href| view.step_for(book, &href)),
@@ -1322,7 +1420,7 @@ impl ContactsView {
                     let Some(card) = view.library.card(&found) else {
                         continue;
                     };
-                    groups.extend(groups_of(&view.library, book, &card.details(), card.uid()));
+                    gone.insert(card.uid().to_owned());
                     merged.absorb(card);
                     steps.extend(
                         view.href_of(book, found.card)
@@ -1331,7 +1429,8 @@ impl ContactsView {
                     view.library.remove_card(&found);
                 }
                 view.library.put_card(book, merged);
-                view.set_groups(book, &uid, &groups, &mut steps);
+                gone.remove(&uid);
+                view.replace_members(book, &gone, &uid, &mut steps);
                 books.insert(book);
             }
         });
@@ -1532,6 +1631,9 @@ impl ContactsView {
         if done.is_some() {
             self.setup = None;
         }
+        if let Some(Done::Updated { account, .. }) = &done {
+            self.asked_password.remove(account);
+        }
         done
     }
 
@@ -1610,6 +1712,9 @@ impl ContactsView {
     }
 
     pub fn command(&mut self, command: &str) {
+        if self.ui.has_sheet() && command != REFRESH {
+            return;
+        }
         match command {
             NEW_CONTACT if self.editor.is_none() => self.new_contact(Contact::default()),
             EDIT_CONTACT => self.edit_selected(),
@@ -1678,7 +1783,12 @@ impl ContactsView {
                 self.editor = None;
                 self.refresh();
             }
-            Signal::ChoosePhoto => self.requests.push(Request::ChoosePhoto),
+            Signal::ChoosePhoto => {
+                if let Some(editor) = &mut self.editor {
+                    editor.choosing_photo = true;
+                    self.requests.push(Request::ChoosePhoto);
+                }
+            }
             Signal::RemovePhoto => {
                 if let Some(mut editor) = self.editor.take() {
                     let contact = editor.read(&self.ui);
@@ -1714,14 +1824,11 @@ impl ContactsView {
         }
         for intent in intents {
             match intent {
-                Intent::Scope(scope) if scope.starts_with("account:") => {
-                    if let Some(account) = scope.strip_prefix("account:") {
-                        self.account_sheet(account, false);
-                    }
-                    self.refresh();
-                }
                 Intent::Scope(scope) => {
                     if self.scope != scope {
+                        if scope.starts_with("account:") {
+                            self.selected = None;
+                        }
                         self.scope = scope;
                         self.refresh();
                     }
@@ -1760,7 +1867,7 @@ impl ContactsView {
                     }
                     self.refresh();
                 }
-                Intent::Sidebar(action, _) => match action.split_once(':') {
+                Intent::Sidebar(action) => match action.split_once(':') {
                     Some(("settings", account)) => self.account_sheet(account, false),
                     Some(("remove", account)) => self.ask_remove_account(account),
                     _ => {}

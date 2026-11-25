@@ -68,6 +68,7 @@ enum Shown {
 pub struct MessageView {
     path: PathBuf,
     store: Store,
+    contacts: Option<Directory>,
     settings: MailSettings,
     network: Network,
     arrived: Inbox<Arrived>,
@@ -159,6 +160,7 @@ impl MessageView {
         Ok(Self {
             path,
             store,
+            contacts: None,
             settings,
             network: Network::default(),
             arrived,
@@ -531,7 +533,11 @@ impl MessageView {
                 self.open_link(url, claimed);
                 None
             }
-            Target::Address(address) => Some(address_menu(&address, &Directory::open())),
+            Target::Address(address) => {
+                let contacts = self.contacts.get_or_insert_with(Directory::open);
+                contacts.refresh();
+                Some(address_menu(&address, contacts))
+            }
             Target::Attachment(_, index) if secondary => Some(attachment_menu(index)),
             Target::Attachment(_, index) => {
                 self.open_attachment(index);

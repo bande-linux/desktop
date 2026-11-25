@@ -3704,6 +3704,7 @@ impl MailView {
             }
             Target::Link(url, claimed, _) => self.open_link(url, claimed),
             Target::Address(address) => {
+                self.contacts.refresh();
                 self.requests.push(Request::ShowMenu(
                     address_menu(&address, &self.contacts),
                     pointer.position,

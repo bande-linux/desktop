@@ -113,13 +113,16 @@ impl Directory {
         &self.people
     }
 
-    /// Every `(name, address)` pair, by name.
+    /// Every `(name, address)` pair, by name; the name is empty when it is the address.
     pub fn addresses(&self) -> impl Iterator<Item = (&str, &str)> {
         self.people.iter().flat_map(|person| {
-            person
-                .emails
-                .iter()
-                .map(|email| (person.name.as_str(), email.as_str()))
+            person.emails.iter().map(|email| {
+                let name = match person.name == *email {
+                    true => "",
+                    false => person.name.as_str(),
+                };
+                (name, email.as_str())
+            })
         })
     }
 

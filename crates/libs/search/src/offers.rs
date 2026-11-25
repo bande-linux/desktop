@@ -39,6 +39,7 @@ fn sender() -> Option<&'static Sender<Snapshot>> {
                         }
                     }
                 })
+                .inspect_err(|error| tracing::warn!("cannot offer items to search: {error}"))
                 .ok()
                 .map(|_| sender)
         })

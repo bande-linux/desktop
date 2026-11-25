@@ -23,6 +23,7 @@ use bande_inbox::Inbox;
 use bande_l10n::{tr, trn};
 use bande_toolkit::ui::{Event, Key};
 use bande_toolkit::{Appearance, FrameRegions, Rect, Scene, Window, WindowEvent};
+use image::ImageDecoder;
 use zbus::blocking::Connection;
 
 const APP_ID: &str = "org.bande.Contacts";
@@ -193,10 +194,16 @@ fn read_photo(path: &Path) -> Result<Photo, String> {
     if u64::from(width) * u64::from(height) > 100_000_000 {
         return Err(tr!("The picture is too large."));
     }
-    let picture = image::load_from_memory(&bytes)
+    let mut decoder = image::ImageReader::new(std::io::Cursor::new(&bytes))
+        .with_guessed_format()
         .map_err(|error| error.to_string())?
-        .thumbnail(PHOTO_PIXELS, PHOTO_PIXELS)
-        .into_rgb8();
+        .into_decoder()
+        .map_err(|error| error.to_string())?;
+    let orientation = decoder.orientation().map_err(|error| error.to_string())?;
+    let mut picture =
+        image::DynamicImage::from_decoder(decoder).map_err(|error| error.to_string())?;
+    picture.apply_orientation(orientation);
+    let picture = picture.thumbnail(PHOTO_PIXELS, PHOTO_PIXELS).into_rgb8();
     let mut jpeg = Vec::new();
     picture
         .write_to(
@@ -225,10 +232,16 @@ fn contact_from(text: &str) -> Contact {
         None => ("", text),
     };
     let mut contact = Contact::default();
-    let mut words = name.split_whitespace().collect::<Vec<_>>();
-    if let Some(family) = words.pop() {
-        contact.name.family = family.to_owned();
-        contact.name.given = words.join(" ");
+    match name.split_once(',') {
+        Some((family, given)) => {
+            contact.name.family = family.trim().to_owned();
+            contact.name.given = given.trim().to_owned();
+        }
+        None => {
+            let mut words = name.split_whitespace().collect::<Vec<_>>();
+            contact.name.family = words.pop().unwrap_or_default().to_owned();
+            contact.name.given = words.join(" ");
+        }
     }
     if !email.trim().is_empty() {
         contact.emails.push(Labelled {
@@ -409,7 +422,10 @@ impl Contacts {
     fn reply(&mut self, cx: &mut Cx<Self>, reply: Reply) {
         match reply {
             Reply::Synced { account, outcome } => {
-                let Some(view) = self.view(cx) else {
+                let Some(view) = self
+                    .view(cx)
+                    .filter(|view| view.library.account(&account).is_some())
+                else {
                     return;
                 };
                 for (name, status) in &outcome.refused {
@@ -440,7 +456,10 @@ impl Contacts {
                 }
             }
             Reply::Failed { account, error } => {
-                if let Some(view) = self.view(cx) {
+                if let Some(view) = self
+                    .view(cx)
+                    .filter(|view| view.library.account(&account).is_some())
+                {
                     if error == Error::Unauthorized {
                         view.ask_password(&account);
                     }
@@ -649,9 +668,8 @@ impl Contacts {
         let mut arguments = arguments.into_iter();
         while let Some(argument) = arguments.next() {
             if argument == ADD_FLAG {
-                if let Some(address) = arguments.next()
-                    && let Some(view) = self.view(cx)
-                {
+                let address = arguments.next().unwrap_or_default();
+                if let Some(view) = self.view(cx) {
                     view.new_contact(contact_from(&address));
                 }
             } else if let Some(uid) = argument.strip_prefix(CONTACT_ARGUMENT) {

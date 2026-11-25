@@ -68,6 +68,7 @@ pub struct Editor {
     pub key: Option<String>,
     pub base: Contact,
     pub photo: Option<Photo>,
+    pub choosing_photo: bool,
     pub books: Vec<(String, String)>,
     pub book: String,
     pub groups: Vec<String>,
@@ -106,10 +107,22 @@ fn one_line(street: &str) -> String {
     street.replace('\n', ", ")
 }
 
+fn listed_groups(groups: &[String]) -> String {
+    groups.join(", ").trim().to_owned()
+}
+
 fn popup(name: &str, choices: &[String], selected: usize) -> (PopUpButton, WidgetId) {
     let popup = PopUpButton::new(name, choices, selected, |_| {});
     let id = popup.id();
     (popup, id)
+}
+
+fn within_month(birthday: Birthday) -> Birthday {
+    (1..=birthday.day)
+        .rev()
+        .map(|day| Birthday { day, ..birthday })
+        .find(|birthday| birthday.date().is_some())
+        .unwrap_or(birthday)
 }
 
 impl Editor {
@@ -123,6 +136,7 @@ impl Editor {
         Self {
             key,
             photo: base.photo.clone(),
+            choosing_photo: false,
             base,
             books,
             book,
@@ -263,7 +277,7 @@ impl Editor {
                 boxed(Pair::new(boxed(day), DAY_WIDTH, boxed(year))),
             )),
         ));
-        self.group_field = text_line(&mut lines, tr!("Groups"), &self.groups.join(", "));
+        self.group_field = text_line(&mut lines, tr!("Groups"), &listed_groups(&self.groups));
         if self.key.is_none() && self.books.len() > 1 {
             let names: Vec<String> = self.books.iter().map(|(_, name)| name.clone()).collect();
             let selected = self
@@ -391,24 +405,29 @@ impl Editor {
             })
             .collect();
         let (month, day) = (picked(self.month), picked(self.day));
-        contact.birthday = (month > 0 && day > 0).then(|| Birthday {
-            year: text(self.year)
-                .parse()
-                .ok()
-                .filter(|year| (1..=9999).contains(year)),
-            month: month as i8,
-            day: day as i8,
-        });
+        contact.birthday = (month > 0 && day > 0)
+            .then(|| Birthday {
+                year: text(self.year)
+                    .parse()
+                    .ok()
+                    .filter(|year| (1..=9999).contains(year)),
+                month: month as i8,
+                day: day as i8,
+            })
+            .map(within_month);
         contact.note = ui
             .widget_ref::<TextView>(self.note)
             .map(|note| note.text().trim().to_owned())
             .unwrap_or_default();
         contact.photo = self.photo.clone();
-        self.groups = text(self.group_field)
-            .split(',')
-            .map(|group| group.trim().to_owned())
-            .filter(|group| !group.is_empty())
-            .collect();
+        let groups = text(self.group_field);
+        if groups != listed_groups(&self.groups) {
+            self.groups = groups
+                .split(',')
+                .map(|group| group.trim().to_owned())
+                .filter(|group| !group.is_empty())
+                .collect();
+        }
         if let Some(book) = self
             .book_field
             .and_then(|id| self.books.get(picked(id)))

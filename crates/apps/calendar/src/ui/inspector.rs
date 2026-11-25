@@ -561,6 +561,7 @@ impl Inspector {
         let Some(field) = self.invite_field else {
             return;
         };
+        let mut before = before.to_owned();
         let text = self.invite_text.clone();
         let set = |ui: &mut Ui, shown: &str, selected: std::ops::Range<usize>| {
             if let Some(widget) = ui.widget_as::<TextField>(field) {
@@ -581,13 +582,14 @@ impl Inspector {
                 self.invite_text = accepted;
                 return;
             }
+            before = typed;
         }
         let selection = ui
             .widget_ref::<TextField>(field)
             .map(TextField::selection)
             .unwrap_or_default();
         if text.len() <= before.len()
-            || !text.starts_with(before)
+            || !text.starts_with(&before)
             || selection != (text.len()..text.len())
         {
             return;

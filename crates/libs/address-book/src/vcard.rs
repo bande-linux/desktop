@@ -84,6 +84,13 @@ pub struct Birthday {
     pub day: i8,
 }
 
+impl Birthday {
+    /// Its date, in a leap year when it has no year, or nothing when there is no such day.
+    pub fn date(self) -> Option<jiff::civil::Date> {
+        jiff::civil::Date::new(self.year.unwrap_or(2000), self.month, self.day).ok()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Photo {
     pub mime: String,
@@ -394,8 +401,8 @@ fn parse_birthday(value: &str) -> Option<Birthday> {
     };
     let month = i8::try_from(number(rest.get(..2)?)?).ok()?;
     let day = i8::try_from(number(rest.get(2..4)?)?).ok()?;
-    let valid = (1..=12).contains(&month) && (1..=31).contains(&day);
-    valid.then_some(Birthday { year, month, day })
+    let birthday = Birthday { year, month, day };
+    birthday.date().map(|_| birthday)
 }
 
 fn birthday_text(birthday: Birthday) -> String {

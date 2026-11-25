@@ -813,13 +813,15 @@ impl ComposeView {
             self.typed.push((field, text));
             return;
         };
-        let before = std::mem::replace(&mut self.typed[at].1, text.clone());
-        if let Some(completion) = completion
-            && let Some(separator) = text.strip_prefix(completion.typed.as_str())
-            && [",", ";"].contains(&separator)
-        {
-            self.set_field(field, &format!("{}, ", completion.shown), None);
-            return;
+        let mut before = std::mem::replace(&mut self.typed[at].1, text.clone());
+        if let Some(completion) = completion {
+            if let Some(separator) = text.strip_prefix(completion.typed.as_str())
+                && [",", ";"].contains(&separator)
+            {
+                self.set_field(field, &format!("{}, ", completion.shown), None);
+                return;
+            }
+            before = completion.typed;
         }
         let selection = self
             .ui

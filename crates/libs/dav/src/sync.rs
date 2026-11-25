@@ -1,9 +1,9 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 
 use crate::client::{Client, Precondition, Resource};
-use crate::http::{Error, same_resource};
+use crate::http::{Error, resource_key};
 
 /// A local change that the server does not have yet.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -160,17 +160,32 @@ fn push(client: &Client, items: &[Local<'_>], outcome: &mut Outcome) -> Result<(
     Ok(())
 }
 
-fn known_etags(items: &[Local<'_>], outcome: &Outcome) -> HashMap<String, Option<String>> {
-    let mut known: HashMap<String, Option<String>> = items
-        .iter()
-        .filter(|local| local.pending != Some(Pending::Create))
-        .map(|local| (local.href.to_owned(), local.etag.map(str::to_owned)))
-        .collect();
+struct Known {
+    href: String,
+    etag: Option<String>,
+}
+
+fn known_resources(items: &[Local<'_>], outcome: &Outcome) -> HashMap<String, Known> {
+    let mut known = HashMap::new();
+    let mut know = |href: &str, etag: Option<&str>| {
+        known.insert(
+            resource_key(href),
+            Known {
+                href: href.to_owned(),
+                etag: etag.map(str::to_owned),
+            },
+        );
+    };
+    for local in items {
+        if local.pending != Some(Pending::Create) {
+            know(local.href, local.etag);
+        }
+    }
     for upsert in &outcome.upserts {
-        known.insert(upsert.href.clone(), upsert.etag.clone());
+        know(&upsert.href, upsert.etag.as_deref());
     }
     for removed in &outcome.removed {
-        known.remove(removed);
+        known.remove(&resource_key(removed));
     }
     known
 }
@@ -179,16 +194,13 @@ fn fetch_changed(
     client: &Client,
     url: &str,
     listed: Vec<(String, Option<String>)>,
-    known: &HashMap<String, Option<String>>,
+    known: &HashMap<String, Known>,
     outcome: &mut Outcome,
 ) -> Result<(), Error> {
     let wanted: Vec<String> = listed
         .into_iter()
         .filter(|(href, etag)| {
-            let mine = known
-                .iter()
-                .find(|(known, _)| same_resource(known, href))
-                .map(|(_, etag)| etag);
+            let mine = known.get(&resource_key(href)).map(|known| &known.etag);
             etag.is_none() || mine != Some(etag)
         })
         .map(|(href, _)| href)
@@ -196,17 +208,20 @@ fn fetch_changed(
     if wanted.is_empty() {
         return Ok(());
     }
+    let mut upserted: HashMap<String, usize> = outcome
+        .upserts
+        .iter()
+        .enumerate()
+        .map(|(index, upsert)| (upsert.href.clone(), index))
+        .collect();
     for resource in client.multiget(url, &wanted)? {
         let href = known
-            .keys()
-            .find(|known| same_resource(known, &resource.url))
-            .cloned()
-            .unwrap_or(resource.url);
-        match outcome
-            .upserts
-            .iter_mut()
-            .find(|upsert| upsert.href == href)
-        {
+            .get(&resource_key(&resource.url))
+            .map_or(resource.url, |known| known.href.clone());
+        let at = *upserted
+            .entry(href.clone())
+            .or_insert(outcome.upserts.len());
+        match outcome.upserts.get_mut(at) {
             Some(upsert) => {
                 upsert.etag = resource.etag;
                 upsert.data = resource.data;
@@ -223,17 +238,17 @@ fn fetch_changed(
 }
 
 fn forget_unlisted<'a>(
-    listed: impl Iterator<Item = &'a String> + Clone,
-    known: &HashMap<String, Option<String>>,
+    listed: impl Iterator<Item = &'a String>,
+    known: &HashMap<String, Known>,
     outcome: &mut Outcome,
 ) {
-    for href in known.keys() {
-        if !listed.clone().any(|listed| same_resource(listed, href))
-            && !outcome.removed.contains(href)
-        {
-            outcome.removed.push(href.clone());
-        }
-    }
+    let listed: HashSet<String> = listed.map(|href| resource_key(href)).collect();
+    outcome.removed.extend(
+        known
+            .iter()
+            .filter(|(key, _)| !listed.contains(*key))
+            .map(|(_, known)| known.href.clone()),
+    );
 }
 
 /// Pushes the pending changes of the collection at `url`, then pulls what changed on the
@@ -269,7 +284,7 @@ fn pull(
     items: &[Local<'_>],
     outcome: &mut Outcome,
 ) -> Result<(), Error> {
-    let known = known_etags(items, outcome);
+    let known = known_resources(items, outcome);
     let (ctag, token) = client.collection_tags(url)?;
     let has_pending = items.iter().any(|local| local.pending.is_some());
     if token.is_some() && token != outcome.sync_token {
@@ -289,8 +304,8 @@ fn pull(
             forget_unlisted(delta.changed.iter().map(|(href, _)| href), &known, outcome);
         }
         for href in &delta.removed {
-            if let Some(mine) = known.keys().find(|known| same_resource(known, href)) {
-                outcome.removed.push(mine.clone());
+            if let Some(mine) = known.get(&resource_key(href)) {
+                outcome.removed.push(mine.href.clone());
             }
         }
         fetch_changed(client, url, delta.changed, &known, outcome)?;
@@ -328,8 +343,9 @@ pub fn merge<T: Cached>(
             .iter()
             .any(|copy| copy.sent.as_ref().is_some_and(|sent| sent.still(item)))
     };
+    let removed: HashSet<&str> = removed.iter().map(String::as_str).collect();
     items.retain_mut(|item| {
-        if !removed.iter().any(|href| href == item.href()) {
+        if !removed.contains(item.href()) {
             return true;
         }
         match item.pending() {
@@ -342,9 +358,14 @@ pub fn merge<T: Cached>(
             _ => false,
         }
     });
+    let mut places: HashMap<String, usize> = HashMap::new();
+    for (index, item) in items.iter().enumerate() {
+        places.entry(item.href().to_owned()).or_insert(index);
+    }
     for upsert in upserts {
         let taken = upsert.sent.as_ref().is_some_and(|sent| sent.taken);
-        match items.iter_mut().find(|item| item.href() == upsert.href) {
+        let place = *places.entry(upsert.href.clone()).or_insert(items.len());
+        match items.get_mut(place) {
             Some(item) => {
                 let changed_meanwhile = item.pending().is_some()
                     && !upsert.sent.as_ref().is_some_and(|sent| sent.still(item));

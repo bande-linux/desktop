@@ -300,6 +300,7 @@ impl Setup {
     }
 
     fn working(&mut self, ui: &mut Ui, status: &str) {
+        self.id = NEXT_SETUP.fetch_add(1, Ordering::Relaxed);
         let closed = Rc::new(Cell::new(false));
         let choices = Rc::clone(&self.choices);
         let alert = Alert::new(status, "", move |action| {

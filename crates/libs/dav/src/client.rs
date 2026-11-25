@@ -1,3 +1,5 @@
+use std::collections::{BTreeMap, BTreeSet};
+
 use bande_discovery::{Resolver, domain_of};
 
 use crate::http::{
@@ -9,6 +11,7 @@ use crate::xml::{
 
 const MAX_REDIRECTS: usize = 5;
 const MULTIGET_BATCH: usize = 50;
+const MAX_SYNC_PAGES: usize = 10_000;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RemoteCalendar {
@@ -407,26 +410,45 @@ impl Client {
         ))
     }
 
-    pub fn sync_collection(&self, calendar: &str, token: Option<&str>) -> Result<Delta, Error> {
-        let (url, status) =
-            self.multistatus("REPORT", calendar, "1", &xml::sync_collection(token))?;
-        let mut delta = Delta {
-            token: status.sync_token.clone(),
-            ..Delta::default()
-        };
-        for entry in status.entries {
-            let href = join(&url, &entry.href);
-            if same_resource(&href, &url) {
-                continue;
+    /// What changed since `token`, or everything without one, asking again for as long as the
+    /// server truncates its answer (`507`, RFC 6578 section 3.6).
+    pub fn sync_collection(&self, collection: &str, token: Option<&str>) -> Result<Delta, Error> {
+        let mut changed = BTreeMap::new();
+        let mut removed = BTreeSet::new();
+        let mut token = token.map(str::to_owned);
+        for _ in 0..MAX_SYNC_PAGES {
+            let body = xml::sync_collection(token.as_deref());
+            let (url, status) = self.multistatus("REPORT", collection, "1", &body)?;
+            let mut truncated = false;
+            for entry in status.entries {
+                let href = join(&url, &entry.href);
+                if same_resource(&href, &url) {
+                    truncated |= entry.status == Some(507);
+                } else if entry.status == Some(404) {
+                    changed.remove(&href);
+                    removed.insert(href);
+                } else {
+                    let etag = entry.text(DAV, "getetag").map(str::to_owned);
+                    removed.remove(&href);
+                    changed.insert(href, etag);
+                }
             }
-            match entry.status {
-                Some(404) => delta.removed.push(href),
-                _ => delta
-                    .changed
-                    .push((href, entry.text(DAV, "getetag").map(str::to_owned))),
+            if !truncated {
+                return Ok(Delta {
+                    changed: changed.into_iter().collect(),
+                    removed: removed.into_iter().collect(),
+                    token: status.sync_token,
+                });
             }
+            if status.sync_token.is_none() || status.sync_token == token {
+                break;
+            }
+            token = status.sync_token;
         }
-        Ok(delta)
+        Err(Error::Status {
+            status: 507,
+            url: collection.to_owned(),
+        })
     }
 
     pub fn etags(&self, collection: &str) -> Result<Vec<(String, Option<String>)>, Error> {

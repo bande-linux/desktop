@@ -25,10 +25,9 @@ fn fingerprint(library: &Library) -> String {
 
 /// Offers the contacts to the desktop's search when they changed since the last offer.
 pub fn offer_to_search(library: &Library) {
-    static LAST: Mutex<String> = Mutex::new(String::new());
-    let fingerprint = fingerprint(library);
+    static LAST: Mutex<Option<u64>> = Mutex::new(None);
     match LAST.lock() {
-        Ok(mut last) if *last != fingerprint => fingerprint.clone_into(&mut last),
+        Ok(mut last) if *last != Some(library.revision()) => *last = Some(library.revision()),
         _ => return,
     }
     let items = library
@@ -59,5 +58,5 @@ pub fn offer_to_search(library: &Library) {
             }
         })
         .collect();
-    offer_in_background(DOMAIN, fingerprint, items);
+    offer_in_background(DOMAIN, fingerprint(library), items);
 }

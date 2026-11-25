@@ -8,9 +8,11 @@ use bande_toolkit::Appearance;
 use bande_toolkit::ui::{Event, Key, Modifiers};
 
 const FILE: &str = "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:ann\r\nFN:Ann Lindqvist\r\n\
-N:Lindqvist;Ann;;;\r\nEMAIL:ann@fjord.example\r\nEND:VCARD\r\nBEGIN:VCARD\r\nVERSION:3.0\r\n\
+N:Lindqvist;Ann;;;\r\nEMAIL:ann@fjord.example\r\nBDAY:2001-02-29\r\nEND:VCARD\r\nBEGIN:VCARD\r\nVERSION:3.0\r\n\
 UID:bo\r\nFN:Bo Ek\r\nN:Ek;Bo;;;\r\nCATEGORIES:Family\r\nEND:VCARD\r\nBEGIN:VCARD\r\nVERSION:3.0\r\n\
-UID:bo2\r\nFN:Bo Ek\r\nN:Ek;Bo;;;\r\nEMAIL:bo@fjord.example\r\nEND:VCARD\r\n";
+UID:bo2\r\nFN:Bo Ek\r\nN:Ek;Bo;;;\r\nEMAIL:bo@fjord.example\r\nEND:VCARD\r\nBEGIN:VCARD\r\nVERSION:3.0\r\n\
+UID:choir\r\nFN:Choir\r\nX-ADDRESSBOOKSERVER-KIND:group\r\n\
+X-ADDRESSBOOKSERVER-MEMBER:urn:uuid:bo2\r\nEND:VCARD\r\n";
 
 fn tree(view: &mut ContactsView) -> Vec<(NodeId, Node)> {
     view.ui().scene(980, 640);
@@ -87,6 +89,7 @@ fn a_typed_contact_is_undone_and_redone_and_imported_duplicates_merge_into_one()
         listed(&mut view),
         ["Bo Ek", "Bo Ek", "Ann Lindqvist", "Ann Lindqvist"]
     );
+    view.select_uid("ann");
     click(&mut view, "Merge Duplicates…");
     click(&mut view, "Merge");
     assert_eq!(listed(&mut view), ["Bo Ek", "Ann Lindqvist"]);
@@ -120,4 +123,7 @@ fn a_typed_contact_is_undone_and_redone_and_imported_duplicates_merge_into_one()
         .map(|email| email.value)
         .collect();
     assert_eq!(emails, ["ann@fjord.example", "bo@fjord.example"]);
+    let book = &kept.books[0];
+    let choir = book.find("choir").and_then(|at| book.cards[at].shown());
+    assert_eq!(choir.unwrap().members(), ["bo"]);
 }

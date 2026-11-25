@@ -14,8 +14,8 @@ offline and in sync. Packaged as `bande-contacts`.
   computer), through `bande-dav`, the client Calendar uses. A failure says what went wrong and keeps
   every field. Passwords go to the Secret Service. "Also use this account for Calendar" offers the
   same server and sign-in to Calendar (`bande_dav::offer`), which finds its calendars there the next
-  time it syncs; Calendar's account sheet offers the same for Contacts. An account's row in the sidebar
-  opens its server settings; its menu also removes it. When the server refuses the saved password,
+  time it syncs; Calendar's account sheet offers the same for Contacts. An account's
+  All Contacts in the sidebar shows its contacts, its server settings and Remove Account…; its menu has both too. When the server refuses the saved password,
   Contacts asks for it again.
 - **On this computer.** A local address book that never leaves the machine.
 - **Offline sync.** Every address book is kept on disk with its pending changes in

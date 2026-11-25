@@ -52,6 +52,8 @@ const LOGIN_WINDOW_LIMIT: Duration = Duration::from_secs(300);
 const PROGRESS_LOOK: Duration = Duration::from_millis(2500);
 const COMPOSITOR_STALL: &str = "compositor-stall";
 const BUS_PATIENCE: Duration = Duration::from_secs(5);
+const FIRST_RETRY: Duration = Duration::from_secs(1);
+const LONGEST_RETRY: Duration = Duration::from_secs(64);
 const STALL_LIMIT: Duration = Duration::from_secs(6);
 const GREETER_HANG_LIMIT_SECONDS: u32 = 20;
 const GREETER_HANG_CHECK: Duration = Duration::from_secs(10);
@@ -198,17 +200,28 @@ struct Buses {
     system: Option<Connection>,
 }
 
-fn answering_soon(builder: zbus::Result<connection::Builder<'static>>) -> zbus::Result<Connection> {
-    builder?.method_timeout(BUS_PATIENCE).build()
-}
-
 impl Buses {
     fn connect() -> Self {
         Self {
-            session: answering_soon(connection::Builder::session())
+            session: Connection::session()
                 .inspect_err(|error| tracing::warn!("cannot connect to the session bus: {error}"))
                 .ok(),
-            system: answering_soon(connection::Builder::system())
+            system: Connection::system()
+                .inspect_err(|error| tracing::warn!("cannot connect to the system bus: {error}"))
+                .ok(),
+        }
+    }
+
+    /// Buses for calls the event loop's own thread waits for while the watchdog runs.
+    fn prompt() -> Self {
+        let build = |builder: zbus::Result<connection::Builder<'static>>| {
+            builder?.method_timeout(BUS_PATIENCE).build()
+        };
+        Self {
+            session: build(connection::Builder::session())
+                .inspect_err(|error| tracing::warn!("cannot connect to the session bus: {error}"))
+                .ok(),
+            system: build(connection::Builder::system())
                 .inspect_err(|error| tracing::warn!("cannot connect to the system bus: {error}"))
                 .ok(),
         }
@@ -723,10 +736,11 @@ fn run_drm(
         }
     })?;
     if let Some(system) = &buses.system {
+        let (sleep, lid) = (system.clone(), system.clone());
         follow(
             &handle,
             "sleep",
-            |sender| follow_sleep(system, sender),
+            move |sender| follow_sleep(&sleep, sender),
             |app, sleep| match sleep {
                 Sleep::Starting => app.output.suspend_input(),
                 Sleep::Ended => {
@@ -745,7 +759,7 @@ fn run_drm(
         follow(
             &handle,
             "the lid",
-            |sender| follow_lid(system, sender),
+            move |sender| follow_lid(&lid, sender),
             |app, closed| {
                 if !app.lid.switched_since_wake {
                     lid_changed(app, closed);
@@ -767,11 +781,11 @@ fn run_drm(
         }
         Err(error) => tracing::warn!("cannot watch for displays being plugged in: {error}"),
     }
-    if let Some(session) = &buses.session {
+    if let Some(session) = buses.session.clone() {
         follow(
             &handle,
             "the display settings",
-            |sender| follow_display_settings(session, sender),
+            move |sender| follow_display_settings(&session, sender),
             |app, ()| {
                 if let Some(config) = user_config() {
                     app.compositor.set_display_config(config);
@@ -895,7 +909,7 @@ fn listen<O: 'static>(
         follow(
             handle,
             "time zone changes",
-            |sender| {
+            move |sender| {
                 let zones = zone_changes(&system)?;
                 std::thread::spawn(move || {
                     for _ in zones {
@@ -958,17 +972,34 @@ fn end_greeter_when_hung<O: 'static>(
     Ok(())
 }
 
-fn follow<O: 'static, T: 'static>(
+fn keep_trying(what: &str, mut start: impl FnMut() -> zbus::Result<()>) {
+    let mut wait = FIRST_RETRY;
+    loop {
+        match start() {
+            Ok(()) => return,
+            Err(error) if wait <= LONGEST_RETRY => {
+                tracing::warn!(
+                    "cannot follow {what}, trying again in {} s: {error}",
+                    wait.as_secs()
+                );
+            }
+            Err(error) => return tracing::warn!("cannot follow {what}: {error}"),
+        }
+        std::thread::sleep(wait);
+        wait *= 2;
+    }
+}
+
+fn follow<O: 'static, T: Send + 'static>(
     handle: &LoopHandle<'static, App<O>>,
-    what: &str,
-    start: impl FnOnce(channel::Sender<T>) -> zbus::Result<()>,
+    what: &'static str,
+    mut start: impl FnMut(channel::Sender<T>) -> zbus::Result<()> + Send + 'static,
     mut apply: impl FnMut(&mut App<O>, T) + 'static,
 ) -> Result<(), Box<dyn Error>> {
     let (sender, changes) = channel::channel();
-    if let Err(error) = start(sender) {
-        tracing::warn!("cannot follow {what}: {error}");
-        return Ok(());
-    }
+    std::thread::Builder::new()
+        .name("follow".to_owned())
+        .spawn(move || keep_trying(what, || start(sender.clone())))?;
     handle.insert_source(changes, move |event, _, app| {
         if let Event::Msg(value) = event {
             apply(app, value);
@@ -977,16 +1008,53 @@ fn follow<O: 'static, T: 'static>(
     Ok(())
 }
 
-fn follow_session_bus<O: FrameOutput + 'static>(
+fn serve_on_session_bus<O: FrameOutput + 'static>(
     handle: &LoopHandle<'static, App<O>>,
     app: &mut App<O>,
     bus: &Connection,
 ) -> Result<(), Box<dyn Error>> {
+    match serve_displays(bus) {
+        Ok(displays) => {
+            app.displays = Some(displays);
+            publish_displays(app);
+        }
+        Err(error) => tracing::warn!("the connected displays cannot be published: {error}"),
+    }
+    match serve_keyboard_monitor(bus) {
+        Ok(monitor) => app.compositor.monitor_keyboard(monitor),
+        Err(error) => tracing::warn!("assistive technologies cannot watch the keyboard: {error}"),
+    }
+    let (sender, bound) = channel::channel();
+    match serve_global_shortcuts(bus, move |shortcuts| sender.send(shortcuts).is_ok()) {
+        Ok(shortcuts) => {
+            handle.insert_source(bound, |event, _, app: &mut App<O>| {
+                if let Event::Msg(shortcuts) = event {
+                    app.compositor.bind_global_shortcuts(shortcuts);
+                }
+            })?;
+            app.compositor.use_global_shortcuts(shortcuts);
+        }
+        Err(error) => tracing::warn!("apps cannot have global shortcuts: {error}"),
+    }
+    match serve_app_states(bus) {
+        Ok(states) => app.compositor.publish_app_states(states),
+        Err(error) => tracing::warn!("the portal cannot see which apps have windows: {error}"),
+    }
+    Ok(())
+}
+
+fn follow_session_bus<O: FrameOutput + 'static>(
+    handle: &LoopHandle<'static, App<O>>,
+    app: &mut App<O>,
+    bus: &Connection,
+    prompt: Option<&Connection>,
+) -> Result<(), Box<dyn Error>> {
+    let (appearance, alerts, settings_bus) = (bus.clone(), bus.clone(), bus.clone());
     follow(
         handle,
         "the appearance",
-        |sender| {
-            follow_appearance(bus.clone(), move |look| sender.send(look).is_ok());
+        move |sender| {
+            follow_appearance(appearance.clone(), move |look| sender.send(look).is_ok());
             Ok(())
         },
         |app, look| {
@@ -1032,40 +1100,18 @@ fn follow_session_bus<O: FrameOutput + 'static>(
     follow(
         handle,
         "alert sounds",
-        |sender| follow_alerts(bus, move || sender.send(()).is_ok()),
+        move |sender| follow_alerts(&alerts, move || sender.send(()).is_ok()),
         |app, ()| app.compositor.flash_screen(),
     )?;
-    match serve_displays(bus) {
-        Ok(displays) => {
-            app.displays = Some(displays);
-            publish_displays(app);
-        }
-        Err(error) => tracing::warn!("the connected displays cannot be published: {error}"),
-    }
-    match serve_keyboard_monitor(bus) {
-        Ok(monitor) => app.compositor.monitor_keyboard(monitor),
-        Err(error) => tracing::warn!("assistive technologies cannot watch the keyboard: {error}"),
-    }
-    let (sender, bound) = channel::channel();
-    match serve_global_shortcuts(bus, move |shortcuts| sender.send(shortcuts).is_ok()) {
-        Ok(shortcuts) => {
-            handle.insert_source(bound, |event, _, app: &mut App<O>| {
-                if let Event::Msg(shortcuts) = event {
-                    app.compositor.bind_global_shortcuts(shortcuts);
-                }
-            })?;
-            app.compositor.use_global_shortcuts(shortcuts);
-        }
-        Err(error) => tracing::warn!("apps cannot have global shortcuts: {error}"),
-    }
-    match serve_app_states(bus) {
-        Ok(states) => app.compositor.publish_app_states(states),
-        Err(error) => tracing::warn!("the portal cannot see which apps have windows: {error}"),
+    if let Some(prompt) = prompt {
+        serve_on_session_bus(handle, app, prompt)?;
     }
     follow(
         handle,
         "the keyboard and pointer settings",
-        |sender| follow_input_settings(bus, move |settings| sender.send(settings).is_ok()),
+        move |sender| {
+            follow_input_settings(&settings_bus, move |settings| sender.send(settings).is_ok())
+        },
         |app, settings| app.compositor.apply_input_settings(settings),
     )
 }
@@ -1110,6 +1156,7 @@ fn note_running_apps<O>(app: &mut App<O>) {
 fn start_user_session<O: FrameOutput + 'static>(
     event_loop: &mut EventLoop<'static, App<O>>,
     app: &mut App<O>,
+    prompt: &Buses,
 ) -> Result<Option<Child>, Box<dyn Error>> {
     for (executable, role) in [
         (SHELL, SessionRole::Shell),
@@ -1131,26 +1178,27 @@ fn start_user_session<O: FrameOutput + 'static>(
     }
     let handle = event_loop.handle();
     if let Some(bus) = app.buses.session.clone() {
-        follow_session_bus(&handle, app, &bus)?;
+        follow_session_bus(&handle, app, &bus, prompt.session.as_ref())?;
     }
     let system = app.buses.system.clone();
     if let Some(system) = &system {
         let (session_reports, reported) = std::sync::mpsc::channel();
+        let (logind, mut reported) = (system.clone(), Some(reported));
         app.compositor.report_session(session_reports);
         follow(
             &handle,
             "the logind session",
-            |sender| follow_session(system, reported, sender),
+            move |sender| follow_session(&logind, &mut reported, sender),
             |app, SessionRequest::Lock| app.compositor.request_lock_screen(),
         )?;
     }
     if let Some(file) = bande_xdg::reopen_file() {
         app.compositor.remember_apps_to_reopen_in(file);
-        if let Some(system) = &system {
+        if let Some(system) = system {
             follow(
                 &handle,
                 "shutdown to remember the apps",
-                |sender| follow_shutdown(system, sender),
+                move |sender| follow_shutdown(&system, sender),
                 |app, shutdown| match shutdown {
                     Shutdown::Starting(delay) => app.compositor.shutting_down(delay),
                     Shutdown::Cancelled => app.compositor.shutdown_cancelled(window_sessions()),
@@ -1188,7 +1236,8 @@ where
         None => (open_socket(&mut app.compositor, &app.buses)?, None),
     };
     listen(&event_loop.handle(), &mut app, socket)?;
-    if let (Session::User, Some(system)) = (&session, &app.buses.system) {
+    let prompt = Buses::prompt();
+    if let (Session::User, Some(system)) = (&session, &prompt.system) {
         let (presses, received) = std::sync::mpsc::channel();
         match handle_power_key(system, received) {
             Ok(true) => app.compositor.send_power_key_presses(presses),
@@ -1210,14 +1259,14 @@ where
             app.compositor.fade_in_over(shown);
             app.first_frame_marker =
                 bande_xdg::runtime_dir().map(|runtime| runtime.join(bande_xdg::DESKTOP_SHOWN));
-            (None, start_user_session(event_loop, &mut app)?)
+            (None, start_user_session(event_loop, &mut app, &prompt)?)
         }
         Session::Greeter => {
             end_greeter_when_hung(&event_loop.handle())?;
             if started_greeter.is_none() {
                 prepare_login_window(&mut app.compositor);
             }
-            if let Some(bus) = &app.buses.session {
+            if let Some(bus) = &prompt.session {
                 match serve_keyboard_monitor(bus) {
                     Ok(monitor) => app.compositor.monitor_keyboard(monitor),
                     Err(error) => {
@@ -1411,7 +1460,7 @@ where
             RecoveryStep::GiveUp => {
                 bande_log::fault::report("display-failure", "no-frame-gave-up");
                 if session == Session::Greeter {
-                    restart_the_computer(app.buses.system.as_ref());
+                    restart_the_computer(prompt.system.as_ref());
                 }
                 return Err("no frame reached the display; ending the session".into());
             }

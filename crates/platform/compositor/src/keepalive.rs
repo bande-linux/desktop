@@ -55,7 +55,7 @@ impl Shared {
             .elapsed()
     }
 
-    fn watch(&self) -> io::Result<()> {
+    fn watch(&self, waits_for_a_device: impl Fn() -> bool) -> io::Result<()> {
         let mut expirations = [0; 8];
         loop {
             match rustix::io::read(&self.timer, &mut expirations) {
@@ -78,6 +78,14 @@ impl Shared {
 
 impl Keepalive {
     pub fn start(socket: OsString, interval: Duration) -> io::Result<Self> {
+        Self::start_looking(socket, interval, waits_for_a_device)
+    }
+
+    fn start_looking(
+        socket: OsString,
+        interval: Duration,
+        waits_for_a_device: impl Fn() -> bool + Send + 'static,
+    ) -> io::Result<Self> {
         let shared = Arc::new(Shared {
             socket,
             timer: timerfd_create(TimerfdClockId::Monotonic, TimerfdFlags::CLOEXEC)?,
@@ -89,7 +97,7 @@ impl Keepalive {
         thread::Builder::new()
             .name("keepalive".to_owned())
             .spawn(move || {
-                if let Err(error) = watched.watch() {
+                if let Err(error) = watched.watch(waits_for_a_device) {
                     tracing::warn!("a busy disk may end the session: {error}");
                 }
             })?;
@@ -106,5 +114,46 @@ impl Keepalive {
         if let Err(error) = self.0.look_in(self.0.late_after) {
             tracing::warn!("a busy disk may end the session: {error}");
         }
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+mod tests {
+    use std::os::unix::net::UnixDatagram;
+
+    use super::*;
+
+    #[test]
+    fn an_event_loop_that_never_comes_back_is_reassured_only_while_a_device_is_waited_for() {
+        let folder = tempfile::tempdir().expect("a folder");
+        let path = folder.path().join("notify");
+        let manager = UnixDatagram::bind(&path).expect("a socket");
+        manager
+            .set_read_timeout(Some(Duration::from_secs(5)))
+            .expect("a timeout");
+        let heard = |manager: &UnixDatagram| {
+            let mut said = [0; 32];
+            manager
+                .recv(&mut said)
+                .map(|length| said[..length].to_vec())
+        };
+        let waiting = Arc::new(std::sync::atomic::AtomicBool::new(true));
+        let seen = Arc::clone(&waiting);
+        let keepalive = Keepalive::start_looking(
+            path.into_os_string(),
+            Duration::from_millis(100),
+            move || seen.load(std::sync::atomic::Ordering::Relaxed),
+        )
+        .expect("a keepalive");
+        assert_eq!(heard(&manager).expect("no word"), b"WATCHDOG=1");
+        waiting.store(false, std::sync::atomic::Ordering::Relaxed);
+        manager.set_nonblocking(true).expect("a drain");
+        while heard(&manager).is_ok() {}
+        manager.set_nonblocking(false).expect("a socket");
+        manager.set_read_timeout(Some(LOOK * 3)).expect("a timeout");
+        assert!(heard(&manager).is_err(), "a hung loop was reassured");
+        keepalive.alive();
+        assert_eq!(heard(&manager).expect("no word"), b"WATCHDOG=1");
     }
 }

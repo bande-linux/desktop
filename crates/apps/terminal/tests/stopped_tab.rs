@@ -33,8 +33,11 @@ fn a_tab_closes_at_once_starts_beside_a_silent_bus_closes_when_its_shell_is_kill
     let folder = tempfile::tempdir().expect("a folder");
     let socket = folder.path().join("bus");
     let _silent = UnixListener::bind(&socket).expect("a bus that never answers");
-    // SAFETY: the only test of this program sets the variable before it starts a thread.
+    let server_folder = folder.path().join("bande/volumes/share");
+    std::fs::create_dir_all(&server_folder).expect("a server's folder");
+    // SAFETY: the only test of this program sets the variables before it starts a thread.
     unsafe {
+        std::env::set_var("XDG_RUNTIME_DIR", folder.path());
         std::env::set_var(
             "DBUS_SESSION_BUS_ADDRESS",
             format!("unix:path={}", socket.display()),
@@ -93,8 +96,26 @@ fn a_tab_closes_at_once_starts_beside_a_silent_bus_closes_when_its_shell_is_kill
         "a shell killed by hand was blamed on memory"
     );
 
+    let shell = ("/bin/sleep".to_owned(), vec!["60".to_owned()]);
+    let mut remote = Session::spawn(
+        Terminal::new(grid),
+        Some(shell),
+        Some(server_folder.clone()),
+    )
+    .expect("a shell");
+    let place = format!("/proc/{}/cwd", remote.id());
+    read_until(
+        &mut remote,
+        &theme,
+        START,
+        "the shell did not enter the server's folder",
+        |_| std::fs::read_link(&place).is_ok_and(|place| place == server_folder),
+    );
+    drop(remote);
+
     let missing = ("/nonexistent/shell".to_owned(), Vec::new());
-    let mut session = Session::spawn(Terminal::new(grid), Some(missing), None).expect("a wrapper");
+    let mut session =
+        Session::spawn(Terminal::new(grid), Some(missing), Some(server_folder)).expect("a wrapper");
     read_until(
         &mut session,
         &theme,

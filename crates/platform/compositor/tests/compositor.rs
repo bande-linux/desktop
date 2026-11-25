@@ -1358,6 +1358,31 @@ fn memory_of_large_uploads_is_freed_once_they_stop() {
 }
 
 #[test]
+fn a_renderer_at_rest_keeps_no_memory_that_drawing_makes_again() {
+    let mut server = headless(1000, 700);
+    let Some(mut output) = DrawnOutput::new(&server) else {
+        println!("skipped: no hardware Vulkan device with a DRM render node");
+        return;
+    };
+    let mut below = PatternWindow::show(&mut server, "org.bande.Below", (700, 500), u8::MAX);
+    let mut glass = PatternWindow::show(&mut server, "org.bande.Glass", (600, 400), 60);
+    glass.client.blur_behind(&mut server, 0, (600, 400));
+    for _ in 0..4 {
+        below.commit(&mut server, (0, 0, 700, 500));
+        output.draw(&mut server);
+    }
+    let held = output.vulkan.memory_use();
+    assert!(held.blur_levels.1 > 0 && held.staging.1 > 0, "{held}");
+    output.vulkan.wait_idle().expect("the GPU finishes");
+    output.vulkan.rest();
+    let held = output.vulkan.memory_use();
+    assert_eq!((held.blur_levels.1, held.staging.1), (0, 0), "{held}");
+    below.commit(&mut server, (0, 0, 700, 500));
+    output.draw(&mut server);
+    output.assert_matches_a_full_redraw(&mut server, "awake");
+}
+
+#[test]
 fn only_frames_of_a_display_count_towards_its_gpu_time() {
     let mut server = headless(1300, 900);
     let Some(mut output) = DrawnOutput::new(&server) else {

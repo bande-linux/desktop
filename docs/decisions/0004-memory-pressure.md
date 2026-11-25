@@ -35,8 +35,8 @@ memory settings stay the system's own.
   runtime value of 0, of the administrator is left alone. When the session ends `bande-login` sets
   the levels it changed back to 0 and removes the runtime drop-ins it made, so nothing overrides the
   system's own files; `user.slice` only when no other Bande session is left. A person's
-  second sign-in, refused because their session already runs, changes nothing. It does not reload the
-  system's service manager: one person's log out must not put an administrator's half-made changes
+  second sign-in, refused because their session already runs, changes nothing. `bande-login` does not
+  reload the system's service manager: one person's log out must not put an administrator's half-made changes
   into effect or keep the login window waiting. A worker that is killed leaves
   them until that person's next Bande session ends or the computer restarts.
 - `MemoryMin=` does not cover the compositor's code: file pages belong to the control group that read

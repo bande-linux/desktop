@@ -343,7 +343,8 @@ impl Reach<'_> {
 
     fn skips(self, item: &Item) -> bool {
         match item {
-            Item::Fill { shape, .. } | Item::Clip { shape, .. } => !self.touches(rect(shape.rect)),
+            Item::Fill { shape, .. } => !self.touches(rect(shape.rect)),
+            Item::Clip { shape, items } => !self.touches(rect(shape.rect)) && !composites(items),
             Item::Stroke { shape, width, .. } => {
                 let reach = f64::from(*width);
                 !self.touches(rect(shape.rect).inflate(reach, reach))
@@ -363,9 +364,12 @@ impl Reach<'_> {
                 let at = Vec2::new(f64::from(origin.x), f64::from(origin.y));
                 self.touches(rect(ink) + at)
             }),
-            Item::Picture(picture) => !picture
-                .bounds()
-                .is_some_and(|bounds| self.touches(rect(bounds))),
+            Item::Picture(picture) => {
+                !picture
+                    .bounds()
+                    .is_some_and(|bounds| self.touches(rect(bounds)))
+                    && !composites(picture.items())
+            }
             _ => false,
         }
     }
@@ -380,6 +384,26 @@ fn record_picture(picture: &Picture, caches: &mut Caches) {
     caches
         .pictures
         .insert(picture.id(), ops.into(), picture.liveness());
+}
+
+fn composites(items: &[Item]) -> bool {
+    items.iter().any(|item| match item {
+        Item::Blend { .. } | Item::Surface { .. } => true,
+        Item::Clip { items, .. }
+        | Item::Translate { items, .. }
+        | Item::Opacity { items, .. }
+        | Item::Transform { items, .. }
+        | Item::Scale { items, .. } => composites(items),
+        Item::Picture(picture) => composites(picture.items()),
+        _ => false,
+    })
+}
+
+fn outline_within(shape: &Shape, reach: Option<Reach<'_>>) -> BezPath {
+    match reach.filter(|reach| reach.lies_within(shape, 0.0)) {
+        Some(reach) => reach.outline(),
+        None => path(shape),
+    }
 }
 
 fn record(items: &[Item], caches: &mut Caches, ops: &mut Vec<Op>, reach: Option<Reach<'_>>) {
@@ -405,10 +429,7 @@ fn scoped(
 fn record_item(item: &Item, caches: &mut Caches, ops: &mut Vec<Op>, reach: Option<Reach<'_>>) {
     match item {
         Item::Fill { shape, paint: fill } => ops.push(Op::Fill {
-            path: match reach.filter(|reach| reach.lies_within(shape, 0.0)) {
-                Some(reach) => reach.outline(),
-                None => path(shape),
-            },
+            path: outline_within(shape, reach),
             paint: paint(fill),
         }),
         Item::Stroke {
@@ -455,11 +476,9 @@ fn record_item(item: &Item, caches: &mut Caches, ops: &mut Vec<Op>, reach: Optio
             }
         }
         Item::Glyphs(run) => record_run(&mut caches.outlines, run, Point::default(), ops),
-        Item::Clip { shape, items } if reach.is_some_and(|reach| reach.lies_within(shape, 0.0)) => {
-            record(items, caches, ops, reach);
-        }
         Item::Clip { shape, items } => {
-            scoped(Op::Clip(path(shape)), items, caches, ops, reach);
+            let clip = outline_within(shape, reach);
+            scoped(Op::Clip(clip), items, caches, ops, reach);
         }
         Item::Translate { offset, items } => {
             let reach = reach.map(|reach| reach.through(snapped(reach.transform, *offset)));
@@ -651,12 +670,11 @@ impl Recording {
         };
         if let Some(clip) = &self.clip {
             encoder.canvas.set_transform(Affine::IDENTITY);
-            encoder.canvas.push_clip_layer(clip);
-            encoder.clips.push((clip.clone(), Affine::IDENTITY));
+            encoder.canvas.push_clip_path(clip);
         }
         encoder.replay(&self.ops, self.base);
         if self.clip.is_some() {
-            encoder.canvas.pop_layer();
+            encoder.canvas.pop_clip();
         }
         encoder.caches.outlines.end_frame();
     }
@@ -674,20 +692,6 @@ struct Encoder<'a, C> {
     drawn: &'a [kurbo::Rect],
     clips: Vec<(BezPath, Affine)>,
     isolated: bool,
-}
-
-fn skip_scope<'a>(ops: &mut impl Iterator<Item = &'a Op>) {
-    let mut open = 1;
-    for op in ops {
-        open += match op {
-            Op::Clip(_) | Op::Layer { .. } | Op::Snap(_) | Op::Transform(_) => 1,
-            Op::End => -1,
-            _ => 0,
-        };
-        if open == 0 {
-            return;
-        }
-    }
 }
 
 impl<C: Canvas> Encoder<'_, C> {
@@ -727,8 +731,7 @@ impl<C: Canvas> Encoder<'_, C> {
     fn replay(&mut self, ops: &[Op], mut transform: Affine) {
         let mut scopes = Vec::new();
         self.canvas.set_transform(transform);
-        let mut ops = ops.iter();
-        while let Some(op) = ops.next() {
+        for op in ops {
             match op {
                 Op::Fill { path, paint } if self.reaches(path.control_box(), transform) => {
                     self.canvas.set_paint(paint.clone());
@@ -784,9 +787,6 @@ impl<C: Canvas> Encoder<'_, C> {
                     self.canvas.set_paint(color(run.color).into());
                     self.canvas.fill_glyphs(run, glyphs);
                 }
-                Op::Clip(clip) if !self.reaches(clip.control_box(), transform) => {
-                    skip_scope(&mut ops);
-                }
                 Op::Clip(clip) => {
                     self.canvas.push_clip_layer(clip);
                     self.clips.push((clip.clone(), transform));
@@ -836,9 +836,10 @@ impl<C: Canvas> Encoder<'_, C> {
                     }
                 }
                 Op::Picture(picture) => {
-                    if picture
+                    let reached = picture
                         .bounds()
-                        .is_some_and(|bounds| self.reaches(rect(bounds), transform))
+                        .is_some_and(|bounds| self.reaches(rect(bounds), transform));
+                    if (reached || composites(picture.items()))
                         && let Some(ops) = self.caches.pictures.get(picture.id())
                     {
                         self.replay(&ops, transform);

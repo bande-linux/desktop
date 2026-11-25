@@ -6,9 +6,9 @@ use std::time::{Duration, Instant};
 
 use bande_intents::client::text;
 use bande_intents::{
-    Client, Describe, Dict, Domain, Done, Effect, Find, Found, Intent, Job, Limits, List, Manifests,
-    Name, Owner, Perform, Plan, Reason, Ref, Refs, Refusal, RichText, Store, Text, Thing, Undo,
-    Unit, Wanted,
+    Client, Describe, Dict, Domain, Done, Effect, Find, Found, Intent, Job, Limits, List,
+    Manifests, Name, Owner, Perform, Plan, Reason, Ref, Refs, Refusal, RichText, Store, Text,
+    Thing, Undo, Unit, Wanted,
 };
 use bande_l10n::text;
 use zbus::blocking::Connection;
@@ -246,7 +246,10 @@ fn many_things_are_found_in_pages_changed_as_a_set_stopped_and_undone() {
         .find(BUS, "books.find", &Dict::new(), &first.cursor, 5)
         .unwrap();
     assert_eq!((first.things.len(), second.things.len()), (2, 3));
-    assert_eq!((second.cursor.as_str(), first.set), ("", second.set.clone()));
+    assert_eq!(
+        (second.cursor.as_str(), first.set),
+        ("", second.set.clone())
+    );
     assert_eq!(text(&first.things[0], "review"), "Buy it at once");
     let other = Client::new(&Connection::session().unwrap());
     let taken = other.prepare(BUS, "books.trash", &books(&[&second.set]));
@@ -300,21 +303,38 @@ fn many_things_are_found_in_pages_changed_as_a_set_stopped_and_undone() {
     }
     assert_eq!(state(), "cancelled");
     let all = client
-        .get(BUS, "books.get", &[second.set.clone()], &["trashed".to_owned()])
+        .get(
+            BUS,
+            "books.get",
+            std::slice::from_ref(&second.set),
+            &["trashed".to_owned()],
+        )
         .unwrap();
-    assert!((1..5).contains(&trashed(&all)), "each book is whole: {all:?}");
+    assert!(
+        (1..5).contains(&trashed(&all)),
+        "each book is whole: {all:?}"
+    );
 
     let receipts = client.all_receipts(&manifests);
     assert_eq!(receipts.len(), 1, "what was done before it stopped");
     client.undo(&manifests, &receipts[0].receipt).unwrap();
     let all = client
-        .get(BUS, "books.get", &[second.set.clone()], &["trashed".to_owned()])
+        .get(
+            BUS,
+            "books.get",
+            std::slice::from_ref(&second.set),
+            &["trashed".to_owned()],
+        )
         .unwrap();
     assert_eq!(trashed(&all), 0);
     assert_eq!(client.all_receipts(&manifests), []);
 
     let prepared = client
-        .prepare(BUS, "books.trash", &books(&["books.book:0", "books.book:9"]))
+        .prepare(
+            BUS,
+            "books.trash",
+            &books(&["books.book:0", "books.book:9"]),
+        )
         .unwrap();
     let performed = client.perform(prepared).unwrap().json();
     assert_eq!(performed["failed"][0]["reference"], "books.book:9");

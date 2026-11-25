@@ -135,7 +135,8 @@ impl Served {
             Form::Number => {
                 let (least, most, step) = self.range()?;
                 let number: u32 = text.parse().ok()?;
-                let fits = (least..=most).contains(&number) && (number - least) % step == 0;
+                let fits =
+                    (least..=most).contains(&number) && (number - least).is_multiple_of(step);
                 fits.then_some(match self.setting.kind {
                     Kind::Level => Value::Fraction(number as f32 / PERCENT),
                     _ => Value::Number(number),

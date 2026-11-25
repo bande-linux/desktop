@@ -179,5 +179,9 @@ fn an_app_serves_its_intents_without_a_window_until_it_is_opened() {
         assert!(Instant::now() < until + PATIENCE, "no answer");
         step(&mut frames, &mut server);
     }
-    assert_eq!(asked.join().expect("an answer"), Ok(1), "its window shows one");
+    assert_eq!(
+        asked.join().expect("an answer"),
+        Ok(1),
+        "its window shows one"
+    );
 }

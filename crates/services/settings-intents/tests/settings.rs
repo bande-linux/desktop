@@ -21,13 +21,9 @@ impl Config {
         let folder = tempfile::tempdir().expect("a folder");
         let path = folder.path().join("config.kdl");
         std::fs::write(&path, "appearance \"dark\"\n").expect("config");
-        let service = ConfigService::start(
-            &connection,
-            &path,
-            Arc::new(ConfigStore::default()),
-            |_| {},
-        )
-        .expect("config service");
+        let service =
+            ConfigService::start(&connection, &path, Arc::new(ConfigStore::default()), |_| {})
+                .expect("config service");
         Self {
             folder,
             _service: service,

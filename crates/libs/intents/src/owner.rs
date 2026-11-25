@@ -212,6 +212,8 @@ impl Serving {
     }
 }
 
+type Answered = (Vec<Dict>, String, String, bool, Vec<String>);
+
 struct Held {
     sender: String,
     agent: Option<String>,
@@ -399,9 +401,7 @@ impl Shared {
             .cloned()
             .collect();
         for receipt in begun {
-            if !receipt.asked.is_empty() {
-                self.tell_interrupted(&receipt);
-            }
+            let interrupted = (!receipt.asked.is_empty()).then(|| receipt.clone());
             let left = match receipts.undo(&receipt) {
                 Some(undo) => self.store(of)?.recover(undo)?,
                 None => None,
@@ -420,6 +420,9 @@ impl Shared {
                 None => receipts.remove(&receipt.token),
             };
             kept.map_err(|error| unstored(&error))?;
+            if let Some(receipt) = interrupted {
+                self.tell_interrupted(&receipt);
+            }
         }
         Ok(())
     }
@@ -529,7 +532,7 @@ impl Shared {
         limits: &Limits,
         cursor: &str,
         count: u32,
-    ) -> Result<(Vec<Dict>, String, String, bool, Vec<String>), Refusal> {
+    ) -> Result<Answered, Refusal> {
         let entry = self.entry(id, false)?;
         let Action::Find(kind, finder) = &entry.action else {
             return Err(unknown_intent(id));
@@ -890,30 +893,29 @@ impl Shared {
         }
         let outcome = (held.ready.run)(job);
         reached("performed");
-        let (output, undo, refusal) = match outcome {
-            Ok((output, undo)) => (output, undo, None),
-            Err(refusal) => {
-                let left = self.recovered(record);
-                (Dict::new(), left, Some(refusal))
-            }
+        let (output, left, refusal) = match outcome {
+            Ok((output, undo)) => (output, Ok(undo), None),
+            Err(refusal) => (Dict::new(), self.recovered(record), Some(refusal)),
         };
         let mut receipt = String::new();
-        let settled = match (&held.undoes, undo) {
-            (Some(undone), _) if refusal.is_none() => self
-                .with_receipts(&held.domain, |receipts| {
-                    receipts.remove(undone).map_err(|error| unstored(&error))
-                }),
-            (Some(_), _) => Ok(()),
-            (None, Some(undo)) if !held.unkept => self
-                .looks(&held.domain, &undo)
-                .and_then(|left| self.store_receipt(record, State::Whole, Some((undo, left))))
-                .map(|()| receipt = format!("{}:{}", held.domain, record.token)),
-            (None, _) => self.with_receipts(&held.domain, |receipts| {
+        let settled = left.and_then(|undo| match undo.filter(|_| !held.unkept) {
+            Some(undo) => {
+                let looks = self.looks(&held.domain, &undo)?;
+                self.store_receipt(record, State::Whole, Some((undo, looks)))?;
+                receipt = format!("{}:{}", held.domain, record.token);
+                Ok(())
+            }
+            None => self.with_receipts(&held.domain, |receipts| {
+                if refusal.is_none()
+                    && let Some(undone) = &held.undoes
+                {
+                    receipts.remove(undone).map_err(|error| unstored(&error))?;
+                }
                 receipts
                     .remove(&record.token)
                     .map_err(|error| unstored(&error))
             }),
-        };
+        });
         if let Err(refusal) = settled {
             tracing::warn!("{} {plan} has no undo: {refusal}", held.intent);
         }
@@ -927,22 +929,18 @@ impl Shared {
         }
     }
 
-    fn recovered(&self, record: &Record) -> Option<Undo> {
-        let kept = self
-            .with_receipts(&record.domain, |receipts| {
-                Ok(receipts
-                    .all()
-                    .iter()
-                    .find(|receipt| receipt.token == record.token)
-                    .and_then(|receipt| receipts.undo(receipt)))
-            })
-            .ok()
-            .flatten()?;
-        self.store(&record.domain)
-            .and_then(|store| store.recover(kept))
-            .inspect_err(|refusal| tracing::warn!("cannot tell what was done: {refusal}"))
-            .ok()
-            .flatten()
+    fn recovered(&self, record: &Record) -> Result<Option<Undo>, Refusal> {
+        let kept = self.with_receipts(&record.domain, |receipts| {
+            Ok(receipts
+                .all()
+                .iter()
+                .find(|receipt| receipt.token == record.token)
+                .and_then(|receipt| receipts.undo(receipt)))
+        })?;
+        match kept {
+            Some(undo) => self.store(&record.domain)?.recover(undo),
+            None => Ok(None),
+        }
     }
 
     fn store_receipt(
@@ -1217,7 +1215,7 @@ impl Intents {
         cursor: String,
         count: u32,
         #[zbus(header)] header: Header<'_>,
-    ) -> Result<(Vec<Dict>, String, String, bool, Vec<String>), Refusal> {
+    ) -> Result<Answered, Refusal> {
         self.answer(&header, limits, move |shared, caller, limits| {
             shared.find(caller, &intent, arguments, limits, &cursor, count)
         })

@@ -345,7 +345,8 @@ pub fn owner() -> Owner {
 `Job::keep` is called **before** each change, with what takes back everything up to and including
 it; a crash then leaves that to `recover`, which says what is left of it: `None` when nothing was
 done. `look` gives the named properties as text that is equal while they mean the same, which is how
-undo sees that something else changed them. Many things go through `Job::expect`, `advance`,
+undo sees that something else changed them. Each `keep` writes the whole undo to disk, so with many
+things an owner whose `recover` can tell which were changed keeps the undo of all of them once. Many things go through `Job::expect`, `advance`,
 `failed` and `cancelled`. `perform` blocks, on a thread of its own.
 
 An app returns its owner from `Program::intents`; a service calls `bande_intents::run(owner())` as

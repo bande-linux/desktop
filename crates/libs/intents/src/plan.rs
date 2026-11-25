@@ -425,7 +425,9 @@ impl Job {
 
     /// Stores what takes back everything up to and including the step about to start, so that a
     /// crash from here on leaves something to undo. An error is returned from Perform at once,
-    /// since nothing may be changed that could not be taken back.
+    /// since nothing may be changed that could not be taken back. Each call writes the whole undo to
+    /// disk: with many things, an owner whose [`Store::recover`] can tell which were changed keeps
+    /// the undo of all of them once.
     pub fn keep(&self, undo: Undo) -> Result<(), Refusal> {
         (self.keep)(undo)
     }

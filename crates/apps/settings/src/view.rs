@@ -24,6 +24,7 @@ use bande_toolkit::{Appearance, Image, Palette, Rect, SHEET_INSET, Scene, Sessio
 use jiff::Zoned;
 
 use crate::about::{About, AboutCommand};
+use crate::activity::ActivityCommand;
 use crate::backup::{BackupIntent, BackupView};
 use crate::battery::{BatteryCommand, PowerState};
 use crate::defaults::{DefaultApp, DefaultAppCommand};
@@ -52,7 +53,6 @@ use crate::services::{AudioCommand, BluetoothCommand, NetworkCommand};
 use crate::sharing::{SharingCommand, SharingState};
 use crate::software::{Need, SoftwareCommand, SoftwareState};
 use crate::state::{Answer, BluetoothState, Display, Joined, NetworkState, Question, WifiState};
-use crate::activity::ActivityCommand;
 use crate::storage::{Storage, StorageCommand};
 use crate::time::{TimeCommand, TimeState, parse_manual, zone_matches};
 use crate::users::{Account, NewAccountForm, PasswordForm, PictureEdit, UsersCommand};

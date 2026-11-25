@@ -22,7 +22,7 @@ const UNREAD_INPUT_CAP: usize = 1 << 20;
 const WRAPPER: &str = "/bin/sh";
 const ENTER: u8 = b'\r';
 const LEAVE_PROGRAM: &[u8] =
-    b"\x1b[?1049l\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?2004l\x1b[?25l\x1b[0m\r\n";
+    b"\x1b[?2026l\x1b[?1049l\x1b7\x1b[r\x1b8\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?2004l\x1b[?25l\x1b[0m\r\n";
 const OUT_OF_MEMORY: u8 = 1;
 const TITLE_SEPARATOR: &str = " — ";
 
@@ -68,6 +68,16 @@ const SCOPE_PATIENCE: Duration = Duration::from_secs(2);
 const STOPPED_UNTIL_PLACED: &str = r#"kill -STOP $$
 [ $# -gt 0 ] || set -- "${SHELL:-$(getent passwd "$(id -u)" | cut -d: -f7)}"
 exec "$@""#;
+
+fn is_runnable(program: &str, directory: Option<&Path>) -> bool {
+    let program = match directory {
+        Some(directory) if program.contains('/') => {
+            directory.join(program).to_string_lossy().into_owned()
+        }
+        _ => program.to_owned(),
+    };
+    bande_xdg::find_executable(&program).is_some()
+}
 
 fn stopped_until_placed(shell: Option<ShellCommand>) -> ShellCommand {
     let mut wrapped = ["-c", STOPPED_UNTIL_PLACED, "sh"]
@@ -175,6 +185,14 @@ impl Session {
         directory: Option<PathBuf>,
     ) -> io::Result<Self> {
         let (shell, directory) = enter_server_folder_in_the_shell(shell, directory);
+        if let Some((program, _)) = &shell
+            && !is_runnable(program, directory.as_deref())
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                format!("cannot run {program}"),
+            ));
+        }
         let (program, arguments) = stopped_until_placed(shell);
         let options = Options {
             shell: Some(Shell::new(program, arguments)),
@@ -242,7 +260,7 @@ impl Session {
 
     pub fn send(&mut self, bytes: &[u8]) -> bool {
         if self.ended() {
-            self.exited |= self.stopped && bytes.contains(&ENTER);
+            self.exited |= self.stopped && bytes == [ENTER];
             return true;
         }
         if self.output.len() >= UNREAD_INPUT_CAP {
@@ -374,7 +392,7 @@ impl Session {
         }
         self.output.clear();
         self.foreground = None;
-        self.finish_command(None);
+        self.command = None;
         let notice = tr!(
             "Everything in this tab was stopped because memory ran low. Press Return to close it."
         );

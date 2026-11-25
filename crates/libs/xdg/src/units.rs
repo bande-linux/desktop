@@ -47,6 +47,20 @@ pub fn is_tab(unit: &str) -> bool {
         .is_some_and(|(_, instance)| instance.starts_with(TAB))
 }
 
+pub fn cgroup_unit(cgroup: &str) -> Option<&str> {
+    cgroup
+        .lines()
+        .find_map(|line| line.strip_prefix("0::"))?
+        .rsplit('/')
+        .next()
+}
+
+pub fn is_scope_of(unit: &str, pid: u32) -> bool {
+    unit.strip_suffix(".scope")
+        .and_then(|scope| scope.rsplit_once('-'))
+        .is_some_and(|(_, number)| number == pid.to_string())
+}
+
 pub fn unit_app_ids(unit: &str) -> Vec<String> {
     let Some(rest) = unit.strip_prefix("app-") else {
         return Vec::new();

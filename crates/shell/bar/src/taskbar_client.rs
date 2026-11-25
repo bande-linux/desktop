@@ -1,7 +1,9 @@
 use bande_l10n::{tr, trn};
 
+use crate::app_processes::AppProcesses;
 use crate::dialogs::DIALOGS;
 use crate::installed_apps::InstalledApps;
+use crate::menus::app_menu;
 use crate::rail::{BarForm, bar_zone, surface_size};
 use crate::taskbar::{
     MenuTarget, Shared, TaskbarAction, TaskbarApp, TaskbarLayout, TaskbarState, scene, taskbar_ui,
@@ -10,6 +12,9 @@ use accesskit::TreeUpdate;
 use bande_config::{Bar as BarConfig, BarEdge};
 use bande_fs::{FolderWatch, Trash};
 use bande_inbox::Inbox;
+use bande_status::hub::StatusHub;
+use bande_status::tray::{Errand, TrayItem, activate_item};
+use bande_status::{Command, Update};
 use bande_taskbar_model::arrange;
 use bande_taskbar_model::bus::{self, BusEvent};
 use bande_toolkit::ui::{Event, Menu, MenuItem, Ui};
@@ -27,7 +32,7 @@ use std::os::fd::BorrowedFd;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::Sender;
 use std::thread;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use zbus::blocking::Connection;
 
 const FILES: &str = "org.bande.Files";
@@ -48,6 +53,15 @@ const MENU_FORCE_QUIT: &str = "force-quit";
 const MENU_WINDOW: &str = "window:";
 const MENU_ACTION: &str = "action:";
 const MENU_OPEN_APP: &str = "open-app:";
+const BANDE_APP_ID: &str = "org.bande.";
+const MENU_PATIENCE: Duration = Duration::from_millis(300);
+
+struct WaitingMenu {
+    menu: String,
+    target: MenuTarget,
+    at: Point,
+    until: Instant,
+}
 
 struct TrashWatch {
     trash: Trash,
@@ -117,6 +131,12 @@ pub struct Taskbar {
     active: Option<String>,
     unresponsive: Vec<String>,
     windowed: Vec<String>,
+    processes: AppProcesses,
+    unkept: Vec<String>,
+    status: StatusHub,
+    updates: Inbox<Update>,
+    status_items: Vec<TrayItem>,
+    waiting_menu: Option<WaitingMenu>,
     keep: Option<Sender<Vec<String>>>,
     autostart: Option<PathBuf>,
     bus: Inbox<BusEvent>,
@@ -186,6 +206,13 @@ impl Taskbar {
                 running.push(app_id.clone());
             }
         }
+        for (window_app, app_id) in &windows {
+            if find_app(entries, window_app).is_some() && !app_id.starts_with(BANDE_APP_ID) {
+                for process in &window.app_processes(window_app) {
+                    self.processes.follow(app_id, process);
+                }
+            }
+        }
         self.windows = windows;
         self.running = running;
     }
@@ -196,9 +223,10 @@ impl Taskbar {
     }
 
     fn describe(&mut self, app_id: &str, kept: bool) -> Option<TaskbarApp> {
-        let running = self.running.iter().any(|running| running == app_id);
+        let windowless = self.windowless(app_id);
+        let running = windowless || self.running.iter().any(|running| running == app_id);
         let entry = self.entry(app_id).cloned();
-        if kept && entry.is_none() && !running {
+        if entry.is_none() && (windowless || !running) {
             return None;
         }
         let name = app_name(self.apps.entries(), app_id);
@@ -214,6 +242,7 @@ impl Taskbar {
             icon,
             kept,
             running,
+            windowless,
         })
     }
 
@@ -222,12 +251,103 @@ impl Taskbar {
         for app_id in self.kept.clone() {
             apps.extend(self.describe(&app_id, true));
         }
-        for app_id in self.running.clone() {
-            if !self.kept.contains(&app_id) {
-                apps.extend(self.describe(&app_id, false));
+        let shown: Vec<String> = self
+            .running
+            .iter()
+            .map(String::as_str)
+            .chain(self.processes.app_ids())
+            .filter(|app_id| !self.kept.iter().any(|kept| kept == app_id))
+            .map(str::to_owned)
+            .collect();
+        self.unkept.retain(|app_id| shown.contains(app_id));
+        for app_id in shown {
+            if !self.unkept.contains(&app_id) {
+                self.unkept.push(app_id);
             }
         }
+        for app_id in self.unkept.clone() {
+            apps.extend(self.describe(&app_id, false));
+        }
         self.state.borrow_mut().set_apps(apps, Instant::now());
+    }
+
+    fn windowless(&self, app_id: &str) -> bool {
+        self.processes.run(app_id) && !self.running.iter().any(|running| running == app_id)
+    }
+
+    fn status_item<T>(&self, app_id: &str, choose: impl Fn(&TrayItem) -> Option<T>) -> Option<T> {
+        self.status_items
+            .iter()
+            .filter(|item| {
+                item.process
+                    .as_ref()
+                    .is_some_and(|process| self.processes.is_of(process, app_id))
+            })
+            .find_map(choose)
+    }
+
+    fn follow_status_items(&mut self) {
+        for item in &self.status_items {
+            let entries = self.apps.entries();
+            let mut named: Vec<&str> = item
+                .names
+                .iter()
+                .filter_map(|name| entries.iter().find(|entry| entry.app_id() == name))
+                .map(DesktopEntry::app_id)
+                .collect();
+            named.dedup();
+            if let ([app_id], Some(process)) = (named.as_slice(), &item.process)
+                && !app_id.starts_with(BANDE_APP_ID)
+            {
+                self.processes.follow(app_id, process);
+            }
+        }
+    }
+
+    fn receive_status(&mut self, window: &mut Window) {
+        for update in self.updates.drain() {
+            match update {
+                Update::Tray(items) => {
+                    self.status_items = items;
+                    self.follow_status_items();
+                    self.sync();
+                    window.request_redraw();
+                }
+                Update::Menu { menu, root } => {
+                    if let Some(waiting) = self.waiting_menu.take_if(|known| known.menu == menu) {
+                        let own = app_menu(&root, &menu);
+                        self.show_menu_with(window, waiting.target, waiting.at, own.items);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    fn show_window(&mut self, entry: DesktopEntry, item: TrayItem, token: Option<String>) {
+        let Some(session) = self.session.clone() else {
+            return;
+        };
+        let app_id = entry.app_id().to_owned();
+        let activating = thread::Builder::new()
+            .name("activate-status-item".to_owned())
+            .spawn(move || {
+                let Err(error) = activate_item(&session, &item.id, token.as_deref()) else {
+                    return;
+                };
+                if matches!(error, zbus::Error::InputOutput(_)) {
+                    tracing::warn!("{} does not answer: {error}", entry.name);
+                    return;
+                }
+                tracing::debug!("{} is opened again: {error}", entry.name);
+                if let Err(error) = bande_xdg::launch(&entry, token.as_deref()) {
+                    tracing::warn!("cannot open {}: {error}", entry.name);
+                }
+            });
+        match activating {
+            Ok(_) => self.state.borrow_mut().launching(&app_id, Instant::now()),
+            Err(error) => tracing::warn!("cannot show {app_id}: {error}"),
+        }
     }
 
     fn load_trash_icons(&mut self) {
@@ -247,6 +367,7 @@ impl Taskbar {
         self.icons.clear();
         self.load_trash_icons();
         self.follow_windows(window);
+        self.follow_status_items();
         self.sync();
         window.request_redraw();
     }
@@ -299,6 +420,12 @@ impl Taskbar {
             return;
         };
         let token = window.activation_token(app_id).ok();
+        if self.windowless(app_id)
+            && let Some(item) =
+                self.status_item(app_id, |item| (!item.item_is_menu).then(|| item.clone()))
+        {
+            return self.show_window(entry, item, token);
+        }
         match bande_xdg::launch(&entry, token.as_deref()) {
             Ok(_) => self.state.borrow_mut().launching(app_id, Instant::now()),
             Err(error) => tracing::warn!("cannot open {}: {error}", entry.name),
@@ -542,6 +669,33 @@ impl Taskbar {
     }
 
     fn show_menu(&mut self, window: &mut Window, target: MenuTarget, at: Point) {
+        if let MenuTarget::App(app_id) = &target
+            && self.windowless(app_id)
+            && let Some(menu) = self.status_item(app_id, |item| item.menu.clone())
+        {
+            self.status.errand(Errand::ShowMenu {
+                menu: menu.clone(),
+                parent: 0,
+            });
+            self.waiting_menu = Some(WaitingMenu {
+                menu,
+                target,
+                at,
+                until: Instant::now() + MENU_PATIENCE,
+            });
+            return;
+        }
+        self.show_menu_with(window, target, at, Vec::new());
+    }
+
+    fn show_menu_with(
+        &mut self,
+        window: &mut Window,
+        target: MenuTarget,
+        at: Point,
+        own: Vec<MenuItem>,
+    ) {
+        self.waiting_menu = None;
         self.confirming = false;
         let items = match &target {
             MenuTarget::More(hidden) => hidden
@@ -608,6 +762,10 @@ impl Taskbar {
                     MenuItem::new(&tr!("Show in Files"), MENU_SHOW).enabled(installed),
                 ]);
                 items.push(MenuItem::submenu(&tr!("Options"), options));
+                if !own.is_empty() {
+                    items.push(MenuItem::separator());
+                    items.extend(own);
+                }
                 if running {
                     items.push(MenuItem::separator());
                     items.push(MenuItem::new(&tr!("Hide"), MENU_HIDE));
@@ -690,6 +848,11 @@ impl Taskbar {
                     && let Err(error) = set_open_at_login(dir, &entry.id, &entry.path, open)
                 {
                     tracing::warn!("cannot change whether {app_id} opens at login: {error}");
+                }
+            }
+            (MenuTarget::App(_), action) => {
+                if let Some(Command::Item { item, id }) = Command::parse(action) {
+                    self.status.errand(Errand::Clicked { menu: item, id });
                 }
             }
             _ => {}
@@ -826,6 +989,10 @@ impl Taskbar {
         self.menu.is_some()
     }
 
+    pub fn forget_waiting_menu(&mut self) {
+        self.waiting_menu = None;
+    }
+
     pub fn set_menu_open(&mut self, open: bool) {
         self.state.borrow_mut().set_menu_open(open, Instant::now());
     }
@@ -873,6 +1040,16 @@ impl App for Taskbar {
     }
 
     fn event(&mut self, window: &mut Window, event: WindowEvent) {
+        if matches!(
+            event,
+            WindowEvent::Input(Event::PointerDown(_))
+                | WindowEvent::Accessibility(_)
+                | WindowEvent::ShowLauncher { .. }
+                | WindowEvent::OpenLauncher { .. }
+                | WindowEvent::TogglePanel(_)
+        ) {
+            self.forget_waiting_menu();
+        }
         match event {
             WindowEvent::Input(Event::PointerDown(pointer))
                 if self.owns_open_menu_at(pointer.position) =>
@@ -971,18 +1148,28 @@ impl App for Taskbar {
     fn sources(&self) -> Vec<BorrowedFd<'_>> {
         let mut sources = vec![self.bus.fd()];
         sources.extend(self.apps.fd());
+        sources.push(self.updates.fd());
         if let Some(trash) = &self.trash {
             sources.extend([trash.watch.fd(), trash.checked.fd()]);
         }
+        sources.extend(self.processes.fds());
         sources
     }
 
     fn source_ready(&mut self, window: &mut Window, index: usize) {
         let watched = 1 + usize::from(self.apps.fd().is_some());
+        let trash = watched + 1;
+        let processes = trash + if self.trash.is_some() { 2 } else { 0 };
         match index {
             0 => self.receive(window),
             1 if watched == 2 => self.apps.read(),
-            index if index == watched => {
+            index if index == watched => self.receive_status(window),
+            index if index >= processes => {
+                self.processes.ended(index - processes);
+                self.sync();
+                window.request_redraw();
+            }
+            index if index == trash => {
                 if let Some(trash) = &mut self.trash {
                     trash.watch.read();
                 }
@@ -1002,15 +1189,24 @@ impl App for Taskbar {
 
     fn deadline(&self) -> Option<Instant> {
         let watch = self.trash.as_ref().and_then(|trash| trash.watch.deadline());
-        [self.state.borrow().deadline(), watch, self.apps.deadline()]
-            .into_iter()
-            .flatten()
-            .min()
+        let menu = self.waiting_menu.as_ref().map(|waiting| waiting.until);
+        [
+            self.state.borrow().deadline(),
+            watch,
+            self.apps.deadline(),
+            menu,
+        ]
+        .into_iter()
+        .flatten()
+        .min()
     }
 
     fn tick(&mut self, window: &mut Window, now: Instant) {
         self.state.borrow_mut().tick(now);
         self.follow_installed_apps(window, now);
+        if let Some(waiting) = self.waiting_menu.take_if(|waiting| waiting.until <= now) {
+            self.show_menu_with(window, waiting.target, waiting.at, Vec::new());
+        }
         if let Some(trash) = &mut self.trash
             && !trash.watch.take_changed(now).is_empty()
         {
@@ -1047,6 +1243,7 @@ impl Taskbar {
         config: &BarConfig,
         text: TextSystem,
         session: Option<&Connection>,
+        status: &StatusHub,
     ) -> std::io::Result<Self> {
         let edge = config.edge;
         let icon_size = config.icon_size as f32;
@@ -1054,6 +1251,8 @@ impl Taskbar {
         if let Some(session) = session {
             bus::follow(session, inbox.outbox());
         }
+        let updates = Inbox::new()?;
+        status.subscribe(updates.outbox());
         let appearance = window.appearance();
         let form = BarForm::of(config);
         let state = TaskbarState::new(edge, icon_size);
@@ -1082,6 +1281,12 @@ impl Taskbar {
             active: None,
             unresponsive: Vec::new(),
             windowed: Vec::new(),
+            processes: AppProcesses::known(),
+            unkept: Vec::new(),
+            status: status.clone(),
+            updates,
+            status_items: Vec::new(),
+            waiting_menu: None,
             keep: session.map(|session| bus::keep_writer(session.clone())),
             autostart: autostart_dir(),
             bus: inbox,

@@ -50,6 +50,7 @@ pub fn open(
         bar,
         text.sharing_fonts(),
         services.session,
+        services.status,
     )?;
     let mut view = TaskbarView::new(
         window.appearance().palette(),

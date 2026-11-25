@@ -10,6 +10,7 @@ mod lock;
 mod popup;
 mod presentation;
 mod primary;
+mod processes;
 mod run;
 mod scale;
 mod seat;

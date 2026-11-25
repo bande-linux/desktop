@@ -1,7 +1,10 @@
+use std::fs;
 use std::process;
 use std::sync::mpsc::{self, Receiver};
 use std::thread;
 
+use bande_bus::systemd::main_pid;
+use bande_bus::{HeldProcess, connected_process};
 use bande_inbox::Outbox;
 use zbus::blocking::fdo::DBusProxy;
 use zbus::blocking::{Connection, MessageIterator};
@@ -19,6 +22,7 @@ const ITEM_INTERFACE: &str = "org.kde.StatusNotifierItem";
 const WATCHER_INTERFACE: &str = "org.kde.StatusNotifierWatcher";
 const WATCHER: &str = "org.kde.StatusNotifierWatcher";
 const MENU_INTERFACE: &str = "com.canonical.dbusmenu";
+const AUTOSTARTED: &str = "@autostart.service";
 const ICON_PIXELS: i32 = 32;
 const BUS: &str = "org.freedesktop.DBus";
 
@@ -43,6 +47,8 @@ pub struct TrayItem {
     pub icon: TrayIcon,
     pub menu: Option<String>,
     pub item_is_menu: bool,
+    pub process: Option<HeldProcess>,
+    pub names: Vec<String>,
 }
 
 #[zbus::proxy(
@@ -66,6 +72,11 @@ trait StatusNotifierWatcher {
 )]
 trait StatusNotifierItem {
     fn activate(&self, x: i32, y: i32) -> zbus::Result<()>;
+
+    fn provide_xdg_activation_token(&self, token: &str) -> zbus::Result<()>;
+
+    #[zbus(property)]
+    fn id(&self) -> zbus::Result<String>;
 
     #[zbus(property)]
     fn title(&self) -> zbus::Result<String>;
@@ -123,6 +134,33 @@ fn item_proxy<'a>(connection: &Connection, id: &'a str) -> zbus::Result<StatusNo
         .build()
 }
 
+fn owner(connection: &Connection, id: &str) -> zbus::Result<Option<HeldProcess>> {
+    connected_process(connection, BusName::try_from(split(id).0)?)
+}
+
+fn own_unit(connection: &Connection, pid: u32) -> Option<String> {
+    let cgroup = fs::read_to_string(format!("/proc/{pid}/cgroup"))
+        .inspect_err(|error| tracing::debug!("no unit of process {pid}: {error}"))
+        .ok()?;
+    let unit = bande_xdg::cgroup_unit(&cgroup)?;
+    let own = bande_xdg::is_scope_of(unit, pid)
+        || (unit.ends_with(AUTOSTARTED)
+            && main_pid(connection, unit)
+                .inspect_err(|error| tracing::debug!("no main process of {unit}: {error}"))
+                .is_ok_and(|main| main == Some(pid)));
+    own.then(|| unit.to_owned())
+}
+
+pub fn activate_item(connection: &Connection, id: &str, token: Option<&str>) -> zbus::Result<()> {
+    let item = item_proxy(connection, id)?;
+    if let Some(token) = token
+        && let Err(error) = item.provide_xdg_activation_token(token)
+    {
+        tracing::debug!("a status item takes no activation token: {error}");
+    }
+    item.activate(0, 0)
+}
+
 fn fetch(connection: &Connection, id: &str) -> Option<TrayItem> {
     let item = item_proxy(connection, id).ok()?;
     if item.status().is_ok_and(|status| status == "Passive") {
@@ -150,12 +188,26 @@ fn fetch(connection: &Connection, id: &str) -> Option<TrayItem> {
         .ok()
         .filter(|path| path.as_str() != "/")
         .map(|path| format!("{}{}", split(id).0, path.as_str()));
+    let process = owner(connection, id)
+        .inspect_err(|error| tracing::debug!("no process of the status item {id}: {error}"))
+        .unwrap_or_default();
     Some(TrayItem {
         id: id.to_owned(),
         title: item.title().unwrap_or_default(),
         icon,
         menu,
         item_is_menu: item.item_is_menu().unwrap_or(false),
+        names: process
+            .as_ref()
+            .and_then(|process| own_unit(connection, process.pid))
+            .map(|unit| bande_xdg::unit_app_ids(&unit))
+            .into_iter()
+            .flatten()
+            .chain(item.id().inspect_err(|error| {
+                tracing::debug!("no name of the status item {id}: {error}");
+            }))
+            .collect(),
+        process,
     })
 }
 

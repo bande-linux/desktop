@@ -15,8 +15,6 @@ use crate::progress::waits_for_a_device;
 
 const LOOK: Duration = Duration::from_secs(1);
 
-/// How long waiting for a device, such as a busy disk, may keep the compositor from working
-/// before it counts as hung.
 pub(crate) const LONGEST_DEVICE_WAIT: Duration = Duration::from_secs(120);
 
 struct Shared {
@@ -86,6 +84,7 @@ impl Keepalive {
             alive_at: Mutex::new(Instant::now()),
             late_after: interval + interval / 2,
         });
+        shared.look_in(shared.late_after)?;
         let watched = Arc::clone(&shared);
         thread::Builder::new()
             .name("keepalive".to_owned())

@@ -69,8 +69,6 @@ fn is_in_a_driver(syscall: &str) -> bool {
         .is_some_and(|number| number.parse() == Ok(libc::SYS_ioctl))
 }
 
-/// Whether a thread of this process waits for a device, such as a disk that is busy, or its first
-/// thread is kept in a driver's call.
 pub(crate) fn waits_for_a_device() -> bool {
     let first = Path::new(OWN_TASKS).join(std::process::id().to_string());
     any_waits_for_a_device(Path::new(OWN_TASKS))

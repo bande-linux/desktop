@@ -13,6 +13,7 @@ const FLIP_TIMEOUT: Duration = Duration::from_secs(1);
 const FAILED_FRAME_RETRY: Duration = Duration::from_millis(250);
 const RESTART_DISPLAY_AFTER: Duration = Duration::from_secs(3);
 const GIVE_UP_AFTER: Duration = Duration::from_secs(15);
+const LONGEST_COUNTED_GAP: Duration = Duration::from_secs(5);
 const MEASURED_GRACE: Duration = Duration::from_secs(1);
 const JANK_WINDOW: Duration = Duration::from_secs(10);
 const JANK_PERCENT: u64 = 5;
@@ -294,6 +295,7 @@ pub enum RecoveryStep {
 pub struct FrameRecovery {
     restarted: bool,
     excused: Duration,
+    seen: Duration,
 }
 
 impl FrameRecovery {
@@ -310,6 +312,8 @@ impl FrameRecovery {
             *self = Self::default();
             return RecoveryStep::Wait;
         };
+        let gap = whole.saturating_sub(std::mem::replace(&mut self.seen, whole));
+        self.excused += gap.saturating_sub(LONGEST_COUNTED_GAP);
         let stalled_for = whole.saturating_sub(self.excused);
         let next = match self.restarted {
             true => GIVE_UP_AFTER,
@@ -926,36 +930,43 @@ mod tests {
     fn a_busy_disk_puts_off_giving_up_on_the_display_but_not_for_ever() {
         let mut recovery = FrameRecovery::default();
         let after = |seconds| Some(Duration::from_secs(seconds));
-        for seconds in [3, 6, 60, 119] {
+        for second in 0..150 {
+            let expected = match second {
+                120 => RecoveryStep::RestartDisplay,
+                132.. => RecoveryStep::GiveUp,
+                _ => RecoveryStep::Wait,
+            };
             assert_eq!(
-                recovery.step_unless(after(seconds), || true),
-                RecoveryStep::Wait
+                recovery.step_unless(after(second), || true),
+                expected,
+                "at {second} s"
+            );
+            if expected == RecoveryStep::GiveUp {
+                break;
+            }
+        }
+        assert_eq!(recovery.step_unless(None, || true), RecoveryStep::Wait);
+        for second in 0..=15 {
+            let expected = match second {
+                3 => RecoveryStep::RestartDisplay,
+                15 => RecoveryStep::GiveUp,
+                _ => RecoveryStep::Wait,
+            };
+            assert_eq!(
+                recovery.step_unless(after(second), || false),
+                expected,
+                "at {second} s"
             );
         }
-        assert_eq!(
-            recovery.step_unless(after(121), || true),
-            RecoveryStep::Wait
-        );
-        assert_eq!(
-            recovery.step_unless(after(122), || true),
-            RecoveryStep::RestartDisplay
-        );
-        assert_eq!(
-            recovery.step_unless(after(134), || true),
-            RecoveryStep::GiveUp
-        );
-        assert_eq!(recovery.step_unless(None, || true), RecoveryStep::Wait);
-        assert_eq!(
-            recovery.step_unless(after(3), || false),
-            RecoveryStep::RestartDisplay
-        );
-        assert_eq!(
-            recovery.step_unless(after(14), || false),
-            RecoveryStep::Wait
-        );
-        assert_eq!(
-            recovery.step_unless(after(15), || false),
-            RecoveryStep::GiveUp
-        );
+    }
+
+    #[test]
+    fn a_kept_event_loop_tries_the_display_again_before_giving_up() {
+        let mut recovery = FrameRecovery::default();
+        let mut step = |seconds| recovery.step_unless(Some(Duration::from_secs(seconds)), || false);
+        assert_eq!(step(40), RecoveryStep::RestartDisplay);
+        assert_eq!(step(80), RecoveryStep::Wait);
+        assert_eq!(step(84), RecoveryStep::Wait);
+        assert_eq!(step(85), RecoveryStep::GiveUp);
     }
 }

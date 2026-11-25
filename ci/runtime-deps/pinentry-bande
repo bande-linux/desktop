@@ -1,0 +1,10 @@
+/usr/bin/ksshaskpass ksshaskpass optional
+/usr/bin/lxqt-openssh-askpass lxqt-openssh-askpass optional
+/usr/bin/pinentry-curses pinentry-curses optional
+/usr/bin/pinentry-fltk pinentry-fltk optional
+/usr/bin/pinentry-gnome3 pinentry-gnome3 optional
+/usr/bin/pinentry-gtk-2 pinentry-gtk2 optional
+/usr/bin/pinentry-qt pinentry-qt optional
+/usr/bin/pinentry-tty pinentry-tty optional
+/usr/lib/openssh/gnome-ssh-askpass ssh-askpass-gnome optional
+/usr/libexec/bande-secrets-prompt bande-secrets depends

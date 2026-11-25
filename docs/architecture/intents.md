@@ -6,8 +6,10 @@ agent the person chooses call the same intents. Bande contains no model and no a
 
 This page is the specification. [Agents and the MCP server](intents/agents.md), [adding intents to
 an application](intents/providers.md) and one page for each [domain](intents/domains/) belong to it,
-and [the plan](../plans/intents.md) says what is built and in which order. **Nothing here is
-implemented yet.**
+and [the plan](../plans/intents.md) says what is built and in which order. Built are the core
+(`bande-intents`, owners, manifests, the command line, rows in Search, Settings ▸ Activity) and what
+the domains' pages mark `done`; the approval prompt, providers, agents, events, times and routines
+are not, nor undo through another owner's intent.
 
 "Intent" here never means an [XDG application
 intent](https://specifications.freedesktop.org/intent-apps/latest/), which is a role an app can fill
@@ -248,13 +250,15 @@ An intent declares every effect it can have; a plan has the ones its arguments c
 
 ## Declaring an intent
 
-`bande-intents` (traits, values, plans, receipts, interface), with `bande-intents-macros`, depends
-on `zbus`, `serde`, `serde_json` and `bande-l10n`. A declaration is the single source for the bus,
-the manifest, the command line, Search and the tool schema.
+`bande-intents` (traits, values, plans, receipts, interface, client), with `bande-intents-macros`,
+depends on `zbus`, `serde`, `serde_json`, `jiff` and Bande's own small libraries, and on no toolkit.
+A declaration is the single source for the bus, the manifest, the command line, Search and the tool
+schema; its `///` comments are the descriptions.
 
 ```rust
+/// Make a draft; it stays on this computer until it is sent.
 #[derive(Intent)]
-#[intent(id = "mail.create_draft", effects = [Change], title = text!("Create Draft"))]
+#[intent(id = "mail.create_draft", title = text!("Create Draft"), effects = [Change], undo)]
 pub struct CreateDraft {
     pub account: Option<Ref<Account>>,
     pub to: List<Address, 100>,
@@ -264,24 +268,89 @@ pub struct CreateDraft {
     pub body: Option<RichText>,
     pub attachments: List<Ref<File>, 50>,
 }
+```
 
-pub trait Perform<O>: Intent {
-    type Prepared: Send + 'static;
-    type Output: Output;
+### Writing an owner
 
-    fn prepare(self, owner: &O, limits: &Limits) -> Result<Plan<Self::Prepared>, Refusal>;
-    fn perform(
-        prepared: Self::Prepared,
-        owner: &O,
-        job: &Job,
-    ) -> Result<Done<Self::Output>, Refusal>;
-}
+A thing is a struct with a `reference` and a `title`; every other field is an `Option`, filled in
+only when it is wanted. A thing of another program is a unit struct that implements `Referent`.
 
-pub struct Done<T> {
-    pub output: T,
-    pub undo: Option<Undo>,
+```rust
+#[derive(Thing)]
+#[thing(id = "clock.timer", title = text!("Timer"))]
+pub struct Timer {
+    pub reference: Ref<Self>,
+    pub title: Name,
+    #[thing(find)]
+    pub remaining: Option<jiff::Span>,
+    #[thing(foreign, content)]
+    pub notes: Option<RichText>,
 }
 ```
+
+The owner's `Store` is what the things are kept in. `Find` lists references and nothing else: the
+library pages them, makes the set, answers `current` and describes what is shown with `Describe`.
+
+```rust
+impl Find<Clock> for FindTimers {
+    type Thing = Timer;
+    fn find(self, clock: &Clock, limits: &Limits) -> Result<Found<Timer>, Refusal> { … }
+}
+
+impl Describe<Timer> for Clock {
+    fn describe(&self, timer: &Ref<Timer>, wanted: &Wanted, limits: &Limits)
+        -> Result<Timer, Refusal> { … }
+}
+
+impl Perform<Clock> for CreateTimer {
+    type Prepared = Span;
+    type Output = Timer;
+
+    fn prepare(self, clock: &Clock, limits: &Limits) -> Result<Plan<Span>, Refusal> {
+        Ok(Plan {
+            effects: vec![Effect::Change],
+            summary: tr!("New timer: {length}", length = shown(&self.length)),
+            rows: vec![Row::new(RowKind::Text, tr!("Length"), shown(&self.length))],
+            references: Vec::new(),
+            prepared: self.length,
+        })
+    }
+
+    fn perform(length: Span, clock: &Clock, job: &Job) -> Result<Done<Timer>, Refusal> {
+        let timer = clock.reserve();
+        let undo = Undo::by(CancelTimer { timer: timer.clone() })?
+            .touching(&timer, &["remaining"]);
+        job.keep(undo.clone())?;
+        clock.start(&timer, length)?;
+        Ok(Done::undone_by(clock.timer(&timer)?, undo))
+    }
+}
+
+impl Store for Clock {
+    fn look(&self, reference: &str, properties: &[String]) -> Result<String, Refusal> { … }
+    fn recover(&self, undo: Undo) -> Result<Option<Undo>, Refusal> { … }
+}
+
+pub fn owner() -> Owner {
+    Owner::new("org.bande.Clock", "/usr/bin/bande-clock").with(
+        Domain::new(Clock::open)
+            .find::<FindTimers>()
+            .get::<GetTimers>()
+            .perform::<CreateTimer>()
+            .private::<CancelTimer>(),
+    )
+}
+```
+
+`Job::keep` is called **before** each change, with what takes back everything up to and including
+it; a crash then leaves that to `recover`, which says what is left of it: `None` when nothing was
+done. `look` gives the named properties as text that is equal while they mean the same, which is how
+undo sees that something else changed them. Many things go through `Job::expect`, `advance`,
+`failed` and `cancelled`. `perform` blocks, on a thread of its own.
+
+An app returns its owner from `Program::intents`; a service calls `bande_intents::run(owner())` as
+its `main`, and has a D-Bus service file, a user unit without `[Install]` and the
+[line](#manifest) that installs its manifest. Its test is `bande_test_intents::stands`.
 
 **Undo is an intent**: `Undo` is an intent id, its arguments and what the things should still look
 like. It is prepared like any other, so it has its own effects and guard. An owner may have private
@@ -320,14 +389,15 @@ A program run as `<program> --write-intents <folder>` writes its manifest and ex
 anything; a line `debian/build/intents/<program>/* usr/share/bande/intents/` in a package's
 `.install` is what makes `debian/rules` run it at build. The file is `/usr/share/bande/intents/<bus
 name>.json`, root-owned. The command line, Search and the broker read these files, so no list of
-domains exists in code, and look titles up in the program's catalog. An id is served by one program;
+domains exists in code, and look titles and phrases up in the program's catalog, where they are the
+English text (with its `context`, if it has one). An id is served by one program;
 a second, by file name, is ignored and logged, as is a file that does not parse. They are read again
 when the folder changes.
 
 ```json
 { "bus": "org.bande.Intents.Settings", "program": "/usr/libexec/bande-settings-intents",
   "things": { "settings.setting": { "title": { "en": "Setting" },
-    "properties": { "value": { "type": "text", "foreign": false, "find": true } } } },
+    "properties": { "value": { "type": "text", "limit": 4096, "foreign": false, "find": true } } } },
   "events": { "settings.changed": { "thing": "settings.setting", "effects": ["read"] } },
   "intents": { "settings.set": { "title": { "en": "Change Setting" }, "effects": ["change", "disrupt", "critical"],
     "undo": true, "phrases": [{ "words": { "en": "{setting} {value}" }, "arguments": {} }],

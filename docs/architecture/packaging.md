@@ -130,7 +130,7 @@ are in [performance.md](performance.md).
 ## Packages
 
 - **The programs** (architecture `amd64`, `arm64`): `bande-compositor`, the session services
-  (`bande-config`, `bande-notify`, `bande-power`, `bande-printd`, `bande-reporter`, `bande-crash-reports`, `bande-sound`, `bande-spell`, `bande-clipboard`, `bande-tray`, `bande-indexer`,
+  (`bande-config`, `bande-notify`, `bande-power`, `bande-printd`, `bande-reporter`, `bande-crash-reports`, `bande-sound`, `bande-spell`, `bande-clipboard`, `bande-tray`, `bande-indexer`, `bande-system-intents`,
   `bande-automount`, `bande-backup`, `bande-polkit`, `bande-secrets` with `libpam-bande-secrets`
   and `pinentry-bande`,
   `xdg-desktop-portal-bande`), the shell clients (`bande-shell`,
@@ -146,6 +146,14 @@ are in [performance.md](performance.md).
   installs the one shell binary that hosts the desktop, the bar, the notifications, Quick
   Settings and the launcher, together with the Bande wallpapers; the crates of those parts are
   libraries and build no package of their own.
+- **`bande-cli`**: the command line `bande`, which knows only the manifests other packages install,
+  with the page `crates/services/cli/data/bande.1`. `bande-desktop` recommends it.
+- **Manifests** ([intents](intents.md#manifest)): a package whose program serves intents has the
+  line `debian/build/intents/<program>/* usr/share/bande/intents/` in its `.install`, and
+  `debian/rules` runs `<program> --write-intents` for each such line at build. The owner of the
+  settings is `/usr/libexec/bande-settings-intents` in `bande-settings`; the small system domains
+  are in `bande-system-intents`. Both have a D-Bus service file and a user unit, and no package
+  starts them: D-Bus does, at the first call.
 - **`bande-icon-theme`** (architecture `all`): the Bande icon theme and its accent variants from `data/icons`. Every
   package that draws icons depends on it, so a symbol never goes missing because the shell is
   not installed.

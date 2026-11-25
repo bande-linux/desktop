@@ -399,6 +399,34 @@ Description: Bande KDL configuration
  notification with its line and column. Started with the graphical
  session or by D-Bus activation.
 
+Package: bande-cli
+Architecture: any
+Built-Using: ${cargo:Built-Using}
+Static-Built-Using: ${cargo:Static-Built-Using}
+Section: misc
+Depends: ${shlibs:Depends},
+ default-dbus-session-bus | dbus-session-bus,
+ ${misc:Depends}
+Description: Bande command line: what the installed Bande programs can do
+ The command "bande" finds, reads and changes what the installed Bande
+ programs offer (settings, and whatever else is installed), and undoes the
+ last change. What it can do comes from the files those programs install,
+ so a new program adds its commands by itself.
+
+Package: bande-system-intents
+Architecture: any
+Built-Using: ${cargo:Built-Using}
+Static-Built-Using: ${cargo:Static-Built-Using}
+Section: misc
+Depends: ${shlibs:Depends},
+ default-dbus-session-bus | dbus-session-bus,
+ init-system-helpers (>= 1.66),
+ ${misc:Depends}
+Description: Bande system operations for Search, the command line and scripts
+ Offers the operations of the system that no application owns to other
+ programs of the same person, on org.bande.Intents.System on the session
+ bus. Started by D-Bus activation, and ends when it is idle.
+
 Package: bande-power
 Architecture: any
 Built-Using: ${cargo:Built-Using}
@@ -1279,6 +1307,8 @@ Recommends: bande-greeter (>= ${source:Version}),
  bande-screen-viewer (>= ${source:Version}),
  bande-files (>= ${source:Version}),
  bande-settings (>= ${source:Version}),
+ bande-cli (>= ${source:Version}),
+ bande-system-intents (>= ${source:Version}),
  bande-tray (>= ${source:Version}),
  bande-indexer (>= ${source:Version}),
  bande-automount (>= ${source:Version}),

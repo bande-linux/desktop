@@ -5,14 +5,19 @@ Work package C2.
 
 | Thing | Properties (* foreign, ~ name) | In `find` |
 | :--- | :--- | :--- |
-| `settings.setting` | title~ text, value text, kind `switch` `choice` `number` `time` `list`, accepts list<text>, minimum, maximum, step integer, pane text, writable bool | title, value, pane |
+| `settings.setting` | title~ text, value text, kind `switch` `choice` `number` `time` `list`, accepts list<text>, labels list<text> (the same in the person's words), minimum, maximum, step integer, pane text, writable bool | title, value, pane |
 
 | Intent | Parameters | Effects | Undo | Code | P |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| `settings.find` | `text`, `pane` | `read` |  | ready | A |
-| `settings.get` | `settings` (value, kind, what is accepted) | `read` |  | part: config, brightness and displays are on the bus; mapping a setting to them is in the Settings app | A |
-| `settings.open_pane` | `pane` | `show` |  | ready | A |
-| `settings.set` | `setting`, `value`, `until` | `change`, `disrupt` or `critical` as marked | the stored value | part, as above | A |
+| `settings.find` | `text`, `pane` | `read` |  | done | A |
+| `settings.get` | `settings` (value, kind, what is accepted) | `read` |  | done, for the settings below | A |
+| `settings.open_pane` | `pane` | `show` |  | done | A |
+| `settings.set` | `setting`, `value`, `until` | `change`, `disrupt` or `critical` as marked | the stored value | done, without `until` (C8), for the settings below | A |
+
+Served today are the settings that `org.bande.Config` stores as one value, and Do Not Disturb; a
+setting marked `critical` is `Unavailable` until the prompt is built (C3). Not yet: the wallpaper
+(needs D1a), sound levels and devices, brightness, the power mode, displays, Wi-Fi, Bluetooth and
+airplane mode, languages, time and what is only read. They are `NotFound`.
 
 Phrases in Search: "{setting} {value}".
 

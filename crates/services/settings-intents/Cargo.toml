@@ -10,6 +10,7 @@ repository.workspace = true
 [dependencies]
 bande-bus.workspace = true
 bande-intents.workspace = true
+bande-keyboard.workspace = true
 bande-l10n.workspace = true
 bande-log.workspace = true
 bande-settings-client.workspace = true

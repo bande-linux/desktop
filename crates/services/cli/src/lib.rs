@@ -46,6 +46,8 @@ fn carry_out(
     match words {
         [] => Ok(shown::everything(manifests)),
         [help] if help == HELP => Ok(shown::everything(manifests)),
+        [undo, help] if undo == UNDO && help == HELP => Ok(shown::everything(manifests)),
+        [of, help] if help == HELP => carry_out(manifests, connect, std::slice::from_ref(of), json),
         [undo, receipt @ ..] if undo == UNDO => {
             let connection = connect().map_err(Refusal::from)?;
             take_back(manifests, &Client::new(&connection), receipt, json)

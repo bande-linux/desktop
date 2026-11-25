@@ -17,6 +17,7 @@ bande-intents.workspace = true
 bande-l10n.workspace = true
 bande-log.workspace = true
 serde_json.workspace = true
+tracing.workspace = true
 zbus.workspace = true
 
 [lints]

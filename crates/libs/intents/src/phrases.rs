@@ -281,6 +281,10 @@ impl Attempt<'_> {
             None if shared => return Vec::new(),
             None => vec![Dict::new()],
         };
+        let chooses = thing.as_ref().is_some_and(|(_, kind, _)| {
+            let findable = self.phrases.things.get(kind);
+            findable.is_some_and(|findable| findable.accepts)
+        });
         let mut offers = Vec::new();
         for found in things {
             let chosen: Option<BTreeMap<&str, Chosen>> = spread
@@ -297,7 +301,7 @@ impl Attempt<'_> {
                             &phrase.definition.parameter(name)?.kind,
                             &words[range.clone()],
                             &original[range.clone()],
-                            range.end == words.len(),
+                            range.end == words.len() && !chooses,
                             &found,
                             shared,
                         ),
@@ -394,7 +398,7 @@ fn value(
     kind: &Kind,
     words: &[String],
     original: &[&str],
-    last: bool,
+    free: bool,
     thing: &Dict,
     shared: bool,
 ) -> Option<Chosen> {
@@ -411,7 +415,7 @@ fn value(
                 follows_thing: true,
             });
         }
-        Kind::Text { .. } | Kind::RichText if last => (original.join(" "), original.join(" ")),
+        Kind::Text { .. } | Kind::RichText if free => (original.join(" "), original.join(" ")),
         Kind::Enum { words } => {
             let word = words.iter().find(|word| word.replace('-', " ") == typed)?;
             (word.clone(), typed)

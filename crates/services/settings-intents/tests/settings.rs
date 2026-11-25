@@ -4,6 +4,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use bande_config::{ConfigService, ConfigStore};
+use bande_intents::Reason;
 use bande_test_intents::{Change, Owned, stands};
 use tempfile::TempDir;
 use zbus::blocking::Connection;
@@ -78,6 +79,16 @@ fn a_setting_is_changed_on_the_command_line_and_undone_after_the_owner_restarts(
         config.text().contains("\"light\""),
         "changes are undone in order"
     );
+
+    let client = owned.client();
+    let arguments = owned.arguments("settings.set", &["appearance", "dark"]);
+    let prepared = client.prepare(owned.name(), "settings.set", &arguments);
+    bande(&owned, "settings set appearance automatic").unwrap();
+    let before = client.all_receipts(&owned.manifests);
+    let conflict = client.perform(prepared.unwrap()).unwrap_err();
+    assert_eq!(conflict.reason, Reason::Conflict);
+    assert_eq!(client.all_receipts(&owned.manifests), before);
+    assert!(bande(&owned, "settings set input-sources settings").is_err());
 
     let refused = bande(&owned, "settings set appearance purple").unwrap_err();
     assert!(refused.contains("light"), "{refused}");

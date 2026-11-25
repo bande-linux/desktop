@@ -94,10 +94,15 @@ impl Running {
         self.ended.get().is_some()
     }
 
-    pub(crate) fn is_old(&self) -> bool {
+    /// How much longer it can be read, once it has ended.
+    pub(crate) fn readable_for(&self) -> Option<Duration> {
         self.ended
             .get()
-            .is_some_and(|(ended, ..)| ended.elapsed() >= JOB_LASTS)
+            .map(|(ended, ..)| JOB_LASTS.saturating_sub(ended.elapsed()))
+    }
+
+    pub(crate) fn is_old(&self) -> bool {
+        self.readable_for().is_some_and(|rest| rest.is_zero())
     }
 
     pub(crate) fn word(&self) -> &'static str {

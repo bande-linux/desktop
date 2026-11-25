@@ -1,6 +1,7 @@
 use std::sync::LazyLock;
 
 use bande_intents::{List, Name, Ref, Refusal, Text, Wanted};
+use bande_keyboard::Layouts;
 use bande_l10n::tr;
 use bande_settings_panes::{
     Computer, Kind, List as Listed, Mark, Pane, PaneId, Setting, SettingId, Value, panes_of,
@@ -145,13 +146,23 @@ impl Served {
                 let time: jiff::civil::Time = text.parse().ok()?;
                 Some(Value::Text(time.strftime("%H:%M").to_string()))
             }
-            Form::List => Some(Value::Codes(
-                text.split(',')
+            Form::List => {
+                let codes: Vec<String> = text
+                    .split(',')
                     .map(|item| item.trim().to_owned())
                     .filter(|item| !item.is_empty())
-                    .collect(),
-            )),
+                    .collect();
+                self.accepts_list(&codes).then_some(Value::Codes(codes))
+            }
         }
+    }
+
+    fn accepts_list(&self, codes: &[String]) -> bool {
+        if self.id() != SettingId::InputSources {
+            return true;
+        }
+        let layouts = Layouts::load();
+        !codes.is_empty() && codes.iter().all(|code| layouts.find(code).is_some())
     }
 
     fn accepts(&self) -> Vec<String> {

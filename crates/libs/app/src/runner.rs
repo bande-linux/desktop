@@ -108,8 +108,10 @@ pub(crate) fn run<P: Program>(
         let Some(request) = intents.wait_for_launch(session, info.id, instance)? else {
             return Ok(());
         };
-        if let Some(directory) = request.directory {
-            std::env::set_current_dir(directory)?;
+        if let Some(directory) = request.directory
+            && let Err(error) = std::env::set_current_dir(&directory)
+        {
+            tracing::warn!("cannot start in {}: {error}", directory.display());
         }
         arguments = request.arguments;
         activation = request.token;
@@ -143,6 +145,11 @@ pub(crate) fn run<P: Program>(
     let prompted = !background && !windowless && reopen_saved_windows(&mut program, &mut cx);
     if plain_launch && !prompted && !cx.resume.has_main_window() {
         program.reopen(&mut cx);
+    }
+    if let Some(token) = cx.activation.take()
+        && let Some(window) = cx.views.last().map(|(id, _)| *id)
+    {
+        cx.raise(window, Some(token));
     }
     if cx.windows.is_empty() && !background && !windowless && !P::waits_for_activation() {
         cx.resume.discard(&mut cx.link);

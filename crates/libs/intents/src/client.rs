@@ -35,8 +35,6 @@ trait Intents {
         limits: &Dict,
     ) -> zbus::Result<(String, Dict)>;
 
-    fn perform(&self, plan: &str) -> zbus::Result<(OwnedObjectPath, String, Dict)>;
-
     fn receipts(&self, limits: &Dict, count: u32) -> zbus::Result<Vec<Dict>>;
 
     fn prepare_undo(&self, receipt: &str, limits: &Dict) -> zbus::Result<(String, Dict)>;
@@ -216,25 +214,33 @@ impl Client {
 
     /// Performs a plan and waits for its end.
     pub fn perform(&self, prepared: Prepared) -> Result<Performed, Refusal> {
-        let (job, state, result) = self.owner(&prepared.bus)?.perform(&prepared.plan)?;
+        let reply = self
+            .owner(&prepared.bus)?
+            .inner()
+            .call_method("Perform", &(&prepared.plan,))?;
+        let (job, state, result): (OwnedObjectPath, String, Dict) = reply.body().deserialize()?;
+        let header = reply.header();
+        let performer = header
+            .sender()
+            .map_or(prepared.bus.as_str(), |sender| sender.as_str());
         match job.as_str() {
             "/" => Ok(Performed {
                 cancelled: state == CANCELLED,
                 result,
             }),
-            _ => zbus::block_on(self.wait(&prepared.bus, &job)),
+            _ => zbus::block_on(self.wait(performer, &job)),
         }
     }
 
-    async fn wait(&self, bus: &str, path: &OwnedObjectPath) -> Result<Performed, Refusal> {
+    async fn wait(&self, performer: &str, path: &OwnedObjectPath) -> Result<Performed, Refusal> {
         let job = JobProxy::builder(self.connection.inner())
-            .destination(bus.to_owned())?
+            .destination(performer.to_owned())?
             .path(path.clone())?
             .cache_properties(CacheProperties::No)
             .build()
             .await?;
         let changes = zbus::fdo::PropertiesProxy::builder(self.connection.inner())
-            .destination(bus.to_owned())?
+            .destination(performer.to_owned())?
             .path(path.clone())?
             .build()
             .await?

@@ -724,6 +724,7 @@ dependencies = [
  "bande-l10n",
  "bande-log",
  "serde_json",
+ "tracing",
  "zbus",
 ]
 
@@ -1932,6 +1933,7 @@ dependencies = [
  "bande-cli",
  "bande-config",
  "bande-intents",
+ "bande-keyboard",
  "bande-l10n",
  "bande-log",
  "bande-notify",

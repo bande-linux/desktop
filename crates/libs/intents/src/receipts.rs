@@ -94,6 +94,7 @@ pub(crate) struct Receipts {
     folder: PathBuf,
     domain: String,
     all: Vec<Receipt>,
+    pub(crate) interrupted: Vec<String>,
     _lock: File,
 }
 
@@ -132,6 +133,7 @@ impl Receipts {
             folder: folder.to_owned(),
             domain: domain.to_owned(),
             all: Vec::new(),
+            interrupted: Vec::new(),
             _lock: held,
         };
         receipts.all = receipts.load();
@@ -222,17 +224,22 @@ impl Receipts {
         })
     }
 
-    pub(crate) fn has_plan(&self, plan: &str) -> bool {
-        self.all.iter().any(|receipt| receipt.plan == plan)
-    }
-
     pub(crate) fn keep(&mut self, receipt: Receipt) -> io::Result<()> {
         let before = self.all.clone();
-        match self.all.iter_mut().find(|kept| kept.token == receipt.token) {
+        let token = receipt.token.clone();
+        let inline = receipt.undo.as_ref().is_none_or(|undo| undo.beside == 0);
+        match self.all.iter_mut().find(|kept| kept.token == token) {
             Some(kept) => *kept = receipt,
             None => self.all.push(receipt),
         }
-        self.save().inspect_err(|_| self.all = before)
+        if let Err(error) = self.save() {
+            self.all = before;
+            return Err(error);
+        }
+        if let Some(replaced) = before.iter().find(|kept| inline && kept.token == token) {
+            self.remove_beside(replaced);
+        }
+        Ok(())
     }
 
     pub(crate) fn remove(&mut self, token: &str) -> io::Result<()> {

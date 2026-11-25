@@ -79,7 +79,7 @@ impl Intents {
                     ended.send(());
                 })?;
             while self.ended.drain().is_empty() {
-                if let Some(request) = instance.take_requests().into_iter().next() {
+                if let Some(request) = instance.take_first_request() {
                     return Ok(Some(request));
                 }
                 self.answer(|_| Vec::new());
@@ -92,7 +92,7 @@ impl Intents {
             }
             session.release_name(id)?;
             std::thread::sleep(LATE_CALLS);
-            if let Some(request) = instance.take_requests().into_iter().next() {
+            if let Some(request) = instance.take_first_request() {
                 session.request_name(id)?;
                 return Ok(Some(request));
             }
@@ -111,6 +111,14 @@ impl Intents {
         match session_ending {
             true => self.serving.stop(),
             false => self.serving.finish(),
+        }
+    }
+}
+
+impl Drop for Intents {
+    fn drop(&mut self) {
+        if self.serving.is_working() {
+            self.serving.finish();
         }
     }
 }

@@ -29,6 +29,7 @@ const PLAN_LASTS: Duration = Duration::from_secs(10 * 60);
 const SET_LASTS: Duration = Duration::from_secs(10 * 60);
 pub(crate) const JOB_LASTS: Duration = Duration::from_secs(10 * 60);
 const AT_ONCE: Duration = Duration::from_millis(100);
+const END_IS_READ: Duration = Duration::from_millis(200);
 const MOST_PLANS: usize = 16;
 const MOST_SETS: usize = 16;
 const MOST_FOUND: u32 = 100;
@@ -181,7 +182,7 @@ impl Serving {
         self.finish();
     }
 
-    /// Blocks until the jobs and calls have ended.
+    /// Blocks until the jobs and calls have ended, and their callers could read how.
     pub fn finish(&self) {
         let mut state = self.0.state();
         while state.is_working() {
@@ -190,6 +191,11 @@ impl Serving {
                 .changed
                 .wait(state)
                 .unwrap_or_else(PoisonError::into_inner);
+        }
+        let unread = state.jobs.values().any(|job| job.is_exported());
+        drop(state);
+        if unread {
+            std::thread::sleep(END_IS_READ);
         }
     }
 
@@ -249,7 +255,10 @@ impl Waiting {
     }
 
     fn is_busy(&self) -> bool {
-        self.is_working() || !self.plans.is_empty() || !self.sets.is_empty()
+        self.is_working()
+            || !self.plans.is_empty()
+            || !self.sets.is_empty()
+            || self.jobs.values().any(|job| !job.is_old())
     }
 
     fn next_end(&self) -> Option<Duration> {
@@ -261,7 +270,8 @@ impl Waiting {
             .sets
             .values()
             .map(|set| SET_LASTS.saturating_sub(set.made.elapsed()));
-        plans.chain(sets).min()
+        let jobs = self.jobs.values().filter_map(|job| job.readable_for());
+        plans.chain(sets).chain(jobs).min()
     }
 
     fn forget_caller(&mut self, sender: &str) {
@@ -391,13 +401,19 @@ impl Shared {
             .collect();
         for receipt in begun {
             let interrupted = (!receipt.asked.is_empty()).then(|| receipt.clone());
+            receipts.interrupted.push(receipt.plan.clone());
             let left = match receipts.undo(&receipt) {
-                Some(undo) => self.store(of)?.recover(undo)?,
+                Some(undo) => match self.left(of, undo) {
+                    Err(refusal) if refusal.reason == Reason::NotFound => {
+                        tracing::warn!("{} cannot be undone: {refusal}", receipt.intent);
+                        None
+                    }
+                    left => left?,
+                },
                 None => None,
             };
             let kept = match left {
-                Some(undo) => {
-                    let looks = self.looks(of, &undo)?;
+                Some((undo, looks)) => {
                     receipts.kept(&receipt.token, undo, looks).and_then(|undo| {
                         receipts.keep(Receipt {
                             state: State::Whole,
@@ -414,6 +430,14 @@ impl Shared {
             }
         }
         Ok(())
+    }
+
+    fn left(&self, of: &str, undo: Undo) -> Result<Option<(Undo, Vec<String>)>, Refusal> {
+        let Some(undo) = self.store(of)?.recover(undo)? else {
+            return Ok(None);
+        };
+        let looks = self.looks(of, &undo)?;
+        Ok(Some((undo, looks)))
     }
 
     fn tell_interrupted(&self, receipt: &Receipt) {
@@ -548,7 +572,8 @@ impl Shared {
             None => return Err(expired()),
         };
         let (references, cut, matched_foreign) = {
-            let state = self.state();
+            let mut state = self.state();
+            state.forget_old();
             let held = state
                 .sets
                 .get(&set)
@@ -845,7 +870,7 @@ impl Shared {
             )),
             None => {
                 drop(state);
-                Err(match self.was_begun(plan) {
+                Err(match self.was_interrupted(plan) {
                     true => Refusal::interrupted(),
                     false => expired(),
                 })
@@ -853,12 +878,14 @@ impl Shared {
         }
     }
 
-    fn was_begun(&self, plan: &str) -> bool {
+    fn was_interrupted(&self, plan: &str) -> bool {
         let mut domains: Vec<&str> = self.entries.keys().map(|id| domain(id)).collect();
         domains.dedup();
         domains.into_iter().any(|of| {
-            self.with_receipts(of, |receipts| Ok(receipts.has_plan(plan)))
-                .unwrap_or(false)
+            self.with_receipts(of, |receipts| {
+                Ok(receipts.interrupted.iter().any(|it| it == plan))
+            })
+            .unwrap_or(false)
         })
     }
 

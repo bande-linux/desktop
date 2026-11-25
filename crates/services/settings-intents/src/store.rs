@@ -109,19 +109,14 @@ impl Settings {
         }
     }
 
-    fn apply<T>(
-        &self,
-        change: &Change<T>,
-        write: impl FnOnce() -> zbus::Result<()>,
-    ) -> Result<(), Refusal> {
-        let id = change.served.id();
-        if self.client.stored(id)? != change.before {
-            return Err(Refusal::conflict(tr!(
-                "{setting} was changed by something else",
-                setting = change.served.setting.label.clone()
-            )));
+    fn unchanged<T>(&self, change: &Change<T>) -> Result<(), Refusal> {
+        if self.client.stored(change.served.id())? == change.before {
+            return Ok(());
         }
-        Ok(write()?)
+        Err(Refusal::conflict(tr!(
+            "{setting} was changed by something else",
+            setting = change.served.setting.label.clone()
+        )))
     }
 
     fn thing(&self, served: &Served, wanted: &Wanted) -> Result<Setting, Refusal> {
@@ -251,8 +246,9 @@ impl Perform<Settings> for Set {
             stored: written(&change.before)?.into(),
         })?
         .touching(&change.served.reference(), &[VALUE]);
+        owner.unchanged(&change)?;
         job.keep(undo.clone())?;
-        owner.apply(&change, || owner.client.set(id, &change.after))?;
+        owner.client.set(id, &change.after)?;
         let thing = owner.thing(&change.served, &Wanted::of(&[VALUE]))?;
         Ok(match owner.client.stored(id)? == change.before {
             true => Done::new(thing),
@@ -285,8 +281,8 @@ impl Perform<Settings> for Restore {
         owner: &Settings,
         _job: &Job,
     ) -> Result<Done<Setting>, Refusal> {
-        let id = change.served.id();
-        owner.apply(&change, || owner.client.restore(id, &change.after))?;
+        owner.unchanged(&change)?;
+        owner.client.restore(change.served.id(), &change.after)?;
         Ok(Done::new(
             owner.thing(&change.served, &Wanted::of(&[VALUE]))?,
         ))

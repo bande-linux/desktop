@@ -151,6 +151,16 @@ impl Instance {
         self.requests.fd()
     }
 
+    pub(crate) fn take_first_request(&mut self) -> Option<Request> {
+        let mut requests = self.take_requests().into_iter();
+        let first = requests.next();
+        let later = self.requests.outbox();
+        for request in requests {
+            later.send(request);
+        }
+        first
+    }
+
     pub(crate) fn take_requests(&mut self) -> Vec<Request> {
         self.requests.drain()
     }

@@ -2,7 +2,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError, Weak, mpsc};
 
 use ash::{ext, khr, vk};
-use vello_cpu::Glyph;
 
 use vello_gpu::kurbo::{self, Affine, BezPath};
 use vello_gpu::peniko::BlendMode;
@@ -17,7 +16,6 @@ use crate::dmabuf::{SHARED_FORMAT, SharedImage, Sharing};
 use crate::draw::{self, Caches, Canvas, Frame, Recording};
 use crate::render::{DrawError, Snapshot};
 use crate::scene::{Image, Scene};
-use crate::text::GlyphRun;
 
 const OFFSCREEN_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 const OFFSCREEN_ATLAS: (u32, u32) = (1024, 1024);
@@ -433,7 +431,6 @@ impl GpuRenderer {
         self.upload_images(recording.images(&self.caches));
         let mut canvas = GpuCanvas {
             scene: &mut self.scene,
-            resources: &mut self.resources,
         };
         recording.replay(&mut canvas, &mut self.caches);
         let cleared: Vec<RectU16> = damage
@@ -615,7 +612,6 @@ impl GpuRenderer {
 
 struct GpuCanvas<'a> {
     scene: &'a mut vello_gpu::Scene,
-    resources: &'a mut Resources,
 }
 
 impl Canvas for GpuCanvas<'_> {
@@ -669,19 +665,6 @@ impl Canvas for GpuCanvas<'_> {
         self.scene
             .push_layer(Some(path), Some(draw::CLEAR), None, None, None);
         self.scene.pop_layer();
-    }
-
-    fn fill_glyphs(&mut self, run: &GlyphRun, glyphs: &[Glyph]) {
-        if let Err(error) = self
-            .scene
-            .glyph_run(self.resources, &run.font)
-            .font_size(run.size)
-            .hint(false)
-            .normalized_coords(&run.coords)
-            .fill_glyphs(glyphs.iter().copied())
-        {
-            tracing::warn!("cannot draw glyphs: {error}");
-        }
     }
 }
 
@@ -1135,6 +1118,47 @@ mod tests {
                 differs.is_some_and(|differs| differs <= SAMPLING_ROUNDING),
                 "{size} at {scale}: a channel differs by {differs:?}"
             );
+        }
+    }
+
+    #[test]
+    fn layered_colour_glyphs_show_the_same_on_the_gpu_and_the_cpu() {
+        let _turn = device_turn();
+        let linear = [vec![LINEAR]];
+        let Some(gpu) = GpuDevice::shared(false, None)
+            .ok()
+            .filter(|gpu| gpu.shares_images(&linear))
+        else {
+            eprintln!("skipped, no GPU to share images from");
+            return;
+        };
+        let font = crate::colr::tests::font();
+        let mut renderer = GpuRenderer::with_device(Arc::clone(&gpu), (SIDE, SIDE));
+        for scale in [1.0, 1.5] {
+            for glyph in crate::colr::tests::GLYPHS {
+                let run = crate::colr::tests::run(&font, glyph, 30.0);
+                let scene = scene_of(&[Item::Glyphs(run)]);
+                let side = crate::render::pixels(SIDE, scale);
+                let image = gpu
+                    .shared_image((side, side), &linear)
+                    .expect("a shared image");
+                renderer
+                    .present(&scene, scale, &image, None)
+                    .expect("a frame with a colour glyph");
+                let mut drawn = vec![0; (side * side * 4) as usize];
+                crate::cpu::CpuRenderer::new()
+                    .render_into(&scene, scale, &mut drawn)
+                    .expect("the same frame on the CPU");
+                for pixel in drawn.as_chunks_mut::<4>().0 {
+                    pixel.swap(0, 2);
+                }
+                let differs =
+                    furthest(&pixels(&image, &everywhere(side)), drawn.as_chunks::<4>().0);
+                assert!(
+                    differs.is_some_and(|differs| differs <= SAMPLING_ROUNDING),
+                    "glyph {glyph} at {scale}: a channel differs by {differs:?}"
+                );
+            }
         }
     }
 

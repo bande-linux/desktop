@@ -104,7 +104,7 @@ tracing-subscriber = { version = "0.3.23", default-features = false, features = 
 udev = "0.9.3"
 ureq = { version = "3.4.2", default-features = false, features = ["gzip", "platform-verifier", "rustls-no-provider"] }
 vello_cpu = "0.3.0"
-vello_gpu = { version = "0.3.0", default-features = false, features = ["wgpu", "text"] }
+vello_gpu = { version = "0.3.0", default-features = false, features = ["wgpu"] }
 wayland-backend = { version = "0.3.17", features = ["log"] }
 wayland-client = "0.31.15"
 wayland-protocols = { version = "0.32.13", features = ["client", "staging", "unstable"] }

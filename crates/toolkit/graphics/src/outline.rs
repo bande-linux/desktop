@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::io::Cursor;
 use std::sync::Arc;
 
+use bande_design::Color;
 use skrifa::bitmap::{BitmapData, Origin};
 use skrifa::instance::{LocationRef, NormalizedCoord, Size};
 use skrifa::outline::{DrawSettings, OutlinePen};
@@ -10,6 +11,7 @@ use skrifa::raw::TableProvider;
 use skrifa::{FontRef, GlyphId, MetadataProvider, Tag};
 use vello_cpu::kurbo::{self, Affine, BezPath, Vec2};
 
+use crate::colr;
 use crate::scene::{Image, Rect, premultiply};
 use crate::text::GlyphRun;
 
@@ -27,7 +29,7 @@ const COLOUR_GLYPH: kurbo::Rect = kurbo::Rect::new(-1.0, -2.0, 2.0, 1.0);
 const GLYPH_TOLERANCE: f64 = 1e-5;
 const LARGEST_SIZE: f32 = 1e6;
 const STEEPEST_SKEW: f32 = 89.0;
-const LARGEST_BITMAP: u32 = 2048;
+pub(crate) const LARGEST_BITMAP: u32 = 2048;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct FontKey {
@@ -55,11 +57,6 @@ pub(crate) struct GlyphBitmap {
     on_pixels: bool,
 }
 
-pub(crate) enum ColourGlyph {
-    Layers,
-    Bitmap(GlyphBitmap),
-}
-
 struct Entry<T> {
     drawn: Option<Arc<T>>,
     used: u64,
@@ -68,13 +65,14 @@ struct Entry<T> {
 #[derive(Default)]
 pub(crate) struct GlyphOutlines {
     glyphs: HashMap<GlyphKey, Entry<GlyphOutline>>,
-    coloured: HashMap<GlyphKey, Entry<ColourGlyph>>,
+    coloured: HashMap<(GlyphKey, Color), Entry<GlyphBitmap>>,
     scale: f64,
     color_fonts: HashMap<FontKey, bool>,
     frame: u64,
 }
 
-struct Pen(BezPath);
+#[derive(Default)]
+pub(crate) struct Pen(pub(crate) BezPath);
 
 impl OutlinePen for Pen {
     fn move_to(&mut self, x: f32, y: f32) {
@@ -152,11 +150,11 @@ impl GlyphOutlines {
         entry.drawn.clone()
     }
 
-    pub(crate) fn coloured(&mut self, run: &GlyphRun, glyph: u32) -> Option<Arc<ColourGlyph>> {
+    pub(crate) fn coloured(&mut self, run: &GlyphRun, glyph: u32) -> Option<Arc<GlyphBitmap>> {
         let (frame, scale) = (self.frame, self.scale);
         let entry = self
             .coloured
-            .entry(glyph_key(run, glyph))
+            .entry((glyph_key(run, glyph), run.color))
             .or_insert_with(|| Entry {
                 drawn: coloured(run, glyph, scale).map(Arc::new),
                 used: frame,
@@ -217,16 +215,33 @@ fn drawable(run: &GlyphRun) -> bool {
             .is_none_or(|degrees| degrees.abs() < STEEPEST_SKEW)
 }
 
-fn coloured(run: &GlyphRun, glyph: u32, scale: f64) -> Option<ColourGlyph> {
+fn coloured(run: &GlyphRun, glyph: u32, scale: f64) -> Option<GlyphBitmap> {
     if !drawable(run) {
         return None;
     }
     let font = FontRef::from_index(run.font_bytes(), run.font_index()).ok()?;
     let id = GlyphId::new(glyph);
-    if font.color_glyphs().get(id).is_some() {
-        return Some(ColourGlyph::Layers);
+    match font.color_glyphs().get(id) {
+        Some(_) => layers(&font, run, id, scale),
+        None => bitmap(&font, run, id, scale),
     }
-    bitmap(&font, run, id, scale).map(ColourGlyph::Bitmap)
+}
+
+fn layers(font: &FontRef<'_>, run: &GlyphRun, id: GlyphId, scale: f64) -> Option<GlyphBitmap> {
+    let painted = colr::paint(font, run, id, scale)?;
+    let (width, height) = painted.size;
+    let area = Rect::new(
+        painted.area.x0 as f32,
+        painted.area.y0 as f32,
+        painted.area.width() as f32,
+        painted.area.height() as f32,
+    );
+    let on_pixels = (painted.area.width() * scale - f64::from(width)).abs() < 0.5;
+    Some(GlyphBitmap {
+        image: Image::from_premultiplied(width, height, painted.pixels)?,
+        area,
+        on_pixels,
+    })
 }
 
 fn bitmap(font: &FontRef<'_>, run: &GlyphRun, id: GlyphId, scale: f64) -> Option<GlyphBitmap> {

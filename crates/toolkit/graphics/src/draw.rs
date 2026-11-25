@@ -3,10 +3,10 @@ use std::sync::{Arc, Weak};
 use vello_cpu::color::{AlphaColor, Srgb};
 use vello_cpu::kurbo::{self, Affine, BezPath, Shape as _, Stroke, StrokeOpts, Vec2};
 use vello_cpu::peniko::{BlendMode, Compose, Extend, Gradient, ImageQuality, ImageSampler, Mix};
-use vello_cpu::{Glyph, ImageId, ImageSource, PaintType};
+use vello_cpu::{ImageId, ImageSource, PaintType};
 
 use crate::damage::Region;
-use crate::outline::{ColourGlyph, GlyphOutline, GlyphOutlines, TOLERANCE};
+use crate::outline::{GlyphOutline, GlyphOutlines, TOLERANCE};
 use crate::scene::{
     Image, Item, Paint, Path, PathElement, Picture, Pixels, Point, Recorded, Rect, Shape, Stop,
     Transform,
@@ -28,7 +28,6 @@ pub(crate) trait Canvas {
     fn push_clip_path(&mut self, path: &BezPath);
     fn pop_clip(&mut self);
     fn clear_path(&mut self, path: &BezPath);
-    fn fill_glyphs(&mut self, run: &GlyphRun, glyphs: &[Glyph]);
 }
 
 const FARTHEST: f64 = 1e8;
@@ -201,10 +200,6 @@ enum Op {
         color: AlphaColor<Srgb>,
         glyphs: Vec<(Arc<GlyphOutline>, Vec2)>,
     },
-    Glyphs {
-        run: GlyphRun,
-        glyphs: Vec<Glyph>,
-    },
     Clip(BezPath),
     Layer {
         blend: BlendMode,
@@ -247,32 +242,25 @@ fn snapped(base: Affine, offset: Point) -> Affine {
 
 fn record_run(outlines: &mut GlyphOutlines, run: &GlyphRun, origin: Point, ops: &mut Vec<Op>) {
     let coloured = outlines.is_color_font(run);
-    let (mut layered, mut plain) = (Vec::new(), Vec::new());
+    let mut plain = Vec::new();
     for glyph in &run.glyphs {
         let (x, y) = (origin.x + glyph.x, origin.y + glyph.y);
-        let drawn = match coloured {
+        let bitmap = match coloured {
             true => outlines.coloured(run, glyph.id),
             false => None,
         };
-        match drawn.as_deref() {
-            Some(ColourGlyph::Bitmap(bitmap)) => {
+        match bitmap {
+            Some(bitmap) => {
                 let area = bitmap.placed(x, y, outlines.scale());
                 let quality = ImageQuality::Medium;
                 ops.push(image_op(area, area, &bitmap.image, Extend::Pad, quality));
             }
-            Some(ColourGlyph::Layers) => layered.push(Glyph { id: glyph.id, x, y }),
             None => plain.extend(
                 outlines
                     .outline(run, glyph.id)
                     .map(|outline| (outline, Vec2::new(f64::from(x), f64::from(y)))),
             ),
         }
-    }
-    if !layered.is_empty() {
-        ops.push(Op::Glyphs {
-            run: run.clone(),
-            glyphs: layered,
-        });
     }
     if !plain.is_empty() {
         ops.push(Op::Outlines {
@@ -837,10 +825,6 @@ impl<C: Canvas> Encoder<'_, C> {
                     }
                     self.canvas.set_transform(transform);
                 }
-                Op::Glyphs { run, glyphs } => {
-                    self.canvas.set_paint(color(run.color).into());
-                    self.canvas.fill_glyphs(run, glyphs);
-                }
                 Op::Clip(clip) => {
                     let shown = drawable(transform.transform_rect_bbox(clip.control_box()));
                     let clip = match shown {
@@ -924,7 +908,6 @@ mod tests {
     struct Counted(usize);
 
     impl Canvas for Counted {
-        fn fill_glyphs(&mut self, _: &GlyphRun, _: &[Glyph]) {}
         fn set_paint(&mut self, _: PaintType) {}
         fn set_transform(&mut self, _: Affine) {}
         fn set_paint_transform(&mut self, _: Affine) {}

@@ -1,14 +1,11 @@
 use vello_cpu::kurbo::{self, Affine, BezPath};
 use vello_cpu::peniko::BlendMode;
-use vello_cpu::{
-    Glyph, PaintType, PixmapMut, RasterizerSettings, RenderContext, Resources, TargetInit,
-};
+use vello_cpu::{PaintType, PixmapMut, RasterizerSettings, RenderContext, Resources, TargetInit};
 
 use crate::damage::Region;
 use crate::draw::{self, Caches, Canvas, Frame, Recording};
 use crate::render::{DrawError, Snapshot};
 use crate::scene::Scene;
-use crate::text::GlyphRun;
 
 pub struct CpuRenderer {
     context: RenderContext,
@@ -97,7 +94,6 @@ impl CpuRenderer {
         recording.replay(
             &mut CpuCanvas {
                 context: &mut self.context,
-                resources: &mut self.resources,
             },
             &mut self.caches,
         );
@@ -117,7 +113,6 @@ impl CpuRenderer {
 
 struct CpuCanvas<'a> {
     context: &'a mut RenderContext,
-    resources: &'a mut Resources,
 }
 
 impl Canvas for CpuCanvas<'_> {
@@ -171,18 +166,5 @@ impl Canvas for CpuCanvas<'_> {
         self.context
             .push_layer(Some(path), Some(draw::CLEAR), None, None, None);
         self.context.pop_layer();
-    }
-
-    fn fill_glyphs(&mut self, run: &GlyphRun, glyphs: &[Glyph]) {
-        if let Err(error) = self
-            .context
-            .glyph_run(self.resources, &run.font)
-            .font_size(run.size)
-            .hint(false)
-            .normalized_coords(&run.coords)
-            .fill_glyphs(glyphs.iter().copied())
-        {
-            tracing::warn!("cannot draw glyphs: {error}");
-        }
     }
 }

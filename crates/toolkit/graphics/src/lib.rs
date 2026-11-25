@@ -1,3 +1,4 @@
+mod colr;
 mod cpu;
 mod damage;
 #[cfg(feature = "gpu")]

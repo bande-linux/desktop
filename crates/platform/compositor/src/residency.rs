@@ -1,8 +1,9 @@
 use std::io;
 use std::path::Path;
 
-use rustix::process::{Resource, getrlimit};
+use rustix::process::{Resource, Rlimit, getrlimit, setrlimit};
 
+const USUAL_LIMIT: u64 = 8 << 20;
 const MAPPINGS: &str = "/proc/self/maps";
 
 struct Mapping {
@@ -43,11 +44,7 @@ fn lock(mapping: &Mapping) -> io::Result<()> {
     }
 }
 
-/// Keeps the pages of the program and its libraries that have been or will be used in memory, as
-/// far as the process may lock memory. Their files are read again from the disk otherwise: the
-/// pages belong to whichever program read them first, such as the login window's compositor, so
-/// the memory kept for the session does not cover them.
-pub fn keep_code_in_memory() {
+fn lock_within(limit: Option<u64>) {
     let maps = match std::fs::read_to_string(MAPPINGS) {
         Ok(maps) => maps,
         Err(error) => return tracing::warn!("the program's code may be reread: {error}"),
@@ -58,9 +55,7 @@ pub fn keep_code_in_memory() {
         .filter_map(|line| mapping(line, program.as_deref()))
         .collect();
     mappings.sort_by_key(|mapping| (!mapping.own_program, mapping.length));
-    let mut left = getrlimit(Resource::Memlock)
-        .current
-        .map_or(usize::MAX, |limit| limit as usize);
+    let mut left = limit.map_or(usize::MAX, |limit| limit as usize);
     for mapping in &mappings {
         if mapping.length > left {
             continue;
@@ -70,6 +65,28 @@ pub fn keep_code_in_memory() {
             Err(error) => {
                 return tracing::debug!("not all of the program's code stays in memory: {error}");
             }
+        }
+    }
+}
+
+/// Keeps the pages of the program and its libraries that have been or will be used in memory, as
+/// far as the process may lock memory, and then gives up the right to lock more than usual, which
+/// the programs it starts would inherit. Their files are read again from the disk otherwise: the
+/// pages belong to whichever program read them first, such as the login window's compositor, so
+/// the memory kept for the session does not cover them.
+pub fn keep_code_in_memory() {
+    let limit = getrlimit(Resource::Memlock);
+    lock_within(limit.current);
+    if limit.maximum.is_none_or(|most| most > USUAL_LIMIT) {
+        let usual = Rlimit {
+            current: limit
+                .current
+                .map(|now| now.min(USUAL_LIMIT))
+                .or(Some(USUAL_LIMIT)),
+            maximum: Some(USUAL_LIMIT),
+        };
+        if let Err(error) = setrlimit(Resource::Memlock, usual) {
+            tracing::warn!("apps may lock more memory than usual: {error}");
         }
     }
 }

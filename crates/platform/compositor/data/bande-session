@@ -57,29 +57,58 @@ if [ -r "$proxy_settings" ]; then
 fi
 
 systemctl --user reset-failed
-protected_units="dbus.service pipewire.service pipewire-pulse.service wireplumber.service xdg-desktop-portal.service"
-set_limits() {
-    systemctl --user set-property --runtime app.slice ManagedOOMMemoryPressure=kill ManagedOOMMemoryPressureLimit=40% \
-        ManagedOOMMemoryPressureDurationSec=10s TasksMax=25% CPUWeight=50
-    for unit in $protected_units; do
-        systemctl --user set-property --runtime "$unit" ManagedOOMPreference=avoid
+controls="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/systemd/user.control"
+limits="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/bande-limits"
+limit() {
+    limited=$1
+    shift
+    wanted=
+    records=
+    for assignment; do
+        record=${assignment%%=*}
+        case $record in
+        TasksMax) record=TasksMaxScale ;;
+        ManagedOOMMemoryPressureDurationSec) record=ManagedOOMMemoryPressureDurationUSec ;;
+        esac
+        record="$limited.d/50-$record.conf"
+        if [ ! -e "$controls/$record" ] || cmp -s "$controls/$record" "$limits/$record"; then
+            wanted="$wanted $assignment"
+            records="$records $record"
+        fi
     done
-    total=$(sed -n 's/^MemTotal: *\([0-9]*\) kB$/\1/p' /proc/meminfo)
-    [ -n "$total" ] || return 0
-    desktop=$((total / 10 < 524288 ? total / 10 : 524288))
-    reserve=$((total / 5 < 3145728 ? total / 5 : 3145728))
-    systemctl --user set-property --runtime session.slice MemoryMin="${desktop}K"
-    systemctl --user set-property --runtime app.slice MemoryHigh="$((total - reserve))K"
+    [ -n "$wanted" ] || return 0
+    systemctl --user set-property --runtime "$limited" $wanted || return 0
+    mkdir -p "$limits/$limited.d"
+    for record in $records; do
+        cp "$controls/$record" "$limits/$record"
+    done
+}
+set_limits() {
+    limit app.slice ManagedOOMMemoryPressure=kill ManagedOOMMemoryPressureLimit=40% \
+        ManagedOOMMemoryPressureDurationSec=10s TasksMax=25% CPUWeight=50
+    for unit in dbus.service pipewire.service pipewire-pulse.service wireplumber.service xdg-desktop-portal.service; do
+        limit "$unit" ManagedOOMPreference=avoid
+    done
+    memory=$(sed -n 's/^MemTotal: *\([0-9]*\) kB$/\1/p' /proc/meminfo)
+    swap=$(sed -n 's/^SwapTotal: *\([0-9]*\) kB$/\1/p' /proc/meminfo)
+    [ -n "$memory" ] || return 0
+    limit session.slice MemoryMin="$((memory / 10 < 524288 ? memory / 10 : 524288))K"
+    reserve=$((memory / 5 < 3145728 ? memory / 5 : 3145728))
+    reserve=$((reserve < ${swap:-0} / 2 ? reserve : ${swap:-0} / 2))
+    [ "$reserve" -eq 0 ] || limit app.slice MemoryHigh="$((memory - reserve))K"
 }
 forget_limits() {
-    controls="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/systemd/user.control"
-    for unit in $protected_units; do
-        rm -f "$controls/$unit.d/50-ManagedOOMPreference.conf"
-    done
-    rm -f "$controls/session.slice.d/50-MemoryMin.conf"
-    for property in ManagedOOMMemoryPressure ManagedOOMMemoryPressureLimit ManagedOOMMemoryPressureDurationUSec TasksMaxScale CPUWeight MemoryHigh; do
-        rm -f "$controls/app.slice.d/50-$property.conf"
-    done
+    [ -d "$limits" ] || return 0
+    (
+        cd "$limits" || exit
+        for record in *.d/*.conf; do
+            if cmp -s "$record" "$controls/$record"; then
+                rm -f "$controls/$record"
+                rmdir "$controls/${record%/*}" 2>/dev/null
+            fi
+        done
+    )
+    rm -rf "$limits"
     systemctl --user daemon-reload
 }
 set_limits

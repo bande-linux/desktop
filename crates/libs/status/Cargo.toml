@@ -28,5 +28,8 @@ zbus.workspace = true
 default = ["audio"]
 audio = ["dep:bande-audio"]
 
+[dev-dependencies]
+tempfile.workspace = true
+
 [lints]
 workspace = true

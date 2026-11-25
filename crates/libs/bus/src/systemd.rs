@@ -36,6 +36,11 @@ pub trait ServiceManager {
         patterns: &[&str],
     ) -> zbus::Result<Vec<ListedUnit>>;
 
+    fn reload(&self) -> zbus::Result<()>;
+
+    #[zbus(property)]
+    fn system_state(&self) -> zbus::Result<String>;
+
     #[zbus(property)]
     fn virtualization(&self) -> zbus::Result<String>;
 }

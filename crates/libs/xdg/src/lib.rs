@@ -34,7 +34,8 @@ pub use installed::{InstallWatch, is_installed};
 pub use launch::{
     ACTIVATION_TOKEN, ExecError, LaunchError, OpenError, TERMINAL, TERMINAL_APP_ID,
     adopt_service_oom_score, follow_oom_kills, launch, launch_action, launch_with,
-    launch_with_arguments, open, open_with, place_tab_in_scope, spawn_detached, wait_for_exit,
+    launch_with_arguments, open, open_with, place_tab_in_scope, spawn_detached,
+    tab_ran_out_of_memory, wait_for_exit,
 };
 pub use mime::{DIRECTORY, MimeDatabase, OCTET_STREAM, TEXT_PLAIN, escape_xml, unescape_xml};
 pub use mimeapps::{

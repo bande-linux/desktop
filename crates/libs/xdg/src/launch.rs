@@ -7,7 +7,7 @@ use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::slice;
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -29,8 +29,10 @@ use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use rustix::fs::{Mode, OFlags};
 use rustix::io::Errno;
 use rustix::process::{Pid, PidfdFlags, Signal, pidfd_open};
-use zbus::blocking::{Connection, MessageIterator};
-use zbus::zvariant::{OwnedValue, Value};
+use zbus::blocking::proxy::Builder;
+use zbus::blocking::{Connection, MessageIterator, Proxy};
+use zbus::proxy::CacheProperties;
+use zbus::zvariant::{OwnedObjectPath, OwnedValue, Value};
 use zbus::{MatchRule, message};
 
 pub const TERMINAL: &str = "bande-terminal";
@@ -669,6 +671,7 @@ const UNIT_INTERFACES: [&str; 2] = [
     "org.freedesktop.systemd1.Scope",
     "org.freedesktop.systemd1.Service",
 ];
+const NO_SUCH_UNIT: &str = "org.freedesktop.systemd1.NoSuchUnit";
 const OOM_KILL: &str = "oom-kill";
 const NOTIFICATIONS: &str = "org.freedesktop.Notifications";
 const REOPEN_ACTION: &str = "reopen";
@@ -678,6 +681,7 @@ const SETTINGS_PROGRAM: &str = "bande-settings";
 const DIAGNOSTICS_PANE: &str = "diagnostics";
 const APP_MEMORY_GUARANTEED: u64 = 128 << 20;
 const APP_MEMORY_KEPT: u64 = 512 << 20;
+const RESULT_POLL: Duration = Duration::from_millis(50);
 const PLACED_POLL: Duration = Duration::from_millis(2);
 const APP_STOP_TIMEOUT_USEC: u64 = 5_000_000;
 const COMPOSITOR_UNIT: &str = "bande-compositor.service";
@@ -700,7 +704,6 @@ fn place_in_scope(bus: &Connection, app_id: &str, instance: &str, pid: u32) -> z
     let mut properties = vec![
         ("PIDs", Value::from(vec![pid])),
         ("Slice", Value::from("app.slice")),
-        ("CollectMode", Value::from("inactive-or-failed")),
         ("PartOf", Value::from(vec!["graphical-session.target"])),
         ("Before", Value::from(vec![COMPOSITOR_UNIT])),
         ("TimeoutStopUSec", Value::from(APP_STOP_TIMEOUT_USEC)),
@@ -708,6 +711,7 @@ fn place_in_scope(bus: &Connection, app_id: &str, instance: &str, pid: u32) -> z
     if is_tab(&scope) {
         properties.push(("OOMPolicy", Value::from("continue")));
     } else {
+        properties.push(("CollectMode", Value::from("inactive-or-failed")));
         properties.push(("MemoryMin", Value::from(APP_MEMORY_GUARANTEED)));
         properties.push(("MemoryLow", Value::from(APP_MEMORY_KEPT)));
     }
@@ -729,10 +733,24 @@ fn place_in_scope(bus: &Connection, app_id: &str, instance: &str, pid: u32) -> z
 /// Moves the process `pid` of one tab of the app into a scope of its own, so that running out of
 /// memory ends that tab alone, and waits until it is there, for at most `patience`.
 pub fn place_tab_in_scope(app_id: &str, pid: u32, patience: Duration) -> zbus::Result<bool> {
+    let deadline = Instant::now() + patience;
     let instance = tab_instance(pid);
     let scope = scope_name(app_id, &instance);
-    place_in_scope(&bande_bus::session()?, app_id, &instance, pid)?;
-    let deadline = Instant::now() + patience;
+    let (connected, connection) = mpsc::channel();
+    let app_id = app_id.to_owned();
+    thread::Builder::new()
+        .name("tab-scope-call".to_owned())
+        .spawn(move || {
+            let placed = bande_bus::session().and_then(|bus| match Instant::now() < deadline {
+                true => place_in_scope(&bus, &app_id, &instance, pid),
+                false => Ok(()),
+            });
+            let _ = connected.send(placed);
+        })
+        .map_err(|error| zbus::Error::InputOutput(Arc::new(error)))?;
+    if let Ok(placed) = connection.recv_timeout(patience) {
+        placed?;
+    }
     loop {
         let cgroup = std::fs::read_to_string(format!("/proc/{pid}/cgroup")).unwrap_or_default();
         if cgroup.trim_end().ends_with(&scope) {
@@ -743,6 +761,49 @@ pub fn place_tab_in_scope(app_id: &str, pid: u32, patience: Duration) -> zbus::R
         }
         thread::sleep(PLACED_POLL);
     }
+}
+
+/// Whether the scope of the tab whose shell was `pid` ended because memory ran out, waiting for
+/// the service manager to say so for at most `patience`. It forgets the scope.
+pub fn tab_ran_out_of_memory(app_id: &str, pid: u32, patience: Duration) -> zbus::Result<bool> {
+    let deadline = Instant::now() + patience;
+    let unit = scope_name(app_id, &tab_instance(pid));
+    let bus = zbus::blocking::connection::Builder::session()?
+        .method_timeout(patience)
+        .build()?;
+    let manager = |method: &str| {
+        bus.call_method(
+            Some(SYSTEMD),
+            SYSTEMD_PATH,
+            Some(SYSTEMD_MANAGER),
+            method,
+            &unit.as_str(),
+        )
+    };
+    let scope: OwnedObjectPath = match manager("GetUnit") {
+        Ok(reply) => reply.body().deserialize()?,
+        Err(zbus::Error::MethodError(name, ..)) if name.as_str() == NO_SUCH_UNIT => {
+            return Ok(false);
+        }
+        Err(error) => return Err(error),
+    };
+    let scope = Builder::<Proxy<'_>>::new(&bus)
+        .destination(SYSTEMD)?
+        .path(scope)?
+        .interface(UNIT_INTERFACES[0])?
+        .cache_properties(CacheProperties::No)
+        .build()?;
+    while Instant::now() < deadline {
+        match scope.get_property::<String>("Result") {
+            Ok(result) if result == OOM_KILL => {
+                manager("ResetFailedUnit")?;
+                return Ok(true);
+            }
+            Ok(_) => thread::sleep(RESULT_POLL),
+            Err(_) => return Ok(false),
+        }
+    }
+    Ok(false)
 }
 
 fn notice_signals(bus: &Connection) -> zbus::Result<MessageIterator> {

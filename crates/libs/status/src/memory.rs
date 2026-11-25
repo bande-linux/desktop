@@ -83,15 +83,21 @@ pub fn memory_exhausted(meminfo: &str) -> bool {
     (available + swap_free) * NEARLY_EXHAUSTED < total + swap_total
 }
 
+/// Whether the apps use nearly all the memory they may, not counting files the kernel can read
+/// again.
 pub fn apps_at_limit(app_slice: &Path) -> bool {
-    let read = |file: &str| {
-        let text = fs::read_to_string(app_slice.join(file)).ok()?;
-        text.trim().parse::<u64>().ok()
-    };
-    let (Some(current), Some(high)) = (read("memory.current"), read("memory.high")) else {
+    let read = |file: &str| fs::read_to_string(app_slice.join(file)).unwrap_or_default();
+    let number = |file: &str| read(file).trim().parse::<u64>().ok();
+    let (Some(current), Some(high)) = (number("memory.current"), number("memory.high")) else {
         return false;
     };
-    current >= high / NEARLY_EXHAUSTED * (NEARLY_EXHAUSTED - 1)
+    let cache: u64 = read("memory.stat")
+        .lines()
+        .filter_map(|line| line.split_once(' '))
+        .filter(|(name, _)| matches!(*name, "inactive_file" | "active_file"))
+        .filter_map(|(_, bytes)| bytes.parse::<u64>().ok())
+        .sum();
+    current.saturating_sub(cache) >= high / NEARLY_EXHAUSTED * (NEARLY_EXHAUSTED - 1)
 }
 
 #[derive(Debug, Default)]
@@ -196,6 +202,7 @@ pub fn heaviest_apps(app_slice: &Path, entries: &[DesktopEntry], limit: usize) -
     };
     let mut apps = Vec::<AppMemory>::new();
     let mut positions = HashMap::<String, usize>::new();
+    let mut tabs = Vec::new();
     for unit in units.filter_map(Result::ok) {
         let Some(name) = unit.file_name().to_str().map(str::to_owned) else {
             continue;
@@ -216,6 +223,7 @@ pub fn heaviest_apps(app_slice: &Path, entries: &[DesktopEntry], limit: usize) -
                     continue;
                 };
                 let shown = tr!("{program} in {app}", program = program, app = app_name);
+                tabs.push((app_id, name.clone()));
                 (name.clone(), shown)
             }
             false => (app_id, app_name),
@@ -233,6 +241,11 @@ pub fn heaviest_apps(app_slice: &Path, entries: &[DesktopEntry], limit: usize) -
         let app = &mut apps[position];
         app.units.push(name);
         app.bytes += bytes;
+    }
+    for (app_id, tab) in tabs {
+        if let Some(position) = positions.get(&app_id) {
+            apps[*position].units.push(tab);
+        }
     }
     apps.sort_by(|left, right| {
         right

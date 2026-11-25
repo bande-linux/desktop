@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::io::{self, Read, Write};
 use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
+use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
@@ -18,10 +19,11 @@ use bande_terminal_view::{GridSize, Terminal, Theme};
 const READ_BUFFER: usize = 65536;
 const READS_PER_WAKE: usize = 16;
 const UNREAD_INPUT_CAP: usize = 1 << 20;
-const DEFAULT_SHELL: &str = "/bin/sh";
+const WRAPPER: &str = "/bin/sh";
 const ENTER: u8 = b'\r';
 const LEAVE_PROGRAM: &[u8] =
     b"\x1b[?1049l\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?2004l\x1b[?25l\x1b[0m\r\n";
+const OUT_OF_MEMORY: u8 = 1;
 const TITLE_SEPARATOR: &str = " — ";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -53,6 +55,7 @@ pub struct Session {
     command: Option<(Instant, String)>,
     notices: Vec<Notice>,
     exited: bool,
+    ending: Option<UnixStream>,
     stopped: bool,
 }
 
@@ -60,27 +63,21 @@ pub type ShellCommand = (String, Vec<String>);
 
 const END_PATIENCE: Duration = Duration::from_millis(200);
 const END_POLL: Duration = Duration::from_millis(2);
+const RESULT_PATIENCE: Duration = Duration::from_secs(2);
 const SCOPE_PATIENCE: Duration = Duration::from_secs(2);
-const STOPPED_UNTIL_PLACED: &str = r#"kill -STOP $$; exec "$@""#;
+const STOPPED_UNTIL_PLACED: &str = r#"kill -STOP $$
+[ $# -gt 0 ] || set -- "${SHELL:-$(getent passwd "$(id -u)" | cut -d: -f7)}"
+exec "$@""#;
 
 fn stopped_until_placed(shell: Option<ShellCommand>) -> ShellCommand {
-    let (program, arguments) = shell.unwrap_or_else(|| {
-        let shell = std::env::var("SHELL")
-            .ok()
-            .filter(|shell| !shell.is_empty());
-        (
-            shell.unwrap_or_else(|| DEFAULT_SHELL.to_owned()),
-            Vec::new(),
-        )
-    });
-    let mut wrapped = vec![
-        "-c".to_owned(),
-        STOPPED_UNTIL_PLACED.to_owned(),
-        "sh".to_owned(),
-        program,
-    ];
-    wrapped.extend(arguments);
-    (DEFAULT_SHELL.to_owned(), wrapped)
+    let mut wrapped = ["-c", STOPPED_UNTIL_PLACED, "sh"]
+        .map(str::to_owned)
+        .to_vec();
+    if let Some((program, arguments)) = shell {
+        wrapped.push(program);
+        wrapped.extend(arguments);
+    }
+    (WRAPPER.to_owned(), wrapped)
 }
 
 fn place_and_start(shell: u32) {
@@ -112,7 +109,7 @@ fn place_and_start(shell: u32) {
     }
 }
 
-fn force_stopped(shell: u32) -> bool {
+fn ran_out_of_memory(shell: u32) -> bool {
     let Some(pid) = i32::try_from(shell).ok().and_then(Pid::from_raw) else {
         return false;
     };
@@ -123,13 +120,14 @@ fn force_stopped(shell: u32) -> bool {
             WaitIdOptions::EXITED | WaitIdOptions::NOWAIT | WaitIdOptions::NOHANG,
         );
         match ended {
-            Ok(Some(status)) => {
-                return status.terminating_signal() == Some(Signal::KILL.as_raw());
-            }
+            Ok(Some(status)) if status.terminating_signal() == Some(Signal::KILL.as_raw()) => break,
             Ok(None) if Instant::now() < deadline => std::thread::sleep(END_POLL),
-            Ok(None) | Err(_) => return false,
+            _ => return false,
         }
     }
+    bande_xdg::tab_ran_out_of_memory(TERMINAL_APP_ID, shell, RESULT_PATIENCE)
+        .inspect_err(|error| tracing::debug!("cannot tell why the shell was killed: {error}"))
+        .unwrap_or_default()
 }
 
 fn enter_server_folder_in_the_shell(
@@ -205,6 +203,7 @@ impl Session {
             command: None,
             notices: Vec::new(),
             exited: false,
+            ending: None,
             stopped: false,
         };
         session.refresh_foreground();
@@ -219,6 +218,10 @@ impl Session {
         self.readiness.as_fd()
     }
 
+    fn ended(&self) -> bool {
+        self.stopped || self.ending.is_some()
+    }
+
     pub fn exited(&self) -> bool {
         self.exited
     }
@@ -228,8 +231,8 @@ impl Session {
     }
 
     pub fn send(&mut self, bytes: &[u8]) -> bool {
-        if self.stopped {
-            self.exited = bytes.contains(&ENTER);
+        if self.ended() {
+            self.exited |= self.stopped && bytes.contains(&ENTER);
             return true;
         }
         if self.output.len() >= UNREAD_INPUT_CAP {
@@ -256,7 +259,7 @@ impl Session {
     }
 
     fn await_room(&mut self, wanted: bool) {
-        if self.stopped || wanted == self.awaiting_room {
+        if self.ended() || wanted == self.awaiting_room {
             return;
         }
         let events = match wanted {
@@ -275,7 +278,8 @@ impl Session {
     }
 
     pub fn read(&mut self, theme: &Theme) -> Vec<Notice> {
-        if self.stopped {
+        if self.ended() {
+            self.learn_why_the_shell_ended();
             return Vec::new();
         }
         let mut buffer = [0u8; READ_BUFFER];
@@ -304,7 +308,7 @@ impl Session {
                 }
             }
         }
-        if !self.stopped {
+        if !self.ended() {
             self.refresh_foreground();
         }
         let notices = self.take_notices(theme);
@@ -313,21 +317,56 @@ impl Session {
     }
 
     fn shell_ended(&mut self) {
-        if !force_stopped(self.shell) {
+        if let Err(error) = self.ask_why_the_shell_ended() {
+            tracing::warn!("cannot ask why the shell ended: {error}");
             self.exited = true;
+        }
+    }
+
+    fn ask_why_the_shell_ended(&mut self) -> io::Result<()> {
+        epoll::delete(&self.readiness, self.pty.file())?;
+        let (asked, answering) = UnixStream::pair()?;
+        asked.set_nonblocking(true)?;
+        epoll::add(
+            &self.readiness,
+            &asked,
+            EventData::new_u64(0),
+            EventFlags::IN,
+        )?;
+        let shell = self.shell;
+        std::thread::Builder::new()
+            .name("tab-end".to_owned())
+            .spawn(move || {
+                if ran_out_of_memory(shell) {
+                    let _ = (&answering).write_all(&[OUT_OF_MEMORY]);
+                }
+            })?;
+        self.ending = Some(asked);
+        Ok(())
+    }
+
+    fn learn_why_the_shell_ended(&mut self) {
+        let Some(asked) = &mut self.ending else {
+            return;
+        };
+        match asked.read(&mut [0]) {
+            Err(error) if error.kind() == io::ErrorKind::WouldBlock => return,
+            Ok(1) => self.stopped = true,
+            _ => self.exited = true,
+        }
+        if let Some(asked) = self.ending.take()
+            && let Err(error) = epoll::delete(&self.readiness, &asked)
+        {
+            tracing::warn!("cannot leave the ended shell: {error}");
+        }
+        if !self.stopped {
             return;
         }
-        if let Err(error) = epoll::delete(&self.readiness, self.pty.file()) {
-            tracing::warn!("cannot leave the stopped shell's terminal: {error}");
-            self.exited = true;
-            return;
-        }
-        self.stopped = true;
         self.output.clear();
         self.foreground = None;
         self.finish_command(None);
         let notice = tr!(
-            "Everything in this tab was stopped, by Force Quit or because memory ran low. Press Return to close it."
+            "Everything in this tab was stopped because memory ran low. Press Return to close it."
         );
         self.terminal.feed(LEAVE_PROGRAM);
         self.terminal

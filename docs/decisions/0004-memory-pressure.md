@@ -27,28 +27,37 @@ memory settings stay the system's own.
 - While a person's Bande session runs, `bande-login` sets `MemoryMin=` at runtime on `user.slice`,
   `user-UID.slice` and `user@UID.service`, and `bande-session` on `session.slice`: a tenth of the
   memory, at most 512 MiB. The kernel honours a guarantee only as far as every level above grants
-  it; `memory_recursiveprot` shares it among `session.slice`'s units by use. `MemoryMin=` and not
-  `MemoryLow=`: when nothing else can be reclaimed, the kernel breaks `MemoryLow=` and the desktop
-  stalls. A level where the administrator set a value is left alone. `bande-login` sets
-  the values back to 0 when the session ends, `user.slice` only when no other Bande session is left.
+  it; `memory_recursiveprot` shares it among `session.slice`'s units by use, and hands what the
+  desktop does not use to the rest of that level. So at most that much of `user.slice`, other
+  people's and ssh sessions included, cannot be reclaimed for system services meanwhile; several
+  Bande sessions share the one amount. `MemoryMin=` and not `MemoryLow=`: when nothing else can be
+  reclaimed, the kernel breaks `MemoryLow=` and the desktop stalls. A level with a value, or a
+  runtime value of 0, of the administrator is left alone. When the session ends `bande-login` removes
+  the runtime drop-ins it made and reloads the service manager, so nothing overrides the system's
+  own files; `user.slice` only when no other Bande session is left. A worker that is killed leaves
+  them until that person's next Bande session ends or the computer restarts.
 - `MemoryMin=` does not cover the compositor's code: file pages belong to the control group that read
   them first, the login window's compositor (the same program), which is gone by then. Reading them
   again took up to 0.3 s each while something swapped. The compositor of a person's session therefore
   locks the read-only file mappings of itself and its libraries on fault (`mlock2`,
   `MLOCK_ONFAULT`: only pages that are used, and stay used), itself first, as far as its
   `LimitMEMLOCK=256M` goes. The user manager may only grant that because `bande-login` raises that
-  process's hard limit while the session runs; other units keep the 8 MiB default. Without it the
+  process's hard limit while the session runs; other units keep the 8 MiB default, and the
+  compositor returns to it once it has locked, before it starts anything. Without it the
   compositor locks what fits in the limit it has.
-- `app.slice` gets `MemoryHigh=` all memory but a fifth of it, at most 3 GiB: the desktop's guarantee, the
-  system and free memory. Apps together above
-  that are reclaimed and slowed, so the desktop and the system still find free memory at once.
+- With swap, `app.slice` gets `MemoryHigh=` all memory but a fifth of it, at most 3 GiB and at most
+  half the swap: the desktop's guarantee, the system and free memory. Apps together above that are
+  swapped and slowed, so the desktop and the system still find free memory at once. Without swap
+  there is none: nothing could leave and every app would crawl beside unused memory.
 - Each app's scope gets `MemoryMin=128M` and `MemoryLow=512M`. When `app.slice` is reclaimed at its
   limit that keeps the other apps' pages, so a build in a Terminal tab does not swap out the windows
   on screen; a tab's own scope has neither. systemd-oomd picks the scope the kernel scans most: with
   `MemoryLow=` alone it picked small apps the kernel scanned when the build's pages were hard to
   free. These guarantees hold only inside `app.slice`, which has none itself, so they take nothing
   from the rest of the system.
-- `bande-session` removes the runtime properties it set when the session ends.
+- `bande-session` keeps a copy of each runtime property file it made (`$XDG_RUNTIME_DIR/bande-limits`),
+  leaves a person's own runtime value alone, and removes only files that still equal its copy when
+  the session ends.
 
 ### 1. Kill domain: `app.slice`
 
@@ -61,9 +70,10 @@ memory settings stay the system's own.
 - Every app already runs in its own `app-bande-<id>-<pid>.scope` in `app.slice`
   (`bande_xdg::spawn_detached`), and what runs in a Terminal tab in
   `app-bande-org.bande.Terminal-tab<pid>.scope` (`place_tab_in_scope`), so oomd and Force Quit end
-  that tab alone. The shell of a new tab waits, stopped, until it is in its scope (2 s at most), so
+  that tab alone. The shell of a new tab waits, stopped, until it is in its scope (2 s at most, whatever the bus does), so
   nothing it starts is left behind. The tab scope has `OOMPolicy=continue`: a kernel kill of one
-  process leaves the tab's shell. A tab ended as a whole stays open and says so until Return.
+  process leaves the tab's shell. A tab whose scope systemd says ended for lack of
+  memory stays open and says so until Return. Force Quit of Terminal ends its tabs' scopes too.
 - The compositor (and with it the shell and every session client it starts) runs in
   `bande-compositor.service` in `session.slice`, with `ManagedOOMPreference=avoid` and
   `OOMScoreAdjust=100`, the lowest a user unit can set. `avoid` is honoured because the candidate

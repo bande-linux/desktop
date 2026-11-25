@@ -1,45 +1,39 @@
 use std::collections::HashSet;
-use std::os::fd::OwnedFd;
 use std::sync::Arc;
 
+use bande_bus::HeldProcess;
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use rustix::process::{Pid, PidfdFlags, pidfd_open};
 
-#[derive(Debug, Clone)]
-pub struct AppProcess {
-    pub pid: u32,
-    pub handle: Arc<OwnedFd>,
-}
-
-impl AppProcess {
-    fn open(pid: u32) -> Option<Self> {
-        let raw = Pid::from_raw(pid.cast_signed())?;
-        let handle = pidfd_open(raw, PidfdFlags::empty())
-            .inspect_err(|error| tracing::debug!("cannot follow process {pid}: {error}"))
-            .ok()?;
-        Some(Self {
-            pid,
-            handle: Arc::new(handle),
-        })
-    }
-
-    fn ended(&self) -> bool {
-        let mut fds = [PollFd::new(&*self.handle, PollFlags::IN)];
-        poll(&mut fds, Some(&Timespec::default())).is_ok_and(|ready| ready > 0)
-    }
+fn hold(pid: u32) -> Option<HeldProcess> {
+    let raw = Pid::from_raw(pid.cast_signed())?;
+    let handle = pidfd_open(raw, PidfdFlags::empty())
+        .inspect_err(|error| tracing::debug!("cannot follow process {pid}: {error}"))
+        .ok()?;
+    Some(HeldProcess {
+        pid,
+        handle: Arc::new(handle),
+    })
 }
 
 struct Known {
     app_id: String,
-    process: AppProcess,
+    process: HeldProcess,
     confirmed: bool,
     doubted: bool,
+}
+
+impl Known {
+    fn ended(&self) -> bool {
+        let mut fds = [PollFd::new(&*self.process.handle, PollFlags::IN)];
+        poll(&mut fds, Some(&Timespec::default())).is_ok_and(|ready| ready > 0)
+    }
 }
 
 #[derive(Clone)]
 pub(crate) struct Announced {
     app_id: String,
-    process: AppProcess,
+    process: HeldProcess,
 }
 
 impl Announced {
@@ -58,7 +52,7 @@ impl Processes {
     fn drop_ended(&mut self) {
         let ended = &mut self.ended;
         self.known.retain(|known| {
-            let runs = !known.process.ended();
+            let runs = !known.ended();
             if !runs {
                 ended.insert(known.process.pid);
             }
@@ -68,14 +62,24 @@ impl Processes {
 
     pub(crate) fn announce(&mut self, app_id: &str, pid: u32) -> Option<Announced> {
         self.drop_ended();
-        let known = self
-            .known
-            .iter()
-            .any(|known| known.app_id == app_id && known.process.pid == pid);
-        if known || self.ended.contains(&pid) {
+        if self.ended.contains(&pid) {
             return None;
         }
-        let process = AppProcess::open(pid)?;
+        let known = self
+            .known
+            .iter_mut()
+            .find(|known| known.app_id == app_id && known.process.pid == pid);
+        if let Some(known) = known {
+            if known.confirmed {
+                return None;
+            }
+            known.doubted = false;
+            return Some(Announced {
+                app_id: app_id.to_owned(),
+                process: known.process.clone(),
+            });
+        }
+        let process = hold(pid)?;
         self.known.push(Known {
             app_id: app_id.to_owned(),
             process: process.clone(),
@@ -88,8 +92,6 @@ impl Processes {
         })
     }
 
-    /// The compositor answered after the handle was opened, and no window of the app closed
-    /// meanwhile: the announced connection, and so its process, was still there.
     pub(crate) fn confirm(&mut self, announced: &Announced) {
         self.drop_ended();
         if let Some(known) = self.known.iter_mut().find(|known| announced.is(known)) {
@@ -108,14 +110,14 @@ impl Processes {
     pub(crate) fn latest_pid(&self, app_id: &str) -> Option<u32> {
         self.known
             .iter()
-            .rfind(|known| known.app_id == app_id && !known.process.ended())
+            .rfind(|known| known.app_id == app_id && !known.ended())
             .map(|known| known.process.pid)
     }
 
-    pub(crate) fn of(&self, app_id: &str) -> Vec<AppProcess> {
+    pub(crate) fn of(&self, app_id: &str) -> Vec<HeldProcess> {
         self.known
             .iter()
-            .filter(|known| known.app_id == app_id && known.confirmed && !known.process.ended())
+            .filter(|known| known.app_id == app_id && known.confirmed && !known.ended())
             .map(|known| known.process.clone())
             .collect()
     }

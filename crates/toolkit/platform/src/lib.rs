@@ -28,7 +28,6 @@ pub use chrome::{FrameRegions, Header, SHEET_INSET, WINDOW_HEADER_HEIGHT};
 pub use clipboard::{DragAction, DragEvent, DragIcon, Transfer, WindowDrag};
 pub use external::{CursorImage, Dmabuf, DmabufPlane, ExternalSurface, ShmLayout, SurfaceBuffer};
 pub use popup::MenuPlacement;
-pub use processes::AppProcess;
 pub use run::{App, Surfaces, run, run_surfaces};
 pub use shell::{Anchor, AppWindow};
 pub use window::{

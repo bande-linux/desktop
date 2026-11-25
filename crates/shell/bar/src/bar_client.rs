@@ -82,6 +82,7 @@ impl BarClient {
                 self.status.event(window, event);
             }
             WindowEvent::Accessibility(request) if owns_node(request.target_node) => {
+                self.taskbar.forget_waiting_menu();
                 self.status.event(window, event);
             }
             WindowEvent::Accessibility(_) => self.taskbar.event(window, event),

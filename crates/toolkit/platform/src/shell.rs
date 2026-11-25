@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::thread;
 use zbus::zvariant::Value;
 
+use bande_bus::HeldProcess;
 use bande_protocols::client::bande_app_control_v1::{self, BandeAppControlV1};
 use bande_protocols::client::bande_app_v1::{self, BandeAppV1, Offer, Placement};
 use bande_protocols::client::bande_shell_v1::{self, BandeShellV1, SessionEnd};
@@ -23,7 +24,7 @@ use bande_graphics::{Key, Modifiers, Rect};
 use wayland_protocols::xdg::shell::client::xdg_toplevel::XdgToplevel;
 
 use crate::app_connection::modifier_bits;
-use crate::processes::{Announced, AppProcess, Processes};
+use crate::processes::{Announced, Processes};
 use crate::seat::keysym_for;
 use crate::window::{State, Window, WindowError, WindowEvent};
 
@@ -310,7 +311,7 @@ impl Window {
     }
 
     /// The running processes whose connections showed the open windows of `app_id`.
-    pub fn app_processes(&self, app_id: &str) -> Vec<AppProcess> {
+    pub fn app_processes(&self, app_id: &str) -> Vec<HeldProcess> {
         self.state.shell.processes.of(app_id)
     }
 

@@ -1,12 +1,10 @@
 use std::fs;
-use std::os::fd::OwnedFd;
 use std::process;
-use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver};
 use std::thread;
 
-use bande_bus::connected_process;
 use bande_bus::systemd::main_pid;
+use bande_bus::{HeldProcess, connected_process};
 use bande_inbox::Outbox;
 use zbus::blocking::fdo::DBusProxy;
 use zbus::blocking::{Connection, MessageIterator};
@@ -42,20 +40,6 @@ pub enum TrayIcon {
     },
 }
 
-#[derive(Debug, Clone)]
-pub struct ItemProcess {
-    pub pid: u32,
-    pub handle: Arc<OwnedFd>,
-}
-
-impl PartialEq for ItemProcess {
-    fn eq(&self, other: &Self) -> bool {
-        self.pid == other.pid
-    }
-}
-
-impl Eq for ItemProcess {}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TrayItem {
     pub id: String,
@@ -63,7 +47,7 @@ pub struct TrayItem {
     pub icon: TrayIcon,
     pub menu: Option<String>,
     pub item_is_menu: bool,
-    pub process: Option<ItemProcess>,
+    pub process: Option<HeldProcess>,
     pub names: Vec<String>,
 }
 
@@ -150,12 +134,8 @@ fn item_proxy<'a>(connection: &Connection, id: &'a str) -> zbus::Result<StatusNo
         .build()
 }
 
-fn owner(connection: &Connection, id: &str) -> zbus::Result<Option<ItemProcess>> {
-    let owner = connected_process(connection, BusName::try_from(split(id).0)?)?;
-    Ok(owner.map(|(pid, handle)| ItemProcess {
-        pid,
-        handle: Arc::new(handle),
-    }))
+fn owner(connection: &Connection, id: &str) -> zbus::Result<Option<HeldProcess>> {
+    connected_process(connection, BusName::try_from(split(id).0)?)
 }
 
 fn own_unit(connection: &Connection, pid: u32) -> Option<String> {
@@ -223,7 +203,9 @@ fn fetch(connection: &Connection, id: &str) -> Option<TrayItem> {
             .map(|unit| bande_xdg::unit_app_ids(&unit))
             .into_iter()
             .flatten()
-            .chain(item.id())
+            .chain(item.id().inspect_err(|error| {
+                tracing::debug!("no name of the status item {id}: {error}");
+            }))
             .collect(),
         process,
     })

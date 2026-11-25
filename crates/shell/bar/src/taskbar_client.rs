@@ -208,8 +208,8 @@ impl Taskbar {
         }
         for (window_app, app_id) in &windows {
             if find_app(entries, window_app).is_some() && !app_id.starts_with(BANDE_APP_ID) {
-                for process in window.app_processes(window_app) {
-                    self.processes.follow(app_id, process.pid, &process.handle);
+                for process in &window.app_processes(window_app) {
+                    self.processes.follow(app_id, process);
                 }
             }
         }
@@ -281,7 +281,7 @@ impl Taskbar {
             .filter(|item| {
                 item.process
                     .as_ref()
-                    .is_some_and(|process| self.processes.is_of(process.pid, app_id))
+                    .is_some_and(|process| self.processes.is_of(process, app_id))
             })
             .find_map(choose)
     }
@@ -299,7 +299,7 @@ impl Taskbar {
             if let ([app_id], Some(process)) = (named.as_slice(), &item.process)
                 && !app_id.starts_with(BANDE_APP_ID)
             {
-                self.processes.follow(app_id, process.pid, &process.handle);
+                self.processes.follow(app_id, process);
             }
         }
     }
@@ -324,12 +324,11 @@ impl Taskbar {
         }
     }
 
-    fn show_window(&mut self, window: &mut Window, entry: DesktopEntry, item: TrayItem) {
+    fn show_window(&mut self, entry: DesktopEntry, item: TrayItem, token: Option<String>) {
         let Some(session) = self.session.clone() else {
             return;
         };
         let app_id = entry.app_id().to_owned();
-        let token = window.activation_token(&app_id).ok();
         let activating = thread::Builder::new()
             .name("activate-status-item".to_owned())
             .spawn(move || {
@@ -420,13 +419,13 @@ impl Taskbar {
         let Some(entry) = self.entry(app_id).cloned() else {
             return;
         };
+        let token = window.activation_token(app_id).ok();
         if self.windowless(app_id)
             && let Some(item) =
                 self.status_item(app_id, |item| (!item.item_is_menu).then(|| item.clone()))
         {
-            return self.show_window(window, entry, item);
+            return self.show_window(entry, item, token);
         }
-        let token = window.activation_token(app_id).ok();
         match bande_xdg::launch(&entry, token.as_deref()) {
             Ok(_) => self.state.borrow_mut().launching(app_id, Instant::now()),
             Err(error) => tracing::warn!("cannot open {}: {error}", entry.name),
@@ -990,6 +989,10 @@ impl Taskbar {
         self.menu.is_some()
     }
 
+    pub fn forget_waiting_menu(&mut self) {
+        self.waiting_menu = None;
+    }
+
     pub fn set_menu_open(&mut self, open: bool) {
         self.state.borrow_mut().set_menu_open(open, Instant::now());
     }
@@ -1039,9 +1042,13 @@ impl App for Taskbar {
     fn event(&mut self, window: &mut Window, event: WindowEvent) {
         if matches!(
             event,
-            WindowEvent::Input(Event::PointerDown(_)) | WindowEvent::Accessibility(_)
+            WindowEvent::Input(Event::PointerDown(_))
+                | WindowEvent::Accessibility(_)
+                | WindowEvent::ShowLauncher { .. }
+                | WindowEvent::OpenLauncher { .. }
+                | WindowEvent::TogglePanel(_)
         ) {
-            self.waiting_menu = None;
+            self.forget_waiting_menu();
         }
         match event {
             WindowEvent::Input(Event::PointerDown(pointer))

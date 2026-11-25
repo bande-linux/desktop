@@ -268,11 +268,14 @@ impl Taskbar {
         self.processes.run(app_id) && !self.running.iter().any(|running| running == app_id)
     }
 
-    fn status_item(&self, app_id: &str) -> Option<&TrayItem> {
-        self.status_items.iter().find(|item| {
-            item.pid
-                .is_some_and(|pid| self.processes.is_of(pid, app_id))
-        })
+    fn status_item<T>(&self, app_id: &str, choose: impl Fn(&TrayItem) -> Option<T>) -> Option<T> {
+        self.status_items
+            .iter()
+            .filter(|item| {
+                item.pid
+                    .is_some_and(|pid| self.processes.is_of(pid, app_id))
+            })
+            .find_map(choose)
     }
 
     fn follow_status_items(&mut self) {
@@ -410,9 +413,9 @@ impl Taskbar {
             return;
         };
         if self.windowless(app_id)
-            && let Some(item) = self.status_item(app_id).filter(|item| !item.item_is_menu)
+            && let Some(item) =
+                self.status_item(app_id, |item| (!item.item_is_menu).then(|| item.clone()))
         {
-            let item = item.clone();
             return self.show_window(window, entry, item);
         }
         let token = window.activation_token(app_id).ok();
@@ -661,7 +664,7 @@ impl Taskbar {
     fn show_menu(&mut self, window: &mut Window, target: MenuTarget, at: Point) {
         if let MenuTarget::App(app_id) = &target
             && self.windowless(app_id)
-            && let Some(menu) = self.status_item(app_id).and_then(|item| item.menu.clone())
+            && let Some(menu) = self.status_item(app_id, |item| item.menu.clone())
         {
             self.status.errand(Errand::ShowMenu {
                 menu: menu.clone(),

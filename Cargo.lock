@@ -1048,6 +1048,7 @@ dependencies = [
  "serde_json",
  "skrifa 0.44.0",
  "tracing",
+ "vello_common",
  "vello_cpu",
  "vello_gpu",
  "wgpu",

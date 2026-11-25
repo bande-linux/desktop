@@ -1,8 +1,9 @@
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError, Weak, mpsc};
+use std::sync::{Arc, Mutex, MutexGuard, Once, PoisonError, Weak, mpsc};
 
 use ash::{ext, khr, vk};
 
+use vello_common::image_cache::ImageCache;
 use vello_gpu::kurbo::{self, Affine, BezPath};
 use vello_gpu::peniko::BlendMode;
 use vello_gpu::{
@@ -227,6 +228,8 @@ pub struct GpuRenderer {
     atlas: (u16, u16),
     renderer: Renderer,
     resources: Resources,
+    room: ImageCache,
+    atlas_pixels: u64,
     caches: Caches,
     scene: vello_gpu::Scene,
     depth: Option<(RenderSize, wgpu::TextureView)>,
@@ -288,9 +291,18 @@ fn atlas_size(needed: (u32, u32), limit: u32) -> Option<(u16, u16)> {
     Some((side(needed.0)?, side(needed.1)?))
 }
 
-fn atlas_settings(atlas: (u16, u16)) -> RenderSettings {
+/// Places images as the renderer will, so that one it has no room for is never handed to it.
+fn room(atlas: (u16, u16), atlas_pixels: u64) -> ImageCache {
+    ImageCache::new_with_config(
+        atlas_settings(atlas, atlas_pixels)
+            .memory_settings
+            .image_atlas_config,
+    )
+}
+
+fn atlas_settings(atlas: (u16, u16), atlas_pixels: u64) -> RenderSettings {
     let pixels = u64::from(atlas.0) * u64::from(atlas.1);
-    let max_atlases = usize::try_from(ATLAS_BUDGET_PIXELS / pixels.max(1))
+    let max_atlases = usize::try_from(atlas_pixels / pixels.max(1))
         .unwrap_or(usize::MAX)
         .max(1);
     RenderSettings {
@@ -310,6 +322,7 @@ fn renderer(
     device: &wgpu::Device,
     format: wgpu::TextureFormat,
     atlas: (u16, u16),
+    atlas_pixels: u64,
 ) -> (Renderer, Resources) {
     Renderer::new_with(
         device,
@@ -318,7 +331,7 @@ fn renderer(
             width: 1,
             height: 1,
         },
-        atlas_settings(atlas),
+        atlas_settings(atlas, atlas_pixels),
     )
 }
 
@@ -328,24 +341,32 @@ impl GpuRenderer {
             Arc::new(GpuDevice::offscreen()?),
             OFFSCREEN_FORMAT,
             OFFSCREEN_ATLAS,
+            ATLAS_BUDGET_PIXELS,
         ))
     }
 
     pub fn with_device(gpu: Arc<GpuDevice>, atlas_hint: (u32, u32)) -> Self {
-        Self::create(gpu, SHARED_FORMAT, atlas_hint)
+        Self::create(gpu, SHARED_FORMAT, atlas_hint, ATLAS_BUDGET_PIXELS)
     }
 
-    fn create(gpu: Arc<GpuDevice>, format: wgpu::TextureFormat, atlas_hint: (u32, u32)) -> Self {
+    fn create(
+        gpu: Arc<GpuDevice>,
+        format: wgpu::TextureFormat,
+        atlas_hint: (u32, u32),
+        atlas_pixels: u64,
+    ) -> Self {
         let limit = gpu.device.limits().max_texture_dimension_2d;
         let clamped = (atlas_hint.0.min(limit), atlas_hint.1.min(limit));
         let atlas = atlas_size(clamped, limit).unwrap_or(FALLBACK_ATLAS);
-        let (renderer, resources) = renderer(&gpu.device, format, atlas);
+        let (renderer, resources) = renderer(&gpu.device, format, atlas, atlas_pixels);
         Self {
             gpu,
             format,
             atlas,
             renderer,
             resources,
+            room: room(atlas, atlas_pixels),
+            atlas_pixels,
             caches: Caches::default(),
             scene: vello_gpu::Scene::new(1, 1),
             depth: None,
@@ -501,9 +522,7 @@ impl GpuRenderer {
         }
         let atlas = self.atlas;
         images.retain(|image| {
-            self.caches.images.get(image.id()).is_none()
-                && image.width() <= u32::from(atlas.0)
-                && image.height() <= u32::from(atlas.1)
+            image.width() <= u32::from(atlas.0) && image.height() <= u32::from(atlas.1)
         });
         let dropped = self.caches.images.take_dropped();
         if !dropped.is_empty() {
@@ -512,34 +531,70 @@ impl GpuRenderer {
                 .device
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
             for id in dropped {
+                self.room.deallocate(id);
                 self.renderer
                     .destroy_image(&mut self.resources, &mut clearing, id);
             }
             self.gpu.queue.submit([clearing.finish()]);
         }
-        if images.is_empty() {
+        if images
+            .iter()
+            .all(|image| self.caches.images.get(image.id()).is_some())
+        {
             return;
         }
         let mut encoder = self
             .gpu
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
+        if !self.upload(&images, &mut encoder) {
+            self.empty_atlas();
+            if !self.upload(&images, &mut encoder) {
+                static TOLD: Once = Once::new();
+                TOLD.call_once(|| {
+                    tracing::warn!("leaving out images, the GPU has no room for a frame's");
+                });
+            }
+        }
+        self.gpu.queue.submit([encoder.finish()]);
+        self.uploaded = true;
+    }
+
+    fn upload(&mut self, images: &[Image], encoder: &mut wgpu::CommandEncoder) -> bool {
+        let mut fitted = true;
         for image in images {
+            if self.caches.images.get(image.id()).is_some() {
+                continue;
+            }
             let Some(pixmap) = image.pixmap() else {
                 continue;
             };
+            if self
+                .room
+                .allocate(pixmap.width(), pixmap.height(), 0)
+                .is_err()
+            {
+                fitted = false;
+                continue;
+            }
             let id = self.renderer.upload_image(
                 &mut self.resources,
                 &self.gpu.device,
                 &self.gpu.queue,
-                &mut encoder,
+                encoder,
                 &pixmap,
             );
             self.caches.images.insert(image.id(), id, image.liveness());
             image.release_pixels();
         }
-        self.gpu.queue.submit([encoder.finish()]);
-        self.uploaded = true;
+        fitted
+    }
+
+    fn empty_atlas(&mut self) {
+        (self.renderer, self.resources) =
+            renderer(&self.gpu.device, self.format, self.atlas, self.atlas_pixels);
+        self.room = room(self.atlas, self.atlas_pixels);
+        self.caches.images = Default::default();
     }
 
     fn grow_atlas(&mut self, needed: (u32, u32)) {
@@ -554,9 +609,8 @@ impl GpuRenderer {
         if atlas == self.atlas {
             return;
         }
-        (self.renderer, self.resources) = renderer(&self.gpu.device, self.format, atlas);
         self.atlas = atlas;
-        self.caches.images = Default::default();
+        self.empty_atlas();
     }
 
     fn read_back(
@@ -1119,6 +1173,55 @@ mod tests {
                 "{size} at {scale}: a channel differs by {differs:?}"
             );
         }
+    }
+
+    #[test]
+    fn images_the_atlases_have_no_room_for_give_way_to_those_a_frame_shows() {
+        const ATLASES: u64 = 2;
+        const TILE: u32 = ATLAS_STEP;
+        let _turn = device_turn();
+        let linear = [vec![LINEAR]];
+        let Some(gpu) = GpuDevice::shared(false, None)
+            .ok()
+            .filter(|gpu| gpu.shares_images(&linear))
+        else {
+            eprintln!("skipped, no GPU to share images from");
+            return;
+        };
+        let mut renderer = GpuRenderer::create(
+            Arc::clone(&gpu),
+            SHARED_FORMAT,
+            (TILE, TILE),
+            ATLASES * u64::from(TILE) * u64::from(TILE),
+        );
+        let images: Vec<Image> = [0xff0000, 0x00ff00, 0x0000ff, 0xffff00]
+            .map(|rgb| {
+                let color = Color::hex(rgb);
+                let pixels = [color.r, color.g, color.b, 255].repeat((TILE * TILE) as usize);
+                Image::from_rgba(TILE, TILE, pixels).expect("an image")
+            })
+            .to_vec();
+        let shown = gpu
+            .shared_image((SIDE, SIDE), &linear)
+            .expect("a shared image");
+        let item = |image: &Image| Item::Image {
+            rect: Rect::new(0.0, 0.0, SIDE as f32, SIDE as f32),
+            image: image.clone(),
+        };
+        for image in images.iter().chain(&images) {
+            renderer
+                .present(&scene_of(&[item(image)]), 1.0, &shown, None)
+                .expect("a frame with an image");
+            let drawn = image.premultiplied_rgba();
+            assert_eq!(
+                pixels(&shown, &[(32, 32)]),
+                [[drawn[2], drawn[1], drawn[0], 255]]
+            );
+        }
+        let all: Vec<Item> = images.iter().map(item).collect();
+        renderer
+            .present(&scene_of(&all), 1.0, &shown, None)
+            .expect("a frame with more images than there is room for");
     }
 
     #[test]

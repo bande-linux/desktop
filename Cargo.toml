@@ -103,6 +103,7 @@ tracing-journald = "0.3.2"
 tracing-subscriber = { version = "0.3.23", default-features = false, features = ["ansi", "fmt", "registry", "std", "tracing-log"] }
 udev = "0.9.3"
 ureq = { version = "3.4.2", default-features = false, features = ["gzip", "platform-verifier", "rustls-no-provider"] }
+vello_common = "0.3.0"
 vello_cpu = "0.3.0"
 vello_gpu = { version = "0.3.0", default-features = false, features = ["wgpu"] }
 wayland-backend = { version = "0.3.17", features = ["log"] }

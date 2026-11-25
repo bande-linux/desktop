@@ -21,6 +21,7 @@ serde_json = { workspace = true, optional = true }
 skrifa.workspace = true
 tracing.workspace = true
 bande-design.workspace = true
+vello_common = { workspace = true, optional = true }
 vello_cpu.workspace = true
 vello_gpu = { workspace = true, optional = true }
 wgpu = { workspace = true, optional = true }
@@ -31,6 +32,7 @@ gpu = [
     "dep:libloading",
     "dep:futures-lite",
     "dep:serde_json",
+    "dep:vello_common",
     "dep:vello_gpu",
     "dep:wgpu",
 ]

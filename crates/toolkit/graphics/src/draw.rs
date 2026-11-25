@@ -277,17 +277,23 @@ fn image_quality(tile: Rect, image: &Image) -> ImageQuality {
     }
 }
 
-fn image_op(area: Rect, tile: Rect, image: &Image, extend: Extend, quality: ImageQuality) -> Op {
+fn image_op(
+    area: kurbo::Rect,
+    tile: kurbo::Rect,
+    image: &Image,
+    extend: Extend,
+    quality: ImageQuality,
+) -> Op {
     Op::Image {
-        path: path(&Shape::rect(area)),
+        path: area.to_path(TOLERANCE),
         image: image.clone(),
         sampler: ImageSampler::default()
             .with_quality(quality)
             .with_extend(extend),
-        placement: Affine::translate((f64::from(tile.x), f64::from(tile.y)))
+        placement: Affine::translate(tile.origin().to_vec2())
             * Affine::scale_non_uniform(
-                f64::from(tile.width) / f64::from(image.width()),
-                f64::from(tile.height) / f64::from(image.height()),
+                tile.width() / f64::from(image.width()),
+                tile.height() / f64::from(image.height()),
             ),
     }
 }
@@ -547,13 +553,29 @@ fn record_item(item: &Item, caches: &mut Caches, ops: &mut Vec<Op>, reach: Optio
             ),
             paint: paint(stroke),
         }),
-        Item::Image { rect, image } => {
-            let quality = image_quality(*rect, image);
-            ops.push(image_op(*rect, *rect, image, Extend::Pad, quality));
+        Item::Image { rect: area, image } => {
+            let quality = image_quality(*area, image);
+            ops.push(image_op(
+                rect(*area),
+                rect(*area),
+                image,
+                Extend::Pad,
+                quality,
+            ));
         }
-        Item::Tiles { rect, tile, image } => {
+        Item::Tiles {
+            rect: area,
+            tile,
+            image,
+        } => {
             let quality = image_quality(*tile, image);
-            ops.push(image_op(*rect, *tile, image, Extend::Repeat, quality));
+            ops.push(image_op(
+                rect(*area),
+                rect(*tile),
+                image,
+                Extend::Repeat,
+                quality,
+            ));
         }
         Item::Surface {
             frame,

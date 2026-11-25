@@ -37,9 +37,9 @@ impl std::fmt::Display for Error {
             Self::Unauthorized => write!(f, "the user name or password is wrong"),
             Self::Unsupported(schemes) => write!(f, "the server asks for {schemes} sign-in"),
             Self::Status { status, url } => write!(f, "{url} answered {status}"),
-            Self::PreconditionFailed => write!(f, "the event changed on the server"),
+            Self::PreconditionFailed => write!(f, "it changed on the server"),
             Self::Xml(error) => write!(f, "the server's answer is not valid: {error}"),
-            Self::NotFound(what) => write!(f, "no calendar server found for {what}"),
+            Self::NotFound(what) => write!(f, "nothing found at {what}"),
             Self::Insecure(url) => write!(f, "{url} is not encrypted, so the password is not sent"),
         }
     }
@@ -250,8 +250,8 @@ fn classify(url: &str, error: &ureq::Error) -> Error {
 }
 
 impl Http {
-    pub fn new(credentials: Option<&Credentials>) -> Self {
-        let agent = bande_https::config("calendar")
+    pub fn new(app: &str, credentials: Option<&Credentials>) -> Self {
+        let agent = bande_https::config(app)
             .http_status_as_error(false)
             .allow_non_standard_methods(true)
             .max_redirects(0)
@@ -312,7 +312,7 @@ impl Http {
                 .collect::<Vec<_>>();
             return Err(Error::Unsupported(schemes.join(", ")));
         };
-        if !url.starts_with("https://") && !loopback(url) {
+        if !secure(url) && !loopback(url) {
             return Err(Error::Insecure(origin(url).to_owned()));
         }
         if let Ok(mut session) = self.session.lock() {
@@ -431,13 +431,17 @@ fn digest_header(digest: &Digest, credentials: &Credentials, method: &str, url: 
     header
 }
 
+pub(crate) fn host(url: &str) -> Option<String> {
+    let uri: ureq::http::Uri = url.parse().ok()?;
+    uri.host().map(str::to_ascii_lowercase)
+}
+
+pub(crate) fn secure(url: &str) -> bool {
+    url.starts_with("https://")
+}
+
 fn loopback(url: &str) -> bool {
-    let host = origin(url).split_once("://").map_or("", |(_, host)| host);
-    let host = match host.strip_prefix('[') {
-        Some(bracketed) => bracketed.split(']').next().unwrap_or(""),
-        None => host.split(':').next().unwrap_or(""),
-    };
-    matches!(host, "localhost" | "127.0.0.1" | "::1")
+    host(url).is_some_and(|host| matches!(host.as_str(), "localhost" | "127.0.0.1" | "[::1]"))
 }
 
 pub fn origin(url: &str) -> &str {
@@ -464,11 +468,11 @@ pub fn join(base: &str, href: &str) -> String {
 }
 
 pub fn same_resource(a: &str, b: &str) -> bool {
-    let normal = |url: &str| {
-        let decoded = percent_decode(url);
-        decoded.trim_end_matches('/').to_owned()
-    };
-    normal(a) == normal(b)
+    resource_key(a) == resource_key(b)
+}
+
+pub(crate) fn resource_key(url: &str) -> String {
+    percent_decode(url).trim_end_matches('/').to_owned()
 }
 
 pub fn percent_decode(text: &str) -> String {

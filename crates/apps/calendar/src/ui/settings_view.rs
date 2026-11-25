@@ -129,6 +129,12 @@ fn general(settings: &Shared<CalendarSettings>, summary: &Summary) -> Vec<FormLi
     let week_numbers = Toggle::new(&tr!("Show week numbers"), current.week_numbers, move |on| {
         shared.borrow_mut().week_numbers = on
     });
+    let shared = settings.clone();
+    let birthdays = Toggle::new(
+        &tr!("Show birthdays from Contacts"),
+        current.birthdays,
+        move |on| shared.borrow_mut().birthdays = on,
+    );
     vec![
         FormLine::Heading(tr!("General")),
         FormLine::Row(tr!("Default calendar:"), Box::new(default_calendar)),
@@ -182,6 +188,7 @@ fn general(settings: &Shared<CalendarSettings>, summary: &Summary) -> Vec<FormLi
             ),
         ),
         FormLine::Row(tr!("Show week numbers"), Box::new(week_numbers)),
+        FormLine::Row(tr!("Show birthdays from Contacts"), Box::new(birthdays)),
     ]
 }
 

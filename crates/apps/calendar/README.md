@@ -21,7 +21,10 @@ views. Packaged as `bande-calendar`.
   as HTTP Basic or Digest (RFC 7616, SHA-256 or MD5), and only over HTTPS (or to this computer,
   for a local server). A failure says what went wrong (unreachable, certificate not valid, user
   name or password refused, unsupported sign-in, no calendar there, server error) and keeps
-  every field editable. Passwords go to the Secret Service, never to disk. Several accounts,
+  every field editable. Passwords go to the Secret Service, never to disk. With Contacts
+  installed, "Also use this account for Contacts" (on by default) offers the server and sign-in
+  to Contacts, and an account offered by Contacts' sheet is adopted at the next sync once its
+  calendars are found (`bande_dav::offer`). Several accounts,
   plus a local calendar. Settings ▸ Accounts shows each account's server and user name, and
   Server Settings… changes them; the sheet opens in the Settings window. When the server
   refuses the password, Calendar asks for it again, with Server Settings… in the same sheet,
@@ -38,8 +41,9 @@ views. Packaged as `bande-calendar`.
   without a network and pushes changes as soon as the network is back (`bande_network::follow_online`).
   Sync is incremental with `sync-token` (RFC 6578), falling back to ctag + etag listings on servers without it. Creates use
   `If-None-Match: *`, edits and deletes `If-Match`; when an edit meets a 412, the server's
-  version stays and the local edit is kept beside it as a new event, and the sidebar says so.
-  Undo (Ctrl+Z) takes back a delete, a move or a change of length, and Redo (Shift+Ctrl+Z) does
+  version stays and the local edit is kept beside it as a new event (also a new event whose address is taken), and the sidebar says so.
+  An event the server refuses stays pending and is sent again at the next sync, while the others
+  sync. Undo (Ctrl+Z) takes back a delete, a move or a change of length, and Redo (Shift+Ctrl+Z) does
   it again: a deleted event comes back
   with its own UID at its own address (`If-None-Match: *`), so other clients see the same event
   return, and a moved one is written back with its earlier times.
@@ -79,7 +83,7 @@ views. Packaged as `bande-calendar`.
   (`SCHEDULE-AGENT` other than `SERVER`), and who sent an invitation for its organizer
   (`SENT-BY`). Accept, Maybe and Decline update your own `PARTSTAT` (an invitation's title and
   times stay read-only), and on an event you organise in a CalDAV calendar you can add
-  invitees by address; the server sends the mail, and a change of time, repeat or exceptions
+  invitees by address (completed from Contacts as you type; a comma takes the suggestion); the server sends the mail, and a change of time, repeat or exceptions
   raises `SEQUENCE` so it goes out as an update; your own changes to an invitation, such as an
   alert, keep the organizer's `SEQUENCE`. Your addresses come from
   `calendar-user-address-set`.
@@ -124,7 +128,9 @@ views. Packaged as `bande-calendar`.
   Alerts that fell due while Calendar was not running, up to a day back, show when it starts.
 - **Settings** (Calendar ▸ Settings…, stored in `~/.config/bande/calendar.conf`): default
   calendar, start of the week, the hours the day starts and ends (the rest is shaded and the
-  week opens there), hours shown at a time, week numbers, default alerts for events and
+  week opens there), hours shown at a time, week numbers, birthdays from Contacts (off by default:
+  a read-only, never-synced Birthdays calendar made from the contacts' `BDAY`, a 29 February one on
+  the last day of February), default alerts for events and
   all-day events, alerts when Calendar is closed, refresh intervals, adding, re-signing and removing accounts, and time zone
   support. With it, the inspector shows each timed event's zone, its times are shown and typed
   in that zone, a new zone keeps the wall times of the whole series (exceptions and end date
@@ -155,10 +161,11 @@ open on that field and says what to type.
 
 | Path | What it is |
 |---|---|
-| `src/ical/` | iCalendar: content lines, values and durations, time zones, recurrence, events, free/busy |
-| `src/caldav/` | HTTP, WebDAV XML, DNS SRV, discovery, the CalDAV requests, directory search and free/busy |
+| `src/ical/` | iCalendar: values and durations, time zones, recurrence, events, free/busy, on the content lines of `bande-content-lines` |
+| `crates/libs/dav` (`bande-dav`) | HTTP with Basic and Digest, WebDAV XML, discovery, the CalDAV requests and the sync of a collection, shared with Contacts |
+| `src/caldav/` | directory search and free/busy on `bande-dav` |
 | `src/store.rs` | accounts, calendars and the offline cache in `~/.local/share/bande-calendar` |
-| `src/sync.rs` | push pending changes, pull with sync-token or ctag/etag, apply the outcome |
+| `src/sync.rs` | a calendar's sync through `bande-dav`, a refused edit kept as a copy, and applying the outcome |
 | `src/edit.rs` | the edits the UI makes: create, move a series or one occurrence, delete, details |
 | `src/schedule.rs` | free times for a meeting within working hours |
 | `src/alerts.rs` | which alarms fall due |

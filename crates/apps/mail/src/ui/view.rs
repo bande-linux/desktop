@@ -30,6 +30,7 @@ use crate::ui::symbols::Symbols;
 use crate::ui::toolbar::{ACTIONS_WIDTH, Signal, Signals, Toolbar};
 use crate::worker::{Command, Event as MailEvent, MailboxChange, Mailroom, Status, Worker};
 use accesskit::{ActionRequest, TreeUpdate};
+use bande_address_book::Directory;
 use bande_app::{Dropping, FileDrop};
 use bande_app_settings::{Stored, settings_folder};
 use bande_datetime::DateFormats;
@@ -121,6 +122,7 @@ pub enum Request {
     OpenSettings,
     Attach(Vec<PathBuf>),
     OpenMessage(PathBuf),
+    AddContact(String),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -241,6 +243,7 @@ struct Moved {
 pub struct MailView {
     drop: FileDrop,
     pub(crate) store: Store,
+    contacts: Directory,
     store_path: PathBuf,
     pub(crate) accounts: Vec<(Account, Vec<Mailbox>)>,
     workers: Vec<Worker>,
@@ -333,6 +336,7 @@ impl MailView {
         let mut view = Self {
             drop: FileDrop::default(),
             store,
+            contacts: Directory::open(),
             store_path,
             accounts: Vec::new(),
             workers: Vec::new(),
@@ -548,12 +552,26 @@ impl MailView {
             .collect()
     }
 
-    pub fn correspondents(&self) -> Vec<crate::message::Address> {
-        let mut found = self
+    pub fn correspondents(&mut self) -> Vec<crate::message::Address> {
+        self.contacts.refresh();
+        let mut found: Vec<crate::message::Address> = self
+            .contacts
+            .addresses()
+            .map(|(name, email)| crate::message::Address {
+                name: name.to_owned(),
+                email: email.to_owned(),
+            })
+            .collect();
+        let senders = self
             .store
             .correspondents(CORRESPONDENTS_READ)
             .inspect_err(|error| tracing::warn!("cannot read known addresses: {error}"))
             .unwrap_or_default();
+        found.extend(
+            senders
+                .into_iter()
+                .filter(|sender| !self.contacts.knows(&sender.email)),
+        );
         found.retain(|address| {
             !self
                 .accounts
@@ -1046,6 +1064,8 @@ impl MailView {
             )
             .inspect_err(|error| tracing::warn!("cannot list the messages: {error}"))
             .unwrap_or_default();
+        self.contacts.refresh();
+        let all = self.with_contact_names(all);
         self.listed_all = all.len() < self.listed;
         self.messages = match self.settings.conversations {
             true => self.conversations.group(all),
@@ -1109,14 +1129,24 @@ impl MailView {
     }
 
     fn conversation_of(&self, summary: &Summary) -> Vec<Summary> {
-        match self.settings.conversations {
+        let conversation = match self.settings.conversations {
             true => self
                 .store
                 .conversation(summary)
                 .inspect_err(|error| tracing::warn!("cannot read a conversation: {error}"))
                 .unwrap_or_else(|_| vec![summary.clone()]),
             false => vec![summary.clone()],
+        };
+        self.with_contact_names(conversation)
+    }
+
+    fn with_contact_names(&self, mut summaries: Vec<Summary>) -> Vec<Summary> {
+        for summary in &mut summaries {
+            if let Some(name) = self.contacts.name_for(&summary.sender.email) {
+                name.clone_into(&mut summary.sender.name);
+            }
         }
+        summaries
     }
 
     fn refresh_thread(&mut self) {
@@ -3674,8 +3704,11 @@ impl MailView {
             }
             Target::Link(url, claimed, _) => self.open_link(url, claimed),
             Target::Address(address) => {
-                self.requests
-                    .push(Request::ShowMenu(address_menu(&address), pointer.position));
+                self.contacts.refresh();
+                self.requests.push(Request::ShowMenu(
+                    address_menu(&address, &self.contacts),
+                    pointer.position,
+                ));
             }
             Target::Attachment(id, index) if secondary => {
                 self.reader.focus_entry(id);
@@ -4126,6 +4159,9 @@ impl MailView {
                 let claimed = self.reader.claimed_host(&url);
                 self.open_link(url, claimed);
             }
+            action if action.starts_with("add-contact:") => self.requests.push(
+                Request::AddContact(action["add-contact:".len()..].to_owned()),
+            ),
             action if action.starts_with("compose-to:") => self.compose(Draft {
                 to: parse_addresses(&action["compose-to:".len()..]),
                 ..Draft::default()

@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 use accesskit::{Node, Role};
+use bande_address_book::Directory;
 use bande_datetime::DateFormats;
 use bande_l10n::tr;
 use bande_toolkit::ui::{
@@ -25,6 +26,7 @@ use crate::ui::symbols::Symbols;
 
 type Spot = (usize, usize);
 
+const CONTACTS_APP: &str = "org.bande.Contacts";
 const MAX_PICTURE_BYTES: usize = 10 << 20;
 const LINK_TARGET_INSET: f32 = 8.0;
 const LINK_TARGET_PADDING: f32 = 8.0;
@@ -696,14 +698,21 @@ pub(crate) fn link_menu(url: &str) -> Menu {
     ])
 }
 
-pub(crate) fn address_menu(address: &Address) -> Menu {
-    Menu::new(vec![
+pub(crate) fn address_menu(address: &Address, contacts: &Directory) -> Menu {
+    let mut items = vec![
         MenuItem::new(
             &tr!("New Message"),
             &format!("compose-to:{}", address.full()),
         ),
         MenuItem::new(&tr!("Copy Address"), &format!("copy:{}", address.email)),
-    ])
+    ];
+    if !contacts.knows(&address.email) && bande_xdg::is_installed(CONTACTS_APP) {
+        items.push(MenuItem::new(
+            &tr!("Add to Contacts"),
+            &format!("add-contact:{}", address.full()),
+        ));
+    }
+    Menu::new(items)
 }
 
 pub(crate) fn attachment_menu(index: usize) -> Menu {

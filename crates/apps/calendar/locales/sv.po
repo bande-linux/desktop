@@ -94,6 +94,9 @@ msgstr "Visa"
 msgid "Updating…"
 msgstr "Uppdaterar…"
 
+msgid "The server did not accept “{title}” ({status}). Your change is kept on this computer and sent again at the next sync."
+msgstr "Servern tog inte emot ”{title}” ({status}). Ändringen finns kvar på den här datorn och skickas igen vid nästa synkning."
+
 msgid "“{title}” was changed elsewhere; both versions are kept."
 msgstr "”{title}” ändrades på annat håll. Båda versionerna har sparats."
 
@@ -111,6 +114,12 @@ msgstr[1] "La till {count} kalendrar från {owner}."
 msgid "Can’t open the calendars of {owner}: {error}"
 msgstr "Kan inte öppna kalendrarna för {owner}: {error}"
 
+msgid "{address} could not be used for Calendar: {error}"
+msgstr "{address} kunde inte användas för Kalender: {error}"
+
+msgid "The account could not be offered to Contacts: {error}"
+msgstr "Kontot kunde inte erbjudas till Kontakter: {error}"
+
 msgid "Updated {time}"
 msgstr "Uppdaterad {time}"
 
@@ -125,6 +134,12 @@ msgstr "Det gick inte att logga in på ”{name}”"
 
 msgid "The server refused the password. Click to enter it again."
 msgstr "Servern avvisade lösenordet. Klicka för att ange det igen."
+
+msgid "Birthdays"
+msgstr "Födelsedagar"
+
+msgid "{name}’s birthday"
+msgstr "{name} fyller år"
 
 msgid "{date}, {count} event"
 msgid_plural "{date}, {count} events"
@@ -625,6 +640,18 @@ msgstr "Kontots kalendrar tas bort från den här datorn. Inget raderas på serv
 msgid "Do you want to delete only this event, or all events in the series?"
 msgstr "Vill du radera bara den här händelsen eller alla händelser i serien?"
 
+msgid "Sign in at {host}?"
+msgstr "Vill du logga in på {host}?"
+
+msgid "The calendars of {address} are on this server. Check that it belongs to your provider before Calendar sends your password to it."
+msgstr "Kalendrarna för {address} finns på den här servern. Kontrollera att den tillhör din leverantör innan Kalender skickar ditt lösenord till den."
+
+msgid "Not Now"
+msgstr "Inte nu"
+
+msgid "Sign In"
+msgstr "Logga in"
+
 msgid "New Calendar"
 msgstr "Ny kalender"
 
@@ -684,6 +711,9 @@ msgstr "Regionens standard"
 
 msgid "Show week numbers"
 msgstr "Visa veckonummer"
+
+msgid "Show birthdays from Contacts"
+msgstr "Visa födelsedagar från Kontakter"
 
 msgid "General"
 msgstr "Allmänt"
@@ -787,6 +817,9 @@ msgstr "Det finns ingen CalDAV-kalender på den här adressen. Kontrollera serve
 msgid "Password:"
 msgstr "Lösenord:"
 
+msgid "Also use this account for Contacts"
+msgstr "Använd också det här kontot för Kontakter"
+
 msgid "Add a Calendar Account"
 msgstr "Lägg till ett kalenderkonto"
 
@@ -801,9 +834,6 @@ msgstr "Logga in på ”{name}”"
 
 msgid "Subscribe to a Calendar"
 msgstr "Prenumerera på en kalender"
-
-msgid "Sign In"
-msgstr "Logga in"
 
 msgid "CalDAV account"
 msgstr "CalDAV-konto"

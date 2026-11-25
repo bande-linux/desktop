@@ -31,6 +31,7 @@ pub struct CalendarSettings {
     pub day_end: u8,
     pub hours_shown: u8,
     pub week_numbers: bool,
+    pub birthdays: bool,
     pub time_zones: bool,
     pub timed_alert: Alert,
     pub all_day_alert: Alert,
@@ -48,6 +49,7 @@ impl Default for CalendarSettings {
             day_end: 18,
             hours_shown: 12,
             week_numbers: false,
+            birthdays: false,
             time_zones: false,
             timed_alert: Alert::None,
             all_day_alert: Alert::None,
@@ -146,6 +148,9 @@ impl Stored for CalendarSettings {
                 "week-numbers" => {
                     settings.week_numbers = flag(value).unwrap_or(settings.week_numbers);
                 }
+                "birthdays" => {
+                    settings.birthdays = flag(value).unwrap_or(settings.birthdays);
+                }
                 "time-zone-support" => {
                     settings.time_zones = flag(value).unwrap_or(settings.time_zones);
                 }
@@ -182,7 +187,7 @@ impl Stored for CalendarSettings {
         format!(
             "default-calendar = {}\nstart-week-on = {}\nday-starts = {}\nday-ends = {}\nhours-shown = {}\n\
              week-numbers = {}\ntime-zone-support = {}\nevent-alert = {}\nall-day-alert = {}\nrefresh-minutes = {}\n\
-             subscription-minutes = {}\nalerts-when-closed = {}\n",
+             subscription-minutes = {}\nalerts-when-closed = {}\nbirthdays = {}\n",
             self.default_calendar,
             self.first_weekday.map_or("default", weekday_name),
             self.day_start,
@@ -195,6 +200,7 @@ impl Stored for CalendarSettings {
             self.refresh_minutes,
             self.subscription_minutes,
             self.alerts_when_closed,
+            self.birthdays,
         )
     }
 }

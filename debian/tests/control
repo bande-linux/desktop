@@ -8,7 +8,7 @@ Depends: bande-compositor, bande-notify, bande-clipboard, bande-config, bande-po
  xdg-desktop-portal-bande, bande-file-chooser, bande-tray, bande-indexer, bande-automount,
  bande-polkit, bande-secrets, libpam-bande-secrets, bande-shell, bande-lock, bande-screenshot,
  bande-files, bande-lookup, bande-settings, bande-greeter, bande-terminal, bande-software,
- bande-installer, bande-monitor, bande-mail, bande-calendar, bande-velox, bande-calculator,
+ bande-installer, bande-monitor, bande-mail, bande-calendar, bande-contacts, bande-velox, bande-calculator,
  bande-player, bande-viewer, bande-clock, bande-text-editor, bande-disks, bande-archive,
  bande-desktop, bande-icon-theme, bande-desktop-l10n-sv, bande-desktop-l10n-en-gb,
  apt, bash, coreutils, dash, dpkg, libc-bin, login, mount, passwd, tar, tzdata, util-linux
@@ -49,7 +49,7 @@ Depends: bande-compositor, bande-notify, bande-clipboard, bande-config, bande-po
  xdg-desktop-portal-bande, bande-file-chooser, bande-tray, bande-indexer, bande-automount,
  bande-polkit, bande-secrets, libpam-bande-secrets, bande-shell, bande-lock, bande-screenshot,
  bande-files, bande-lookup, bande-settings, bande-greeter, bande-terminal, bande-software,
- bande-installer, bande-monitor, bande-mail, bande-calendar, bande-velox, bande-calculator,
+ bande-installer, bande-monitor, bande-mail, bande-calendar, bande-contacts, bande-velox, bande-calculator,
  bande-player, bande-viewer, bande-clock, bande-text-editor, bande-disks, bande-archive,
  bande-desktop, bande-icon-theme, bande-desktop-l10n-sv, bande-desktop-l10n-en-gb,
  desktop-file-utils, appstream, systemd, dbus-daemon, dbus-bin

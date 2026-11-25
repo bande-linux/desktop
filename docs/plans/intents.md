@@ -11,7 +11,7 @@ by itself.
 | `bande-intents`, owners, command line, rows in Search, broker, sandbox, MCP server, routines | not built |
 | Approval prompt with its own compositor role | not built |
 | Apps that serve without a window | Calendar, Clock, Velox and Installer run in the background, Dictionary waits for activation; the rest is tied to a window |
-| Contacts and shared accounts | on branch `accounts`, with more on it that is not committed |
+| Contacts | built; shared accounts are on branch `accounts-wip` |
 | Undo of mail flags, of event creation, history of a note; delayed send and outbox | not built |
 | File operations with progress and undo; servers and volumes; text search | built (`bande-fs`, `org.bande.Mounts`, `org.bande.Search`) |
 
@@ -60,7 +60,6 @@ by itself.
 - Land `responsive-3`, which contains `next`.
 - Decide what is uncommitted in the worktrees of `perf-compositor-2`, `reopen-apps` and
   `diag-magenta`.
-- Commit what is uncommitted on `accounts` to a branch of its own. It exists in one worktree only.
 - Free build space; 60 GB stay free.
 
 ## Running many agents
@@ -116,7 +115,6 @@ Search or a menu use it.
 
 | Id | Domains | Needs | Owns | Size |
 | :--- | :--- | :--- | :--- | :--- |
-| D0 | Markdown in and out, with the sanitising, for everyone | | `crates/libs/rich-text`, `crates/apps/text-editor` | S |
 | D1a | `files`, with Open and Register | C2 | `crates/services/files-intents`, `crates/libs/fs`, `crates/apps/settings/src/storage.rs` | L |
 | D1b | `archives` | D1a | `crates/services/files-intents` | M |
 | D1c | facts for `photos`, `documents.get` | D1b | `crates/services/files-intents`, `crates/services/index`, `crates/libs/content` | M |
@@ -149,7 +147,6 @@ Each has a [plan of its own](README.md). The app serves its domain from the firs
 
 | Id | App | Domain | Needs | Owns | Size |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| A1a | [Contacts](apps/contacts.md): land what is committed | | nothing; alone in mail, calendar, keyring, search and secrets | `crates/apps/{contacts,calendar,mail}`, `crates/libs/{address-book,dav,content-lines,keyring,search}`, `crates/services/secrets` | L |
 | A1b | [Shared accounts](apps/contacts.md) | | A1a, C2 | `crates/libs/accounts`, `crates/libs/mail-core`, `crates/apps/{mail,notes,calendar,contacts,tasks}`, its pane in `crates/apps/settings` | L |
 | A1c | [Contacts' domain](apps/contacts.md) | `contacts` | D5 | `crates/apps/contacts`, `crates/libs/address-book` | M |
 | A2 | [Tasks](apps/tasks.md) | `tasks` | A1a, D5 | `crates/apps/tasks`, `crates/libs/{dav,content-lines}` | M |
@@ -172,8 +169,7 @@ mail. An agent that reads, shows and changes needs no prompt.
 
 | Wave | At once | Then |
 | :--- | :--- | :--- |
-| 0 | A1a | |
-| 1 | C1 and C2 by one agent; D0 | gate 1 |
+| 1 | C1 and C2 by one agent | gate 1 |
 | 2 | D1a, then D1b, then D1c; D2; D6; D21; D5, then A1c | |
 | 3 | C4, then C5 and C6; D23; D4 (drafts, reading); D7; D11; D14; D16; A2 | gate 2 |
 | 4 | C3; D12; D15; D18; A4; A6; A7; A11a | |

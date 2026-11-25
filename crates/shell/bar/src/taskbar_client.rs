@@ -1022,6 +1022,12 @@ impl App for Taskbar {
     }
 
     fn event(&mut self, window: &mut Window, event: WindowEvent) {
+        if matches!(
+            event,
+            WindowEvent::Input(Event::PointerDown(_)) | WindowEvent::Accessibility(_)
+        ) {
+            self.waiting_menu = None;
+        }
         match event {
             WindowEvent::Input(Event::PointerDown(pointer))
                 if self.owns_open_menu_at(pointer.position) =>

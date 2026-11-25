@@ -7,6 +7,8 @@ use std::time::{Duration, Instant};
 
 use bande_l10n::tr;
 use bande_xdg::{DesktopEntry, find_app, is_tab, unit_app_ids};
+use rustix::buffer::spare_capacity;
+use rustix::event::Timespec;
 use rustix::event::epoll::{self, CreateFlags, EventData, EventFlags};
 use zbus::blocking::Connection;
 
@@ -22,6 +24,7 @@ const SUSTAINED: Duration = Duration::from_secs(4);
 const STREAK_GAP: Duration = Duration::from_secs(5);
 const CALM: Duration = Duration::from_secs(60);
 const SIGKILL: i32 = 9;
+const NO_SUCH_UNIT: &str = "org.freedesktop.systemd1.NoSuchUnit";
 const NEARLY_EXHAUSTED: u64 = 10;
 
 fn trigger(stall: Duration, window: Duration) -> String {
@@ -59,6 +62,17 @@ impl PressureTrigger {
 
     pub fn fd(&self) -> BorrowedFd<'_> {
         self.events.as_fd()
+    }
+
+    /// Whether what it watches is gone, after which its descriptor stays ready.
+    pub fn is_gone(&self) -> bool {
+        let mut events = Vec::<epoll::Event>::with_capacity(1);
+        let now = Timespec::default();
+        epoll::wait(&self.events, spare_capacity(&mut events), Some(&now)).is_ok()
+            && events.iter().any(|event| {
+                let flags = event.flags;
+                flags.contains(EventFlags::ERR)
+            })
     }
 }
 
@@ -258,14 +272,19 @@ pub fn heaviest_apps(app_slice: &Path, entries: &[DesktopEntry], limit: usize) -
 }
 
 pub fn force_quit(session: &Connection, app: &AppMemory) -> zbus::Result<()> {
+    let mut killed = Ok(());
     for unit in &app.units {
-        session.call_method(
+        match session.call_method(
             Some("org.freedesktop.systemd1"),
             "/org/freedesktop/systemd1",
             Some("org.freedesktop.systemd1.Manager"),
             "KillUnit",
             &(unit, "all", SIGKILL),
-        )?;
+        ) {
+            Ok(_) => {}
+            Err(zbus::Error::MethodError(name, ..)) if name.as_str() == NO_SUCH_UNIT => {}
+            Err(error) => killed = Err(error),
+        }
     }
-    Ok(())
+    killed
 }

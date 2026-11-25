@@ -71,7 +71,7 @@ limit() {
         ManagedOOMMemoryPressureDurationSec) record=ManagedOOMMemoryPressureDurationUSec ;;
         esac
         record="$limited.d/50-$record.conf"
-        if [ ! -e "$controls/$record" ] || cmp -s "$controls/$record" "$limits/$record"; then
+        if [ ! -e "$controls/$record" ]; then
             wanted="$wanted $assignment"
             records="$records $record"
         fi
@@ -111,6 +111,7 @@ forget_limits() {
     rm -rf "$limits"
     systemctl --user daemon-reload
 }
+forget_limits
 set_limits
 systemctl --user unset-environment $locale_variables BANDE_LOGIN_ACCESSIBILITY
 systemctl --user import-environment ELECTRON_OZONE_PLATFORM_HINT QT_QPA_PLATFORMTHEME GTK_USE_PORTAL PATH $locale_variables XDG_SEAT XDG_SESSION_ID XDG_SESSION_CLASS \

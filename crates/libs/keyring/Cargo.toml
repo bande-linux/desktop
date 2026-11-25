@@ -8,6 +8,7 @@ repository.workspace = true
 description = "Passwords in the Secret Service keyring for Bande"
 
 [dependencies]
+tracing.workspace = true
 zbus.workspace = true
 
 [lints]

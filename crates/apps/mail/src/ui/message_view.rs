@@ -6,6 +6,7 @@ use std::rc::Rc;
 use std::time::Instant;
 
 use accesskit::{Action, ActionRequest, Node, NodeId, Role, TreeUpdate};
+use bande_address_book::Directory;
 use bande_datetime::DateFormats;
 use bande_inbox::{Inbox, Outbox};
 use bande_l10n::tr;
@@ -530,7 +531,7 @@ impl MessageView {
                 self.open_link(url, claimed);
                 None
             }
-            Target::Address(address) => Some(address_menu(&address)),
+            Target::Address(address) => Some(address_menu(&address, &Directory::open())),
             Target::Attachment(_, index) if secondary => Some(attachment_menu(index)),
             Target::Attachment(_, index) => {
                 self.open_attachment(index);
@@ -662,6 +663,9 @@ impl MessageView {
                 let claimed = self.reader.claimed_host(&url);
                 self.open_link(url, claimed);
             }
+            action if action.starts_with("add-contact:") => self.requests.push(
+                Request::AddContact(action["add-contact:".len()..].to_owned()),
+            ),
             action if action.starts_with("attachment-") => {
                 let parsed = action
                     .split_once(':')

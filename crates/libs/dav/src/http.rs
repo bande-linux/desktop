@@ -37,9 +37,9 @@ impl std::fmt::Display for Error {
             Self::Unauthorized => write!(f, "the user name or password is wrong"),
             Self::Unsupported(schemes) => write!(f, "the server asks for {schemes} sign-in"),
             Self::Status { status, url } => write!(f, "{url} answered {status}"),
-            Self::PreconditionFailed => write!(f, "the event changed on the server"),
+            Self::PreconditionFailed => write!(f, "it changed on the server"),
             Self::Xml(error) => write!(f, "the server's answer is not valid: {error}"),
-            Self::NotFound(what) => write!(f, "no calendar server found for {what}"),
+            Self::NotFound(what) => write!(f, "nothing found at {what}"),
             Self::Insecure(url) => write!(f, "{url} is not encrypted, so the password is not sent"),
         }
     }
@@ -250,8 +250,8 @@ fn classify(url: &str, error: &ureq::Error) -> Error {
 }
 
 impl Http {
-    pub fn new(credentials: Option<&Credentials>) -> Self {
-        let agent = bande_https::config("calendar")
+    pub fn new(app: &str, credentials: Option<&Credentials>) -> Self {
+        let agent = bande_https::config(app)
             .http_status_as_error(false)
             .allow_non_standard_methods(true)
             .max_redirects(0)

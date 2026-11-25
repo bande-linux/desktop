@@ -3,6 +3,7 @@ pub mod drives;
 pub mod fwupd;
 pub mod packagekit;
 mod private;
+pub mod xandikos;
 
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, Command, Stdio};

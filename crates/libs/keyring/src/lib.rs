@@ -11,6 +11,7 @@ const COLLECTION_INTERFACE: &str = "org.freedesktop.Secret.Collection";
 const ITEM_INTERFACE: &str = "org.freedesktop.Secret.Item";
 const PROMPT_INTERFACE: &str = "org.freedesktop.Secret.Prompt";
 const NO_PROMPT: &str = "/";
+const SHARED_WITH: &str = "bande:allowed";
 
 type Secret = (OwnedObjectPath, Vec<u8>, Vec<u8>, String);
 
@@ -20,10 +21,17 @@ pub struct Keyring {
     connection: Connection,
     session: OwnedObjectPath,
     application: &'static str,
+    shared_with: Vec<String>,
 }
 
 impl Keyring {
     pub fn open(application: &'static str) -> Result<Self> {
+        Self::shared(application, Vec::new())
+    }
+
+    /// The keyring for items that the programs at `shared_with` (executable paths) open as
+    /// their own, without asking the user, once this program saves them.
+    pub fn shared(application: &'static str, shared_with: Vec<String>) -> Result<Self> {
         let connection = Connection::session()?;
         let (_, session): (OwnedValue, OwnedObjectPath) = connection
             .call_method(
@@ -39,6 +47,7 @@ impl Keyring {
             connection,
             session,
             application,
+            shared_with,
         })
     }
 
@@ -138,11 +147,16 @@ impl Keyring {
     pub fn save(&self, key: &Key<'_>, label: &str, password: &str) -> Result<()> {
         let collection = self.default_collection()?;
         self.unlock(std::slice::from_ref(&collection))?;
+        let shared_with = self.shared_with.join("\n");
+        let mut attributes = self.attributes(key);
+        if !shared_with.is_empty() {
+            attributes.insert(SHARED_WITH, &shared_with);
+        }
         let properties = HashMap::from([
             ("org.freedesktop.Secret.Item.Label", Value::from(label)),
             (
                 "org.freedesktop.Secret.Item.Attributes",
-                Value::from(self.attributes(key)),
+                Value::from(attributes),
             ),
         ]);
         let secret = (
@@ -180,5 +194,64 @@ impl Keyring {
             self.prompt(&prompt)?;
         }
         Ok(())
+    }
+}
+
+/// The passwords of an app's accounts, each kept under its `account` attribute and remembered
+/// once read, for a thread that signs in to servers. The keyring opens on first use.
+pub struct Passwords {
+    application: &'static str,
+    keyring: Option<Keyring>,
+    known: HashMap<String, String>,
+}
+
+impl Passwords {
+    pub fn new(application: &'static str) -> Self {
+        Self {
+            application,
+            keyring: None,
+            known: HashMap::new(),
+        }
+    }
+
+    fn keyring(&mut self) -> Option<&Keyring> {
+        if self.keyring.is_none() {
+            self.keyring = Keyring::open(self.application)
+                .map_err(|error| tracing::warn!("cannot open the keyring: {error}"))
+                .ok();
+        }
+        self.keyring.as_ref()
+    }
+
+    pub fn get(&mut self, account: &str) -> Option<String> {
+        if let Some(password) = self.known.get(account) {
+            return Some(password.clone());
+        }
+        let password = self
+            .keyring()?
+            .password(&[("account", account)])
+            .map_err(|error| tracing::warn!("cannot read the password: {error}"))
+            .ok()
+            .flatten()?;
+        self.known.insert(account.to_owned(), password.clone());
+        Some(password)
+    }
+
+    pub fn set(&mut self, account: &str, label: &str, password: &str) {
+        if let Some(keyring) = self.keyring()
+            && let Err(error) = keyring.save(&[("account", account)], label, password)
+        {
+            tracing::warn!("cannot keep the password: {error}");
+        }
+        self.known.insert(account.to_owned(), password.to_owned());
+    }
+
+    pub fn forget(&mut self, account: &str) {
+        self.known.remove(account);
+        if let Some(keyring) = self.keyring()
+            && let Err(error) = keyring.forget(&[("account", account)])
+        {
+            tracing::warn!("cannot forget the password: {error}");
+        }
     }
 }

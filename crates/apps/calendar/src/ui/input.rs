@@ -13,7 +13,7 @@ use super::{
     TOOLBAR_HEIGHT,
 };
 use crate::edit::{Scope, new_event, shifted};
-use crate::store::Found;
+use crate::store::{BIRTHDAYS_CALENDAR, Found};
 
 const WHEEL_STEP: f32 = 40.0;
 
@@ -49,7 +49,11 @@ const COLORS: [(Accent, Text); 8] = [
 ];
 
 fn calendar_menu(view: &CalendarView, index: usize) -> Option<Menu> {
-    let calendar = view.library.calendars.get(index)?;
+    let calendar = view
+        .library
+        .calendars
+        .get(index)
+        .filter(|calendar| calendar.info.id != BIRTHDAYS_CALENDAR)?;
     let current = super::painter::parse_color(&calendar.info.color).map(Accent::nearest);
     let mut items: Vec<MenuItem> = COLORS
         .iter()
@@ -64,7 +68,9 @@ fn calendar_menu(view: &CalendarView, index: usize) -> Option<Menu> {
         .library
         .calendars
         .iter()
-        .filter(|other| other.info.account == crate::store::LOCAL_ACCOUNT)
+        .filter(|other| {
+            other.info.account == crate::store::LOCAL_ACCOUNT && other.info.id != BIRTHDAYS_CALENDAR
+        })
         .count();
     items.push(MenuItem::separator());
     items.push(MenuItem::new(
@@ -954,7 +960,12 @@ fn new_event_now(view: &mut CalendarView) {
 
 pub fn signal(view: &mut CalendarView, signal: Signal) {
     if let Some(inspector) = &mut view.inspector {
+        let before = inspector.invite_text().to_owned();
         inspector.apply(&signal);
+        if matches!(signal, Signal::Invitees(_)) {
+            view.contacts.refresh();
+            inspector.complete_invitee(&mut view.ui, &before, &view.contacts);
+        }
     }
     if let Some(custom) = &mut view.custom {
         custom.apply(&signal, &mut view.ui);

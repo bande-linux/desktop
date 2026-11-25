@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use bande_secrets::pam;
 use bande_secrets::service::{Daemon, SERVICE_PATH, WireSecret, collection_path, item_path};
-use bande_secrets::store::{CREATOR, Store};
+use bande_secrets::store::{ALLOWED, CREATOR, Store};
 use bande_test_bus::SessionBus;
 use oo7::{Key, Secret, crypto};
 use zbus::blocking::Connection;
@@ -43,7 +43,7 @@ fn call<R: serde::de::DeserializeOwned + zbus::zvariant::Type>(
 }
 
 #[test]
-fn an_app_keeps_a_secret_over_an_encrypted_session_and_cannot_forge_its_owner() {
+fn an_app_keeps_a_secret_over_an_encrypted_session_shares_it_by_name_and_cannot_forge_its_owner() {
     let bus = SessionBus::start().unwrap();
     let home = tempfile::tempdir().unwrap();
     let (daemon, _connection) = serve(&bus, home.path(), PathBuf::from("/nonexistent"));
@@ -66,7 +66,11 @@ fn an_app_keeps_a_secret_over_an_encrypted_session_and_cannot_forge_its_owner() 
         Key::generate_aes_key(&private, &Key::new(Vec::<u8>::try_from(output).unwrap())).unwrap();
     let iv = crypto::generate_iv().unwrap();
     let sealed = crypto::encrypt(b"hunter2", &aes, &iv).unwrap();
-    let attributes = HashMap::from([("service", "mail"), (CREATOR, "/usr/bin/someone-else")]);
+    let attributes = HashMap::from([
+        ("service", "mail"),
+        (CREATOR, "/usr/bin/someone-else"),
+        (ALLOWED, "/usr/bin/bande-notes"),
+    ]);
     let properties = HashMap::from([
         ("org.freedesktop.Secret.Item.Label", Value::from("Mail")),
         (
@@ -103,6 +107,11 @@ fn an_app_keeps_a_secret_over_an_encrypted_session_and_cannot_forge_its_owner() 
         stored.get(CREATOR).map(String::as_str),
         Some("/usr/bin/someone-else"),
         "a client cannot name another app as the owner"
+    );
+    assert_eq!(
+        stored.get(ALLOWED).map(String::as_str),
+        Some("/usr/bin/bande-notes"),
+        "the saving app may open its item to the apps it names"
     );
 }
 

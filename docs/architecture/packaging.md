@@ -136,7 +136,7 @@ are in [performance.md](performance.md).
   `xdg-desktop-portal-bande`), the shell clients (`bande-shell`,
   `bande-screenshot`, `bande-lock`, `bande-greeter`) and the apps (`bande-files`,
   `bande-settings`, `bande-file-chooser`, `bande-lookup`, `bande-terminal`, `bande-software`,
-  `bande-installer`, `bande-monitor`, `bande-mail`, `bande-notes`, `bande-calendar`, `bande-velox`,
+  `bande-installer`, `bande-monitor`, `bande-mail`, `bande-notes`, `bande-calendar`, `bande-contacts`, `bande-velox`,
   `bande-calculator`, `bande-player`, `bande-viewer`, `bande-clock`, `bande-text-editor`,
   `bande-disks`, `bande-archive`). Package names stay `bande-*` whatever directory the crate
   lives in ([decision 0003](../decisions/0003-repository-layout.md)); a program may ship in
@@ -183,7 +183,7 @@ are in [performance.md](performance.md).
   folders in Files, `.deb` files in the Package Installer, every type a Bande app declares
   in that app (plain text, Markdown, RTF, source code and logs in Text Editor when it is
   installed, pictures and PDF in Viewer, audio and video in Player), web pages and links in the Browser,
-  `mailto:` links in Mail, calendar files and `webcal:` links in Calendar, and archives (zip, tar,
+  `mailto:` links in Mail, calendar files and `webcal:` links in Calendar, vCard files in Contacts, and archives (zip, tar,
   gzip, bzip2, xz, zstd, 7-Zip) in Archives, which also makes Files' Compress; Files expands an archive
   itself only when no app opens it; other types open in an installed app
   whose desktop entry declares them, and a person's own choice in

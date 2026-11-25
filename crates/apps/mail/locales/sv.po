@@ -1022,6 +1022,9 @@ msgstr "Ingen brevlåda matchar"
 msgid "{shortcut}: {action}"
 msgstr "{shortcut}: {action}"
 
+msgid "Add to Contacts"
+msgstr "Lägg till i Kontakter"
+
 msgid "{first} to {last}: the first nine mailboxes in the sidebar"
 msgstr "{first} till {last}: de nio första brevlådorna i sidofältet"
 

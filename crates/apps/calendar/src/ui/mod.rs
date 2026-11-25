@@ -289,6 +289,7 @@ pub(crate) struct Selection {
 
 pub struct CalendarView {
     library: Library,
+    contacts: bande_address_book::Directory,
     ui: Ui,
     host: WidgetId,
     access: WidgetId,
@@ -353,8 +354,9 @@ impl CalendarView {
         let host_id = bande_toolkit::ui::Widget::id(&host);
         let today = now.date();
         let cx = Context::new(text, palette);
-        Self {
+        let mut view = Self {
             library,
+            contacts: bande_address_book::Directory::open(),
             ui: Ui::new(Box::new(host), cx),
             host: host_id,
             access: WidgetId::next(),
@@ -400,7 +402,11 @@ impl CalendarView {
             pending_open: None,
             undo: Vec::new(),
             redo: Vec::new(),
+        };
+        if view.settings.birthdays {
+            view.refresh_birthdays();
         }
+        view
     }
 
     pub fn library(&self) -> &Library {
@@ -470,7 +476,28 @@ impl CalendarView {
         if settings.day_start != self.settings.day_start {
             self.scroll = f32::from(settings.day_start) * self.hour_height;
         }
+        let birthdays = settings.birthdays != self.settings.birthdays;
         self.settings = settings;
+        if birthdays {
+            self.refresh_birthdays();
+        }
+    }
+
+    /// Shows the birthdays of Contacts while the setting is on.
+    pub fn refresh_birthdays(&mut self) {
+        self.contacts.refresh();
+        let people: Vec<_> = match self.settings.birthdays {
+            true => self
+                .contacts
+                .people()
+                .iter()
+                .filter_map(|person| {
+                    Some((person.uid.clone(), person.name.clone(), person.birthday?))
+                })
+                .collect(),
+            false => Vec::new(),
+        };
+        self.library.set_birthdays(&people);
     }
 
     pub(crate) fn first_weekday(&self) -> Weekday {

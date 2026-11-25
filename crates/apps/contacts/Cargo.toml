@@ -1,0 +1,37 @@
+[package]
+name = "bande-contacts"
+description = "contacts for the Bande desktop"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+accesskit.workspace = true
+bande-address-book.workspace = true
+bande-app.workspace = true
+bande-app-menu.workspace = true
+bande-content-lines.workspace = true
+bande-datetime.workspace = true
+bande-dav.workspace = true
+bande-discovery.workspace = true
+bande-inbox.workspace = true
+bande-keyring.workspace = true
+bande-l10n.workspace = true
+bande-network.workspace = true
+bande-search.workspace = true
+bande-toolkit.workspace = true
+bande-xdg.workspace = true
+image.workspace = true
+jiff.workspace = true
+tracing.workspace = true
+zbus.workspace = true
+zeroize.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

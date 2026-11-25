@@ -115,6 +115,9 @@ msgstr "Diagnostik"
 msgid "Backup"
 msgstr "Säkerhetskopia"
 
+msgid "Activity"
+msgstr "Historik"
+
 msgid "Join networks and see how you are connected"
 msgstr "Anslut till nätverk och se hur du är ansluten"
 
@@ -211,6 +214,9 @@ msgstr "Problemrapporter från den här datorn"
 msgid "Hourly encrypted versions on an external disk"
 msgstr "Krypterade versioner varje timme på en extern skiva"
 
+msgid "What was changed for you, and undoing it"
+msgstr "Vad som har ändrats åt dig, och hur du ångrar det"
+
 msgid "wireless, wlan, internet, network"
 msgstr "trådlöst, wlan, internet, nätverk"
 
@@ -306,6 +312,9 @@ msgstr "krasch, kraschar, frysning, hänger sig, avslutades oväntat, minnesdump
 
 msgid "restore, versions, external disk, history, recover"
 msgstr "återställ, versioner, extern skiva, historik, återskapa"
+
+msgid "undo, history, changes, receipts, what happened, log"
+msgstr "ångra, historik, ändringar, kvitton, vad hände, logg"
 
 msgid "When available"
 msgstr "När de finns"
@@ -1346,6 +1355,9 @@ msgstr "inmatningsmetod, keylogger, skriva, fcitx, ibus, virtuellt tangentbord, 
 
 msgid "remote login, ssh, security, sign-in page, captive portal, connectivity check"
 msgstr "fjärrinloggning, ssh, säkerhet, inloggningssida, captive portal, anslutningskontroll"
+
+msgid "undo, undo changes, history, take back"
+msgstr "ångra, ångra ändringar, historik, ta tillbaka"
 
 msgid "install updates, check for updates, check now, security updates, upgrade, packages, firmware, restart"
 msgstr "installera uppdateringar, sök efter uppdateringar, sök nu, säkerhetsuppdateringar, uppgradera, paket, fast programvara, starta om"

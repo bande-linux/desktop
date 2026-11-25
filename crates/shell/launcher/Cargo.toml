@@ -15,7 +15,10 @@ tracing.workspace = true
 bande-config.workspace = true
 bande-content.workspace = true
 bande-fs.workspace = true
+bande-bus.workspace = true
 bande-inbox.workspace = true
+bande-intents.workspace = true
+bande-notify.workspace = true
 bande-l10n.workspace = true
 bande-search.workspace = true
 bande-settings-panes.workspace = true
@@ -24,6 +27,10 @@ bande-thumbnails.workspace = true
 bande-toolkit.workspace = true
 bande-xdg.workspace = true
 zbus.workspace = true
+
+[dev-dependencies]
+bande-settings-intents.workspace = true
+tempfile.workspace = true
 
 [lints]
 workspace = true

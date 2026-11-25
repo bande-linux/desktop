@@ -1,0 +1,31 @@
+[package]
+name = "bande-intents"
+description = "Bande Intents: typed operations apps offer other programs, their owners and their callers"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+bande-bus.workspace = true
+bande-intents-macros.workspace = true
+bande-l10n.workspace = true
+bande-notify.workspace = true
+bande-xdg.workspace = true
+blocking.workspace = true
+futures-lite.workspace = true
+jiff.workspace = true
+rustix = { workspace = true, features = ["fs", "rand"] }
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+signal-hook.workspace = true
+tracing.workspace = true
+zbus.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

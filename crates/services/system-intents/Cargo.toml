@@ -1,0 +1,15 @@
+[package]
+name = "bande-system-intents"
+description = "The host of small domains of Bande Intents that no other program owns"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+bande-intents.workspace = true
+bande-log.workspace = true
+
+[lints]
+workspace = true

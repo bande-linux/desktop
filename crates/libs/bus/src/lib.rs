@@ -57,7 +57,8 @@ pub fn is_unowned(error: &zbus::Error) -> bool {
     }
 }
 
-fn pid_of_handle(handle: BorrowedFd<'_>) -> Option<u32> {
+/// The process behind a process descriptor.
+pub fn pid_of_handle(handle: BorrowedFd<'_>) -> Option<u32> {
     std::fs::read_to_string(format!("/proc/self/fdinfo/{}", handle.as_raw_fd()))
         .ok()?
         .lines()

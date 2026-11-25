@@ -1,0 +1,65 @@
+msgid ""
+msgstr ""
+"Language: sv\n"
+"Language-Team: Swedish\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "Setting"
+msgstr "Inställning"
+
+msgid "Find Settings"
+msgstr "Hitta inställningar"
+
+msgid "Get Settings"
+msgstr "Hämta inställningar"
+
+msgid "Open Settings Page"
+msgstr "Öppna sida i Inställningar"
+
+msgid "Change Setting"
+msgstr "Ändra inställning"
+
+msgid "{setting} {value}"
+msgstr "{setting} {value}"
+
+msgid "On"
+msgstr "På"
+
+msgid "Off"
+msgstr "Av"
+
+msgid "{minimum} to {maximum} in steps of {step}"
+msgstr "{minimum} till {maximum} i steg om {step}"
+
+msgid "a list separated by commas"
+msgstr "en lista med kommatecken emellan"
+
+msgid "There is no setting “{name}”"
+msgstr "Det finns ingen inställning ”{name}”"
+
+msgid "{setting}: {from} to {to}"
+msgstr "{setting}: {from} till {to}"
+
+msgid "From"
+msgstr "Från"
+
+msgid "To"
+msgstr "Till"
+
+msgid "{setting} was changed by something else"
+msgstr "{setting} ändrades av något annat"
+
+msgid "Open {page} in Settings"
+msgstr "Öppna {page} i Inställningar"
+
+msgid "Page"
+msgstr "Sida"
+
+msgid "Settings is not installed"
+msgstr "Inställningar är inte installerat"
+
+msgid "The earlier value cannot be read"
+msgstr "Det tidigare värdet kan inte läsas"

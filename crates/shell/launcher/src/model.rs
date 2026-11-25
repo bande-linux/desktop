@@ -19,6 +19,7 @@ pub const MAX_SETTINGS: usize = 3;
 pub const MAX_FOLDERS: usize = 3;
 pub const MAX_DOCUMENTS: usize = 5;
 pub const MAX_COMMANDS: usize = 2;
+pub const MAX_OFFERS: usize = 3;
 const MIN_COMMAND_QUERY: usize = 2;
 const DESCRIBED_PENALTY: u32 = 150;
 const COMMENT_PENALTY: u32 = 300;
@@ -150,6 +151,28 @@ impl IndexedPane {
             .flatten()
             .max_by_key(|(score, _)| *score)
     }
+}
+
+/// Something that can be done as typed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OfferInfo {
+    pub title: String,
+    pub detail: String,
+    pub intent: String,
+}
+
+fn still_offers(offer: &OfferInfo, typed: &str) -> bool {
+    let title = fold(&offer.title);
+    let words = |text: &str| -> Vec<String> {
+        text.split(|character: char| !character.is_alphanumeric())
+            .filter(|word| !word.is_empty())
+            .map(str::to_owned)
+            .collect()
+    };
+    let shown = words(&title);
+    words(&fold(typed))
+        .iter()
+        .all(|typed| shown.iter().any(|word| word.starts_with(typed.as_str())))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -303,6 +326,7 @@ pub enum Kind {
     Application,
     Setting,
     Command,
+    Offer,
     Folder,
     Document,
     Mail,
@@ -319,6 +343,7 @@ pub enum Target {
     Emoji(String),
     Clip(u64),
     Command(SystemCommand),
+    Offer { intent: String, title: String },
     Item { app: String, argument: String },
 }
 
@@ -330,7 +355,7 @@ impl Target {
             Self::Path(path) => path.to_str().map(|path| format!("file:{path}")),
             Self::Emoji(character) => Some(format!("{EMOJI_KEY}{character}")),
             Self::Command(command) => Some(format!("command:{}", command.key())),
-            Self::Value(_) | Self::Clip(_) | Self::Item { .. } => None,
+            Self::Value(_) | Self::Clip(_) | Self::Offer { .. } | Self::Item { .. } => None,
         }
     }
 }
@@ -348,6 +373,7 @@ pub struct Hit {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Heading {
     TopHit,
+    Actions,
     Applications,
     Settings,
     System,
@@ -388,6 +414,9 @@ pub struct Model {
     pub generation: u64,
     files: Vec<FileHit>,
     items: Vec<Found>,
+    offers: Vec<OfferInfo>,
+    asks_offers: bool,
+    offers_complete: bool,
     recent_documents: Vec<PathBuf>,
     search: Search,
     excluded: Vec<PathBuf>,
@@ -438,6 +467,9 @@ impl Model {
             generation: 0,
             files: Vec::new(),
             items: Vec::new(),
+            offers: Vec::new(),
+            asks_offers: false,
+            offers_complete: true,
             recent_documents: Vec::new(),
             search: Search::default(),
             excluded: Vec::new(),
@@ -532,8 +564,14 @@ impl Model {
         if query == self.query {
             return;
         }
+        match query.to_lowercase().starts_with(&self.query.to_lowercase()) {
+            true => self.offers.retain(|offer| still_offers(offer, query)),
+            false => self.offers.clear(),
+        }
         self.query = query.to_owned();
         self.generation += 1;
+        self.offers_complete =
+            self.mode != Mode::Search || Query::new(query).is_none() || !self.asks_offers;
         self.files_complete =
             self.mode != Mode::Search || Query::new(query).is_none() || !self.searches_files();
         if self.files_complete {
@@ -542,6 +580,68 @@ impl Model {
             self.picked = false;
             self.held_since.get_or_insert_with(Instant::now);
         }
+    }
+
+    /// Expects offers for each query; what else is found is shown without waiting for them.
+    pub fn ask_offers(&mut self) {
+        self.asks_offers = true;
+    }
+
+    /// Takes the offers of a query. With its results already shown, they are added below, and what
+    /// is shown stays where it is.
+    pub fn set_offers(&mut self, generation: u64, offers: Vec<OfferInfo>) {
+        if generation != self.generation {
+            return;
+        }
+        self.offers_complete = true;
+        let gone = self.offers.iter().any(|known| !offers.contains(known));
+        let fresh: Vec<OfferInfo> = offers
+            .iter()
+            .filter(|offer| !self.offers.contains(offer))
+            .cloned()
+            .collect();
+        self.offers = offers;
+        if self.mode != Mode::Search || self.held_since.is_some() {
+            return;
+        }
+        let Some(query) = Query::new(&self.query) else {
+            return;
+        };
+        if gone || self.hits.is_empty() {
+            let keep = self.selection().map(|hit| hit.target.clone());
+            self.rebuild(keep);
+            return;
+        }
+        self.answered = self.is_complete();
+        self.revision += 1;
+        let late = self.offer_hits(&fresh, &query);
+        if late.is_empty() {
+            return;
+        }
+        self.headings.push((self.hits.len(), Heading::Actions));
+        self.hits.extend(late);
+    }
+
+    fn is_complete(&self) -> bool {
+        self.files_complete && self.offers_complete
+    }
+
+    fn offer_hits(&self, offers: &[OfferInfo], query: &Query) -> Vec<Hit> {
+        offers
+            .iter()
+            .filter(|_| self.shows(SearchCategory::System))
+            .map(|offer| Hit {
+                kind: Kind::Offer,
+                title: offer.title.clone(),
+                detail: Some(offer.detail.clone()),
+                target: Target::Offer {
+                    intent: offer.intent.clone(),
+                    title: offer.title.clone(),
+                },
+                matched: query.matched(&fold(&offer.title)),
+                score: bande_search::WORD,
+            })
+            .collect()
     }
 
     /// When results of an earlier query give way to those found without the file index.
@@ -633,7 +733,7 @@ impl Model {
     fn rebuild(&mut self, keep: Option<Target>) {
         self.revision += 1;
         self.held_since = None;
-        self.answered = self.files_complete;
+        self.answered = self.is_complete();
         self.copied = false;
         self.hits.clear();
         self.headings.clear();
@@ -741,6 +841,7 @@ impl Model {
             })
             .collect();
         commands.sort_by(by_score);
+        let mut offers = self.offer_hits(&self.offers, &query);
         let files: Vec<Hit> = self
             .files
             .iter()
@@ -769,6 +870,7 @@ impl Model {
         let top = match calculation {
             Some(calculation) => Some(calculation),
             None => [
+                &mut offers,
                 &mut apps,
                 &mut settings,
                 &mut folders,
@@ -787,6 +889,7 @@ impl Model {
             self.hits.push(top);
         }
         for (heading, group, limit) in [
+            (Heading::Actions, offers, MAX_OFFERS),
             (Heading::Applications, apps, MAX_APPS),
             (Heading::Settings, settings, MAX_SETTINGS),
             (Heading::System, commands, MAX_COMMANDS),
@@ -1154,12 +1257,68 @@ impl Model {
                 return true;
             }
             Some(
-                Target::App(_) | Target::Settings(_) | Target::Command(_) | Target::Item { .. },
+                Target::App(_)
+                | Target::Settings(_)
+                | Target::Command(_)
+                | Target::Offer { .. }
+                | Target::Item { .. },
             )
             | None => return false,
         };
         self.actions.push(Action::Copy(text));
         self.copied = true;
         true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn offer(title: &str) -> OfferInfo {
+        OfferInfo {
+            title: title.to_owned(),
+            detail: String::new(),
+            intent: "settings.set".to_owned(),
+        }
+    }
+
+    fn titles(model: &Model) -> Vec<&str> {
+        model.hits.iter().map(|hit| hit.title.as_str()).collect()
+    }
+
+    #[test]
+    fn late_offers_go_below_what_is_shown() {
+        let app = AppInfo {
+            app_id: "darkroom".to_owned(),
+            name: "Darkroom".to_owned(),
+            generic_name: None,
+            comment: None,
+            keywords: Vec::new(),
+        };
+        let usage = Usage::default();
+        let mut model = Model::new(vec![app], Vec::new(), PathBuf::new(), usage, 0);
+        model.ask_offers();
+        model.set_query("dar");
+        model.set_files(FileResults {
+            generation: model.generation,
+            hits: Vec::new(),
+            items: Vec::new(),
+        });
+        assert_eq!(titles(&model), ["Darkroom"], "nothing waits for offers");
+        let dark = offer("Appearance: Dark");
+        model.set_offers(model.generation, vec![dark.clone()]);
+        assert_eq!(titles(&model), ["Darkroom", "Appearance: Dark"]);
+        assert_eq!(model.selected, 0);
+
+        model.set_query("dark");
+        model.stop_holding();
+        assert!(
+            titles(&model).contains(&"Appearance: Dark"),
+            "it still fits"
+        );
+        model.set_query("darn");
+        model.stop_holding();
+        assert!(!titles(&model).contains(&"Appearance: Dark"));
     }
 }

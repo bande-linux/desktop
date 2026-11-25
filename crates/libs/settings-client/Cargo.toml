@@ -1,0 +1,19 @@
+[package]
+name = "bande-settings-client"
+description = "The stored values of Bande settings, read and changed over the session bus"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+bande-config.workspace = true
+bande-notify.workspace = true
+bande-settings-panes.workspace = true
+serde.workspace = true
+tracing.workspace = true
+zbus.workspace = true
+
+[lints]
+workspace = true

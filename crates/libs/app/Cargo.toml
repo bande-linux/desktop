@@ -13,6 +13,7 @@ tracing.workspace = true
 bande-app-menu.workspace = true
 bande-pdf.workspace = true
 bande-inbox.workspace = true
+bande-intents.workspace = true
 bande-bus.workspace = true
 bande-log.workspace = true
 bande-notify.workspace = true

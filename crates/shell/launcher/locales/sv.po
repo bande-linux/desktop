@@ -40,6 +40,12 @@ msgstr "omstart boota"
 msgid "shutdown poweroff power off turn"
 msgstr "avstängning stänga släck"
 
+msgid "Undo"
+msgstr "Ångra"
+
+msgid "Search"
+msgstr "Sök"
+
 msgid "Just now"
 msgstr "Nyss"
 
@@ -166,11 +172,17 @@ msgstr "Visa i Filer"
 msgid "Copy Path"
 msgstr "Kopiera sökväg"
 
+msgid "Do It"
+msgstr "Gör det"
+
 msgid "Skin Tone"
 msgstr "Hudton"
 
 msgid "Best Match"
 msgstr "Bästa träff"
+
+msgid "Actions"
+msgstr "Åtgärder"
 
 msgid "Applications"
 msgstr "Program"
@@ -234,9 +246,6 @@ msgstr "Flaggor"
 
 msgid "Characters"
 msgstr "Tecken"
-
-msgid "Search"
-msgstr "Sök"
 
 msgid "Search Emoji & Symbols"
 msgstr "Sök bland emojier och symboler"

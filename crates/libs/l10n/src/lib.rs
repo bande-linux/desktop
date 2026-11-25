@@ -32,6 +32,14 @@ impl Text {
         Self { context, english }
     }
 
+    pub const fn english(self) -> &'static str {
+        self.english
+    }
+
+    pub const fn context(self) -> Option<&'static str> {
+        self.context
+    }
+
     pub fn tr(self) -> String {
         translate(self.context, self.english, &[])
     }
@@ -76,6 +84,27 @@ pub fn translate_plural(
     args: &[(&str, &dyn Display)],
 ) -> String {
     PROGRAM.translate(context, singular, Some((plural, count)), args)
+}
+
+/// The catalogs of another installed program, for text it declares in a file.
+pub struct Program(Catalogs);
+
+impl Program {
+    /// The catalogs of the program `name`, in the languages this program is shown in.
+    pub fn named(name: &str) -> Self {
+        Self(Catalogs::open(
+            &Path::new(CATALOGS).join(name),
+            &requested_languages(|name| std::env::var(name).ok()),
+        ))
+    }
+
+    /// The translation of `english` as it is written, placeholders and all.
+    pub fn pattern(&self, context: Option<&str>, english: &str) -> String {
+        self.0
+            .catalogs()
+            .find_map(|catalog| Some((*catalog.find(context, english)?.first()?).to_owned()))
+            .unwrap_or_else(|| english.to_owned())
+    }
 }
 
 struct Catalogs {

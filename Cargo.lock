@@ -505,6 +505,7 @@ dependencies = [
  "bande-bus",
  "bande-compositor",
  "bande-inbox",
+ "bande-intents",
  "bande-l10n",
  "bande-log",
  "bande-notify",
@@ -727,6 +728,19 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
+ "tracing",
+ "zbus",
+]
+
+[[package]]
+name = "bande-cli"
+version = "0.2.0"
+dependencies = [
+ "bande-bus",
+ "bande-intents",
+ "bande-l10n",
+ "bande-log",
+ "serde_json",
  "tracing",
  "zbus",
 ]
@@ -1206,6 +1220,37 @@ dependencies = [
 ]
 
 [[package]]
+name = "bande-intents"
+version = "0.2.0"
+dependencies = [
+ "bande-bus",
+ "bande-intents-macros",
+ "bande-l10n",
+ "bande-notify",
+ "bande-xdg",
+ "blocking",
+ "futures-lite",
+ "jiff",
+ "rustix 1.1.6",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "signal-hook",
+ "tempfile",
+ "tracing",
+ "zbus",
+]
+
+[[package]]
+name = "bande-intents-macros"
+version = "0.2.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
 name = "bande-keyboard"
 version = "0.2.0"
 dependencies = [
@@ -1261,12 +1306,16 @@ name = "bande-launcher"
 version = "0.2.0"
 dependencies = [
  "accesskit",
+ "bande-bus",
  "bande-config",
  "bande-content",
  "bande-fs",
  "bande-inbox",
+ "bande-intents",
  "bande-l10n",
+ "bande-notify",
  "bande-search",
+ "bande-settings-intents",
  "bande-settings-panes",
  "bande-status",
  "bande-thumbnails",
@@ -1274,6 +1323,7 @@ dependencies = [
  "bande-volumes",
  "bande-xdg",
  "image",
+ "tempfile",
  "tracing",
  "zbus",
 ]
@@ -1894,6 +1944,7 @@ dependencies = [
  "bande-edid",
  "bande-fs",
  "bande-https",
+ "bande-intents",
  "bande-keyboard",
  "bande-keyring",
  "bande-l10n",
@@ -1904,6 +1955,7 @@ dependencies = [
  "bande-pdf",
  "bande-printers",
  "bande-screen-sharing",
+ "bande-settings-client",
  "bande-settings-panes",
  "bande-sound",
  "bande-status",
@@ -1930,6 +1982,41 @@ dependencies = [
  "xkbcommon 0.9.0",
  "zbus",
  "zeroize",
+]
+
+[[package]]
+name = "bande-settings-client"
+version = "0.2.0"
+dependencies = [
+ "bande-config",
+ "bande-notify",
+ "bande-settings-panes",
+ "serde",
+ "tracing",
+ "zbus",
+]
+
+[[package]]
+name = "bande-settings-intents"
+version = "0.2.0"
+dependencies = [
+ "bande-cli",
+ "bande-config",
+ "bande-intents",
+ "bande-keyboard",
+ "bande-l10n",
+ "bande-log",
+ "bande-notify",
+ "bande-settings-client",
+ "bande-settings-panes",
+ "bande-status",
+ "bande-test-bus",
+ "bande-test-intents",
+ "bande-xdg",
+ "jiff",
+ "serde_json",
+ "tempfile",
+ "zbus",
 ]
 
 [[package]]
@@ -2058,6 +2145,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "bande-system-intents"
+version = "0.2.0"
+dependencies = [
+ "bande-intents",
+ "bande-log",
+]
+
+[[package]]
 name = "bande-taskbar-model"
 version = "0.2.0"
 dependencies = [
@@ -2123,6 +2218,16 @@ dependencies = [
 name = "bande-test-bus"
 version = "0.2.0"
 dependencies = [
+ "tempfile",
+ "zbus",
+]
+
+[[package]]
+name = "bande-test-intents"
+version = "0.2.0"
+dependencies = [
+ "bande-intents",
+ "bande-test-bus",
  "tempfile",
  "zbus",
 ]

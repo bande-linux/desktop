@@ -1,0 +1,8 @@
+[Unit]
+Description=Bande settings for other programs
+
+[Service]
+Slice=session.slice
+Type=dbus
+BusName=org.bande.Intents.Settings
+ExecStart=/usr/libexec/bande-settings-intents

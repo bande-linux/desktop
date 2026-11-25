@@ -98,21 +98,20 @@ impl OutlinePen for Pen {
 }
 
 impl GlyphBitmap {
-    pub(crate) fn placed(&self, x: f32, y: f32, scale: f64) -> Rect {
+    pub(crate) fn placed(&self, x: f32, y: f32, scale: f64) -> kurbo::Rect {
+        let (x, y) = (
+            f64::from(x) + f64::from(self.area.x),
+            f64::from(y) + f64::from(self.area.y),
+        );
         if !self.on_pixels {
-            return Rect {
-                x: x + self.area.x,
-                y: y + self.area.y,
-                ..self.area
-            };
+            let size = (f64::from(self.area.width), f64::from(self.area.height));
+            return kurbo::Rect::from_origin_size((x, y), size);
         }
-        let on_pixel = |at: f32| ((f64::from(at) * scale).round() / scale) as f32;
-        let length = |pixels: u32| (f64::from(pixels) / scale) as f32;
-        Rect::new(
-            on_pixel(x + self.area.x),
-            on_pixel(y + self.area.y),
-            length(self.image.width()),
-            length(self.image.height()),
+        let on_pixel = |at: f64| (at * scale).round() / scale;
+        let length = |pixels: u32| f64::from(pixels) / scale;
+        kurbo::Rect::from_origin_size(
+            (on_pixel(x), on_pixel(y)),
+            (length(self.image.width()), length(self.image.height())),
         )
     }
 }

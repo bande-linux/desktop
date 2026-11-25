@@ -14,6 +14,7 @@ image.workspace = true
 libc.workspace = true
 libloading = { workspace = true, optional = true }
 parley.workspace = true
+parley_data.workspace = true
 futures-lite = { workspace = true, optional = true }
 resvg.workspace = true
 serde_json = { workspace = true, optional = true }

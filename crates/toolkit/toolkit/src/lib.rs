@@ -6,7 +6,7 @@ pub use bande_graphics::{
     FontData, GlyphRun, GpuRenderer, HeaderInsets, Image, Item, Paint, Palette, Paragraph, Path,
     Picture, Point, PositionedGlyph, Radius, Rect, Region, Scene, Scheme, Shape, Snapshot, Spacing,
     Stop, TextAlign, TextRole, TextSize, TextStyle, TextSystem, Transform, Typeface, WindowButtons,
-    grown_line, pixels, shortened,
+    grown_line, pixels, push_emoji, shortened,
 };
 pub use bande_toolkit_platform::{
     ACTIVATION_TOKEN_VARIABLE, Anchor, App, AppConnection, AppRequest, AppWindow, BrightnessKey,

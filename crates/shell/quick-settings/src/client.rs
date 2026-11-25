@@ -1196,6 +1196,8 @@ impl App for QuickSettings {
         match event {
             WindowEvent::TogglePanel(Panel::QuickSettings) => self.toggle_panel(window),
             WindowEvent::TogglePanel(Panel::Notifications)
+            | WindowEvent::ShowLauncher { .. }
+            | WindowEvent::OpenLauncher { .. }
                 if matches!(self.mode, Mode::Panel { .. }) =>
             {
                 self.dismiss(window);

@@ -175,6 +175,7 @@ impl Compositor {
             Contact::BottomEdge(location)
         } else if let Some((surface, origin)) = state.client_under(location) {
             let serial = SERIAL_COUNTER.next_serial();
+            state.press_outside(Some(&surface), serial);
             if let Some(focusable) = state
                 .toplevel_of(&surface)
                 .or_else(|| state.focusable_layer_of(&surface))
@@ -388,7 +389,17 @@ impl Compositor {
         };
         match (press, tool) {
             (Some((PenPress::Client, true)), Some(tool)) => {
-                tool.tip_down(SERIAL_COUNTER.next_serial(), time);
+                let serial = SERIAL_COUNTER.next_serial();
+                let state = &self.state;
+                let menu_open = state
+                    .popup_grab
+                    .as_ref()
+                    .is_some_and(|grab| !grab.has_ended());
+                if !menu_open {
+                    let touched = state.touch.pen_focus.as_ref();
+                    state.press_outside(touched.map(|(surface, _)| surface), serial);
+                }
+                tool.tip_down(serial, time);
             }
             (Some((PenPress::Client, false)), Some(tool)) => tool.tip_up(time),
             (Some((PenPress::Pointer, down)), _) => self.press_button(BTN_LEFT, down, time),

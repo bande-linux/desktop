@@ -79,6 +79,8 @@ sed -i -e "s/^Maintainer: .*/Maintainer: $maintainer/" -e '/^Uploaders:/d' debia
 rm -f debian/google.key debian/mls.key debian/browser.desktop.in debian/browser-symbolic.svg.in \
     debian/browser.preinst.in debian/browser.postrm.in debian/firefox.in
 sed -i 's/^stamps\/dh_install:: debian\/noinstall debian\/$($(PRODUCT))-symbolic.svg/stamps\/dh_install:: debian\/noinstall/' debian/rules
+sed -i 's/^export MOZ_BUILD_DATE := $(shell head -1 sourcestamp.txt)$/export MOZ_BUILD_DATE := '"$(date -u -d "$released" +%Y%m%d%H%M%S)/" debian/upstream.mk
+grep -q '^export MOZ_BUILD_DATE := [0-9]' debian/upstream.mk
 cat "$repo/firefox-esr-bande/settings.js" "$repo/prefs/bande.js" > debian/00-bande.js
 while IFS=: read -r window name name_sv name_de; do
     printf '[Desktop Entry]\nType=Application\nName=%s\nName[de]=%s\nName[sv]=%s\nIcon=org.bande.Browser\nExec=bande-browser\nNoDisplay=true\n' \
@@ -115,7 +117,8 @@ cp "$repo"/search/2c4b8834-030c-4097-a887-c7506689095c* services/settings/dumps/
 find browser/locales/en-US toolkit/locales/en-US dom/locales/en-US -type f \( -name '*.ftl' -o -name '*.properties' -o -name '*.dtd' \) \
     -exec sed -i -E '/^\s*(#|<!--)/! s/\bFirefox\b/Browser/g' {} +
 python3 "$repo/scripts/check-theme.py" .
-cat "$repo/theme/colors.css" "$repo/theme/bande.css" >> browser/themes/linux/browser.css
+cat "$repo/theme/colors.css" "$repo/theme/controls.css" "$repo/theme/bande.css" >> browser/themes/linux/browser.css
+cat "$repo/theme/colors.css" "$repo/theme/pages.css" >> toolkit/themes/shared/in-content/common-shared.css
 cp "$repo/l10n/languages" debian/bande-languages
 sed -i 's/^L10N_LANGS = .*/L10N_LANGS = $(shell cat debian\/bande-languages)/' debian/upstream.mk
 sed -i 's/^         @browser@ (>= ${source:Version}), @browser@ (<< ${source:Version}.1~)$/         @browser@ (= ${source:Version})\nEnhances: @browser@/' debian/l10n/browser-l10n.control.in

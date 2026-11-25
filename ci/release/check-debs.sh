@@ -53,6 +53,11 @@ for package in "${packages[@]}"; do
 done
 field bande-compositor Depends | grep -F 'mesa-vulkan-drivers | vulkan-icd'
 
+echo "== xdg-desktop-menu finds the shell's menu folders"
+root=$(extract bande-shell)
+test -f "$root/usr/share/desktop-directories/bande-applications.directory"
+test -f "$root/etc/xdg/menus/bande-applications.menu"
+
 echo "== the compositor ships the Bande pointers under their CSS and X11 names"
 root=$(extract bande-compositor)
 for name in default pointer text e-resize nwse-resize col-resize left_ptr right_side top_left_corner hand2 xterm; do

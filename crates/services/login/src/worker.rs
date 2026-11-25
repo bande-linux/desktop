@@ -261,8 +261,6 @@ fn with_credentials(
     };
     let mut terminal = Terminal::open(number)
         .map_err(|error| Failure::other(format!("cannot open tty{number}: {error}")))?;
-    pam.set_tty(&format!("tty{number}"))
-        .map_err(|code| Failure::pam("pam_set_item", code))?;
     for assignment in session_environment(class, account, number)
         .iter()
         .chain(&carried)
@@ -270,6 +268,8 @@ fn with_credentials(
         pam.put_env(assignment)
             .map_err(|code| Failure::pam("pam_putenv", code))?;
     }
+    pam.set_tty("")
+        .map_err(|code| Failure::pam("pam_set_item", code))?;
     pam.open_session()
         .map_err(|code| Failure::pam("pam_open_session", code))?;
     if let Err(code) = pam.credentials(REINITIALIZE_CRED) {
@@ -366,8 +366,9 @@ fn run_session(
         None => tracing::warn!("pam_systemd registered no session"),
     }
     let followed = launch(class, account, terminal, &environment, links);
-    if let Err(error) = terminal.reclaim() {
-        tracing::warn!("cannot take tty{} back: {error}", terminal.number());
+    match terminal.reclaim() {
+        Ok(()) => terminal.blank(),
+        Err(error) => tracing::warn!("cannot take tty{} back: {error}", terminal.number()),
     }
     if class == Class::User
         && let Err(error) = terminal.leave_to(GREETER_VT)

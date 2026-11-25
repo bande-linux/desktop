@@ -49,12 +49,16 @@ struct VtStat {
 
 static HELD: AtomicI32 = AtomicI32::new(-1);
 
-fn device(path: &str) -> io::Result<File> {
+fn open(path: &str, flags: c_int) -> io::Result<File> {
     OpenOptions::new()
         .read(true)
         .write(true)
-        .custom_flags(libc::O_NOCTTY | libc::O_CLOEXEC)
+        .custom_flags(libc::O_NOCTTY | libc::O_CLOEXEC | flags)
         .open(path)
+}
+
+fn device(path: &str) -> io::Result<File> {
+    open(path, 0)
 }
 
 fn console() -> io::Result<File> {
@@ -152,15 +156,30 @@ impl Terminal {
 
     /// Empties the console and paints it in the login window's background with no cursor, so
     /// that whenever the kernel shows it, it shows only that colour.
-    pub fn blank(&mut self) {
+    pub fn blank(&self) {
         let deep = Palette::for_scheme(Scheme::Dark).deep;
         let blank = format!(
             "\x1b[?25l\x1b]P0{:02x}{:02x}{:02x}\x1b[H\x1b[2J",
             deep.r, deep.g, deep.b
         );
-        if let Err(error) = self.file.write_all(blank.as_bytes()) {
-            tracing::warn!("tty{} may show text: {error}", self.number);
+        self.print(blank.as_bytes());
+    }
+
+    /// Writes to the console whether or not a session stopped its output (`TCOOFF`), without ever
+    /// waiting for one that stops it again.
+    fn print(&self, text: &[u8]) {
+        // SAFETY: tcflow takes an open descriptor and a plain integer.
+        let started = checked(unsafe { libc::tcflow(self.file.as_raw_fd(), libc::TCOON) });
+        let printed = started
+            .and_then(|_| open(&self.path(), libc::O_NONBLOCK))
+            .and_then(|mut console| console.write_all(text));
+        if let Err(error) = printed {
+            tracing::warn!("tty{} may show the wrong thing: {error}", self.number);
         }
+    }
+
+    fn path(&self) -> String {
+        format!("/dev/tty{}", self.number)
     }
 
     fn ioctl(&self, request: c_ulong, value: c_int) -> io::Result<()> {
@@ -203,7 +222,7 @@ impl Terminal {
     /// ended, which hung up every descriptor open on it: until then a switch away from it could
     /// not be acknowledged, nor the terminal restored.
     pub fn reclaim(&mut self) -> io::Result<()> {
-        let fresh = device(&format!("/dev/tty{}", self.number))?;
+        let fresh = device(&self.path())?;
         if self.held {
             HELD.store(fresh.as_raw_fd(), Ordering::Relaxed);
         }
@@ -228,7 +247,7 @@ impl Terminal {
     pub fn give_to_console(&self) -> io::Result<()> {
         self.restore()?;
         self.ioctl(KDSKBMODE, K_UNICODE)?;
-        (&self.file).write_all(b"\x1b]R\x1bc")?;
+        self.print(b"\x1b]R\x1bc");
         switch_to(self.number)
     }
 

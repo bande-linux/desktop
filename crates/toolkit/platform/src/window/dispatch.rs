@@ -241,6 +241,10 @@ impl Dispatch<XdgToplevel, ()> for State {
                         .push(WindowEvent::ToplevelChanged(state.toplevel));
                 }
             }
+            xdg_toplevel::Event::ConfigureBounds { width, height } => {
+                state.bounds = (width > 0 && height > 0)
+                    .then(|| (width.unsigned_abs(), height.unsigned_abs()));
+            }
             xdg_toplevel::Event::Close => state.events.push(WindowEvent::CloseRequested),
             _ => {}
         }

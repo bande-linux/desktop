@@ -247,6 +247,39 @@ impl Window {
         })
     }
 
+    pub(crate) fn placed_states(&self) -> (bool, bool) {
+        self.toplevel.with_pending_state(|pending| {
+            (
+                pending.states.contains(xdg_toplevel::State::Fullscreen),
+                pending.states.contains(xdg_toplevel::State::Maximized),
+            )
+        })
+    }
+
+    fn asked_to_fill(&self, area: Rectangle<i32, Logical>) -> bool {
+        let location = self.pending_location.map_or(self.location, |(_, at)| at);
+        location == area.loc && self.requested_size() == Some(area.size)
+    }
+
+    pub(crate) fn asked_frame(&self) -> Option<Rectangle<i32, Logical>> {
+        let geometry = self.geometry()?;
+        Some(match self.pending_location {
+            Some((_, location)) => {
+                Rectangle::new(location, self.requested_size().unwrap_or(geometry.size))
+            }
+            None => geometry,
+        })
+    }
+
+    pub(crate) fn floating_frame(&self) -> Option<Rectangle<i32, Logical>> {
+        if self.pending_location.is_some() && self.placed_states() == (false, false) {
+            return self.asked_frame();
+        }
+        let placed = self.has_state(xdg_toplevel::State::Maximized)
+            || self.has_state(xdg_toplevel::State::Fullscreen);
+        self.geometry().filter(|_| !placed)
+    }
+
     pub(crate) fn local_geometry(&self) -> Rectangle<i32, Logical> {
         let surface = self.toplevel.wl_surface();
         let bounds = bbox_from_surface_tree(surface, (0, 0));
@@ -311,6 +344,12 @@ impl Window {
             .is_initial_configure_sent()
             .then(|| self.toplevel.send_pending_configure())
             .flatten()
+    }
+
+    fn answer_unchanged(&self) {
+        if self.toplevel.is_initial_configure_sent() {
+            self.toplevel.send_configure();
+        }
     }
 
     pub(crate) fn move_with_next_configure(&mut self, location: Point<i32, Logical>) {
@@ -452,12 +491,7 @@ impl State {
     fn release_placement(&mut self, index: usize) {
         let window = &self.windows[index];
         let surface = window.surface().clone();
-        let (maximized, fullscreen) = window.toplevel.with_pending_state(|pending| {
-            (
-                pending.states.contains(xdg_toplevel::State::Maximized),
-                pending.states.contains(xdg_toplevel::State::Fullscreen),
-            )
-        });
+        let (fullscreen, maximized) = window.placed_states();
         if fullscreen {
             self.unfullscreen(&surface);
         } else if maximized {
@@ -522,13 +556,8 @@ impl State {
         target: Option<Rectangle<i32, Logical>>,
     ) {
         let window = &mut self.windows[index];
-        if window.restore.is_none()
-            && window.tile.is_none()
-            && let Some(geometry) = window.geometry()
-            && !window.has_state(xdg_toplevel::State::Maximized)
-            && !window.has_state(xdg_toplevel::State::Fullscreen)
-        {
-            window.restore = Some(geometry);
+        if window.restore.is_none() && window.tile.is_none() {
+            window.restore = window.floating_frame();
         }
         window.toplevel.with_pending_state(|pending| {
             for placed in [
@@ -553,10 +582,11 @@ impl State {
         if target.is_none() {
             window.restore = None;
         }
-        if let Some(serial) = window.configure()
-            && let Some(location) = location
-        {
-            window.pending_location = Some((serial, location));
+        match location {
+            Some(location) => window.move_with_next_configure(location),
+            None => {
+                window.configure();
+            }
         }
         if target.is_some() {
             self.set_tile(index, None);
@@ -581,32 +611,30 @@ impl State {
             let full_screen = workspaces
                 .id_at(workspaces.active())
                 .is_some_and(|id| workspaces.is_full_screen(id));
-            if full_screen || self.screens[screen].fitted_to == area {
+            if full_screen {
                 continue;
             }
-            self.screens[screen].fitted_to = area;
+            let before = std::mem::replace(&mut self.screens[screen].fitted_to, area);
             for index in 0..self.windows.len() {
                 let window = &self.windows[index];
+                let (full_screen, maximized) = window.placed_states();
                 if self.screen_of(window) != screen
                     || self.on_full_screen_space(window)
-                    || window.has_state(xdg_toplevel::State::Fullscreen)
+                    || full_screen
                 {
                     continue;
                 }
-                let (fitted, target) = match window.tile {
-                    Some((tile, rect)) => (rect == self.tile_rect(screen, tile), Some(tile)),
-                    None if window.has_state(xdg_toplevel::State::Maximized) => {
-                        (window.geometry() == Some(area), None)
+                match window.tile {
+                    Some((tile, rect)) => {
+                        if before != area && rect != self.tile_rect(screen, tile) {
+                            self.tile_window(index, tile, Spring::STANDARD);
+                        }
                     }
-                    None => continue,
-                };
-                match (fitted, target) {
-                    (true, _) => {}
-                    (false, Some(tile)) => self.tile_window(index, tile, Spring::STANDARD),
-                    (false, None) => {
+                    None if maximized && !window.asked_to_fill(area) => {
                         let surface = window.surface().clone();
                         self.maximize(&surface);
                     }
+                    None => {}
                 }
             }
         }
@@ -617,17 +645,17 @@ impl State {
             return;
         };
         let window = &self.windows[index];
-        if window
-            .toplevel
-            .with_pending_state(|pending| pending.states.contains(xdg_toplevel::State::Fullscreen))
-        {
+        let (full_screen, maximized) = window.placed_states();
+        if full_screen {
             window.toplevel.with_pending_state(|pending| {
                 pending.states.unset(xdg_toplevel::State::Maximized);
             });
             window.configure();
-            return;
+        } else if maximized {
+            self.place(index, xdg_toplevel::State::Maximized, None);
+        } else {
+            window.answer_unchanged();
         }
-        self.place(index, xdg_toplevel::State::Maximized, None);
     }
 
     pub(crate) fn fullscreen(&mut self, surface: &WlSurface) {
@@ -636,7 +664,7 @@ impl State {
             .filter(|index| !self.windows[*index].fixed_size())
         {
             let output = self.screen_rect(self.screen_of(&self.windows[index]));
-            let was_maximized = self.windows[index].has_state(xdg_toplevel::State::Maximized);
+            let (_, was_maximized) = self.windows[index].placed_states();
             self.place(index, xdg_toplevel::State::Fullscreen, Some(output));
             self.windows[index].resize = None;
             if was_maximized {
@@ -655,14 +683,18 @@ impl State {
         let Some(index) = self.window_index(surface) else {
             return;
         };
-        let stays_maximized = self.windows[index]
-            .toplevel
-            .with_pending_state(|pending| pending.states.contains(xdg_toplevel::State::Maximized));
-        if stays_maximized {
-            let area = self.placement_area(self.screen_of(&self.windows[index]));
+        let (full_screen, stays_maximized) = self.windows[index].placed_states();
+        if full_screen && stays_maximized {
+            let screen = self.screen_of(&self.windows[index]);
+            let area = match self.screens[screen].fitted_to {
+                beside_the_bar if !beside_the_bar.is_empty() => beside_the_bar,
+                _ => self.placement_area(screen),
+            };
             self.place(index, xdg_toplevel::State::Maximized, Some(area));
-        } else {
+        } else if full_screen {
             self.place(index, xdg_toplevel::State::Fullscreen, None);
+        } else {
+            self.windows[index].answer_unchanged();
         }
         self.leave_full_screen_space(index);
         self.tidy_workspaces();

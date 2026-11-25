@@ -29,7 +29,7 @@ pub(crate) struct Shown {
 impl Default for Shown {
     fn default() -> Self {
         Self {
-            extensions: false,
+            extensions: true,
             disks: true,
             warn_extension_change: true,
         }
@@ -50,7 +50,7 @@ impl Shown {
                 .map(|(_, value)| value.trim() == "true")
         };
         Self {
-            extensions: flag(SHOW_EXTENSIONS).unwrap_or(false),
+            extensions: flag(SHOW_EXTENSIONS).unwrap_or(true),
             disks: flag(SHOW_DISKS).unwrap_or(true),
             warn_extension_change: flag(WARN_EXTENSION_CHANGE).unwrap_or(true),
         }

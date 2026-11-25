@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 use bande_config::{Search, SearchCategory};
 use bande_l10n::tr;
@@ -11,6 +12,7 @@ pub const GRID_COLUMNS: usize = 8;
 pub const EMOJI_COLUMNS: usize = 12;
 const FREQUENT_EMOJI_ROWS: usize = 2;
 const MAX_EMOJI: usize = 240;
+const LONGEST_HELD: Duration = Duration::from_millis(150);
 const EMOJI_KEY: &str = "emoji:";
 pub const MAX_APPS: usize = 4;
 pub const MAX_SETTINGS: usize = 3;
@@ -391,6 +393,8 @@ pub struct Model {
     excluded: Vec<PathBuf>,
     pub clips: Vec<Clip>,
     pub files_complete: bool,
+    pub answered: bool,
+    held_since: Option<Instant>,
     pub hits: Vec<Hit>,
     pub headings: Vec<(usize, Heading)>,
     pub columns: usize,
@@ -398,6 +402,7 @@ pub struct Model {
     pub inserts: bool,
     pub skin_tone: Option<usize>,
     pub selected: usize,
+    picked: bool,
     pub copied: bool,
     pub actions: Vec<Action>,
     pub revision: u64,
@@ -437,7 +442,9 @@ impl Model {
             search: Search::default(),
             excluded: Vec::new(),
             clips: Vec::new(),
-            files_complete: false,
+            files_complete: true,
+            answered: true,
+            held_since: None,
             hits: Vec::new(),
             headings: Vec::new(),
             columns: 0,
@@ -445,6 +452,7 @@ impl Model {
             inserts: false,
             skin_tone: None,
             selected: 0,
+            picked: false,
             copied: false,
             actions: Vec::new(),
             revision: 0,
@@ -526,18 +534,38 @@ impl Model {
         }
         self.query = query.to_owned();
         self.generation += 1;
-        self.files_complete = Query::new(query).is_none() || !self.searches_files();
-        self.selected = 0;
-        self.rebuild(None);
+        self.files_complete =
+            self.mode != Mode::Search || Query::new(query).is_none() || !self.searches_files();
+        if self.files_complete {
+            self.rebuild(None);
+        } else {
+            self.picked = false;
+            self.held_since.get_or_insert_with(Instant::now);
+        }
+    }
+
+    /// When results of an earlier query give way to those found without the file index.
+    pub fn held_until(&self) -> Option<Instant> {
+        self.held_since.map(|since| since + LONGEST_HELD)
+    }
+
+    pub fn stop_holding(&mut self) {
+        if self.held_since.is_some() {
+            self.rebuild(self.kept());
+        }
+    }
+
+    fn kept(&self) -> Option<Target> {
+        (self.picked && self.selected > 0)
+            .then(|| self.selection().map(|hit| hit.target.clone()))
+            .flatten()
     }
 
     pub fn set_files(&mut self, results: FileResults) {
         if results.generation != self.generation {
             return;
         }
-        let keep = (self.selected > 0)
-            .then(|| self.selection().map(|hit| hit.target.clone()))
-            .flatten();
+        let keep = self.kept();
         self.files = results.hits;
         self.items = results.items;
         self.files_complete = true;
@@ -604,6 +632,8 @@ impl Model {
 
     fn rebuild(&mut self, keep: Option<Target>) {
         self.revision += 1;
+        self.held_since = None;
+        self.answered = self.files_complete;
         self.copied = false;
         self.hits.clear();
         self.headings.clear();
@@ -1039,6 +1069,7 @@ impl Model {
     }
 
     pub fn select(&mut self, index: usize) {
+        self.picked = true;
         if index < self.hits.len() && index != self.selected {
             self.selected = index;
             self.copied = false;

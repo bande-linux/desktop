@@ -124,9 +124,9 @@ when they reach the screen is Bande's own.
   minimum or maximum size and that edge can only move one way.
 - **Controls over the Browser's own row.** A client-side window of `org.bande.Browser` keeps its
   tabs in its top row and has no title bar of ours; the compositor draws only the control well
-  (`WindowControls` in `bande-graphics`) over the last 78 pt of a 48 pt row, in front of the
-  client's surfaces and behind its popups, and takes the presses there with the same code as a
-  title bar. Everything else in the row is the client's, so free tab-row space stays its own
+  (`WindowControls` in `bande-graphics`) over the 78 pt of a 48 pt row at the side the window
+  buttons setting names, in front of the client's surfaces and behind its popups, and takes the
+  presses there with the same code as a title bar. Everything else in the row is the client's, so free tab-row space stays its own
   move request. Full screen removes the well. The rule is the app id plus client-side, so a build
   that asks for server-side gets a normal title bar, and any other Firefox is left alone.
 - **dma-buf.** `linux-dmabuf-v1` serves every format and modifier the GPU can import from a dma-buf

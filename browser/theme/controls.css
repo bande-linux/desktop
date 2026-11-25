@@ -1,0 +1,13 @@
+:root {
+  --bande-row-height: 48px;
+  --bande-row-leading: 12px;
+  --bande-well-span: 78px;
+  --bande-menu-size: 24px;
+  --bande-menu-gap: 6px;
+  --bande-menu-reach: 4px;
+  --bande-menu-dot: 1.25px;
+  --bande-menu-pitch: 4.5px;
+  --bande-menu-disc: 18px;
+  --bande-menu-hover: 12%;
+  --bande-menu-pressed: 22%;
+}

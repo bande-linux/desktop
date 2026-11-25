@@ -189,20 +189,8 @@ const TASKBAR_ICON_SIZE: f64 = 48.0;
 pub(crate) const BAR_NAMESPACE: &str = "bar";
 
 impl State {
-    fn rect_of(window: &Window) -> Option<Rectangle<f64, Logical>> {
-        let geometry = window.geometry()?;
-        let (location, size) = window
-            .pending_location
-            .map(|(_, location)| {
-                let size = window.requested_size().unwrap_or(geometry.size);
-                (location, size)
-            })
-            .unwrap_or((geometry.loc, geometry.size));
-        Some(Rectangle::new(location.to_f64(), size.to_f64()))
-    }
-
     fn destination(&self, window: &Window) -> Option<Look> {
-        let rect = Self::rect_of(window)?;
+        let rect = window.asked_frame()?.to_f64();
         if window.hidden {
             return Some(Look::hidden(rect));
         }

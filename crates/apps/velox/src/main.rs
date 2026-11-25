@@ -121,7 +121,6 @@ impl Pane {
                 }
                 Request::EngineLogs(target) => self.logs.push(target),
                 Request::Engine(lifecycle) => self.informer.control(lifecycle),
-                Request::InstallPodman => self.informer.install_podman(),
                 request => self.places.push(request),
             }
         }

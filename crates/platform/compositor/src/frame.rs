@@ -403,7 +403,8 @@ impl State {
         let Some(index) = self.window_index(surface) else {
             return;
         };
-        if self.windows[index].has_state(xdg_toplevel::State::Maximized) {
+        let (_, maximized) = self.windows[index].placed_states();
+        if maximized {
             self.unmaximize(surface);
         } else {
             self.maximize(surface);

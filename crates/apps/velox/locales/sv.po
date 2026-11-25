@@ -1183,14 +1183,8 @@ msgstr "Frigör"
 msgid "Or Podman, rootless"
 msgstr "Eller Podman, rootless"
 
-msgid "Podman, rootless (recommended)"
-msgstr "Podman, rootless (rekommenderas)"
-
-msgid "Or Docker Engine"
-msgstr "Eller Docker Engine"
-
-msgid "Install a container engine to continue"
-msgstr "Installera en containermotor för att fortsätta"
+msgid "Install Docker or Podman to use Velox"
+msgstr "Installera Docker eller Podman för att använda Velox"
 
 msgid "Start Docker"
 msgstr "Starta Docker"
@@ -1339,9 +1333,6 @@ msgstr "Det gick inte att starta motorn"
 msgid "Cannot stop the engine"
 msgstr "Det gick inte att stoppa motorn"
 
-msgid "Cannot install Podman"
-msgstr "Det gick inte att installera Podman"
-
 msgid "“{name}” already exists"
 msgstr "”{name}” finns redan"
 
@@ -1365,12 +1356,6 @@ msgstr "Starta {engine}"
 
 msgid "Stop {engine}"
 msgstr "Stoppa {engine}"
-
-msgid "Installing Podman…"
-msgstr "Installerar Podman…"
-
-msgid "Install Podman"
-msgstr "Installera Podman"
 
 msgid "In a terminal"
 msgstr "I en terminal"

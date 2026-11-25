@@ -28,7 +28,7 @@ pub fn bar_role(edge: BarEdge, icon_size: f32, form: BarForm) -> (Role, (u32, u3
             layer: LayerKind::Top,
             anchor: anchor(edge),
             exclusive_zone: bar_zone(icon_size, form).round() as i32,
-            keyboard: KeyboardFocus::OnDemand,
+            keyboard: KeyboardFocus::None,
             namespace: BAR_NAMESPACE.to_owned(),
         }),
         surface_size(edge, icon_size, form),

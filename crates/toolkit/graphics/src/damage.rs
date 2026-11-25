@@ -3,7 +3,6 @@ use crate::scene::{Item, Path, PathElement, Point, Rect, Scene, Shape, Transform
 const MAX_REGIONS: usize = 8;
 const ANTIALIASING_MARGIN: f32 = 1.0;
 const SHADOW_REACH: f32 = 2.5;
-const GLYPH_OVERHANG: f32 = 0.5;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Region {
@@ -221,16 +220,17 @@ fn intersect(first: Rect, second: Rect) -> Option<Rect> {
     (right > left && bottom > top).then(|| Rect::new(left, top, right - left, bottom - top))
 }
 
-fn translated(rect: Rect, offset: Point) -> Rect {
-    outset(
-        Rect::new(
-            rect.x + offset.x,
-            rect.y + offset.y,
-            rect.width,
-            rect.height,
-        ),
-        ANTIALIASING_MARGIN,
+fn moved(rect: Rect, offset: Point) -> Rect {
+    Rect::new(
+        rect.x + offset.x,
+        rect.y + offset.y,
+        rect.width,
+        rect.height,
     )
+}
+
+fn translated(rect: Rect, offset: Point) -> Rect {
+    outset(moved(rect, offset), ANTIALIASING_MARGIN)
 }
 
 fn scaled(rect: Rect, origin: Point, factor: f32) -> Rect {
@@ -299,26 +299,8 @@ fn bounds(item: &Item) -> Option<Rect> {
             translated(shape.rect, *offset),
             blur_radius * SHADOW_REACH,
         )),
-        Item::Text { origin, paragraph } => {
-            let size = paragraph
-                .glyph_runs()
-                .iter()
-                .map(|run| run.size)
-                .fold(0.0, f32::max);
-            Some(outset(
-                Rect::new(
-                    origin.x,
-                    origin.y,
-                    paragraph.painted_width(),
-                    paragraph.height(),
-                ),
-                size * GLYPH_OVERHANG,
-            ))
-        }
-        Item::Glyphs(run) => Some(outset(
-            through(run.glyphs.iter().map(|glyph| Point::new(glyph.x, glyph.y)))?,
-            run.size,
-        )),
+        Item::Text { origin, paragraph } => Some(moved(paragraph.ink()?, *origin)),
+        Item::Glyphs(run) => crate::outline::ink(std::slice::from_ref(run)),
         Item::Clip { shape, items } => intersect(children(items)?, shape.rect),
         Item::Translate { offset, items } => Some(translated(children(items)?, *offset)),
         Item::Opacity { items, .. } | Item::Blend { items, .. } => children(items),

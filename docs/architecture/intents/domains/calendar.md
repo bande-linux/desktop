@@ -7,12 +7,12 @@ Calendar app. Work package D5.
 | :--- | :--- | :--- |
 | `calendar.event` | title text (foreign with guests or from outside), starts, ends date_time, all_day bool, calendar ref, place\*, notes\* text, url\* url, repeats text, alerts list<duration>, attendees\* list<address>, answer enum, shared bool | title, starts, ends, calendar |
 | `calendar.calendar` | name~ text, colour text, shown, read_only, shared bool, account ref | all |
-| `calendar.person` | name\*, text; address address | all |
+| `calendar.person` | name\* text, address address | all |
 
 | Intent | Parameters | Effects | Undo | Code | P |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | `calendar.find` | `text`, `starts_after`, `starts_before`, `calendar`, `answer`, `trash` | `read`; foreign where what is in it is, and for invitations |  | app | A |
-| `calendar.get` | `events` | as `find` |  | app | A |
+| `calendar.get` | `events`, `properties` | as `find` |  | app | A |
 | `calendar.find_calendar` | `text` | `read` |  | app | A |
 | `calendar.find_person` | `text` (the server's directory) | `send`, foreign |  | app | B |
 | `calendar.create` | `title`, `starts`, `ends`, `all_day`, `calendar`, `place`, `url`, `notes`, `repeats`, `alerts`, `attendees` | `change`; attendees or shared: `send` | `calendar.trash` | app; create has no undo | A |

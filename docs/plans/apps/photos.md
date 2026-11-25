@@ -1,7 +1,6 @@
 # Photos
 
-Domain: [photos](../../architecture/intents/domains/photos.md). Package A3, after D1's facts. Size
-L.
+Domain: [photos](../../architecture/intents/domains/photos.md). Package A3, after D1c. Size L.
 
 **There is.** Decoding (JPEG, PNG, HEIF, JPEG XL, raw within limits), facts as display text,
 confined import, thumbnails, the index service, Viewer.

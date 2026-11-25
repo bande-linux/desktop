@@ -28,5 +28,5 @@ D8.
 
 Phrases in Search: "quit {app}", "tile left", "tile right", "workspace {workspace}".
 
-`apps.open` is `show` for Bande's apps that neither connect nor restore anything when opened,
-otherwise `disrupt`. It takes no arguments or files and does not open a terminal.
+`apps.open` is `show`; for an agent `disrupt`. It takes no arguments or files and does not open a
+terminal.

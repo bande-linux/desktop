@@ -8,6 +8,7 @@ D1a, D1b.
 | :--- | :--- | :--- |
 | `files.file` | name\* text, size integer, kind enum, modified, created, used date_time, access `private` `group` `others`, origin\* url, digest text, trashed bool | name, size, modified, kind |
 | `files.location` | name~ text, kind `server` `volume` `folder`, connected bool, free integer, folder ref<files.file> (while connected) | all |
+| `files.sync` | folder ref<files.file>, location ref, last date_time | all |
 | `archives.archive` (a view of a file) | items, size integer, names\* list<text> | all |
 
 | Intent | Parameters | Effects | Undo | Code | P |
@@ -16,7 +17,7 @@ D1a, D1b.
 | `archives.get` | `archive`, `properties` | foreign |  | part: totals; names are new | A |
 | `files.find` | `name`, `text`, `kind`, `within`, `recursive`, `modified_after`, `modified_before`, `used_after`, `larger_than`, `duplicates`, `trash`, `order` (`name`, `modified`, `used`, `size`) | `read`; foreign with `text` or where what is in it is |  | part: names and text within a folder, and only with words to find; Trash is listed in `libs/fs/src/trash.rs`; duplicates are new | A |
 | `files.get` | `files`, `properties` | as `find` |  | part: digest is new | A |
-| `files.find_sync` | `text` | `read` |  | new | B |
+| `files.find_sync` | `text` | `read` |  | new, with Synced folders | B |
 | `files.create_folder` | `within`, `name` | `change`; shared: `send` | `files.trash` | part: `new_folder` chooses the name | A |
 | `files.move`, `files.copy` | `files`, `to`, `new_folder`, `if_exists` (`keep-both`, `skip`) | `change`; shared: `send` | move back, trash the copies | ready | A |
 | `files.update` | `files`, `names` in the same order | `change`; shared: `send` | the old names | ready | A |

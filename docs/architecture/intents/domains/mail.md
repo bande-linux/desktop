@@ -18,7 +18,7 @@ Part of [Bande Intents](../../intents.md). Main noun `message`; `mail.thread`, `
 | `mail.find_thread` | `text`, `message` | foreign |  | app | A |
 | `mail.get` | `messages`, `properties` | foreign; does not mark read |  | app | A |
 | `mail.find_mailbox` | `text`, `account` | `read` |  | app | A |
-| `mail.find_draft` | `text`, `to`, `scheduled` | `read`; a draft the person made: foreign |  | app | A |
+| `mail.find_draft` | `text`, `to`, `scheduled` | `read`; foreign when the person or an agent wrote it |  | app | A |
 | `mail.get_draft` | `drafts`, `properties` | as `find_draft` |  | app | A |
 | `mail.find_rule` | `text` | `read` |  | app (`store.rs`) | B |
 | `mail.get_away`, `mail.stop_away` | `account` | `read`; `send` |  | new | B |
@@ -48,7 +48,7 @@ Part of [Bande Intents](../../intents.md). Main noun `message`; `mail.thread`, `
 | `mail.delete_mailbox` | `mailbox` | `critical`; shared: also `send` |  | app | C |
 | `mail.delete` | `messages` | `critical`; shared: also `send` |  | app | C |
 
-Phrases in Search: "new message to {contact}".
+Phrases in Search: "new message to {to}".
 
 A draft an intent makes stays on this computer until the person saves or sends it. `mail.send` takes
 a draft and nothing else. From approval on the draft is frozen with copies of its attachments; it is

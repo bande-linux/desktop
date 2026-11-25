@@ -15,7 +15,7 @@ Part of [Bande Intents](../../intents.md). Main noun `session`; power and stayin
 | `session.cancel` | `:only` | `change` for what the caller started, otherwise `disrupt` for an agent |  | new | A |
 | `session.start_awake`, `session.stop_awake` | `until` | `change`, at most 4 hours; else `critical` | each other | ready (`services/power`) | A |
 
-Phrases in Search: "lock", "sleep", "stay awake {length}".
+Phrases in Search: "lock", "sleep", "stay awake until {until}".
 
 Open work is never forced: an app that asks about it keeps the session, and the plan ends
 `declined`.

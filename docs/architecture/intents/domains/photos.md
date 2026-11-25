@@ -20,7 +20,7 @@ Part of [Bande Intents](../../intents.md). Main noun `photo`; `photos.album`. Ow
 | `photos.set_favourite` | `photos`, `favourite` | `change` | the earlier value | new | B |
 
 A photo is its file, so `files.move` and `files.trash` work on it. `create_copy` leaves out place
-and camera.  Facts are read in the confined importer and indexed as typed values: today the date has
+and camera. Facts are read in the confined importer and indexed as typed values: today the date has
 no zone and dimensions need a decode. There is no photo library app, album or favourite: see the
 [plan](../../../plans/apps/photos.md). Finding by what a picture shows needs a model the person
 installs, and is not decided.

@@ -218,11 +218,14 @@ person who needs one cannot Allow, and `send` and `critical` stay off for agents
 | Find | no `text` lists all, `text` uses `bande_settings_panes::search` in the owner's language, `pane` is a `PaneId` word; an empty `cursor` starts and ends |
 | Command line | required parameters in declared order, the others `--name value`; a bare word gets the type its reference needs; `bande undo [receipt]`, without one the newest over the owners whose manifests are installed; `--json`; exit 0 or 1; Prepare and Perform on one connection |
 | Search | the phrase "{setting} {value}": a row "Appearance: Light" for words that match a setting's label or keywords and one of its values by word start; Return prepares and performs on a worker, closes Search and shows the notice with Undo; a refusal is a notification; no such rows without the owner |
-| Life | exits 60 seconds after the last call when no plan waits; a plan ends with its connection |
-| Left out | `until`, sets (empty), limits (any key is `InvalidArgument`), jobs (Perform runs to its end), events, unused value types, candidates, `settings.open_pane` |
+| Life | exits 60 seconds after the last call when no plan waits; a plan ends with its connection or when its job ends |
+| Left out | `until` and events (C8) |
 
 In slices: the settings client to a library; words and marks in the registry; `bande-intents` with
-its owner, its manifest and one end-to-end test; the command line; the launcher.
+its owner, its manifest and one end-to-end test; the command line; the launcher; then, before wave
+2, limits, sets, jobs, candidates and every value type in `bande-intents` with the harness, limits
+and `settings.open_pane` in the owner, and the domain page's other settings that need no other
+package.
 
 ## Open decisions
 

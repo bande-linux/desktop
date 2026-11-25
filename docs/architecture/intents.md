@@ -295,10 +295,10 @@ question. The first Activate or Open is a plain launch, with restore. Its window
 process, so the person's own click needs no bus and no question. An app that has had a window lives
 as [apps](apps.md) say, and Quit with a job or held mail closes the windows and leaves the process
 until it is done; one that never had a window exits a minute after it is idle (no plan, set, job,
-subscriber or held draft). Losing the compositor ends plans not yet allowed, not a job. One whose
-program was replaced is started again when it is idle, and with a window when that closes; only a
-plan its build cannot make is `Unavailable` ("Close Mail to finish updating"), and a caller retries
-once.
+subscriber, held draft or anything it started that still runs, and `Program::runs_in_background` is
+false). Losing the compositor ends plans not yet allowed, not a job. One whose program was replaced
+is started again when it is idle, and with a window when that closes; only a plan its build cannot
+make is `Unavailable` ("Close Mail to finish updating"), and a caller retries once.
 
 The owner holds a lock file beside its store, which only owners take, and answers `Unavailable`
 where another holds it. For a thing open with unsaved edits the intent changes the window's text as
@@ -321,8 +321,8 @@ anything; a line `debian/build/intents/<program>/* usr/share/bande/intents/` in 
 `.install` is what makes `debian/rules` run it at build. The file is `/usr/share/bande/intents/<bus
 name>.json`, root-owned. The command line, Search and the broker read these files, so no list of
 domains exists in code, and look titles up in the program's catalog. An id is served by one program;
-a second is ignored and logged, as is a file that does not parse. They are read again when the
-folder changes.
+a second, by file name, is ignored and logged, as is a file that does not parse. They are read again
+when the folder changes.
 
 ```json
 { "bus": "org.bande.Intents.Settings", "program": "/usr/libexec/bande-settings-intents",
@@ -417,7 +417,8 @@ it replaces, or nothing. Mail and Messages serve `Open` for their attachments. `
   has `receipt` (`<domain>:<token>`), `intent` (the one performed), `summary`, `references`, `made`
   (seconds), `agent`, and is stored with its undo and a digest of what was left, mode 0600, for a
   day, at most 100 and 1 GB a domain; content over 64 KiB is beside it. One that a newer build
-  cannot read is `Expired`.
+  cannot read is `Expired`. `Receipts` gives the newest first. A finished job can be read until its
+  caller leaves the bus, at most ten minutes.
 - A caller whose `ProcessFD` shows another mount namespace, or a `/.flatpak-info`, is refused; the
   broker's and owners' units make none, so they pass.
 
@@ -584,11 +585,11 @@ waits for the person. Times with a zone are instants; a critical plan takes a ti
 offline update whose question is asked at Allow.
 
 **Events** name things and carry no content: `mail.received`, `calendar.starting`, `calendar.ended`,
-`tasks.due`, `clock.timer_done`, `files.changed` (in a folder), `jobs.done`, `network.changed`,
-`power.changed`, `disks.added`, `devices.connected`, `session.unlocked`, `print.done`. An event is
-declared in its owner's manifest and narrowed by the fields of `find` on its type. Delivery is at
-most once: a subscriber subscribes again when the owner changes hands and treats the gap as possibly
-missed.
+`tasks.due`, `clock.timer_done`, `settings.changed`, `files.changed` (in a folder), `jobs.done`,
+`network.changed`, `power.changed`, `disks.added`, `devices.connected`, `session.unlocked`,
+`print.done`. An event is declared in its owner's manifest and narrowed by the fields of `find` on
+its type. Delivery is at most once: a subscriber subscribes again when the owner changes hands and
+treats the gap as possibly missed.
 
 **Routines** (`bande-routines`) are the person's own, and need no agent: a trigger (a time, a key
 through the GlobalShortcuts portal, a tile, an event) and a list of intents. An argument is a fixed

@@ -11,7 +11,7 @@ Work package A2.
 | Intent | Parameters | Effects | Undo | Code | P |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | `tasks.find` | `text`, `list`, `due_after`, `due_before`, `done`, `priority`, `order` (`due`, `priority`), `trash` | `read`; foreign where what is in it is |  | new | A |
-| `tasks.get` | `tasks` | as `find` |  | new | A |
+| `tasks.get` | `tasks`, `properties` | as `find` |  | new | A |
 | `tasks.find_list` | `text` | `read` |  | new | A |
 | `tasks.update` | `task` and the same | as `create` | the earlier tasks | new | A |
 | `tasks.trash`, `tasks.restore` | `tasks` | as `create` | each other | new | A |

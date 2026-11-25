@@ -11,7 +11,7 @@ Work package D2.
 | Intent | Parameters | Effects | Undo | Code | P |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | `notes.find` | `text`, `folder`, `modified_after`, `modified_before`, `order` (`modified`, `title`), `trash` | `read`; foreign where what is in it is |  | app; not in the search index | A |
-| `notes.get` | `notes` | as `find` |  | app | A |
+| `notes.get` | `notes`, `properties` | as `find` |  | app | A |
 | `notes.find_folder` | `text` | `read` |  | app | A |
 | `notes.create` | `title`, `body`, `folder` | `change`; shared: `send` | `notes.trash` | app | A |
 | `notes.append` | `note`, `body`, `at` (`start`, `end`) | as `create` | the earlier text | app; a note keeps no history | A |

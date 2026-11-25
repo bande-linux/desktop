@@ -12,7 +12,7 @@ it:
 | Layer | Enforced by | Stops |
 | :--- | :--- | :--- |
 | The agent program offers its model no shell, file, web or other tool | the agent program, by its launch options | a model that is misled |
-| The agent sees only `/usr` read-only, from `/etc` the loader cache, `alternatives`, CA certificates and a made-up `passwd` and `nsswitch.conf`, its program file and the folders the person was shown when adding it (never the home folder or a parent of it), a private home kept for it, its own processes, `null`, `zero`, `random` and `urandom`, the broker's socket, a proxy to its model's host and port, and in a terminal a pseudo-terminal of its own that passes only text, cursor, colour and screen sequences: no other socket, bus, device or terminal, no new privileges, no user namespaces | `bande-agent run` | an agent program that has other tools after all, or is compromised |
+| The agent sees only, all read-only, `/usr`, from `/etc` the loader cache, `alternatives`, CA certificates and a made-up `passwd` and `nsswitch.conf`, its program file and the folders the person was shown when adding it (never the home folder or a parent of it); a private home kept for it, writable; its own processes, `null`, `zero`, `random` and `urandom`, the broker's socket, a proxy to its model's host and port, and in a terminal a pseudo-terminal of its own that passes only text, cursor, colour and screen sequences: no other socket, bus, device or terminal, no new privileges, no user namespaces | `bande-agent run` | an agent program that has other tools after all, or is compromised |
 | The broker offers only permitted intents | `bande-agentd` | everything else |
 
 There is no intent to read a password, so an intents-only agent in the sandbox has no way to ask for
@@ -24,7 +24,7 @@ client can do, so one it did not start itself counts as unsandboxed.
 | :--- | :--- | :--- | :--- | :--- |
 | By `bande-agent run`, sandboxed | as given | as given | `send`, `disrupt`, `critical` | yes |
 | Directly to `bande-mcp` | as given, labelled "not a security boundary" | off; the person may turn it on per permission, told that strangers' text then reaches a program that can do anything they can | the same | no |
-| Over SSH, or a tunnel the person runs | as given, the same label | never | the same, at this computer, unlocked | no |
+| Over SSH, or a tunnel the person runs (the person says so when adding it, and `SSH_CONNECTION` counts) | as given, the same label | never | the same, at this computer, unlocked | no |
 
 The sandbox leaves one way out: what the agent reads goes to its model's host, under any account the
 program chooses. The first connection says so and names it. A model served on this computer is the
@@ -33,20 +33,22 @@ and gets no network.
 
 ## Broker
 
-`bande-agentd` (bus name `org.bande.Agents`) is D-Bus activated and exits when idle and no handle
-lives. Per agent it keeps the permissions (as limits), the numbers (plans, jobs, things per call,
-bytes and changes per hour, so undo is never flooded out), denials and a log of intents, references,
-effects and outcomes without content, readable by the person only and kept as long as they choose.
-Denials and numbers are stored before an answer, and the log entry before Perform; where they cannot
-be, the call is `Unavailable`. Its end withdraws its questions and cancels plans that wait. It holds
-no credentials. Each entry has the plan's token, which the owner logs too. **Stop** ends the agent's
-whole systemd scope and cancels its jobs. Settings ▸ Agents lists agents, permissions, mandates and
-the log, and a status item shows while one is connected and what it does.
+`bande-agentd` (bus name `org.bande.Agents`) is D-Bus activated and exits when idle, no run or
+connection is open and no handle lives. Per agent it keeps the permissions (as limits), the numbers
+(plans, jobs, things per call, bytes and changes per hour, so undo is never flooded out), denials
+and a log of intents, references, effects, outcomes and each receipt's summary, readable by the
+person only and kept as long as they choose. Denials and numbers are stored before an answer, and
+the log entry before Perform; where they cannot be, the call is `Unavailable`. Its end withdraws its
+questions and cancels plans that wait. It holds no credentials. Each entry has the plan's token,
+which the owner logs too. **Stop** ends the agent's whole systemd scope and cancels its jobs.
+Settings ▸ Agents lists agents, permissions, mandates and the log, and a status item shows while one
+is connected and what it does.
 
 ## Permissions
 
 A domain without a set is not offered to agents; a test checks that every domain is here once. Each
-set has an Ask switch for its effects that are asked each time.
+set has an Ask switch for its effects that are asked each time. A set is given once: its folders,
+accounts or calendars are one list and share its level and Ask.
 
 | Set | Domains | Read gives | Change adds |
 | :--- | :--- | :--- | :--- |
@@ -86,10 +88,11 @@ idle for an hour. There is no token on disk and no TCP port.
 `bande-mcp` is a stateless adapter between an agent's standard input and output and the broker's
 socket. It has no authority, no state and no network. It speaks the current stateless protocol
 (2026-07-28) and answers clients that still initialise (2025-11-25, 2025-06-18). It finds the socket
-from the user id, not from the environment, because clients pass almost none of it. A client may
-start it once, or once per call: jobs, cursors and sets belong to the registered agent or its
-sandboxed run, live in the broker and are named by unguessable handles. Time, zone and language come
-from the session.
+from the user id, not from the environment, because clients pass almost none of it. Outside the
+sandbox it first has the bus at `/run/user/<uid>/bus` start `org.bande.Agents`, which listens before
+it takes its name. A client may start it once, or once per call: jobs, cursors and sets belong to
+the registered agent or its sandboxed run, live in the broker and are named by unguessable handles.
+Time, zone and language come from the session.
 
 ### Tools
 

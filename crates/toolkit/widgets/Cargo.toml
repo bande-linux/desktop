@@ -12,6 +12,7 @@ accesskit.workspace = true
 parley.workspace = true
 bande-graphics.workspace = true
 bande-l10n.workspace = true
+bande-rich-text.workspace = true
 bande-spring.workspace = true
 zeroize.workspace = true
 

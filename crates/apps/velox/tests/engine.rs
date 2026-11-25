@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use bande_toolkit::Appearance;
-use bande_velox::{Informer, Target, Update, VeloxView};
+use bande_velox::{Informer, Readiness, Target, Update, VeloxView};
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
 
 const PATIENCE: Duration = Duration::from_secs(60);
@@ -68,9 +68,9 @@ fn the_list_follows_events_and_reconciles_when_the_engine_stops_and_returns() {
     unsafe { std::env::set_var("DOCKER_HOST", format!("unix://{}", socket.display())) };
     let informer = Informer::start(Target::default()).unwrap();
     let queue = &mut Vec::new();
-    let blocked = next(&informer, queue, |u| matches!(u, Update::Blocked(_)));
+    next(&informer, queue, |u| matches!(u, Update::Blocked(_)));
     let mut view = VeloxView::new(Appearance::default());
-    view.apply(blocked);
+    view.apply(Update::Blocked(Readiness::NotInstalled));
     let page = format!("{:?}", view.ui_ref().accessibility());
     assert!(
         page.contains("Install Docker or Podman to use Velox"),

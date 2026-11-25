@@ -57,8 +57,6 @@ by itself.
 
 ## Before it starts
 
-- Merge this plan, since agents branch from `main`, and drop the older copy staged in `main`'s
-  checkout.
 - Land `responsive-3`, which contains `next`.
 - Decide what is uncommitted in the worktrees of `perf-compositor-2`, `reopen-apps` and
   `diag-magenta`.

@@ -325,6 +325,10 @@ impl Taskbar {
                 let Err(error) = activate_item(&session, &item.id, token.as_deref()) else {
                     return;
                 };
+                if matches!(error, zbus::Error::InputOutput(_)) {
+                    tracing::warn!("{} does not answer: {error}", entry.name);
+                    return;
+                }
                 tracing::debug!("{} is opened again: {error}", entry.name);
                 if let Err(error) = bande_xdg::launch(&entry, token.as_deref()) {
                     tracing::warn!("cannot open {}: {error}", entry.name);

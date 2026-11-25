@@ -9,7 +9,7 @@ use bande_fs::{format_date, format_size};
 use bande_l10n::{tr, trn};
 use bande_toolkit::{
     Color, Elevation, Image, Item, Palette, Paragraph, Point, Radius, Rect, ResizeEdge, Shape,
-    TextAlign, TextRole, TextStyle, TextSystem, Transform,
+    TextAlign, TextRole, TextStyle, TextSystem, Transform, push_emoji,
 };
 use bande_xdg::{ICON_THEMES, data_dirs, find_icon};
 use parley::{Alignment, AlignmentOptions, FontFamily, FontFamilyName, StyleProperty};
@@ -117,6 +117,7 @@ pub(crate) fn colored(
             builder.push(StyleProperty::Brush(*color), range.clone());
         }
     }
+    push_emoji(&mut builder, content);
     let mut layout = builder.build(content);
     layout.break_all_lines(width);
     layout.align(Alignment::Start, AlignmentOptions::default());

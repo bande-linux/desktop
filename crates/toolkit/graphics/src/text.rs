@@ -15,6 +15,7 @@ use parley::{
 use skrifa::MetadataProvider;
 
 use crate::Rect;
+use crate::emoji::push_emoji;
 
 const DISPLAY_SIZE: f32 = 20.0;
 const ELLIPSIS: char = '\u{2026}';
@@ -95,7 +96,7 @@ static EMOJI_FAMILIES: [FontFamilyName<'static>; 3] = [
     FontFamilyName::Generic(GenericFamily::SansSerif),
 ];
 
-fn families(typeface: Typeface) -> FontFamily<'static> {
+pub(crate) fn families(typeface: Typeface) -> FontFamily<'static> {
     let families = match typeface {
         Typeface::Interface => INTERFACE_FAMILIES.as_slice(),
         Typeface::Display => DISPLAY_FAMILIES.as_slice(),
@@ -497,6 +498,7 @@ impl TextSystem {
                 );
             }
         }
+        push_emoji(&mut builder, &text);
         let mut layout = builder.build(&text);
         layout.break_all_lines(max_width);
         let alignment = match align {

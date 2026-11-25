@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::cell::RefCell;
 use std::ops::Range;
 
-use bande_graphics::{Color, Paragraph, Point, Rect, TextAlign, TextStyle, TextSystem};
+use bande_graphics::{Color, Paragraph, Point, Rect, TextAlign, TextStyle, TextSystem, push_emoji};
 use parley::{
     Affinity, AlignmentOptions, Cursor, FontFamily, FontFamilyName, FontStyle, FontWeight,
     GenericFamily, Layout, Selection as Span, StyleProperty,
@@ -222,6 +222,7 @@ impl Editor {
         for (at, spacing) in tabs {
             builder.push(StyleProperty::LetterSpacing(*spacing), *at..*at + 1);
         }
+        push_emoji(&mut builder, content);
         let mut layout: Layout<Color> = builder.build(content);
         let left = self.left(paragraph);
         layout.break_all_lines(self.width.map(|width| (width - left).max(self.font_size)));

@@ -366,7 +366,8 @@ interface org.bande.Intents.Files      (on the files owner)
 
 `access` is `read` or `folder`. Each file opened is its descriptor, its reference, and `name`,
 `media_type` and `size`; each registered is its temporary name, its wanted name, and the reference
-it replaces, or nothing. `Subscribe` and `Event` come with routines.
+it replaces, or nothing. Mail and Messages serve `Open` for their attachments. `Subscribe` and
+`Event` come with routines.
 
 - **Find** and **Get** serve the rows with those verbs whose effects are only `read` and
   `read_foreign`; arguments that cause another effect go through Prepare. `count` is at most 100,
@@ -411,13 +412,12 @@ it replaces, or nothing. `Subscribe` and `Event` come with routines.
   prepared by name (`UnknownIntent`). It is refused while the thing differs from what the plan left
   in the properties the plan changed, compared by meaning: a server's new tag or rewriting of the
   same values is no difference. Successive changes undo in order; an undo leaves no receipt.
-- **A plan belongs to the connection** that made it; at most 16 wait per caller. **A receipt belongs
-  to the person**: any of their programs may prepare its undo. It has `receipt`
-  (`<domain>:<token>`), `intent` (the one performed), `summary`, `references`, `made` (seconds),
-  `agent`, and is stored with its undo and a digest of what was left, mode 0600, for a day, at most
-  100 and 1 GB a domain; content over 64 KiB is beside it. One that a newer build cannot read is
-  `Expired`.
-
+- **A plan belongs to the connection** that made it; at most 16 wait per caller, and per agent for
+  the broker. **A receipt belongs to the person**: any of their programs may prepare its undo. It
+  has `receipt` (`<domain>:<token>`), `intent` (the one performed), `summary`, `references`, `made`
+  (seconds), `agent`, and is stored with its undo and a digest of what was left, mode 0600, for a
+  day, at most 100 and 1 GB a domain; content over 64 KiB is beside it. One that a newer build
+  cannot read is `Expired`.
 - A caller whose `ProcessFD` shows another mount namespace, or a `/.flatpak-info`, is refused; the
   broker's and owners' units make none, so they pass.
 
@@ -563,7 +563,7 @@ Each intent is reviewed for what it makes possible together with the others.
 | `sharing.start` | someone else's input | view only, and every viewer is still asked for |
 | stopping a recording, share, backup or planned shutdown | losing the person's work | `change` for what the caller started, otherwise `disrupt` for an agent |
 | `windows.move` | what the person types goes to the next window | for an agent never changes which window has the focus, else `disrupt` |
-| `notifications.dismiss`, `clock.dismiss_alarm`, any clock intent on an alarm that rings or a timer that is done | hiding what an agent did, a missed alarm | for an agent `disrupt` unless its own, and never a notice about an agent |
+| `notifications.dismiss`, `clock.dismiss_alarm`, `calendar.dismiss`, `calendar.snooze`, any clock intent on an alarm that rings or a timer that is done | hiding what an agent did, a missed alarm | for an agent `disrupt` unless its own, and never a notice about an agent |
 | `clipboard.set` | a command pasted into a terminal, another account number | `disrupt` unless one line of plain text, and for an agent while the current item is concealed or was copied by the person in the last minute; a notice names the agent |
 | `media.*` of other applications' players | seeks read by the page that plays | for an agent `disrupt`, except pause |
 | `containers.start_project` | running a changed compose file | its existing containers, through the engine; its files are never read |

@@ -34,7 +34,8 @@ by itself.
 3. **Guards are stubs until built.** An intent whose guard is missing answers `Unavailable`, through
    one function in `bande-intents` that C3 replaces, so a domain does not wait for the prompt. An
    argument that makes a plan wait (`at`, and an `until` that puts something back) is `Unavailable`,
-   and no events are declared, until C8 builds both in `bande-intents`.
+   and no events are declared, until C8 builds both in `bande-intents`. `account` parameters and
+   properties are left out until D3.
 4. **`bande-intents` is only added to** after C1. A thing, property, parameter or enum word that two
    packages share is in the specification first.
 5. **Its test harness is every owner's**: killed after Prepare, at each step of Perform and before
@@ -98,12 +99,12 @@ is only added to; a change that breaks a user waits for a wave where the package
 | Id | Work | Needs | Owns | Debian package | Done when | Size |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | C0 | `ci/runtime-deps` as a folder with a file per crate | nothing | `ci/runtime-deps*`, `ci/check-runtime-deps.py` | none | the gate passes | S |
-| C1 | `bande-intents` and its macros, manifests, client, harness; `Program::intents()`; `bande` from manifests | C0 | `crates/libs/intents*`, `crates/libs/app`, `crates/libs/l10n`, `crates/testing`, `crates/services/cli`, `debian/rules`, `ci/release/lint.sh` | `bande-cli` | with C2 | L |
+| C1 | `bande-intents` and its macros, manifests, client, harness; `Program::intents()` and `Program::current()`; `bande` from manifests | C0 | `crates/libs/intents*`, `crates/libs/app`, `crates/libs/l10n`, `crates/testing`, `crates/services/cli`, `debian/rules`, `ci/release/lint.sh` | `bande-cli` | with C2 | L |
 | C2 | `settings`, and rows in Search with phrases, [step 1](#step-1-in-detail) | C1, by the same agent | `crates/services/settings-intents`, `crates/services/system-intents` (an empty list), `crates/libs/settings-client`, `crates/libs/settings-panes`, `crates/apps/settings` with Activity, `crates/shell/launcher`, `crates/shell/shell` | `bande-settings`, `bande-system-intents` | `bande settings set appearance light`, "dark" in Search with Undo, and `bande undo` after a restart of the owner | L |
 | C3 | Approval prompt, [in detail](#c3-in-detail) | C1 | `crates/shell/approval`, `crates/platform`, `crates/libs/intents`, `crates/testing`, `ci/review` | `bande-shell` | a virtual keyboard, EIS, input method or accessibility client cannot press Allow; one Allow formats a stick; installing a package asks Allow and then polkit's own question | L |
-| C4 | Broker, and Settings ▸ Agents with Activity | C1, C2 | `crates/services/agentd`, its page in `crates/apps/settings` | `bande-agent` | a person adds an agent, gives it Notes and a folder, sees what it did and undoes it, without meeting a word outside the eight | L |
+| C4 | Broker, and Settings ▸ Agents; its log in C2's Activity | C1, C2 | `crates/services/agentd`, its page in `crates/apps/settings` | `bande-agent` | a person adds an agent, gives it Notes and a folder, sees what it did and undoes it, without meeting a word outside the eight | L |
 | C5 | Sandbox `bande-agent run` and its network proxy | C4 | `crates/services/agent-run` | `bande-agent` | escape tests (session and system bus, Wayland, accessibility, keyring, CUPS, PipeWire, devices, processes, paths, links, network, an OSC 52 write) fail closed | L |
-| C6 | `bande-mcp`, skill, `bande agent add` and `test`, evaluation set | C4 | `crates/services/mcp`, `crates/services/cli`, `data/skills` | `bande-agent` | three unrelated agent programs do the 30 requests without a line about any of them | L |
+| C6 | `bande-mcp`, skill, `bande agent add` and `test`, evaluation set | C4 | `crates/services/mcp`, `crates/services/cli`, `data/skills` | `bande-agent` | three unrelated agent programs do those of the 30 requests that need no prompt, and after C3 the rest, without a line about any of them | L |
 | C7 | Providers, when an application wants it | C3, D23 | `crates/services/intents-providers` | `bande-intents-providers` | two unrelated applications serve `documents` with no line about either in Bande | L |
 | C8 | Events, timed plans, routines; keys; tiles; Settings ▸ Routines | C3 | `crates/services/routines`, `crates/libs/intents`, its page in `crates/apps/settings`, `crates/shell/quick-settings` | `bande-routines` | "back up every Friday" and a key for "new note" work with no agent installed | L |
 | C9 | Mandates | C5, C6, C8, D4 | `crates/services/agentd/src/mandates` | `bande-agent` | a hostile message gets nothing but its own thread | M |
@@ -209,7 +210,7 @@ person who needs one cannot Allow, and `send` and `critical` stay off for agents
 | Names | owner `crates/services/settings-intents`, program `/usr/libexec/bande-settings-intents` with a D-Bus service file and user unit, bus name `org.bande.Intents.Settings`, D-Bus activated; command line `crates/services/cli`, `/usr/bin/bande` with `bande.1`; the owner in package `bande-settings`, the command line in `bande-cli`, recommended by `bande-desktop` |
 | Settings | by `SettingId`: Appearance, Style, WindowButtons, Accent, TintedFrame, TextSize, WallpaperFit, Bar*, Night*, DoNotDisturb, Focus*, AlertSound, AlertVolume, SoundEffects, VolumeFeedback, KeyRepeat*, Mouse*, Trackpad*, StickyKeys, SlowKeys, BounceKeys, Zoom, IncreaseContrast, ReduceTransparency, ReduceMotion, CursorSize, FlashScreen, ClockFormat, Search* except SearchExcluded |
 | Words | the `SettingId` in kebab-case; pages, lists, ids absent from `panes()` and everything not named here are `hidden`, and what later steps add is `NotFound` until then |
-| Stores | `org.bande.Config` and `org.bande.Notifications` stay the stores and other programs write them: Perform reads again and compare values, then set, and a write in that instant wins; a store's error is `Failed`, or `Unavailable` when it is not there |
+| Stores | `org.bande.Config` and `org.bande.Notifications` stay the stores and other programs write them: Perform reads again and compares values, then set, and a write in that instant wins; a store's error is `Failed`, or `Unavailable` when it is not there |
 | Undo | the setting's own raw part of the stored property before and after (a field of the night light or Do Not Disturb schedule, an entry of the search map), merged into what is stored now; not the registry's value, which rounds zoom and pointer speeds, put back by a private intent; values are checked against the registry before any setter; the preview sound stays in the Settings app |
 | Thing | `reference s`, `type s`, `title s`, `foreign as`, `value s`, `kind s` (`switch`, `choice`, `number`, `time`), `accepts as` or `minimum`, `maximum`, `step` (`x`), `pane s`, `writable b`; a level is a percentage, 0 to 100, and stops are a `choice` whose words are their numbers |
 | Description | rows as in the specification: the setting, from, to |

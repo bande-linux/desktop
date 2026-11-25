@@ -9,7 +9,7 @@ Part of [Bande Intents](../../intents.md). One thing, `desktop.current`. Owner:
 
 | Intent | Parameters | Effects | Undo | Code | P |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| `desktop.get` | `:only`, `properties` | `read`, foreign for the title |  | part: the selection is published by the app's library (`org.bande.Intents.Selection` on its bus name) | A |
+| `desktop.get` | `:only`, `properties` | `read`, foreign for the title |  | new: asks the focused app's owner, by its app id, its `find` with `current` | A |
 
 What is in front of the person, for "this" and "here". It needs the permission Apps and Windows, and
 of the selection only references the caller may read are given.

@@ -5,7 +5,9 @@ Part of [Bande Intents](../../intents.md). Main noun `message`; also `messages.c
 
 | Thing | Properties (* foreign, ~ name) | In `find` |
 | :--- | :--- | :--- |
-| `messages.conversation`, `messages.message`, `messages.draft` | name~ text, unread integer, muted bool; from\* address, body\* rich_text, sent date_time, attachments list<ref>; conversation ref, body rich_text, attachments list<ref> | name; from, sent |
+| `messages.conversation` | name~ text, unread integer, muted bool | all |
+| `messages.message` | from\* address, body\* rich_text, sent date_time, attachments list<ref> | from, sent |
+| `messages.draft` | conversation ref, body rich_text, attachments list<ref> | conversation |
 
 | Intent | Parameters | Effects | Undo | Code | P |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -18,6 +20,7 @@ Part of [Bande Intents](../../intents.md). Main noun `message`; also `messages.c
 | `messages.send` | `draft` | `send` |  | new | B |
 | `messages.update` | `conversation`, `read`, `muted` | `change`; a read receipt: `send` | the earlier values | new | B |
 | `messages.open` | `conversation` | `show`, without marking read |  | new | B |
+| `messages.create_conversation` | `people` | `send` |  | new | B |
 | `messages.create_files` | `attachments`, `within` | `change`; shared: `send` | `files.trash` | new | B |
 | `messages.delete` | `messages`, `for_everyone` | `critical`; for everyone also `send` |  | new | C |
 

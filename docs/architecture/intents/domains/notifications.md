@@ -5,7 +5,8 @@ Part of [Bande Intents](../../intents.md). Main noun `notification`; also `clipb
 
 | Thing | Properties (* foreign, ~ name) | In `find` |
 | :--- | :--- | :--- |
-| `notifications.notification`, `notifications.rule` | app ref, title\*, body\* text, made date_time; app ref, rule enum | app, made |
+| `notifications.notification` | app ref, title\*, body\* text, made date_time | app, made |
+| `notifications.rule` | app ref, rule `on` `quiet` `off` | all |
 | `clipboard.item` | title\* text, made date_time, types list<text> | all |
 
 | Intent | Parameters | Effects | Undo | Code | P |

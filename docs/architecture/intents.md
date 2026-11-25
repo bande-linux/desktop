@@ -32,27 +32,35 @@ intent](https://specifications.freedesktop.org/intent-apps/latest/), which is a 
 
 ## For the person
 
-Five words are all a person meets: **Agent**, **Permission**, **Allow**, **Activity**, **Undo**. The
-words on the rest of this page never appear in the interface.
+The interface has eight words for all this: **Agent**, **Permission**, **Allow**, **Ask**,
+**Activity**, **Undo**, **Stop**, **Routine**. No other word on these pages appears in it. (In
+Swedish Activity is Historik, since the Taskbar is Aktivitetsfältet.)
 
-- **Adding an agent.** Settings ▸ Agents ▸ Add Agent…: its name, the program or command, permissions
-  as checkboxes, Connect. Until then there are no agents, and nothing in Bande mentions one.
-- **Permissions** are sets with a sentence each, every one Off, Read, or Read and Change: Files in a
-  folder; Notes; Calendar; Tasks; Contacts; Mail ("includes text from strangers"); Drafts ("you send
-  them"); Settings; Apps and Windows; Music and Video; This Computer (battery, network, disks,
-  processes, packages); Messages; Photos, with Places apart. One more line, **Ask Me to…** (send,
-  print, install, delete, format, share), lets an agent ask; each time is answered by itself. A
-  folder's line says that whatever copies the folder elsewhere will copy what the agent writes.
+- **Adding an agent.** Settings ▸ Agents ▸ Add Agent…: a name; the program or command; *Run in a
+  sandbox* (on), and then the host its model is on, or none; permissions; Connect, which starts it
+  once and says whether it answered. Open in Terminal starts it again; Bande has no chat window of
+  its own. Until then there are no agents, and nothing in Bande mentions one.
+- **Permissions** are the [sets](intents/agents.md#permissions), each Off, Read, or Read and Change,
+  with one sentence and an Ask switch: it may ask for what is asked each time. A folder's sentence
+  says that whatever copies the folder elsewhere copies what the agent writes. Where a program
+  outside the sandbox may not read what others wrote, the line says so ("Mail: Read, not text from
+  strangers") with Turn On….
 - **Allow** is one question, about one thing, in plain words, with everything it will do.
-- **Activity** lists what agents and routines did, each with Undo while it can be undone. After
-  changes a quiet notice says "Organiser moved 14 files", with Undo.
-- **Errors** are one sentence that says what to do: "Mail is closed for an update. Try again."
-  "Organiser may not read Calendar. Open Settings."
+- **Activity** is Settings ▸ Activity: everything that can be undone, whoever did it, with Undo;
+  what agents and routines did, and what they asked, with the answer or "not answered". A line keeps
+  its sentence as long as the person keeps Activity. What Activity does not list did not happen.
+  After an agent's changes, and after Search, a quiet notice says what was done, with Undo.
+- **Removing an agent** stops it, withdraws its questions, cancels what it set for later and turns
+  its routines off; its drafts, Activity and undos stay, under its name.
+- **Errors** are one sentence that says what to do: "Organiser may not read Calendar. Open
+  Settings."
 - **Search** shows what can be done as one typed line: "dark", "timer 10 min", "new note milk",
-  "eject stick". An intent with at most one free parameter may declare translated phrases
-  (`text!("Timer {length}")`), matched against words, values and found names, never prose; Return
-  performs it and the result shows Undo. Nothing `critical` is offered there.
-- **Routines** are in Settings ▸ Routines, and may have a key or a Quick Settings tile.
+  "eject stick". An intent with at most one free parameter may declare translated phrases, on its
+  domain's page. A placeholder is a thing (matched by its owner's `find`), an enum word, a duration
+  with a translated unit, a text whose thing has `accepts` (one of those), or one free text at the
+  end; prose is never interpreted. Return performs it. Nothing `critical` is offered there.
+- **Routines** are Settings ▸ Routines, and may have a key or a Quick Settings tile, which the
+  person gives.
 
 ## Terms
 
@@ -105,7 +113,7 @@ main noun always names the noun.
 | `set` | Give one value to one named slot | `update`, which takes several properties |
 | `append` | Add to a thing's content | replacing content |
 | `move`, `copy` | To another container | renaming, which is `update` of the name |
-| `trash`, `restore` | Remove so that it can be brought back, and bring it back | `delete` |
+| `trash`, `restore` | Remove so that it can be brought back, and bring it back: what `find` with `trash` gives, else only as an undo | `delete` |
 | `delete` | Remove for good | `trash` |
 | `erase` | Remove everything in a container, and make it new | `delete` |
 | `add`, `remove` | Make something known or set up (a network, device, account), and undo that | `create` |
@@ -131,7 +139,10 @@ control or bidirectional characters, and is not foreign.
 A reference is opaque, stable across restarts and sync, and **gives no access by itself**: the owner
 checks every call. Its token is random and assigned by the owner, which maps it to its own keys; it
 never contains text someone else chose. A type of which there is one uses `:only`. A token not used
-for 30 days may be forgotten (`NotFound`), and so is one whose account was removed and added again.
+for 30 days may be forgotten (`NotFound`), except one in a permission, routine, timed plan or
+receipt; so is one whose account was removed and added again. `apps.app` uses its desktop file id
+and `accounts.account` its stored id as token, so any owner may write them; references of other
+types come only from their owner.
 
 `find` also returns a **set**, `set:<token>`: exactly what it found (at most 10,000 things, frozen,
 ten minutes; the answer says when it was cut). It is passed as the only element of a list of
@@ -155,13 +166,13 @@ archives are views of it. An account is `accounts.account` everywhere.
 | Type | Written as | D-Bus |
 | :--- | :--- | :--- |
 | `text` | plain Unicode, with a limit in bytes | `s` |
-| `rich_text` | Markdown (CommonMark) parsed by Bande and written out again: no images, no raw HTML, no metadata block, links only to `https`, `http` and `mailto` | `s` |
+| `rich_text` | Markdown (CommonMark) parsed by its owner and written out again with `bande-rich-text`: no images, no raw HTML, no metadata block, links only to `https`, `http` and `mailto` | `s` |
 | `rows` | CSV (RFC 4180) | `s` |
 | `bool`, `integer`, `number` | | `b`, `x`, `d` |
 | `date`, `time` | `2026-11-24`, `07:30` | `s` |
 | `date_time` | RFC 9557: `2026-11-24T13:00:00+01:00[Europe/Stockholm]` | `s` |
 | `duration` | ISO 8601: `PT25M` | `s` |
-| `url`, `place` | an `https` or `http` URL without user information; a `geo:` URI with `u=` as radius (RFC 5870) | `s` |
+| `url`, `uri`, `location` | an `https` or `http` URL without user information; another scheme a row names (`sftp`, `ipp`); a `geo:` URI with `u=` as radius (RFC 5870) | `s` |
 | `address` | RFC 5322 and RFC 6532: `Anna Ek <anna@example.org>` | `s` |
 | `picture` | PNG, as a descriptor | `h` |
 | `enum` | one of the declared words | `s` |
@@ -188,14 +199,20 @@ Unless a domain's page says otherwise:
 | `size`, `memory`, `larger_than` | `integer` bytes |
 | `level`, `speed` | `integer` 0 to 100; `number`, 1 is normal |
 | `priority` | `none`, `low`, `medium`, `high` |
-| an adjective or participle (`unread`, `recursive`, `done`) | `bool`; absent is no filter in `find`, false elsewhere |
-| `order` | the words given, newest or largest first |
-| `properties` | words of the thing's table; absent means all that are not content |
+| an adjective or participle (`unread`, `recursive`, `done`), and `trash`, `duplicates`, `sign`, `encrypt`, `to_all`, `with_attachments`, `current` | `bool`; absent is no filter in `find`, false elsewhere |
+| `new_folder`; `names`; `address` | `text` 255 B; `list<text, 1000>`; `text` 2 KiB |
+| `since`; `older_than`; `depth`, `copies`, `page` | `date_time`; `duration`; `integer` |
+| `birthday_after`, `birthday_before` | `date`, month and day only |
+| the name of a property of the thing | that property's type |
+| `order` | the words given, newest or largest first; the first word when absent |
+| `properties` | words of the thing's table; empty means all that are not content |
 | "and the same" | `create`'s parameters, all optional; absent leaves as it is |
 
 A parameter naming **another domain's thing** (an attachment, a wallpaper) reaches the performing
-owner as a descriptor, never as a path: in Prepare it calls `Open` of the files owner, with the
-caller's limits passed on, and `Register` for what it made.
+owner as a descriptor, never as a path. To read, it calls `Open` of the files owner in Prepare, with
+the caller's limits passed on. To write, it opens the folder there, writes a temporary file, and
+`Register` checks the content, the name and every rule, names it (keeping both) and returns its
+reference.
 
 ## Effects
 
@@ -217,8 +234,10 @@ An intent declares every effect it can have; a plan has the ones its arguments c
   foreign whatever their type.
 - **Who can read what is written** is found out where it can be: a folder that is exported, readable
   by other users, on a network or FUSE, and a collection whose server names a sharee or another
-  owner, are `send`; everything else is `change`. Where several hold, the strongest does, at both
-  ends of a move.
+  owner, and a clipboard shared with a remote screen or machine, are `send`; everything else is
+  `change`. Where several hold, the strongest does, at both ends of a move.
+- Effects are found again at Perform, and by a job before each thing; one that is not in the plan is
+  `Conflict`.
 - While a screen or window is shared, recorded or on a projector, `show` by an agent is `send`.
 - Results, plan descriptions, candidates and errors name things by reference and type; titles and
   properties are included only as far as the caller may read them.
@@ -264,16 +283,29 @@ pub struct Done<T> {
 like. It is prepared like any other, so it has its own effects and guard. An owner may have private
 intents for it, listed in no manifest, such as putting back a raw value.
 
-**The app is the owner.** The process that already writes a store serves its domain: an app is
-started by D-Bus without a window (`Program::intents()`, as `--background` and
-`waits_for_activation` do today), does its work and exits when idle; its window, when there is one,
-is in the same process, so the person's own click needs no bus and no question. The owner holds an
-exclusive lock on its store; where another program holds it, it answers `Unavailable` and says what
-to close. Where a window has unsaved edits of the thing, the owner takes them in first; if text is
-being composed, the intent is `Conflict`. Services that write something serve it themselves. Only
-what has neither gets a process: `bande-files-intents` (beside the indexer),
-`bande-settings-intents`, and `bande-system-intents`, which hosts small domains as libraries. Stores
-that the Settings app and Quick Settings write directly stay as they are.
+**The app is the owner.** The process that already writes a store serves its domain, on its app id,
+started by `org.bande.<App>.service` with `Exec=/usr/bin/<package> --intents`
+(`Program::intents()`). That start takes no part in the window session: it reads and discards no
+saved windows, is not a running app, and connects to Wayland when it first needs a window or a
+question. The first Activate or Open is a plain launch, with restore. Its window is in the same
+process, so the person's own click needs no bus and no question. An app that has had a window lives
+as [apps](apps.md) say, and Quit with a job or held mail closes the windows and leaves the process
+until it is done; one that never had a window exits a minute after it is idle (no plan, set, job,
+subscriber or held draft). Losing the compositor ends plans not yet allowed, not a job. One whose
+program was replaced is started again when it is idle, and with a window when that closes; only a
+plan its build cannot make is `Unavailable` ("Close Mail to finish updating"), and a caller retries
+once.
+
+The owner holds a lock file beside its store, which only owners take, and answers `Unavailable`
+where another holds it. For a thing open with unsaved edits the intent changes the window's text as
+one undo step and saves nothing; if text is being composed, it is `Conflict`. Where reading a thing
+and writing it back would lose something, it makes a copy (documents) or is `Conflict` (notes,
+drafts).
+
+Services that write something serve it themselves. Only what has neither gets a process:
+`bande-files-intents` (beside the indexer), `bande-settings-intents`, and `bande-system-intents`,
+which hosts small domains as libraries. Stores that the Settings app and Quick Settings write
+directly stay as they are.
 
 A menu item that does the same thing performs the intent, except continuous controls such as
 sliders.
@@ -281,11 +313,12 @@ sliders.
 ### Manifest
 
 A program run as `<program> --write-intents <folder>` writes its manifest and exits before opening
-anything; a `debian/rules` target runs it at build and the package installs
-`/usr/share/bande/intents/<bus name>.json`, root-owned. The command line, Search and the broker read
-these files, so no list of domains exists in code, and look titles up in the program's catalog. An
-id is served by one program; a second is ignored and logged, as is a file that does not parse. They
-are read again when the folder changes.
+anything; a line `debian/build/intents/<program>/* usr/share/bande/intents/` in a package's
+`.install` is what makes `debian/rules` run it at build. The file is `/usr/share/bande/intents/<bus
+name>.json`, root-owned. The command line, Search and the broker read these files, so no list of
+domains exists in code, and look titles up in the program's catalog. An id is served by one program;
+a second is ignored and logged, as is a file that does not parse. They are read again when the
+folder changes.
 
 ```json
 { "bus": "org.bande.Intents.Settings", "program": "/usr/libexec/bande-settings-intents",
@@ -293,7 +326,7 @@ are read again when the folder changes.
     "properties": { "value": { "type": "text", "foreign": false, "find": true } } } },
   "events": { "settings.changed": { "thing": "settings.setting", "effects": ["read"] } },
   "intents": { "settings.set": { "title": { "en": "Change Setting" }, "effects": ["change", "disrupt", "critical"],
-    "undo": true, "phrases": [{ "en": "{value}" }],
+    "undo": true, "phrases": [{ "en": "{setting} {value}" }],
     "parameters": [ { "name": "setting", "type": "ref", "of": ["settings.setting"], "required": true },
                     { "name": "value", "type": "text", "limit": 4096, "required": true } ],
     "returns": { "list": "settings.setting" } } } }
@@ -306,11 +339,12 @@ On the owner's bus name at `/org/bande/Intents`; for a provider on `org.bande.In
 
 ```
 interface org.bande.Intents
-  Find     (s intent, a{sv} arguments, a{sv} limits, s cursor, u count)        -> (aa{sv} things, s cursor, s set, as effects)
+  Find     (s intent, a{sv} arguments, a{sv} limits, s cursor, u count)        -> (aa{sv} things, s cursor, s set, b set_cut, as effects)
   Get      (s intent, as references, as properties, a{sv} arguments, a{sv} limits) -> (aa{sv} things, as effects)
   Prepare  (s intent, a{sv} arguments, a{sv} limits) -> (s plan, a{sv} description)
   Perform  (s plan)                                  -> (o job, s state, a{sv} result)
   Receipts (a{sv} limits, u count)                   -> (aa{sv} receipts)
+  PrepareUndo (s receipt, a{sv} limits)              -> (s plan, a{sv} description)
 
 interface org.bande.Intents.Job
   State s   running | waiting | done | failed | cancelled
@@ -322,22 +356,26 @@ interface org.bande.Intents.Job
   Cancel ()
 ```
 
-`Open`, `Register` (files owner) and `Subscribe`, `Event` are added with their first user.
+interface org.bande.Intents.Files, on the files owner Open     (as references, s access, a{sv}
+limits)   -> (a(hsa{sv}) files, as effects)      access: read | folder Register (h folder, a(ss)
+files, a{sv} limits)     -> (as references)                     temporary and wanted name
 
 - **Find** and **Get** serve the rows with those verbs whose effects are only `read` and
   `read_foreign`; arguments that cause another effect go through Prepare. `count` is at most 100,
-  text at most 64 KiB a property, and an answer says where it was cut. Get returns all of the
-  references or fails. Across domains each owner has two seconds, no more than four start at once,
-  and the answer names those that did not answer.
-- **Limits** (`effects`, `within`, `agent`) narrow a call; none means unlimited, an unknown key is
-  `InvalidArgument`. `within` is a list of containers, recursive for folders: folders for files and
-  their views; mailboxes or accounts for mail; folders, lists, calendars, books or accounts for
-  notes, tasks, calendar and contacts; panes for settings. A grant is stored as these and passed
-  unchanged. What is outside is `NotFound`, not matched, counted or offered. `agent` is the
-  registered name; it is accepted only from `org.bande.Agents`, `org.bande.Routines` and other
-  owners, turns on every rule for an agent, and is kept with what the call makes. Files are opened
-  beneath a held folder (`openat2`, `RESOLVE_BENEATH | RESOLVE_NO_SYMLINKS`, and `RESOLVE_NO_XDEV`
-  for an agent).
+  text at most 64 KiB a property; a thing's `cut` (`as`) names what was shortened. Get returns all
+  of the references or fails. Across domains each owner has two seconds, no more than four start at
+  once, and the answer names those that did not answer.
+- **Limits** are `agent` (`s`) and `domains` (`a{sa{sv}}`): for each domain its `effects` (`as`)
+  and, if it is limited, `within` (`as`). Without `domains` a call is unlimited; a domain missing
+  from it is `NotGranted`; an empty `within` contains nothing. They are passed on whole, and each
+  owner reads its own entry. An unknown key is `InvalidArgument`. `within` lists containers,
+  recursive for folders: folders for files and their views; mailboxes or accounts for mail; folders,
+  lists, calendars, books or accounts for notes, tasks, calendar and contacts; panes for settings. A
+  permission is stored as these and passed unchanged. What is outside is `NotFound`, not matched,
+  counted or offered. `agent` is the registered name; it is accepted only from a caller whose bus
+  name is in a manifest, and from `org.bande.Agents` and `org.bande.Routines`, turns on every rule
+  for an agent, and is kept with what the call makes. Files are opened beneath a held folder
+  (`openat2`, `RESOLVE_BENEATH | RESOLVE_NO_SYMLINKS`, and `RESOLVE_NO_XDEV` for an agent).
 - **Prepare** checks everything that can be checked and changes nothing. It answers within ten
   seconds: what is too large to copy or digest by then is frozen by identity, size and change time
   and compared again as it is used. The description has `effects`, `summary`, and `rows` (`label`,
@@ -348,25 +386,28 @@ interface org.bande.Intents.Job
   made for. A plan with an effect that is asked waits for [approval](#approval).
 - **Nothing happens twice, nothing half.** Before its first change the owner stores the plan's token
   and the undo, and for many things each step as it is done. Started again after a crash it finishes
-  or takes back what is not whole and keeps a receipt of the rest; callers get `Interrupted`, which
-  nothing repeats by itself. If the undo cannot be stored, the plan is `Unavailable` for an agent,
-  and for the person it says before Perform that there is none.
-- **Many things.** A job goes on after a failure unless the next would fail the same way. A failed
-  or cancelled result has `done`, the first 100 of `failed` with their errors, and a receipt for
-  what was done; each thing is whole on one side. A job outlives its connection and ends only by
-  itself, Cancel, Stop or the end of the session, which the owner delays until the thing in hand is
-  whole.
-- **Undo** is the receipt's intent, refused while the thing differs from what the plan left in the
-  properties the plan changed, compared by meaning: a server's new tag or rewriting of the same
-  values is no difference. Successive changes undo in order; an undo leaves no receipt.
+  or takes back a `change` that is not whole and keeps a receipt of the rest; callers get
+  `Interrupted`. A step that sends, disrupts or is critical is marked before it starts, never
+  continued or repeated, and the person is told that it may have been done. If the undo cannot be
+  stored, the plan is `Unavailable` for an agent, and for the person it says before Perform that
+  there is none.
+- **Many things.** A job goes on after a failure unless the next would fail the same way. A result
+  has `things`, `receipt` (empty if none), `done` and the first 100 of `failed` with their errors,
+  also when the job failed or was cancelled; each thing is whole on one side. A job outlives its
+  connection and ends only by itself, Cancel, Stop or the end of the session, which the owner delays
+  until the thing in hand is whole.
+- **Undo** is prepared by the owner that holds the receipt; where it is another owner's intent, that
+  one prepares it with the limits and it is performed inside the plan. Private intents cannot be
+  prepared by name (`UnknownIntent`). It is refused while the thing differs from what the plan left
+  in the properties the plan changed, compared by meaning: a server's new tag or rewriting of the
+  same values is no difference. Successive changes undo in order; an undo leaves no receipt.
 - **A plan belongs to the connection** that made it; at most 16 wait per caller. **A receipt belongs
   to the person**: any of their programs may prepare its undo. It has `receipt`
-  (`<domain>:<token>`), `intent`, `summary`, `references`, `made` (seconds), `agent`, and is stored
-  with its undo and a digest of what was left, mode 0600, for a day, at most 100 and 1 GB a domain;
-  content over 64 KiB is beside it. One that a newer build cannot read is `Expired`.
-- **An owner stays** while it has a window, plan, set, job, subscriber or held draft, and exits a
-  minute after. One whose program was replaced takes no new plan, finishes and is started again; a
-  caller gets `Unavailable` for that moment and retries once.
+  (`<domain>:<token>`), `intent` (the one performed), `summary`, `references`, `made` (seconds),
+  `agent`, and is stored with its undo and a digest of what was left, mode 0600, for a day, at most
+  100 and 1 GB a domain; content over 64 KiB is beside it. One that a newer build cannot read is
+  `Expired`.
+
 - A caller whose `ProcessFD` shows another mount namespace or a `/.flatpak-info` is refused, except
   the broker and owners, whose units make no mount namespace.
 
@@ -412,8 +453,8 @@ changed is marked so in Mail, with every recipient shown.
 A session client, `bande-approval`, that the compositor starts on demand with a role of its own,
 above every other surface, on the focused output. It is opened at session start like the other
 helpers, so an update does not change it under the session. Owners reach it through
-`bande_approval_v1` on Wayland, for verified Bande programs only; it is not the polkit agent, which
-stays as it is.
+`bande_approval_v1` on Wayland, for the programs that manifests name, verified; it is not the polkit
+agent, which stays as it is.
 
 It shows who asks (the agent's name, or "a program"), that the agent can read what other people
 wrote if it can, and every row of the plan: for a mail every bare recipient address, the sending
@@ -424,13 +465,14 @@ they are, and text from a provider that is not Bande's is labelled as its claim.
 digest of the arguments, the frozen content and what was shown. A draft being sent cannot be
 changed.
 
-Allow is never focused at first, and works only after the prompt has been visible and still for a
-second and scrolled to its end. Each requester has one question at a time; after a Deny it waits,
-longer each time, and three stop an agent's run. Deny and Stop This Agent are always there. While a
-question is open no other program's intent changes a setting, moves a window or opens a prompt; the
-person's own clicks are not held. It is withdrawn after a time the person sets (60 seconds at first,
-or never), which stops while the session is locked, no output is on, or the person is using the
-prompt. Only a received Allow counts: a closed channel, a crash or logout ends the plan undone.
+The focus starts on the text. Allow works only after the prompt has been visible and still for a
+second and scrolled to its end (Page Down does), and becoming ready is announced. Each requester has
+one question at a time; after a Deny it waits, longer each time, and three stop an agent's run. Deny
+and Stop This Agent are always there. While a question is open no other program's intent changes a
+setting, moves a window or opens a prompt; the person's own clicks are not held. It is withdrawn
+after a time the person sets (60 seconds at first, or never), which stops while the session is
+locked, no output is on, or the person is using the prompt. Only a received Allow counts: a closed
+channel, a crash or logout ends the plan undone.
 
 Virtual keyboards, EIS devices, input methods and accessibility clients do not reach Allow, except
 Bande's own on-screen keyboard and the screen reader the session started. Deny accepts everything.
@@ -487,7 +529,7 @@ Each intent is reviewed for what it makes possible together with the others.
 | Intent | What it could become | Rule |
 | :--- | :--- | :--- |
 | `files.*` | reading keys and sessions | hidden files, other users' files and anything outside granted folders do not exist for an agent |
-| every intent with `within`, `to` or a file as its result, and `files.update`, `files.restore`, `backups.restore` | code that runs | for an agent: only documents, pictures, sound, video and archives, whole trees; no executables, desktop entries, hidden names or names without an extension; nothing in or below a folder with a version-control folder, nor on the person's `PATH`; a rename keeps the extension; it restores only what it trashed |
+| every intent that makes, renames, restores or changes the content of a file | code that runs | for an agent: only files whose extension and content are in one fixed list in `bande-intents` (pictures, sound, video, PDF, RTF, ODF and OOXML without macros, CSV, Markdown, `.txt`, archives of these), before and after, whole trees; never a name a build tool reads (a list there too); no executables or hidden names; nothing in or below a folder with a version-control folder, nor on the person's `PATH`; a rename keeps the extension; it restores only what it trashed |
 | `files.open`, `documents.open`, `books.open` | a page or playlist that fetches an address with data in it, an installer | pictures, PDF, sound, video and plain text, without external references, in Bande's viewers; for an agent anything else is refused and `files.reveal` offered |
 | `files.trash` | deletion where there is no Trash | refused |
 | `files.find` by text, `documents.update` | guessing what a file contains | matching content is `read_foreign` |
@@ -510,10 +552,12 @@ Each intent is reviewed for what it makes possible together with the others.
 | `screen.*`, `recordings.start`, `camera.*` | watching or listening | asked, with an indicator; for an agent what it captured cannot be read, converted or attached, except the window the person picked in `screen.create` |
 | `sharing.start` | someone else's input | view only, and every viewer is still asked for |
 | stopping a recording, share, backup or planned shutdown | losing the person's work | `change` for what the caller started, otherwise `disrupt` for an agent |
+| `windows.move` | what the person types goes to the next window | for an agent never changes which window has the focus, else `disrupt` |
+| `notifications.dismiss`, `clock.dismiss_alarm` | hiding what an agent did, a missed alarm | for an agent `disrupt` unless its own, and never a notice about an agent |
 | `clipboard.set` | a command pasted into a terminal, another account number | `disrupt` unless one line of plain text, and for an agent while the current item is concealed or was copied by the person in the last minute; a notice names the agent |
 | `media.*` of other applications' players | seeks read by the page that plays | for an agent `disrupt`, except pause |
 | `containers.start_project` | running a changed compose file | its existing containers, through the engine; its files are never read |
-| `speech.start` | reading aloud to whoever is near | for an agent `send`, unless the screen reader is on or sound goes to headphones; refused while locked |
+| `speech.start` | reading aloud to whoever is near | for an agent `send`, unless the screen reader is on or sound goes to headphones, and it stops when the output changes; refused while locked |
 | `spreadsheets.*`, `documents.*`, `presentations.*` | fetching, leaking, running | inputs and every output are refused when they hold macros, external links, remote templates, data connections, embedded objects, or a field or formula outside an allow list of pure functions on the same file; CSV output prefixes cells that look like formulas |
 | `routines.*` | the same, later, with nobody there | below |
 
@@ -522,10 +566,12 @@ Each intent is reviewed for what it makes possible together with the others.
 **At a time.** `settings.set` (`until`), `software.install_update`, `session.stop`, `backups.start`
 and `mail.send` take a time. What was allowed is stored as intent, arguments and the digest of what
 was shown, and prepared again then: the same digest is performed, another is not and a notification
-says so. It is marked as taken before it is performed, so it never runs twice. What is more than ten
-minutes late is not performed and a notification says so, except an `until`, which is put back as
-soon as possible, and a mail, which waits for the person. Times with a zone are instants; a critical
-plan takes a time only as an offline update whose question is asked at Allow.
+says so. It waits with its owner, which a systemd user timer starts; Stop and removing a permission
+cancel an agent's, and a staged offline update is not prepared again. It is marked as taken before
+it is performed, so it never runs twice. What is more than ten minutes late is not performed and a
+notification says so, except an `until`, which is put back as soon as possible, and a mail, which
+waits for the person. Times with a zone are instants; a critical plan takes a time only as an
+offline update whose question is asked at Allow.
 
 **Events** name things and carry no content: `mail.received`, `calendar.starting`, `calendar.ended`,
 `tasks.due`, `clock.timer_done`, `files.changed` (in a folder), `jobs.done`, `network.changed`,
@@ -536,12 +582,13 @@ missed.
 
 **Routines** (`bande-routines`) are the person's own, and need no agent: a trigger (a time, a key
 through the GlobalShortcuts portal, a tile, an event) and a list of intents. An argument is a fixed
-value, a stored search run at the start with a limit on how many things, or the event's things.
-Making or changing one is approved by the strongest effect in it. `critical` never runs unattended;
-`send` and `disrupt` only if the person chose so for that step, and not on what an agent made or
-changed since, nor from an event an agent caused: then it waits for the person. A routine an agent
-made or changed keeps that agent's name and permissions, is off when the agent is stopped, and for
-an agent making, changing, trashing or turning off a routine is `disrupt`. Local times follow the
+value, a stored search run at the start (with dates counted from then, such as `-P30D`) and a limit
+on how many things, or the event's things. Making or changing one is approved by the strongest
+effect in it. `critical` never runs unattended; `send` and `disrupt` only if the person chose so for
+that step, and not on what an agent made or changed since, nor from an event an agent caused: then
+it waits for the person. A routine an agent made or changed keeps that agent's name and permissions,
+is off when the agent is stopped, and for an agent making, changing, trashing, turning off or
+starting a routine is `disrupt`, and one it starts runs with its limits. Local times follow the
 zone; a missed run runs once or not, as the person chose.
 
 **Mandates** let a sandboxed agent act while the person is away: made in Settings ▸ Agents and

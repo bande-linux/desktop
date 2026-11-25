@@ -1,6 +1,6 @@
 # Feeds
 
-Package A13. Size M.
+Domain: [feeds](../../architecture/intents/domains/feeds.md). Package A13. Size M.
 
 **There is.** HTTPS, HTML reading, notifications.
 

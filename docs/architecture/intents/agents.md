@@ -12,7 +12,7 @@ it:
 | Layer | Enforced by | Stops |
 | :--- | :--- | :--- |
 | The agent program offers its model no shell, file, web or other tool | the agent program, by its launch options | a model that is misled |
-| The agent runs without the session bus, Wayland, the accessibility bus, the keyring, the home folder, or a network other than its model's host and port | `bande-agent run` | an agent program that has other tools after all, or is compromised |
+| The agent sees only `/usr` read-only, its command's files, a private home kept for it, its own processes, the broker's socket and a proxy to its model's host and port: no other socket, bus, device or terminal, no new privileges, no user namespaces | `bande-agent run` | an agent program that has other tools after all, or is compromised |
 | The broker offers only permitted intents | `bande-agentd` | everything else |
 
 There is no intent to read a password, so an intents-only agent in the sandbox has no way to ask for
@@ -38,14 +38,38 @@ bytes and changes per hour, so undo is never flooded out), denials and a log of 
 effects and outcomes without content, readable by the person only and kept as long as they choose.
 Denials and numbers are stored before an answer, and the log entry before Perform; where they cannot
 be, the call is `Unavailable`. Its end withdraws its questions and cancels plans that wait. It holds
-no credentials, and drops references of a type a program does not serve. Each entry has the plan's
-token, which the owner logs too. **Stop** ends the agent's whole systemd scope and cancels its jobs.
-Settings ▸ Agents lists agents, permissions, mandates and the log, and a status item shows while one
-is connected and what it does.
+no credentials. Each entry has the plan's token, which the owner logs too. **Stop** ends the agent's
+whole systemd scope and cancels its jobs. Settings ▸ Agents lists agents, permissions, mandates and
+the log, and a status item shows while one is connected and what it does.
 
-Permissions are given as the [sets a person sees](../intents.md#for-the-person), and apps can be
-excluded from agents, search and recent files in one list. A permission to be asked is never the
-approval.
+## Permissions
+
+A domain without a set is not offered to agents; a test checks that every domain is here once. Each
+set has an Ask switch for its effects that are asked each time.
+
+| Set | Domains | Read gives | Change adds |
+| :--- | :--- | :--- | :--- |
+| Files in… (a folder) | `files`, `archives`, `documents`, `spreadsheets`, `presentations` | names and content | making, moving, changing, Trash |
+| Photos; Places apart | `photos` | pictures and dates; where they were taken | copies, albums, favourites |
+| Notes | `notes` | notes | making and changing |
+| Calendar | `calendar` | events | events without guests |
+| Tasks | `tasks` | lists | making and changing |
+| Contacts | `contacts` | people | (asks) |
+| Mail | `mail` | messages, text from strangers included | filing, flags |
+| Drafts | `mail`'s drafts | what it wrote | drafts; the person sends |
+| Messages | `messages` | conversations, text from strangers included | drafts, read |
+| Settings | `settings`, `notifications`' rules | settings | changing those that are safe |
+| Apps and Windows | `apps`, `windows`, `desktop`, `terminal`, `browser` | what is open and in front | arranging windows, opening |
+| Music, Video and Books | `media`, `music`, `books`, `recordings` | players and libraries | playing, playlists |
+| Clock | `clock` | alarms and timers | making and changing |
+| This Computer | `session`, `network`, `devices`, `print`, `scanners`, `disks`, `processes`, `software`, `backups`, `machines`, `containers`, `accounts` | state and names | staying awake, default printer |
+| Notices | `notifications`, `clipboard` | notices of what it may read | its own notices, one line on the clipboard |
+| Knowledge | `calculator`, `dictionary`, `maps`, `feeds` | results | opening |
+| Screen and Sound | `screen`, `sharing`, `camera`, `speech` | status | (asks) |
+| Routines | `routines` | routines | (asks) |
+
+`users` and `reports` are not offered. Apps can be excluded from agents, search and recent files in
+one list.
 
 An agent may change or trash only drafts it made and the person has not edited since. For an agent,
 every `contacts` intent that writes is `disrupt`.
@@ -93,11 +117,11 @@ list overflows them. So the most useful intents are also tools of their own:
 - A direct tool is generated from its intent and goes through the same checks. Its name is the id
   with `_` for `.`, at most 40 of `[a-z0-9_]`; its hints come from the intent's effects. One that
   can need the person says so and works like `ask`.
-- They are the A intents of the permitted domains, in the order of their pages, at most 12 and at
-  most 3,500 tokens for the whole list (bytes divided by four). The list depends on the agent and
-  its permissions only, has one fixed order with the generic tools first, and changes only when
-  those do. Any permitted intent's tool name is accepted, listed or not. Anything finer waits for
-  the evaluation set.
+- They are the A intents of the permitted domains without `find` and `get`, one from each domain in
+  turn in the order of their pages, at most 12 and at most 3,500 tokens for the whole list (bytes
+  divided by four). The list depends on the agent and its permissions only, has one fixed order with
+  the generic tools first, and changes only when those do. Any permitted intent's tool name is
+  accepted, listed or not. Anything finer waits for the evaluation set.
 
 Their parameters: `find` {type, text, within, filters, count, cursor}; `get` {references,
 properties, intent, arguments, pictures}; `intents` {words, domain, id}; `run` and `ask` {intent,

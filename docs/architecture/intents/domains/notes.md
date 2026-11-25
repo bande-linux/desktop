@@ -5,12 +5,12 @@ Work package D2.
 
 | Thing | Properties (* foreign, ~ name) | In `find` |
 | :--- | :--- | :--- |
-| `notes.note` | title text, body rich_text, folder ref, pinned bool, created, modified date_time, by_agent bool (then title and body\*) | title, folder, modified |
+| `notes.note` | title text, body rich_text, folder ref, created, modified date_time, by_agent bool (then title and body\*) | title, folder, modified |
 | `notes.folder` | name~ text, account ref<accounts.account>, parent ref | all |
 
 | Intent | Parameters | Effects | Undo | Code | P |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| `notes.find` | `text`, `folder` | `read`; foreign where what is in it is |  | app; not in the search index | A |
+| `notes.find` | `text`, `folder`, `modified_after`, `modified_before`, `order` (`modified`, `title`), `trash` | `read`; foreign where what is in it is |  | app; not in the search index | A |
 | `notes.get` | `notes` | as `find` |  | app | A |
 | `notes.find_folder` | `text` | `read` |  | app | A |
 | `notes.create` | `title`, `body`, `folder` | `change`; shared: `send` | `notes.trash` | app | A |
@@ -23,6 +23,8 @@ Work package D2.
 | `notes.create_folder` | `name`, `account` | `change`; shared: `send` | removes it while empty | new | B |
 | `notes.update_folder` | `folder`, `name` | `change`; shared: `send` | the earlier name | new | C |
 | `notes.delete` | `notes` | `critical`; shared: also `send` |  | new | C |
+
+Phrases in Search: "new note {text}", "open note {note}".
 
 The folder may be in the local account, so `notes.create` works offline. Pins, tags and locks do not
 exist.

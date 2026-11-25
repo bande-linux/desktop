@@ -5,12 +5,12 @@ Work package A2.
 
 | Thing | Properties (* foreign, ~ name) | In `find` |
 | :--- | :--- | :--- |
-| `tasks.task` | title\* (own lists: not foreign) text, list ref, parent ref, due, starts, completed date_time, done bool, priority enum, notes\* rich_text, url\* url, message ref<mail.message>, repeats text, alerts list<duration> | title, list, due, done |
+| `tasks.task` | title text (foreign in a shared list), list ref, parent ref, due date or date_time, starts, completed date_time, done bool, priority enum, notes\* rich_text, url\* url, message ref<mail.message>, repeats text, alerts list<duration> | title, list, due, done |
 | `tasks.list` | name~ text, account ref, colour text, shared bool | all |
 
 | Intent | Parameters | Effects | Undo | Code | P |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| `tasks.find` | `text`, `list`, `due_after`, `due_before`, `done` | `read`; foreign where what is in it is |  | new | A |
+| `tasks.find` | `text`, `list`, `due_after`, `due_before`, `done`, `priority`, `order` (`due`, `priority`), `trash` | `read`; foreign where what is in it is |  | new | A |
 | `tasks.get` | `tasks` | as `find` |  | new | A |
 | `tasks.find_list` | `text` | `read` |  | new | A |
 | `tasks.update` | `task` and the same | as `create` | the earlier tasks | new | A |
@@ -21,6 +21,8 @@ Work package A2.
 | `tasks.create_list` | `name` | `change`; shared: `send` | removes it while empty | new | B |
 | `tasks.update_list` | `list`, `name`, `colour` | `change`; shared: `send` | the earlier values | new | B |
 | `tasks.delete_list` | `list` | `critical`; shared: also `send` |  | new | C |
+
+Phrases in Search: "add task {text}".
 
 There is no Tasks app and no VTODO model: see the [plan](../../../plans/apps/tasks.md). Calendar
 drops collections without events, and a resource with only a VTODO gives it nothing; one beside an

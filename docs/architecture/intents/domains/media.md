@@ -19,6 +19,8 @@ package D7.
 | `media.set_stream` | `player`, `kind` (`sound`, `subtitles`), `stream` | `change` | the earlier stream | app (`libs/media`) | C |
 | `media.open` | `player` | `show` |  | app | C |
 
+Phrases in Search: "play", "pause", "next track".
+
 Any MPRIS player, also of other applications. The code is in
 `crates/shell/quick-settings/src/media.rs`.
 

@@ -6,13 +6,18 @@ app. Work package D20.
 
 | Thing | Properties (* foreign, ~ name) | In `find` |
 | :--- | :--- | :--- |
-| `machines.machine`, `machines.snapshot`, `machines.image` | name~ text, state `running` `paused` `stopped`, memory, disk integer, processors integer; name~, made date_time; name~, size integer | all |
-| `containers.container`, `.image`, `.volume`, `.project` | name~ text, image\* text, state enum, engine text, remote bool; name\* text, size integer | name, state |
+| `machines.machine` | name~ text, state `running` `paused` `stopped`, memory, disk, processors integer | all |
+| `machines.snapshot` | name~ text, machine ref, made date_time | all |
+| `machines.image` | name~ text, size integer | all |
+| `containers.container` | name~ text, image\* text, state `running` `paused` `stopped`, engine text, remote bool | name, state |
+| `containers.image` | name\* text, size integer | all |
+| `containers.volume` | name~ text, size integer | all |
+| `containers.project` | name~ text, running bool | all |
 
 | Intent | Parameters | Effects | Undo | Code | P |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| `machines.find`, `machines.get` | `text`; `machines`, `properties` (state, memory, processors, disk) | `read` |  | ready | B |
-| `containers.find`, `containers.get` | `text`; `containers`, `properties` (name, image, state, engine) | `read` for names, foreign for images |  | app | B |
+| `machines.find`, `machines.get` | `text`; `machines`, `properties` | `read` |  | ready | B |
+| `containers.find`, `containers.get` | `text`; `containers`, `properties` | `read` for names, foreign for images |  | app | B |
 | `containers.find_image`, `containers.find_volume` | `text` | `read` for names, foreign for images |  | app | B |
 | `machines.find_image` | `text` | `read` |  | ready | B |
 | `machines.find_snapshot` | `machine` | `read` |  | ready | B |

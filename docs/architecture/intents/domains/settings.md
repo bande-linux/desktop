@@ -14,6 +14,8 @@ Work package C2.
 | `settings.open_pane` | `pane` | `show` |  | ready | A |
 | `settings.set` | `setting`, `value`, `until` | `change`, `disrupt` or `critical` as marked | the stored value | part, as above | A |
 
+Phrases in Search: "{setting} {value}".
+
 `value` is text: the setting's word, `on` or `off`, a number, a time, or a list separated by commas.
 `until` puts the stored value back [at that time](../../intents.md#later-and-by-itself). A setting
 of one display or device is a thing of its own (`settings.setting:display-scale@…`), and the

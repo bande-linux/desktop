@@ -6,12 +6,15 @@ package D19.
 
 | Thing | Properties (* foreign, ~ name) | In `find` |
 | :--- | :--- | :--- |
-| `sharing.status` (`:only`), `sharing.folder` | on bool, viewers\* list<text>; folder ref<files.file> | all |
+| `sharing.status` (`:only`) | on bool, viewers\* list<text> | all |
+| `sharing.folder` | folder ref<files.file> | all |
+| `screen.picture` (a view of a file) | picture picture | all |
+| `screen.display` | name~ text | all |
 
 | Intent | Parameters | Effects | Undo | Code | P |
 | :--- | :--- | :--- | :--- | :--- | :--- |
+| `sharing.get_status` | `:only`, `properties` | `read`, foreign for viewers' names |  | new; the service has no interface | A |
 | `sharing.find_folder` | `text` | `read` |  | app | B |
-| `sharing.get_status` | `:only`, `properties` (on, viewers) | `read`, foreign for viewers' names |  | new; the service has no interface | C |
 | `sharing.stop` | `:only` | `change` for what the caller started, otherwise `disrupt` for an agent |  | part | A |
 | `screen.create_screenshot` | `display`, `window`, `delay`; saved in Pictures, not returned | `disrupt` | `files.trash` | app | A |
 | `sharing.start` | `view_only` (always), `until` | `critical` | `sharing.stop` | new: today a viewer may control | B |
@@ -22,7 +25,9 @@ package D19.
 | `screen.stop_recording` |  | `change` for what the caller started, otherwise `disrupt` for an agent |  | app | B |
 | `sharing.start_login` | remote login | `critical` | `sharing.stop_login` | app | C |
 | `sharing.stop_login` |  | `disrupt`; with an administrator `critical` |  | app | C |
-| `sharing.open` | `computer` (a saved one) | `disrupt` and `send` |  | app | C |
+| `sharing.open` | `computer` (`text`, a saved one) | `disrupt` and `send` |  | app | C |
+
+Phrases in Search: "screenshot", "stop sharing".
 
 Sharing is always view only, and accepting a viewer, passwords, another computer's picture,
 clipboard and any input have no intent. What an agent recorded or captured it cannot read.

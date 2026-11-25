@@ -1,6 +1,6 @@
 # Tasks
 
-Domain: [tasks](../../architecture/intents/domains/tasks.md). Package A2, after A1a and C1. Size M.
+Domain: [tasks](../../architecture/intents/domains/tasks.md). Package A2, after A1a and D5. Size M.
 
 **There is.** CalDAV in Calendar, which drops collections without events and has no VTODO model; the
 branch's `bande-dav` and `bande-content-lines`; recurrence rules; notifications.
@@ -9,7 +9,7 @@ branch's `bande-dav` and `bande-content-lines`; recurrence rules; notifications.
 `RELATED-TO`) in a store of its own, which syncs the VTODO resources and leaves events to Calendar
 (a resource with both is Calendar's, and read only here); task lists found and made on the server; a
 local list; the app (lists, today, scheduled, search, drag to order); due alerts through the same
-background process as Calendar's; due tasks in Calendar when the person wants them.
+background process as Calendar's; due tasks in Calendar later, through `tasks.find`.
 
 **Done when** a list edited here and by another CalDAV client agree, offline and after conflicts,
 and "add milk to my shopping list" needs no prompt on the person's own list.

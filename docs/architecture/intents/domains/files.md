@@ -2,7 +2,7 @@
 
 Part of [Bande Intents](../../intents.md). Main noun `file`; `files.location` is a server, volume or
 standard folder. `archives` has the main noun `archive`. Owner: `bande-files-intents`. Work package
-D1.
+D1a, D1b.
 
 | Thing | Properties (* foreign, ~ name) | In `find` |
 | :--- | :--- | :--- |
@@ -13,9 +13,10 @@ D1.
 | Intent | Parameters | Effects | Undo | Code | P |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | `files.find_location` | `text` | `read` |  | ready; saved servers, mounted volumes and standard folders, no discovery | A |
+| `archives.get` | `archive`, `properties` | foreign |  | part: totals; names are new | A |
 | `files.find` | `name`, `text`, `kind`, `within`, `recursive`, `modified_after`, `modified_before`, `used_after`, `larger_than`, `duplicates`, `trash`, `order` (`name`, `modified`, `used`, `size`) | `read`; foreign with `text` or where what is in it is |  | part: names and text within a folder, and only with words to find; Trash is listed in `libs/fs/src/trash.rs`; duplicates are new | A |
-| `files.get` | `files`, `properties` (name, size, dates, kind, access, origin, digest) | as `find` |  | part: digest is new | A |
-| `archives.get` | `archive`, `properties` (items, size, `names`) | foreign |  | part: totals; names are new | B |
+| `files.get` | `files`, `properties` | as `find` |  | part: digest is new | A |
+| `files.find_sync` | `text` | `read` |  | new | B |
 | `files.create_folder` | `within`, `name` | `change`; shared: `send` | `files.trash` | part: `new_folder` chooses the name | A |
 | `files.move`, `files.copy` | `files`, `to`, `new_folder`, `if_exists` (`keep-both`, `skip`) | `change`; shared: `send` | move back, trash the copies | ready | A |
 | `files.update` | `files`, `names` in the same order | `change`; shared: `send` | the old names | ready | A |
@@ -31,9 +32,12 @@ D1.
 | `files.create_link` | `file`, `within` | `change`; shared: `send` | `files.trash` | ready (`libs/fs/src/ops.rs`) | B |
 | `files.compute_changes` | `within`, `since` | `read`; foreign where what is in it is |  | new, on the backup client | B |
 | `files.delete` | `files` | `critical`; shared: also `send` |  | ready | B |
-| `files.add_location` | `address` | `send` | `files.remove_location` | part: saved servers | B |
+| `files.add_location` | `address` (`uri`: `sftp`, `smb`, `davs`) | `send` | `files.remove_location` | part: saved servers | B |
 | `files.remove_location` | `location` | `disrupt` |  | ready | B |
-| `files.set_access` | `files`, `class`, `access` | `disrupt`; wider for others: `critical` | the earlier access | ready (`libs/fs/src/permissions.rs`) | C |
+| `files.start_sync` | `folder` | `send` |  | new, with Synced folders | B |
+| `files.set_access` | `files`, `who` (`group`, `others`), `access` (`none`, `read`, `write`) | `disrupt`; wider for others: `critical` | the earlier access | ready (`libs/fs/src/permissions.rs`) | C |
+
+Phrases in Search: "connect {location}".
 
 `kind` is `folder`, `picture`, `sound`, `video`, `document`, `spreadsheet`, `presentation`,
 `archive` or `other`. There is no `replace`. `delete` and `delete_trash` name the count, the size

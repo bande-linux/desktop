@@ -9,5 +9,5 @@ Part of [Bande Intents](../../intents.md). Main noun `book`. Owner: the Books ap
 | Intent | Parameters | Effects | Undo | Code | P |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | `books.find` | `text`, `author`, `unread` | foreign |  | new | B |
-| `books.get` | `books`, `properties` (title, author, contents, position) | foreign |  | new | B |
+| `books.get` | `books`, `properties` | foreign |  | new | B |
 | `books.open` | `book`, `place` | `show` |  | new | B |

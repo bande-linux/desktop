@@ -47,8 +47,10 @@ memory settings stay the system's own.
   compositor locks what fits in the limit it has.
 - With swap, `app.slice` gets `MemoryHigh=` all memory but a fifth of it, at most 3 GiB and at most
   half the swap: the desktop's guarantee, the system and free memory. Apps together above that are
-  swapped and slowed, so the desktop and the system still find free memory at once. Without swap
-  there is none: nothing could leave and every app would crawl beside unused memory.
+  swapped and slowed, so the desktop and the system still find free memory at once. `MemoryMax=` at half that reserve
+  ends an app once swap is full too, before the whole computer runs out and the desktop waits for
+  memory. Without swap there is neither: nothing could leave and every app would crawl beside
+  unused memory.
 - Each app's scope gets `MemoryMin=128M` and `MemoryLow=512M`. When `app.slice` is reclaimed at its
   limit that keeps the other apps' pages, so a build in a Terminal tab does not swap out the windows
   on screen; a tab's own scope has neither. systemd-oomd picks the scope the kernel scans most: with

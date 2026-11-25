@@ -1,0 +1,3 @@
+gpg gpg optional
+gpgconf gpgconf optional
+gpgsm gpgsm optional

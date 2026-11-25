@@ -1,0 +1,5 @@
+/bin/ash busybox optional
+/bin/bash bash required
+/bin/sh dash required
+journalctl systemd depends
+ssh openssh-client optional

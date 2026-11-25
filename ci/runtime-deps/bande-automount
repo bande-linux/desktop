@@ -1,0 +1,15 @@
+/usr/bin/bande-automount bande-automount depends
+/usr/bin/fusermount3 fuse3 optional
+/usr/bin/go-mtpfs go-mtpfs optional
+/usr/bin/gphotofs gphotofs optional
+/usr/bin/pkexec pkexec depends
+/usr/bin/smbclient smbclient optional
+/usr/bin/sshfs sshfs optional
+/usr/bin/systemctl systemd depends
+/usr/libexec/bande-mount-helper bande-automount depends
+/usr/libexec/bande-secrets-prompt bande-secrets depends
+/usr/sbin/mount.cifs cifs-utils optional
+/usr/sbin/mount.davfs davfs2 optional
+/usr/sbin/mount.nfs nfs-common optional
+/usr/sbin/showmount nfs-common optional
+/usr/share/bande/bande-davfs2.conf bande-automount depends

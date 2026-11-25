@@ -1,0 +1,3 @@
+/usr/sbin/update-grub grub2-common optional
+/usr/share/plymouth/themes plymouth optional
+/usr/share/plymouth/themes/bande/bande.plymouth bande-plymouth-theme optional

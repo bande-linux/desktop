@@ -1,0 +1,3 @@
+/usr/share/dictd dictd optional
+/usr/share/stardict/dic stardict-common optional
+tar tar required

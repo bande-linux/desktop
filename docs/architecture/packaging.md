@@ -86,7 +86,7 @@ debhelper compat 14, built with Debian's `rustc` and `cargo` through dh-cargo's 
   `bande-login`, Bande's PAM services, its pictures and failed-session folders, and purging it
   leaving no display manager chosen), `every-package` (the
   one version, every program and file in
-  `ci/runtime-deps` without recommends, the installed compositor serving Wayland clients),
+  `ci/runtime-deps/` without recommends, the installed compositor serving Wayland clients),
   `boot-screen` (the boot screen is a `default.plymouth` alternative that only applies when no
   other theme is chosen, the initramfs carries it, its link and Inter, it installs without GRUB,
   with GRUB the generated `linux` lines carry `splash` and `loglevel=3` once, also when
@@ -300,7 +300,7 @@ depends on it) or the fonts, PackageKit, AppStream, UPower, UDisks, NetworkManag
 - `mesa-vulkan-drivers` and `libvulkan1` come with `bande-compositor`.
 
 Every program Bande runs and every system file it reads by path is listed in
-`ci/runtime-deps` with the Debian package that ships it ([ci.md](ci.md#runtime-dependencies)).
+`ci/runtime-deps/<crate>` with the Debian package that ships it ([ci.md](ci.md#runtime-dependencies)).
 
 No package depends on an X server, XWayland or an X session; the `desktop` autopkgtest checks that none
 comes along.

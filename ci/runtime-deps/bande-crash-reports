@@ -1,0 +1,2 @@
+coredumpctl systemd-coredump depends
+journalctl systemd depends

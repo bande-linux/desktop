@@ -1,3 +1,4 @@
+mod app_processes;
 mod bar_client;
 pub mod dialogs;
 mod installed_apps;

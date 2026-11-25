@@ -297,6 +297,20 @@ fn tray_event(message: &Message) -> Option<TrayEvent> {
     }
 }
 
+pub fn activate_item_of(connection: &Connection, pids: &[u32]) -> zbus::Result<()> {
+    let bus = DBusProxy::new(connection)?;
+    for id in Watcher::new(connection)?.registered_status_notifier_items()? {
+        let owned = BusName::try_from(split(&id).0).is_ok_and(|owner| {
+            bus.get_connection_unix_process_id(owner)
+                .is_ok_and(|pid| pids.contains(&pid))
+        });
+        if owned {
+            return item_proxy(connection, &id)?.activate(0, 0);
+        }
+    }
+    Ok(())
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Errand {
     ShowMenu { menu: String, parent: i32 },

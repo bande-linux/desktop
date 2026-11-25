@@ -1,5 +1,6 @@
 use bande_l10n::{tr, trn};
 
+use crate::app_processes::AppProcesses;
 use crate::dialogs::DIALOGS;
 use crate::installed_apps::InstalledApps;
 use crate::rail::{BarForm, bar_zone, surface_size};
@@ -10,6 +11,7 @@ use accesskit::TreeUpdate;
 use bande_config::{Bar as BarConfig, BarEdge};
 use bande_fs::{FolderWatch, Trash};
 use bande_inbox::Inbox;
+use bande_status::tray::activate_item_of;
 use bande_taskbar_model::arrange;
 use bande_taskbar_model::bus::{self, BusEvent};
 use bande_toolkit::ui::{Event, Menu, MenuItem, Ui};
@@ -22,12 +24,13 @@ use bande_xdg::{
     find_app_for_process, find_icon, launch_with_arguments, opens_at_login, path_from_file_uri,
     set_open_at_login, write_launcher,
 };
+use rustix::process::Signal;
 use std::collections::HashMap;
 use std::os::fd::BorrowedFd;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::Sender;
 use std::thread;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use zbus::blocking::Connection;
 
 const FILES: &str = "org.bande.Files";
@@ -48,6 +51,15 @@ const MENU_FORCE_QUIT: &str = "force-quit";
 const MENU_WINDOW: &str = "window:";
 const MENU_ACTION: &str = "action:";
 const MENU_OPEN_APP: &str = "open-app:";
+const BANDE_APP_ID: &str = "org.bande.";
+const QUIT_PATIENCE: Duration = Duration::from_secs(30);
+const QUIT_GRACE: Duration = Duration::from_secs(5);
+const REOPEN_PATIENCE: Duration = Duration::from_secs(3);
+
+struct Quitting {
+    until: Instant,
+    windows_closed: bool,
+}
 
 struct TrashWatch {
     trash: Trash,
@@ -117,6 +129,9 @@ pub struct Taskbar {
     active: Option<String>,
     unresponsive: Vec<String>,
     windowed: Vec<String>,
+    processes: AppProcesses,
+    quitting: HashMap<String, Quitting>,
+    reopening: Option<(String, Instant)>,
     keep: Option<Sender<Vec<String>>>,
     autostart: Option<PathBuf>,
     bus: Inbox<BusEvent>,
@@ -186,6 +201,15 @@ impl Taskbar {
                 running.push(app_id.clone());
             }
         }
+        for (window_app, app_id) in &windows {
+            let named = find_app(entries, window_app).is_some();
+            if named
+                && !app_id.starts_with(BANDE_APP_ID)
+                && let Some(pid) = window.app_pid(window_app)
+            {
+                self.processes.follow(app_id, pid);
+            }
+        }
         self.windows = windows;
         self.running = running;
     }
@@ -196,9 +220,10 @@ impl Taskbar {
     }
 
     fn describe(&mut self, app_id: &str, kept: bool) -> Option<TaskbarApp> {
-        let running = self.running.iter().any(|running| running == app_id);
+        let windowless = self.windowless(app_id);
+        let running = windowless || self.running.iter().any(|running| running == app_id);
         let entry = self.entry(app_id).cloned();
-        if kept && entry.is_none() && !running {
+        if entry.is_none() && (windowless || !running) {
             return None;
         }
         let name = app_name(self.apps.entries(), app_id);
@@ -214,6 +239,7 @@ impl Taskbar {
             icon,
             kept,
             running,
+            windowless,
         })
     }
 
@@ -222,12 +248,95 @@ impl Taskbar {
         for app_id in self.kept.clone() {
             apps.extend(self.describe(&app_id, true));
         }
-        for app_id in self.running.clone() {
-            if !self.kept.contains(&app_id) {
-                apps.extend(self.describe(&app_id, false));
+        let mut unkept = self.running.clone();
+        for app_id in self.processes.app_ids() {
+            if !unkept.iter().any(|known| known == app_id) {
+                unkept.push(app_id.to_owned());
             }
         }
+        unkept.retain(|app_id| !self.kept.contains(app_id));
+        for app_id in unkept {
+            apps.extend(self.describe(&app_id, false));
+        }
         self.state.borrow_mut().set_apps(apps, Instant::now());
+    }
+
+    fn windowless(&self, app_id: &str) -> bool {
+        self.processes.run(app_id) && !self.running.iter().any(|running| running == app_id)
+    }
+
+    fn quit(&mut self, window: &mut Window, app_id: &str, force: bool) {
+        if self.windowless(app_id) {
+            let signal = if force { Signal::KILL } else { Signal::TERM };
+            self.processes.signal(app_id, signal);
+            return;
+        }
+        if self.processes.run(app_id) {
+            let quitting = Quitting {
+                until: Instant::now() + QUIT_PATIENCE,
+                windows_closed: false,
+            };
+            self.quitting.insert(app_id.to_owned(), quitting);
+        }
+        let window_app = self.window_app(app_id);
+        let asked = if force {
+            window.force_quit_app(&window_app)
+        } else {
+            window.quit_app(&window_app)
+        };
+        if let Err(error) = asked {
+            tracing::warn!("cannot quit {app_id}: {error}");
+        }
+    }
+
+    fn windows_closed(&mut self, app_id: &str, now: Instant) {
+        self.state.borrow_mut().windows_closed(app_id);
+        if let Some(quitting) = self.quitting.get_mut(app_id) {
+            quitting.windows_closed = true;
+            quitting.until = now + QUIT_GRACE;
+        }
+    }
+
+    fn follow_windowless(&mut self, now: Instant) {
+        let due: Vec<String> = self
+            .quitting
+            .extract_if(|_, quitting| quitting.until <= now)
+            .filter(|(_, quitting)| quitting.windows_closed)
+            .map(|(app_id, _)| app_id)
+            .collect();
+        for app_id in due {
+            if self.windowless(&app_id) {
+                self.processes.signal(&app_id, Signal::TERM);
+            }
+        }
+        if let Some((app_id, _)) = self.reopening.take_if(|(_, at)| *at <= now)
+            && self.windowless(&app_id)
+        {
+            self.activate_status_item(&app_id);
+        }
+    }
+
+    fn activate_status_item(&self, app_id: &str) {
+        let Some(session) = self.session.clone() else {
+            return;
+        };
+        let pids = self.processes.pids(app_id);
+        let activated = thread::Builder::new()
+            .name("activate-status-item".to_owned())
+            .spawn(move || {
+                if let Err(error) = activate_item_of(&session, &pids) {
+                    tracing::warn!("cannot activate a status item of {pids:?}: {error}");
+                }
+            });
+        if let Err(error) = activated {
+            tracing::warn!("cannot activate the status item of {app_id}: {error}");
+        }
+    }
+
+    fn windowless_deadline(&self) -> Option<Instant> {
+        let quitting = self.quitting.values().map(|quitting| quitting.until);
+        let reopening = self.reopening.iter().map(|(_, at)| *at);
+        quitting.chain(reopening).min()
     }
 
     fn load_trash_icons(&mut self) {
@@ -300,7 +409,13 @@ impl Taskbar {
         };
         let token = window.activation_token(app_id).ok();
         match bande_xdg::launch(&entry, token.as_deref()) {
-            Ok(_) => self.state.borrow_mut().launching(app_id, Instant::now()),
+            Ok(_) => {
+                let now = Instant::now();
+                self.state.borrow_mut().launching(app_id, now);
+                if self.windowless(app_id) {
+                    self.reopening = Some((app_id.to_owned(), now + REOPEN_PATIENCE));
+                }
+            }
             Err(error) => tracing::warn!("cannot open {}: {error}", entry.name),
         }
     }
@@ -608,9 +723,14 @@ impl Taskbar {
                     MenuItem::new(&tr!("Show in Files"), MENU_SHOW).enabled(installed),
                 ]);
                 items.push(MenuItem::submenu(&tr!("Options"), options));
-                if running {
+                let windowless = self.windowless(app_id);
+                if running || windowless {
                     items.push(MenuItem::separator());
+                }
+                if running {
                     items.push(MenuItem::new(&tr!("Hide"), MENU_HIDE));
+                }
+                if running || windowless {
                     let force_quit = MenuItem::new(&tr!("Force Quit"), MENU_FORCE_QUIT);
                     items.push(if self.unresponsive.contains(app_id) {
                         force_quit
@@ -666,14 +786,10 @@ impl Taskbar {
                 }
             }
             (MenuTarget::App(app_id), MENU_QUIT) => {
-                if let Err(error) = window.quit_app(&self.window_app(&app_id)) {
-                    tracing::warn!("cannot quit {app_id}: {error}");
-                }
+                self.quit(window, &app_id, false);
             }
             (MenuTarget::App(app_id), MENU_FORCE_QUIT) => {
-                if let Err(error) = window.force_quit_app(&self.window_app(&app_id)) {
-                    tracing::warn!("cannot force {app_id} to quit: {error}");
-                }
+                self.quit(window, &app_id, true);
             }
             (MenuTarget::App(app_id), action) if action.starts_with(MENU_ACTION) => {
                 self.run_action(window, &app_id, &action[MENU_ACTION.len()..]);
@@ -912,12 +1028,15 @@ impl App for Taskbar {
                     .map(|(_, identity)| identity.clone())
                     .collect();
                 let before = std::mem::replace(&mut self.windowed, windowed);
-                for app_id in before
-                    .iter()
-                    .filter(|app_id| !self.windowed.contains(app_id))
-                {
-                    self.state.borrow_mut().windows_closed(app_id);
+                let now = Instant::now();
+                for app_id in &before {
+                    if !self.windowed.contains(app_id) {
+                        self.windows_closed(app_id, now);
+                    }
                 }
+                let windowed = &self.windowed;
+                self.quitting
+                    .retain(|app_id, _| before.contains(app_id) || !windowed.contains(app_id));
                 self.sync();
                 self.show_active();
                 window.request_redraw();
@@ -974,13 +1093,20 @@ impl App for Taskbar {
         if let Some(trash) = &self.trash {
             sources.extend([trash.watch.fd(), trash.checked.fd()]);
         }
+        sources.extend(self.processes.fds());
         sources
     }
 
     fn source_ready(&mut self, window: &mut Window, index: usize) {
         let watched = 1 + usize::from(self.apps.fd().is_some());
+        let processes = watched + if self.trash.is_some() { 2 } else { 0 };
         match index {
             0 => self.receive(window),
+            index if index >= processes => {
+                self.processes.ended(index - processes);
+                self.sync();
+                window.request_redraw();
+            }
             1 if watched == 2 => self.apps.read(),
             index if index == watched => {
                 if let Some(trash) = &mut self.trash {
@@ -1002,15 +1128,21 @@ impl App for Taskbar {
 
     fn deadline(&self) -> Option<Instant> {
         let watch = self.trash.as_ref().and_then(|trash| trash.watch.deadline());
-        [self.state.borrow().deadline(), watch, self.apps.deadline()]
-            .into_iter()
-            .flatten()
-            .min()
+        [
+            self.state.borrow().deadline(),
+            watch,
+            self.apps.deadline(),
+            self.windowless_deadline(),
+        ]
+        .into_iter()
+        .flatten()
+        .min()
     }
 
     fn tick(&mut self, window: &mut Window, now: Instant) {
         self.state.borrow_mut().tick(now);
         self.follow_installed_apps(window, now);
+        self.follow_windowless(now);
         if let Some(trash) = &mut self.trash
             && !trash.watch.take_changed(now).is_empty()
         {
@@ -1082,6 +1214,9 @@ impl Taskbar {
             active: None,
             unresponsive: Vec::new(),
             windowed: Vec::new(),
+            processes: AppProcesses::load(),
+            quitting: HashMap::new(),
+            reopening: None,
             keep: session.map(|session| bus::keep_writer(session.clone())),
             autostart: autostart_dir(),
             bus: inbox,

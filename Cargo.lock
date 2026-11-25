@@ -624,6 +624,7 @@ dependencies = [
  "bande-toolkit",
  "bande-xdg",
  "jiff",
+ "rustix 1.1.6",
  "tracing",
  "zbus",
 ]

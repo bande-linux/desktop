@@ -10,6 +10,7 @@ repository.workspace = true
 [dependencies]
 accesskit.workspace = true
 jiff.workspace = true
+rustix.workspace = true
 tracing.workspace = true
 bande-bluetooth.workspace = true
 bande-bus.workspace = true

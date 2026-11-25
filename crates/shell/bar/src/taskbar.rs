@@ -63,6 +63,7 @@ pub struct TaskbarApp {
     pub icon: Option<Image>,
     pub kept: bool,
     pub running: bool,
+    pub windowless: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -407,7 +408,7 @@ impl TaskbarState {
             self.attention.remove(&app_id);
         }
         for app in &apps {
-            if app.running {
+            if app.running && !app.windowless {
                 self.launching.remove(&app.app_id);
             }
         }

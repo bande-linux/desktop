@@ -36,6 +36,7 @@ const SMALL_TILES: f64 = 64.0;
 const MOST_COVERAGE: f64 = 128.0 * 1024.0 * 1024.0;
 const MOST_PAINTS: u32 = 1 << 20;
 const FARTHEST: f64 = 1e8;
+const FARTHEST_TEXEL: f64 = 4e6;
 const FARTHEST_ON_SCREEN: f64 = 1e12;
 const RELATIVE_TOLERANCE: f64 = 1e-6;
 const ANTIALIASING_PIXEL: f64 = 1.0;
@@ -307,10 +308,10 @@ fn image_op(
     }
 }
 
-fn drawable(on_screen: kurbo::Rect) -> bool {
-    [on_screen.x0, on_screen.y0, on_screen.x1, on_screen.y1]
+fn drawable(area: kurbo::Rect, farthest: f64) -> bool {
+    [area.x0, area.y0, area.x1, area.y1]
         .iter()
-        .all(|edge| edge.abs() <= FARTHEST_ON_SCREEN)
+        .all(|edge| edge.abs() <= farthest)
 }
 
 #[derive(Clone, Copy)]
@@ -329,7 +330,8 @@ impl Reach<'_> {
             .transform
             .transform_rect_bbox(bounds)
             .inflate(ANTIALIASING_PIXEL, ANTIALIASING_PIXEL);
-        drawable(on_screen) && self.drawn.iter().any(|drawn| drawn.overlaps(on_screen))
+        drawable(on_screen, FARTHEST_ON_SCREEN)
+            && self.drawn.iter().any(|drawn| drawn.overlaps(on_screen))
     }
 
     fn lies_within(self, shape: &Shape, inset: f32) -> bool {
@@ -780,6 +782,19 @@ impl<C: Canvas> Encoder<'_, C> {
         .touches(bounds)
     }
 
+    fn samples(&self, path: &BezPath, transform: Affine, placement: Affine) -> bool {
+        let to_texels = (transform * placement).inverse();
+        let on_screen = transform.transform_rect_bbox(path.control_box());
+        to_texels
+            .as_coeffs()
+            .iter()
+            .all(|coefficient| coefficient.abs() <= FARTHEST_TEXEL)
+            && self.drawn.iter().all(|drawn| {
+                let shown = drawn.intersect(on_screen);
+                drawable(to_texels.transform_rect_bbox(shown), FARTHEST_TEXEL)
+            })
+    }
+
     fn punch(&mut self, hole: &BezPath, base: Affine) {
         let reach = !self.isolated;
         if reach {
@@ -827,6 +842,7 @@ impl<C: Canvas> Encoder<'_, C> {
                     placement,
                 } => {
                     if !self.reaches(path.control_box(), transform)
+                        || !self.samples(path, transform, *placement)
                         || !self.budget.affords(path, transform, self.drawn)
                         || !self.budget.affords_paint()
                     {
@@ -873,7 +889,10 @@ impl<C: Canvas> Encoder<'_, C> {
                     self.canvas.set_transform(transform);
                 }
                 Op::Clip(clip) => {
-                    let shown = drawable(transform.transform_rect_bbox(clip.control_box()));
+                    let shown = drawable(
+                        transform.transform_rect_bbox(clip.control_box()),
+                        FARTHEST_ON_SCREEN,
+                    );
                     let clip = match shown {
                         true => clip.clone(),
                         false => BezPath::new(),
@@ -919,7 +938,7 @@ impl<C: Canvas> Encoder<'_, C> {
                     scaling,
                 } => {
                     let backing = rect(*frame);
-                    if !drawable(transform.transform_rect_bbox(backing)) {
+                    if !drawable(transform.transform_rect_bbox(backing), FARTHEST_ON_SCREEN) {
                         continue;
                     }
                     self.canvas.set_paint(color(Color::BLACK).into());
@@ -1036,6 +1055,7 @@ mod tests {
     #[test]
     fn absurd_sizes_and_places_are_drawn_or_left_out() {
         let mut text = TextSystem::new();
+        let image = Image::from_rgba(30, 20, vec![255; 2400]).expect("an image");
         let mut items = Vec::new();
         for value in [1e30, -1e30, 1e9, f32::INFINITY, f32::NEG_INFINITY, f32::NAN] {
             let shapes = [
@@ -1081,6 +1101,20 @@ mod tests {
                 origin: Point::new(0.0, 0.0),
                 paragraph: text.paragraph("absurd", style, Some(100.0), TextAlign::Start),
             });
+        }
+        for width in [1e-30, 1e-12, 1e-7, 1e-4, 1.0] {
+            for (x, y) in [(0.0, 0.0), (-1e7, 3.0), (2.5, 1e7), (-1e30, -1e30)] {
+                for rect in [
+                    Rect::new(-9.0, -9.0, 99.0, 99.0),
+                    Rect::new(5.0, 5.0, 1e-6, 40.0),
+                ] {
+                    items.push(Item::Tiles {
+                        rect,
+                        tile: Rect::new(x, y, width, width * 2.0),
+                        image: image.clone(),
+                    });
+                }
+            }
         }
         let scene = |width, height| Scene {
             width,

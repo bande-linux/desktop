@@ -1,4 +1,4 @@
-use bande_dav::{Client, Error, Local, Upsert, merge, sync_collection};
+use bande_dav::{Client, Conflict, Error, Local, Sent, Upsert, merge, sync_collection};
 use jiff::Timestamp;
 
 use crate::ical::CalendarObject;
@@ -13,6 +13,8 @@ pub struct Outcome {
     pub removed: Vec<String>,
     pub conflicts: Vec<String>,
     pub copies: Vec<Upsert>,
+    pub refused: Vec<(String, u16)>,
+    pub error: Option<Error>,
 }
 
 fn summary(data: &str) -> String {
@@ -28,8 +30,11 @@ fn summary(data: &str) -> String {
         .unwrap_or_default()
 }
 
-fn kept_copy(info: &CalendarInfo, data: &str) -> Option<Upsert> {
-    let mut object = CalendarObject::parse(data).ok()?.into_iter().next()?;
+fn kept_copy(info: &CalendarInfo, conflict: &Conflict) -> Option<Upsert> {
+    let mut object = CalendarObject::parse(&conflict.data)
+        .ok()?
+        .into_iter()
+        .next()?;
     let uid = new_uid();
     for event in &mut object.events {
         event.uid = uid.clone();
@@ -43,7 +48,11 @@ fn kept_copy(info: &CalendarInfo, data: &str) -> Option<Upsert> {
         href: href_for(info, &uid),
         etag: None,
         data: object.to_ics(Timestamp::now()),
-        pushed: None,
+        sent: Some(Sent {
+            pending: conflict.pending,
+            data: conflict.data.clone(),
+            taken: false,
+        }),
     })
 }
 
@@ -69,7 +78,7 @@ pub fn sync_calendar(client: &Client, calendar: &Calendar) -> Result<Outcome, Er
         calendar.info.ctag.as_deref(),
         calendar.info.sync_token.as_deref(),
         &items,
-    )?;
+    );
     Ok(Outcome {
         calendar: calendar.info.id.clone(),
         ctag: synced.ctag,
@@ -84,9 +93,15 @@ pub fn sync_calendar(client: &Client, calendar: &Calendar) -> Result<Outcome, Er
         copies: synced
             .conflicts
             .iter()
-            .filter(|conflict| conflict.pending == Pending::Update)
-            .filter_map(|conflict| kept_copy(&calendar.info, &conflict.data))
+            .filter(|conflict| conflict.pending != Pending::Delete)
+            .filter_map(|conflict| kept_copy(&calendar.info, conflict))
             .collect(),
+        refused: synced
+            .refused
+            .iter()
+            .map(|refused| (summary(&refused.data), refused.status))
+            .collect(),
+        error: synced.error,
     })
 }
 
@@ -111,12 +126,14 @@ pub fn subscription_outcome(info: &CalendarInfo, data: &str, alerts: bool) -> Op
                 href: format!("{}.ics", object.uid()),
                 etag: None,
                 data: object.to_ics(stamp),
-                pushed: None,
+                sent: None,
             })
             .collect(),
         removed: Vec::new(),
         conflicts: Vec::new(),
         copies: Vec::new(),
+        refused: Vec::new(),
+        error: None,
     })
 }
 

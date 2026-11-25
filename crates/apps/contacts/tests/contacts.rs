@@ -71,6 +71,8 @@ fn a_typed_contact_is_undone_and_redone_and_imported_duplicates_merge_into_one()
 
     click(&mut view, "New Contact");
     typed(&mut view, "Ann\tLindqvist");
+    click(&mut view, "Add Email");
+    typed(&mut view, "ann@fjord.example");
     click(&mut view, "Done");
     assert_eq!(listed(&mut view), ["Ann Lindqvist"]);
     view.command(UNDO);
@@ -88,6 +90,27 @@ fn a_typed_contact_is_undone_and_redone_and_imported_duplicates_merge_into_one()
     click(&mut view, "Merge Duplicates…");
     click(&mut view, "Merge");
     assert_eq!(listed(&mut view), ["Bo Ek", "Ann Lindqvist"]);
+
+    view.command(UNDO);
+    assert_eq!(listed(&mut view).len(), 4);
+    view.command(REDO);
+    assert_eq!(listed(&mut view), ["Bo Ek", "Ann Lindqvist"]);
+
+    let expanded = |view: &mut ContactsView| {
+        tree(view)
+            .into_iter()
+            .find_map(|(id, node)| Some((id, node.is_expanded()?)))
+    };
+    let (book, open) = expanded(&mut view).unwrap();
+    assert!(open);
+    view.ui().perform(&ActionRequest {
+        action: Action::Collapse,
+        target_tree: TreeId::ROOT,
+        target_node: book,
+        data: None,
+    });
+    view.refresh();
+    assert_eq!(expanded(&mut view).map(|(_, open)| open), Some(false));
 
     let kept = Library::load(dir.path().to_path_buf());
     let emails: Vec<String> = kept

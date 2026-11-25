@@ -17,6 +17,8 @@ fn deleted_on_the_server() -> Outcome {
         removed: vec![HREF.into()],
         conflicts: Vec::new(),
         copies: Vec::new(),
+        refused: Vec::new(),
+        error: None,
     }
 }
 

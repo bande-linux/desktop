@@ -42,7 +42,8 @@ views. Packaged as `bande-calendar`.
   Sync is incremental with `sync-token` (RFC 6578), falling back to ctag + etag listings on servers without it. Creates use
   `If-None-Match: *`, edits and deletes `If-Match`; when an edit meets a 412, the server's
   version stays and the local edit is kept beside it as a new event, and the sidebar says so.
-  Undo (Ctrl+Z) takes back a delete, a move or a change of length, and Redo (Shift+Ctrl+Z) does
+  An event the server refuses stays pending and is sent again at the next sync, while the others
+  sync. Undo (Ctrl+Z) takes back a delete, a move or a change of length, and Redo (Shift+Ctrl+Z) does
   it again: a deleted event comes back
   with its own UID at its own address (`If-None-Match: *`), so other clients see the same event
   return, and a moved one is written back with its earlier times.

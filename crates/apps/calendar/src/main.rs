@@ -634,6 +634,13 @@ impl CalendarApp {
         for reply in replies {
             match reply {
                 Reply::Synced(outcome) => {
+                    for (title, status) in &outcome.refused {
+                        self.errors.push(tr!(
+                            "The server did not accept “{title}” ({status}). Your change is kept on this computer and sent again at the next sync.",
+                            title = title.clone(),
+                            status = *status
+                        ));
+                    }
                     for title in apply(view.library_mut(), outcome, false) {
                         self.sync_again = true;
                         self.errors.push(tr!(

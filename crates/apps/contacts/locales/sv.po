@@ -127,6 +127,9 @@ msgstr "Mall"
 msgid "The picture is too large."
 msgstr "Bilden är för stor."
 
+msgid "The server did not accept {name} ({status}). Your change is kept on this computer and sent again at the next sync."
+msgstr "Servern tog inte emot {name} ({status}). Ändringen finns kvar på den här datorn och skickas igen vid nästa synkning."
+
 msgid "A contact changed on another device too"
 msgid_plural "Contacts changed on another device too"
 msgstr[0] "En kontakt ändrades också på en annan enhet"
@@ -416,6 +419,9 @@ msgstr "Dess kontakter tas bort från den här datorn och finns kvar på servern
 
 msgid "Remove"
 msgstr "Ta bort"
+
+msgid "And {count} more."
+msgstr "Och {count} till."
 
 msgid "“{name}” could not be synced"
 msgstr "”{name}” kunde inte synkas"

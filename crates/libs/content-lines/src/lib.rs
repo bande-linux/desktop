@@ -11,6 +11,8 @@ use rustix::fs::OFlags;
 
 /// The largest file [`read_file`] reads.
 pub const MAX_FILE_BYTES: u64 = 64 * 1024 * 1024;
+const BYTE_ORDER_MARK: char = '\u{feff}';
+const MAX_DEPTH: usize = 16;
 
 /// The text of an `.ics` or `.vcf` file someone handed over: only a regular file (a FIFO
 /// would hang) and at most [`MAX_FILE_BYTES`].
@@ -33,6 +35,9 @@ pub fn read_file(path: &Path) -> io::Result<String> {
     file.take(MAX_FILE_BYTES + 1).read_to_string(&mut text)?;
     if text.len() as u64 > MAX_FILE_BYTES {
         return Err(io::ErrorKind::FileTooLarge.into());
+    }
+    if text.starts_with(BYTE_ORDER_MARK) {
+        text.remove(0);
     }
     Ok(text)
 }
@@ -265,6 +270,7 @@ pub fn parse(text: &str) -> Result<Vec<Component>, ParseError> {
     for (number, line) in unfold(text).iter().enumerate() {
         let property = parse_line(line).ok_or(ParseError::Line(number + 1))?;
         match property.name.as_str() {
+            "BEGIN" if stack.len() >= MAX_DEPTH => return Err(ParseError::Line(number + 1)),
             "BEGIN" => stack.push(Component::new(&property.value.trim().to_ascii_uppercase())),
             "END" => {
                 let component = stack.pop().ok_or(ParseError::Line(number + 1))?;

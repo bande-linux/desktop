@@ -23,8 +23,9 @@ offline and in sync. Packaged as `bande-contacts`.
   View ▸ Refresh. Sync uses `sync-collection` (RFC 6578), else ctag and etags; contacts are
   fetched with `addressbook-multiget`. Creates use `If-None-Match: *`, edits and deletes
   `If-Match`: when an edit meets a contact changed elsewhere, the server's version stays and the
-  edit is kept as a second contact to merge. The title bar says Offline, or Not Synced with the
-  reason, Try Again and Server Settings….
+  edit is kept as a second contact to merge. A contact the server refuses stays pending and is sent
+  again at the next sync, while the others sync. The title bar says Offline, or Not Synced with the
+  reason and the contacts refused, Try Again and Server Settings….
 - **vCard.** 3.0 and 4.0 (and 2.1 with quoted-printable, kept as 3.0) through `bande-address-book`: folding,
   escaping, groups, and every property it does not edit kept as it was; an edit rewrites only the
   fields that changed. New contacts are vCard 3.0, which every CardDAV server takes. A card over
@@ -39,7 +40,8 @@ offline and in sync. Packaged as `bande-contacts`.
   `CATEGORIES`. Clicking an email address writes to it in Mail.
 - **Duplicates.** Contacts in one address book with the same name or an email address in common
   are offered for merging (Merge Duplicates… in the title bar and the Edit menu): every address,
-  number and note comes together in one.
+  number, note and property Contacts does not show comes together in one; a second birthday,
+  anniversary or gender stays in the card as `X-BDAY` and so on.
 - **Undo.** Ctrl+Z and Shift+Ctrl+Z take back and redo adding, changing, deleting, importing and
   merging; a deleted contact comes back at its own address.
 - **Files.** File ▸ Import…, a dropped `.vcf` file or `bande-contacts file.vcf` offers to import

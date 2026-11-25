@@ -94,6 +94,9 @@ msgstr "Visa"
 msgid "Updating…"
 msgstr "Uppdaterar…"
 
+msgid "The server did not accept “{title}” ({status}). Your change is kept on this computer and sent again at the next sync."
+msgstr "Servern tog inte emot ”{title}” ({status}). Ändringen finns kvar på den här datorn och skickas igen vid nästa synkning."
+
 msgid "“{title}” was changed elsewhere; both versions are kept."
 msgstr "”{title}” ändrades på annat håll. Båda versionerna har sparats."
 

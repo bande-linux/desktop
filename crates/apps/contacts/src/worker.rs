@@ -37,7 +37,10 @@ pub enum Job {
 
 #[derive(Debug)]
 pub enum Reply {
-    Synced(Outcome),
+    Synced {
+        account: String,
+        outcome: Outcome,
+    },
     Failed {
         account: String,
         error: Error,
@@ -71,7 +74,16 @@ fn run(job: Job, passwords: &mut Passwords, outbox: &Outbox<Reply>) {
                     .map(|password| Credentials { user, password });
                 let client = Client::new(Service::CardDav, credentials.as_ref());
                 match sync_book(&client, &book) {
-                    Ok(outcome) => reply(Reply::Synced(outcome)),
+                    Ok(mut outcome) => {
+                        let error = outcome.error.take();
+                        reply(Reply::Synced {
+                            account: account.clone(),
+                            outcome,
+                        });
+                        if let Some(error) = error {
+                            reply(Reply::Failed { account, error });
+                        }
+                    }
                     Err(error) => reply(Reply::Failed { account, error }),
                 }
             }

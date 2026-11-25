@@ -22,14 +22,28 @@ pub struct Local<'a> {
     pub pending: Option<Pending>,
 }
 
-/// A resource as the server has it now; `pushed` is the local data that was sent, if any, so
-/// that an edit made while syncing is not overwritten.
+/// The local change that was sent for a resource, and whether the server took it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Sent {
+    pub pending: Pending,
+    pub data: String,
+    pub taken: bool,
+}
+
+impl Sent {
+    fn still<T: Cached>(&self, item: &T) -> bool {
+        item.pending() == Some(self.pending) && item.data() == self.data
+    }
+}
+
+/// A resource as the server has it now; `sent` is the local change that was sent, if any, so
+/// that one made while syncing is not overwritten.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Upsert {
     pub href: String,
     pub etag: Option<String>,
     pub data: String,
-    pub pushed: Option<String>,
+    pub sent: Option<Sent>,
 }
 
 /// A local change that the server refused because the resource changed there first
@@ -41,6 +55,17 @@ pub struct Conflict {
     pub pending: Pending,
 }
 
+/// A local change that the server answered with `status` and did not take. It stays pending
+/// and is sent again at the next sync.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Refused {
+    pub href: String,
+    pub data: String,
+    pub status: u16,
+}
+
+/// What a sync did. With an `error` it stopped early: what it did until then still holds, and
+/// the tags are those from before, so the next sync finds the rest.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Outcome {
     pub ctag: Option<String>,
@@ -48,27 +73,41 @@ pub struct Outcome {
     pub upserts: Vec<Upsert>,
     pub removed: Vec<String>,
     pub conflicts: Vec<Conflict>,
+    pub refused: Vec<Refused>,
+    pub error: Option<Error>,
 }
 
-fn conflict(client: &Client, local: &Local<'_>, outcome: &mut Outcome) -> Result<(), Error> {
-    if let Some(pending) = local.pending {
-        outcome.conflicts.push(Conflict {
-            href: local.href.to_owned(),
-            data: local.data.to_owned(),
-            pending,
-        });
-    }
+fn conflict(
+    client: &Client,
+    local: &Local<'_>,
+    pending: Pending,
+    outcome: &mut Outcome,
+) -> Result<(), Error> {
     match client.get(local.href) {
         Ok(Resource { etag, data, .. }) => outcome.upserts.push(Upsert {
             href: local.href.to_owned(),
             etag,
             data,
-            pushed: Some(local.data.to_owned()),
+            sent: Some(Sent {
+                pending,
+                data: local.data.to_owned(),
+                taken: false,
+            }),
         }),
+        Err(Error::Status { status: 404, .. }) if pending == Pending::Create => return Ok(()),
         Err(Error::Status { status: 404, .. }) => outcome.removed.push(local.href.to_owned()),
         Err(error) => return Err(error),
     }
+    outcome.conflicts.push(Conflict {
+        href: local.href.to_owned(),
+        data: local.data.to_owned(),
+        pending,
+    });
     Ok(())
+}
+
+fn refuses_one_resource(status: u16) -> bool {
+    !matches!(status, 408 | 429 | 502..=504) && status >= 400
 }
 
 fn push(client: &Client, items: &[Local<'_>], outcome: &mut Outcome) -> Result<(), Error> {
@@ -100,10 +139,21 @@ fn push(client: &Client, items: &[Local<'_>], outcome: &mut Outcome) -> Result<(
                 href: local.href.to_owned(),
                 etag,
                 data: local.data.to_owned(),
-                pushed: Some(local.data.to_owned()),
+                sent: Some(Sent {
+                    pending,
+                    data: local.data.to_owned(),
+                    taken: true,
+                }),
             }),
             Ok(None) => outcome.removed.push(local.href.to_owned()),
-            Err(Error::PreconditionFailed) => conflict(client, local, outcome)?,
+            Err(Error::PreconditionFailed) => conflict(client, local, pending, outcome)?,
+            Err(Error::Status { status, .. }) if refuses_one_resource(status) => {
+                outcome.refused.push(Refused {
+                    href: local.href.to_owned(),
+                    data: local.data.to_owned(),
+                    status,
+                });
+            }
             Err(error) => return Err(error),
         }
     }
@@ -165,7 +215,7 @@ fn fetch_changed(
                 href,
                 etag: resource.etag,
                 data: resource.data,
-                pushed: None,
+                sent: None,
             }),
         }
     }
@@ -195,14 +245,31 @@ pub fn sync_collection(
     ctag: Option<&str>,
     sync_token: Option<&str>,
     items: &[Local<'_>],
-) -> Result<Outcome, Error> {
+) -> Outcome {
     let mut outcome = Outcome {
         ctag: ctag.map(str::to_owned),
         sync_token: sync_token.map(str::to_owned),
         ..Outcome::default()
     };
-    push(client, items, &mut outcome)?;
-    let known = known_etags(items, &outcome);
+    outcome.error = push(client, items, &mut outcome)
+        .and_then(|()| pull(client, url, items, &mut outcome))
+        .err();
+    let refused: Vec<&String> = outcome
+        .refused
+        .iter()
+        .map(|refused| &refused.href)
+        .collect();
+    outcome.removed.retain(|href| !refused.contains(&href));
+    outcome
+}
+
+fn pull(
+    client: &Client,
+    url: &str,
+    items: &[Local<'_>],
+    outcome: &mut Outcome,
+) -> Result<(), Error> {
+    let known = known_etags(items, outcome);
     let (ctag, token) = client.collection_tags(url)?;
     let has_pending = items.iter().any(|local| local.pending.is_some());
     if token.is_some() && token != outcome.sync_token {
@@ -219,26 +286,22 @@ pub fn sync_collection(
             None => (client.sync_collection(url, None)?, true),
         };
         if full {
-            forget_unlisted(
-                delta.changed.iter().map(|(href, _)| href),
-                &known,
-                &mut outcome,
-            );
+            forget_unlisted(delta.changed.iter().map(|(href, _)| href), &known, outcome);
         }
         for href in &delta.removed {
             if let Some(mine) = known.keys().find(|known| same_resource(known, href)) {
                 outcome.removed.push(mine.clone());
             }
         }
-        fetch_changed(client, url, delta.changed, &known, &mut outcome)?;
+        fetch_changed(client, url, delta.changed, &known, outcome)?;
         outcome.sync_token = delta.token.or(token);
     } else if token.is_none() && (ctag.is_none() || ctag != outcome.ctag || has_pending) {
         let listed = client.etags(url)?;
-        forget_unlisted(listed.iter().map(|(href, _)| href), &known, &mut outcome);
-        fetch_changed(client, url, listed, &known, &mut outcome)?;
+        forget_unlisted(listed.iter().map(|(href, _)| href), &known, outcome);
+        fetch_changed(client, url, listed, &known, outcome)?;
     }
     outcome.ctag = ctag;
-    Ok(outcome)
+    Ok(())
 }
 
 /// A resource of an app's offline copy, which [`merge`] updates from a sync's outcome.
@@ -252,32 +315,52 @@ pub trait Cached: Sized {
 }
 
 /// Applies what a sync found to `items`: removes what the server removed, takes the server's
-/// version of what changed unless it was edited again while the sync ran, and adds `copies`
-/// (local edits kept beside a conflict) as new resources to push.
+/// version of what changed, and adds `copies` (local edits kept beside a conflict) as new
+/// resources to push. What was edited or deleted while the sync ran stays a pending change.
 pub fn merge<T: Cached>(
     items: &mut Vec<T>,
     removed: &[String],
     upserts: Vec<Upsert>,
     copies: Vec<Upsert>,
 ) {
-    items.retain(|item| {
-        item.pending() == Some(Pending::Create) || !removed.iter().any(|href| href == item.href())
+    let kept = |item: &T| {
+        copies
+            .iter()
+            .any(|copy| copy.sent.as_ref().is_some_and(|sent| sent.still(item)))
+    };
+    items.retain_mut(|item| {
+        if !removed.iter().any(|href| href == item.href()) {
+            return true;
+        }
+        match item.pending() {
+            Some(Pending::Create) => true,
+            Some(Pending::Update) if !kept(item) => {
+                item.set_etag(None);
+                item.set_pending(Some(Pending::Create));
+                true
+            }
+            _ => false,
+        }
     });
     for upsert in upserts {
+        let taken = upsert.sent.as_ref().is_some_and(|sent| sent.taken);
         match items.iter_mut().find(|item| item.href() == upsert.href) {
             Some(item) => {
-                let edited_meanwhile =
-                    item.pending().is_some() && upsert.pushed.as_deref() != Some(item.data());
-                if !edited_meanwhile {
+                let changed_meanwhile = item.pending().is_some()
+                    && !upsert.sent.as_ref().is_some_and(|sent| sent.still(item));
+                if !changed_meanwhile {
                     *item = T::fresh(upsert.href, upsert.etag, upsert.data, None);
-                } else {
+                } else if taken {
                     item.set_etag(upsert.etag);
                     if item.pending() == Some(Pending::Create) {
                         item.set_pending(Some(Pending::Update));
                     }
                 }
             }
-            None => items.push(T::fresh(upsert.href, upsert.etag, upsert.data, None)),
+            None => {
+                let pending = taken.then_some(Pending::Delete);
+                items.push(T::fresh(upsert.href, upsert.etag, upsert.data, pending));
+            }
         }
     }
     items.extend(

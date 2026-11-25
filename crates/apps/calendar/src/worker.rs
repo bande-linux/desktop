@@ -131,6 +131,10 @@ fn run(job: Job, passwords: &mut Passwords, reply: &mut dyn FnMut(Reply)) {
     match job {
         Job::Sync(calendars) => {
             for (kind, account, calendar) in calendars {
+                let failed = |error: Error| Reply::Failed {
+                    calendar: calendar.info.id.clone(),
+                    error: error.to_string(),
+                };
                 let result = match &kind {
                     AccountKind::CalDav { user, .. } => {
                         let credentials = passwords.get(&account).map(|password| Credentials {
@@ -141,13 +145,19 @@ fn run(job: Job, passwords: &mut Passwords, reply: &mut dyn FnMut(Reply)) {
                             &Client::new(Service::CalDav, credentials.as_ref()),
                             &calendar,
                         )
-                        .map(Reply::Synced)
+                        .and_then(|mut outcome| {
+                            let error = outcome.error.take();
+                            reply(Reply::Synced(outcome));
+                            error.map_or(Ok(None), Err)
+                        })
                     }
                     AccountKind::Subscription { url, .. } => Client::new(Service::CalDav, None)
                         .get(&http_url(url))
-                        .map(|resource| Reply::Refreshed {
-                            calendar: calendar.info.id.clone(),
-                            data: resource.data,
+                        .map(|resource| {
+                            Some(Reply::Refreshed {
+                                calendar: calendar.info.id.clone(),
+                                data: resource.data,
+                            })
                         }),
                     AccountKind::Local => continue,
                 };
@@ -156,10 +166,9 @@ fn run(job: Job, passwords: &mut Passwords, reply: &mut dyn FnMut(Reply)) {
                         account: account.clone(),
                     });
                 }
-                reply(result.unwrap_or_else(|error: Error| Reply::Failed {
-                    calendar: calendar.info.id.clone(),
-                    error: error.to_string(),
-                }));
+                if let Some(answer) = result.unwrap_or_else(|error| Some(failed(error))) {
+                    reply(answer);
+                }
             }
             reply(Reply::Finished);
         }

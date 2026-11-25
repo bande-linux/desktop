@@ -98,7 +98,7 @@ impl Cached for Stored {
 
 impl Stored {
     pub fn new(href: String, etag: Option<String>, data: String, pending: Option<Pending>) -> Self {
-        let card = parse_one(&data);
+        let card = parse_one(&href, &data);
         Self {
             href,
             etag,
@@ -115,8 +115,13 @@ impl Stored {
     }
 }
 
-fn parse_one(data: &str) -> Option<Card> {
-    parse_cards(data).cards.into_iter().next()
+fn parse_one(href: &str, data: &str) -> Option<Card> {
+    let mut card = parse_cards(data).cards.into_iter().next()?;
+    if card.uid().is_empty() {
+        let name = href.rsplit('/').next().unwrap_or(href);
+        card.set_uid(name.strip_suffix(".vcf").unwrap_or(name));
+    }
+    Some(card)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -227,7 +232,7 @@ impl Library {
             .collect();
         for book in &mut books {
             for stored in &mut book.cards {
-                stored.card = parse_one(&stored.data);
+                stored.card = parse_one(&stored.href, &stored.data);
             }
         }
         books.sort_by(|a, b| a.info.name.cmp(&b.info.name));
@@ -423,6 +428,11 @@ impl Library {
     /// Stores `card` in `book`, replacing the card with its UID, as a pending change for a
     /// CardDAV book. Returns where it is, or nothing for a read-only book.
     pub fn put_card(&mut self, book: usize, card: Card) -> Option<usize> {
+        let at = self.books.get(book)?.find(card.uid());
+        self.put_card_at(book, at, card)
+    }
+
+    fn put_card_at(&mut self, book: usize, at: Option<usize>, card: Card) -> Option<usize> {
         let info = self.books.get(book)?.info.clone();
         if info.read_only {
             return None;
@@ -430,9 +440,9 @@ impl Library {
         let local = self.local(book);
         let data = card.to_vcf();
         let target = self.books.get_mut(book)?;
-        let index = match target.find(card.uid()) {
+        let index = match at {
             Some(index) => {
-                let stored = &mut target.cards[index];
+                let stored = target.cards.get_mut(index)?;
                 stored.pending = match (local, stored.pending) {
                     (true, _) => None,
                     (false, Some(Pending::Create)) => Some(Pending::Create),
@@ -459,12 +469,12 @@ impl Library {
         Some(index)
     }
 
-    /// Changes the contact at `found`, keeping every property the edit leaves alone.
-    pub fn edit(&mut self, found: &Found, contact: &Contact) -> Option<usize> {
+    /// Changes what differs between `before` and `contact` in the contact at `found`, keeping
+    /// every property the edit leaves alone, also those a sync changed since `before` was read.
+    pub fn edit(&mut self, found: &Found, before: &Contact, contact: &Contact) -> Option<usize> {
         let mut card = self.card(found)?.clone();
-        let before = card.contact();
-        card.apply(&before, contact);
-        self.put_card(found.book, card)
+        card.apply(before, contact);
+        self.put_card_at(found.book, Some(found.card), card)
     }
 
     /// Removes the card at `found`; returns its href and data for Undo.
@@ -506,7 +516,7 @@ impl Library {
                     (false, _) => Some(Pending::Update),
                 };
                 stored.data = data;
-                stored.card = parse_one(&stored.data);
+                stored.card = parse_one(&stored.href, &stored.data);
                 index
             }
             None => {

@@ -5,8 +5,8 @@ use bande_address_book::vcard::{Address, Birthday, Contact, Label, Labelled, Pho
 use bande_datetime::DateFormats as Formats;
 use bande_l10n::tr;
 use bande_toolkit::ui::{
-    Axis, Button, Form, FormLine, PopUpButton, ScrollView, Stack, TextField, TextView, Ui, Widget,
-    WidgetId,
+    Axis, Button, Form, FormLine, PopUpButton, ScrollState, ScrollView, Stack, TextField, TextView,
+    Ui, Widget, WidgetId,
 };
 
 use crate::widgets::{Avatar, Pair};
@@ -84,6 +84,7 @@ pub struct Editor {
     group_field: WidgetId,
     note: WidgetId,
     book_field: Option<WidgetId>,
+    scroll: Rc<RefCell<ScrollState>>,
 }
 
 fn boxed(widget: impl Widget + 'static) -> Box<dyn Widget> {
@@ -139,6 +140,7 @@ impl Editor {
             group_field: WidgetId::next(),
             note: WidgetId::next(),
             book_field: None,
+            scroll: Rc::default(),
         }
     }
 
@@ -308,7 +310,7 @@ impl Editor {
             ],
         )
         .trailing();
-        boxed(ScrollView::new(Stack::new(
+        let content = Stack::new(
             Axis::Vertical,
             SPACING,
             PADDING,
@@ -317,11 +319,23 @@ impl Editor {
                 boxed(Form::new(&tr!("Contact"), lines)),
                 boxed(buttons),
             ],
-        )))
+        );
+        boxed(ScrollView::shared(boxed(content), Rc::clone(&self.scroll)))
     }
 
     pub fn given_field(&self) -> WidgetId {
         self.given
+    }
+
+    /// The first field of the email, phone or address that was added last.
+    pub fn added_field(&self, add: Add) -> WidgetId {
+        let last = |fields: &[(WidgetId, WidgetId)]| fields.last().map(|(_, text)| *text);
+        match add {
+            Add::Email => last(&self.emails),
+            Add::Phone => last(&self.phones),
+            Add::Address => self.addresses.last().map(|address| address.street),
+        }
+        .unwrap_or(self.given)
     }
 
     /// The contact as the fields have it now.

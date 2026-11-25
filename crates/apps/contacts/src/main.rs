@@ -67,6 +67,7 @@ impl View for Pane {
         });
         self.0.set_full_screen(full_screen);
         let scene = View::scene(self.0.ui(), window);
+        self.0.laid_out();
         window.set_header(self.0.header());
         scene
     }
@@ -407,10 +408,20 @@ impl Contacts {
 
     fn reply(&mut self, cx: &mut Cx<Self>, reply: Reply) {
         match reply {
-            Reply::Synced(outcome) => {
+            Reply::Synced { account, outcome } => {
                 let Some(view) = self.view(cx) else {
                     return;
                 };
+                for (name, status) in &outcome.refused {
+                    view.status.failed.push((
+                        account.clone(),
+                        tr!(
+                            "The server did not accept {name} ({status}). Your change is kept on this computer and sent again at the next sync.",
+                            name = name.clone(),
+                            status = *status
+                        ),
+                    ));
+                }
                 let conflicts = apply(&mut view.library, outcome);
                 view.refresh();
                 if !conflicts.is_empty() {
@@ -425,6 +436,7 @@ impl Contacts {
                             names = conflicts.join(", ")
                         ),
                     );
+                    self.again = true;
                 }
             }
             Reply::Failed { account, error } => {

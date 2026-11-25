@@ -1,4 +1,7 @@
-use bande_dav::{Client, Error, Local, Pending, Upsert, href_for, merge, new_uid, sync_collection};
+use bande_dav::{
+    Client, Conflict, Error, Local, Pending, Sent, Upsert, href_for, merge, new_uid,
+    sync_collection,
+};
 
 use crate::store::{Book, Library};
 use crate::vcard::{display_name, parse_cards};
@@ -12,6 +15,8 @@ pub struct Outcome {
     pub removed: Vec<String>,
     pub conflicts: Vec<String>,
     pub copies: Vec<Upsert>,
+    pub refused: Vec<(String, u16)>,
+    pub error: Option<Error>,
 }
 
 fn name_of(data: &str) -> String {
@@ -22,15 +27,19 @@ fn name_of(data: &str) -> String {
         .unwrap_or_default()
 }
 
-fn kept_copy(book: &Book, data: &str) -> Option<Upsert> {
-    let mut card = parse_cards(data).cards.into_iter().next()?;
+fn kept_copy(book: &Book, conflict: &Conflict) -> Option<Upsert> {
+    let mut card = parse_cards(&conflict.data).cards.into_iter().next()?;
     let uid = new_uid();
     card.set_uid(&uid);
     Some(Upsert {
         href: href_for(book.info.url.as_deref(), &uid, "vcf"),
         etag: None,
         data: card.to_vcf(),
-        pushed: None,
+        sent: Some(Sent {
+            pending: conflict.pending,
+            data: conflict.data.clone(),
+            taken: false,
+        }),
     })
 }
 
@@ -59,7 +68,7 @@ pub fn sync_book(client: &Client, book: &Book) -> Result<Outcome, Error> {
         book.info.ctag.as_deref(),
         book.info.sync_token.as_deref(),
         &items,
-    )?;
+    );
     Ok(Outcome {
         book: book.info.id.clone(),
         ctag: synced.ctag,
@@ -74,9 +83,15 @@ pub fn sync_book(client: &Client, book: &Book) -> Result<Outcome, Error> {
         copies: synced
             .conflicts
             .iter()
-            .filter(|conflict| conflict.pending == Pending::Update)
-            .filter_map(|conflict| kept_copy(book, &conflict.data))
+            .filter(|conflict| conflict.pending != Pending::Delete)
+            .filter_map(|conflict| kept_copy(book, conflict))
             .collect(),
+        refused: synced
+            .refused
+            .iter()
+            .map(|refused| (name_of(&refused.data), refused.status))
+            .collect(),
+        error: synced.error,
     })
 }
 

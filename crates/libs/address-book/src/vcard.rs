@@ -2,12 +2,25 @@ use bande_content_lines::{
     Component, Property, escape, parse, split_components, split_list, unescape,
 };
 use base64::Engine;
+use std::collections::HashMap;
 
 const MAX_CARD: usize = 8 << 20;
 const MAX_PROPERTIES: usize = 4096;
 const MAX_CARDS: usize = 100_000;
 const MAX_PHOTO: usize = 4 << 20;
 const MAX_VALUES: usize = 256;
+const OWN_PROPERTIES: [&str; 9] = [
+    "VERSION",
+    "PRODID",
+    "UID",
+    "REV",
+    "KIND",
+    "FN",
+    "N",
+    "NOTE",
+    "CATEGORIES",
+];
+const ONCE_PER_CARD: [&str; 5] = ["ANNIVERSARY", "BDAY", "CLASS", "GENDER", "SORT-STRING"];
 const PRODID: &str = "-//Bande//Contacts//EN";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -177,13 +190,21 @@ fn chunks(text: &str) -> (Vec<String>, usize) {
     let mut skipped = 0;
     let mut current: Option<String> = None;
     let mut depth = 0usize;
+    let mut nests = false;
     for line in text.split("\r\n") {
-        let upper = line.trim().to_ascii_uppercase();
+        let upper = line.trim_end().to_ascii_uppercase();
         if upper == "BEGIN:VCARD" {
+            if depth > 0 && !nests {
+                skipped += usize::from(current.take().is_some());
+                depth = 0;
+            }
             depth += 1;
             if depth == 1 {
                 current = Some(String::new());
             }
+        }
+        if !upper.is_empty() {
+            nests = upper.starts_with("AGENT");
         }
         if let Some(card) = current.as_mut() {
             card.push_str(line);
@@ -205,6 +226,7 @@ fn chunks(text: &str) -> (Vec<String>, usize) {
             }
         }
     }
+    skipped += usize::from(current.is_some());
     (found, skipped)
 }
 
@@ -282,6 +304,47 @@ fn label_of(property: &Property) -> Label {
 
 fn preferred(property: &Property) -> bool {
     types(property).any(|kind| kind == "pref") || property.param("PREF") == Some("1")
+}
+
+fn labelled_of(property: &Property) -> Labelled {
+    let value = unescape(&property.value);
+    let scheme = match property.name.as_str() {
+        "TEL" => "tel:",
+        _ => "mailto:",
+    };
+    Labelled {
+        label: label_of(property),
+        value: value
+            .strip_prefix(scheme)
+            .unwrap_or(&value)
+            .trim()
+            .to_owned(),
+    }
+}
+
+fn address_of(property: &Property) -> Address {
+    let parts = split_components(&property.value);
+    Address {
+        label: label_of(property),
+        street: (0..=2)
+            .map(|index| component_text(&parts, index))
+            .filter(|part| !part.is_empty())
+            .collect::<Vec<_>>()
+            .join("\n"),
+        locality: component_text(&parts, 3),
+        region: component_text(&parts, 4),
+        code: component_text(&parts, 5),
+        country: component_text(&parts, 6),
+    }
+}
+
+fn member_of(property: &Property) -> String {
+    let value = unescape(&property.value);
+    value
+        .strip_prefix("urn:uuid:")
+        .unwrap_or(&value)
+        .trim()
+        .to_owned()
 }
 
 fn label_type(label: Label, phone: bool) -> Option<&'static str> {
@@ -377,6 +440,74 @@ fn decode_photo(property: &Property) -> Option<Photo> {
     Some(Photo { mime, bytes })
 }
 
+fn compared(property: &Property) -> String {
+    let text = unescape(&property.value).trim().to_owned();
+    match property.name.as_str() {
+        "EMAIL" => text.to_lowercase().trim_start_matches("mailto:").to_owned(),
+        "TEL" => match digits(&text) {
+            digits if digits.is_empty() => text,
+            digits => digits,
+        },
+        "BDAY" => parse_birthday(&text).map_or(text, birthday_text),
+        "ADR" | "ORG" => split_components(property.value.trim())
+            .into_iter()
+            .map(|part| unescape(part).trim().to_lowercase())
+            .collect::<Vec<_>>()
+            .join(";")
+            .trim_matches(';')
+            .to_owned(),
+        _ => text,
+    }
+}
+
+fn digits(text: &str) -> String {
+    text.chars().filter(char::is_ascii_digit).collect()
+}
+
+fn merged_notes(card: &Card, other: &Card) -> String {
+    let mut notes: Vec<String> = Vec::new();
+    for property in card
+        .component
+        .all("NOTE")
+        .chain(other.component.all("NOTE"))
+    {
+        let note = unescape(&property.value).trim().to_owned();
+        if !note.is_empty() && !notes.contains(&note) {
+            notes.push(note);
+        }
+    }
+    notes.join("\n\n")
+}
+
+fn merge_fields(merged: &mut Contact, theirs: &Contact) {
+    let name = &mut merged.name;
+    if *name == Name::default() {
+        if theirs.name != Name::default() {
+            merged.name = theirs.name.clone();
+            merged.formatted = theirs.formatted.clone();
+        }
+    } else if name.given.eq_ignore_ascii_case(&theirs.name.given)
+        || name.family.eq_ignore_ascii_case(&theirs.name.family)
+    {
+        for (mine, theirs) in [
+            (&mut name.given, &theirs.name.given),
+            (&mut name.family, &theirs.name.family),
+            (&mut name.additional, &theirs.name.additional),
+            (&mut name.prefix, &theirs.name.prefix),
+            (&mut name.suffix, &theirs.name.suffix),
+        ] {
+            if mine.is_empty() {
+                mine.clone_from(theirs);
+            }
+        }
+    }
+    for category in &theirs.categories {
+        if !merged.categories.contains(category) {
+            merged.categories.push(category.clone());
+        }
+    }
+}
+
 impl Card {
     fn read(component: Component) -> Self {
         let mut card = Self {
@@ -459,28 +590,27 @@ impl Card {
             .filter(|property| {
                 property.name == "MEMBER" || property.name == "X-ADDRESSBOOKSERVER-MEMBER"
             })
-            .map(|property| {
-                let value = unescape(&property.value);
-                value
-                    .strip_prefix("urn:uuid:")
-                    .unwrap_or(&value)
-                    .trim()
-                    .to_owned()
-            })
+            .map(member_of)
             .take(MAX_PROPERTIES)
             .collect()
     }
 
-    /// Sets the members of a group card to `uids`, in the property the card already uses.
+    /// Sets the members of a group card to `uids`, keeping those it has as they are written.
     pub fn set_members(&mut self, uids: &[String]) {
         let name = match self.version() {
             Version::V4 => "MEMBER",
             Version::V3 => "X-ADDRESSBOOKSERVER-MEMBER",
         };
+        let mut missing: Vec<&String> = uids.iter().collect();
         self.component.properties.retain(|property| {
-            property.name != "MEMBER" && property.name != "X-ADDRESSBOOKSERVER-MEMBER"
+            if property.name != "MEMBER" && property.name != "X-ADDRESSBOOKSERVER-MEMBER" {
+                return true;
+            }
+            let member = member_of(property);
+            missing.retain(|uid| **uid != member);
+            uids.contains(&member)
         });
-        for uid in uids {
+        for uid in missing {
             self.component
                 .push(Property::new(name, format!("urn:uuid:{}", escape(uid))));
         }
@@ -523,26 +653,12 @@ impl Card {
         let n: Vec<&str> = n.iter().map(String::as_str).collect();
         let org = parts("ORG");
         let org: Vec<&str> = org.iter().map(String::as_str).collect();
-        let labelled = |name: &str, strip: &str| {
+        let labelled = |name: &str| {
             let mut found: Vec<(bool, Labelled)> = self
                 .component
                 .all(name)
                 .take(MAX_VALUES)
-                .map(|property| {
-                    let value = unescape(&property.value);
-                    let value = value
-                        .strip_prefix(strip)
-                        .unwrap_or(&value)
-                        .trim()
-                        .to_owned();
-                    (
-                        preferred(property),
-                        Labelled {
-                            label: label_of(property),
-                            value,
-                        },
-                    )
-                })
+                .map(|property| (preferred(property), labelled_of(property)))
                 .filter(|(_, labelled)| !labelled.value.is_empty())
                 .collect();
             found.sort_by_key(|(preferred, _)| !preferred);
@@ -563,27 +679,13 @@ impl Card {
                 .collect::<Vec<_>>()
                 .join(", "),
             title: self.text("TITLE"),
-            emails: labelled("EMAIL", "mailto:"),
-            phones: labelled("TEL", "tel:"),
+            emails: labelled("EMAIL"),
+            phones: labelled("TEL"),
             addresses: self
                 .component
                 .all("ADR")
                 .take(MAX_VALUES)
-                .map(|property| {
-                    let parts = split_components(&property.value);
-                    Address {
-                        label: label_of(property),
-                        street: [component_text(&parts, 1), component_text(&parts, 2)]
-                            .into_iter()
-                            .filter(|part| !part.is_empty())
-                            .collect::<Vec<_>>()
-                            .join("\n"),
-                        locality: component_text(&parts, 3),
-                        region: component_text(&parts, 4),
-                        code: component_text(&parts, 5),
-                        country: component_text(&parts, 6),
-                    }
-                })
+                .map(address_of)
                 .filter(|address| !address.is_empty())
                 .collect(),
             birthday: self.component.property("BDAY").and_then(|property| {
@@ -615,6 +717,10 @@ impl Card {
             .iter()
             .filter(|property| ours(property))
             .filter_map(|property| property.group.clone())
+            .filter(|group| {
+                !new.iter()
+                    .any(|property| property.group.as_ref() == Some(group))
+            })
             .collect();
         let doomed = |property: &Property| {
             ours(property)
@@ -658,6 +764,13 @@ impl Card {
             .iter()
             .filter(|labelled| !labelled.value.trim().is_empty())
             .map(|labelled| {
+                let same = self
+                    .component
+                    .all(name)
+                    .find(|property| labelled_of(property) == *labelled);
+                if let Some(same) = same {
+                    return same.clone();
+                }
                 let mut property = Property::new(name, escape(labelled.value.trim()));
                 if let Some(kind) = label_type(labelled.label, phone) {
                     property = property.with_param("TYPE", kind);
@@ -726,6 +839,13 @@ impl Card {
                 .iter()
                 .filter(|address| !address.is_empty())
                 .map(|address| {
+                    let same = self
+                        .component
+                        .all("ADR")
+                        .find(|property| address_of(property) == *address);
+                    if let Some(same) = same {
+                        return same.clone();
+                    }
                     let street = address.street.replace('\n', ", ");
                     let value = structured(&[
                         "",
@@ -785,6 +905,87 @@ impl Card {
             self.replace(&["CATEGORIES"], new);
         }
         self.replace(&["REV"], vec![Property::new("REV", revision())]);
+    }
+
+    /// Takes everything `other` says that this card does not: its addresses and numbers as
+    /// they are written there, its notes, its categories and every property Contacts does not
+    /// show. The UID and the name stay this card's, unless it has no name.
+    pub fn absorb(&mut self, other: &Self) {
+        let before = self.contact();
+        let mut merged = before.clone();
+        merge_fields(&mut merged, &other.details());
+        merged.note = merged_notes(self, other);
+        self.apply(&before, &merged);
+        let (labels, others): (Vec<&Property>, Vec<&Property>) = other
+            .component
+            .properties
+            .iter()
+            .partition(|property| property.name == "X-ABLABEL");
+        let mut groups: HashMap<String, String> = HashMap::new();
+        for property in others {
+            if let Some(mut property) = self.missing(property) {
+                property.group = property.group.map(|group| {
+                    groups
+                        .entry(group)
+                        .or_insert_with_key(|group| self.unused_group(group))
+                        .clone()
+                });
+                self.component.push(property);
+            }
+        }
+        for label in labels {
+            if let Some(group) = label.group.as_ref().and_then(|group| groups.get(group)) {
+                self.component.push(Property {
+                    group: Some(group.clone()),
+                    ..label.clone()
+                });
+            }
+        }
+    }
+
+    fn unused_group(&self, wanted: &str) -> String {
+        let used = |group: &str| {
+            self.component.properties.iter().any(|property| {
+                property
+                    .group
+                    .as_ref()
+                    .is_some_and(|mine| mine.eq_ignore_ascii_case(group))
+            })
+        };
+        match used(wanted) {
+            false => wanted.to_owned(),
+            true => (1..)
+                .map(|number| format!("merged{number}"))
+                .find(|group| !used(group))
+                .unwrap_or_default(),
+        }
+    }
+
+    /// `theirs` as a property for this card to add, unless it already says the same.
+    fn missing(&self, theirs: &Property) -> Option<Property> {
+        let name = theirs.name.as_str();
+        let value = compared(theirs);
+        let says = |name: &str| self.component.all(name).any(|mine| compared(mine) == value);
+        if OWN_PROPERTIES.contains(&name) || value.is_empty() || says(name) {
+            return None;
+        }
+        let mut added = theirs.clone();
+        if self.version() == Version::V3 && name == "TEL" && added.value.starts_with("tel:") {
+            added.value = added.value.trim_start_matches("tel:").to_owned();
+            added.params.retain(|(name, _)| name != "VALUE");
+        }
+        if name == "PHOTO"
+            && let Some(photo) = decode_photo(theirs)
+        {
+            added = self.photo_property(&photo);
+        }
+        if ONCE_PER_CARD.contains(&name) && self.component.property(name).is_some() {
+            added.name = format!("X-{name}");
+            if says(&added.name) {
+                return None;
+            }
+        }
+        Some(added)
     }
 
     pub fn to_vcf(&self) -> String {

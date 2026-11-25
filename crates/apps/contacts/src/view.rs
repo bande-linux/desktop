@@ -23,6 +23,7 @@ const AVATAR_SIZE: f32 = 72.0;
 const SPACING: f32 = 16.0;
 const PADDING: f32 = 24.0;
 const ALL: &str = "all";
+const FAILURES_SHOWN: usize = 3;
 const MAX_PHOTO_PIXELS: u32 = 256;
 const SYMBOL_PIXELS: u32 = 32;
 const ADD_SYMBOL: &str = include_str!("../data/symbols/add.svg");
@@ -110,11 +111,13 @@ pub struct ContactsView {
     shown: Vec<Shown>,
     selected: Option<String>,
     editor: Option<Editor>,
+    reveal_focus: bool,
     signals: editor::Signals,
     setup: Option<Setup>,
     pending_import: Vec<Card>,
     import_picker: Option<(WidgetId, Vec<(String, String)>)>,
     duplicates: usize,
+    opened_books: HashSet<String>,
     waiting: VecDeque<Waiting>,
     asked_password: HashSet<String>,
     undo: Vec<Vec<Step>>,
@@ -334,11 +337,13 @@ impl ContactsView {
             shown: Vec::new(),
             selected: None,
             editor: None,
+            reveal_focus: false,
             signals: editor::Signals::default(),
             setup: None,
             pending_import: Vec::new(),
             import_picker: None,
             duplicates: 0,
+            opened_books: HashSet::new(),
             waiting: VecDeque::new(),
             asked_password: HashSet::new(),
             undo: Vec::new(),
@@ -378,6 +383,13 @@ impl ContactsView {
         };
         if let Some(panes) = self.ui.widget_as::<Panes>(self.panes) {
             panes.set_inset(inset);
+        }
+    }
+
+    /// Scrolls to the field the editor just focused, once it is laid out.
+    pub fn laid_out(&mut self) {
+        if std::mem::take(&mut self.reveal_focus) {
+            self.ui.reveal_focus();
         }
     }
 
@@ -799,7 +811,11 @@ impl ContactsView {
         if let Some(sidebar) = self.ui.widget_as::<Table>(self.sidebar) {
             sidebar.set_rows(rows);
             sidebar.set_headings(headings);
-            sidebar.set_expanded_rows(expanded);
+            for key in expanded {
+                if self.opened_books.insert(key.clone()) {
+                    sidebar.set_row_expanded(&key, true);
+                }
+            }
             sidebar.select(&[scope]);
         }
         if self.editor.is_none() {
@@ -900,13 +916,23 @@ impl ContactsView {
         self.open_editor(editor, &contact);
     }
 
-    fn open_editor(&mut self, mut editor: Editor, contact: &Contact) {
+    fn open_editor(&mut self, editor: Editor, contact: &Contact) {
+        self.show_editor(editor, contact, Editor::given_field);
+    }
+
+    fn show_editor(
+        &mut self,
+        mut editor: Editor,
+        contact: &Contact,
+        focus: impl FnOnce(&Editor) -> WidgetId,
+    ) {
         let photo = photo_image(editor.photo.as_ref());
         let widget = editor.build(contact, &self.signals, &self.formats, photo);
-        let focus = editor.given_field();
+        let focus = focus(&editor);
         self.editor = Some(editor);
         self.set_detail(widget);
         self.ui.set_focus(focus);
+        self.reveal_focus = true;
         let tools = self.tools();
         if let Some(panes) = self.ui.widget_as::<Panes>(self.panes) {
             panes.set_tools(tools);
@@ -1077,7 +1103,7 @@ impl ContactsView {
                 if let Some(href) = self.href_of(found.book, found.card) {
                     steps.push(self.step_for(found.book, &href));
                 }
-                (self.library.edit(&found, &contact), uid)
+                (self.library.edit(&found, &editor.base, &contact), uid)
             }
             None => {
                 let uid = bande_dav::new_uid();
@@ -1280,12 +1306,11 @@ impl ContactsView {
                     continue;
                 };
                 let book = kept.book;
-                let Some(card) = view.library.card(&kept) else {
+                let Some(mut merged) = view.library.card(&kept).cloned() else {
                     continue;
                 };
-                let uid = card.uid().to_owned();
-                let mut merged = card.contact();
-                let mut groups = groups_of(&view.library, book, &merged, &uid);
+                let uid = merged.uid().to_owned();
+                let mut groups = groups_of(&view.library, book, &merged.details(), &uid);
                 steps.extend(
                     view.href_of(book, kept.card)
                         .map(|href| view.step_for(book, &href)),
@@ -1297,18 +1322,15 @@ impl ContactsView {
                     let Some(card) = view.library.card(&found) else {
                         continue;
                     };
-                    let other = card.contact();
-                    groups.extend(groups_of(&view.library, book, &other, card.uid()));
-                    merge_into(&mut merged, other);
+                    groups.extend(groups_of(&view.library, book, &card.details(), card.uid()));
+                    merged.absorb(card);
                     steps.extend(
                         view.href_of(book, found.card)
                             .map(|href| view.step_for(book, &href)),
                     );
                     view.library.remove_card(&found);
                 }
-                if let Some(kept) = found_by(&view.library, first) {
-                    view.library.edit(&kept, &merged);
-                }
+                view.library.put_card(book, merged);
                 view.set_groups(book, &uid, &groups, &mut steps);
                 books.insert(book);
             }
@@ -1536,15 +1558,22 @@ impl ContactsView {
     }
 
     fn show_failure(&mut self, account: &str) {
-        let Some((_, error)) = self
-            .status
-            .failed
-            .iter()
-            .find(|(failed, _)| failed == account)
-            .cloned()
-        else {
+        let mut errors: Vec<&str> = Vec::new();
+        for (failed, error) in &self.status.failed {
+            if failed == account && !errors.contains(&error.as_str()) {
+                errors.push(error);
+            }
+        }
+        if errors.is_empty() {
             return;
-        };
+        }
+        let more = errors.len().saturating_sub(FAILURES_SHOWN);
+        errors.truncate(FAILURES_SHOWN);
+        let mut message = errors.join("\n\n");
+        if more > 0 {
+            message.push_str("\n\n");
+            message.push_str(&tr!("And {count} more.", count = more));
+        }
         let name = self
             .library
             .account(account)
@@ -1555,7 +1584,7 @@ impl ContactsView {
         self.ui.present_sheet(
             Alert::new(
                 &tr!("“{name}” could not be synced", name = name),
-                &error,
+                &message,
                 move |action| push(&intents, Intent::Confirm(format!("{action}:{account}"))),
             )
             .other(&tr!("Server Settings…"), "settings")
@@ -1665,7 +1694,7 @@ impl ContactsView {
                 if let Some(mut editor) = self.editor.take() {
                     let mut contact = editor.read(&self.ui);
                     Editor::with_added(&mut contact, add);
-                    self.open_editor(editor, &contact);
+                    self.show_editor(editor, &contact, |editor| editor.added_field(add));
                 }
             }
         }
@@ -1742,59 +1771,5 @@ impl ContactsView {
         }
         self.show_waiting();
         true
-    }
-}
-
-fn merge_into(merged: &mut Contact, other: Contact) {
-    let fill = |mine: &mut String, theirs: String| {
-        if mine.trim().is_empty() {
-            *mine = theirs;
-        }
-    };
-    fill(&mut merged.name.given, other.name.given);
-    fill(&mut merged.name.family, other.name.family);
-    fill(&mut merged.organisation, other.organisation);
-    fill(&mut merged.title, other.title);
-    for email in other.emails {
-        if !merged
-            .emails
-            .iter()
-            .any(|mine| mine.value.eq_ignore_ascii_case(&email.value))
-        {
-            merged.emails.push(email);
-        }
-    }
-    let digits = |text: &str| -> String { text.chars().filter(char::is_ascii_digit).collect() };
-    for phone in other.phones {
-        if !merged
-            .phones
-            .iter()
-            .any(|mine| digits(&mine.value) == digits(&phone.value))
-        {
-            merged.phones.push(phone);
-        }
-    }
-    for address in other.addresses {
-        if !merged.addresses.contains(&address) {
-            merged.addresses.push(address);
-        }
-    }
-    if merged.birthday.is_none() {
-        merged.birthday = other.birthday;
-    }
-    if merged.photo.is_none() {
-        merged.photo = other.photo;
-    }
-    match (merged.note.trim().is_empty(), other.note.trim().is_empty()) {
-        (true, _) => merged.note = other.note,
-        (false, false) if merged.note != other.note => {
-            merged.note = format!("{}\n\n{}", merged.note, other.note)
-        }
-        _ => {}
-    }
-    for category in other.categories {
-        if !merged.categories.contains(&category) {
-            merged.categories.push(category);
-        }
     }
 }

@@ -48,8 +48,11 @@ pub fn href_for(url: Option<&str>, uid: &str, extension: &str) -> String {
 /// The JSON in `file`, or nothing when there is none; a file that cannot be read is renamed
 /// to `.broken` and kept, so the offline copy starts over without losing it.
 pub fn read_or_set_aside<T: serde::de::DeserializeOwned>(file: &Path) -> Option<T> {
-    let text = std::fs::read_to_string(file).ok()?;
-    match serde_json::from_str(&text) {
+    let read = match std::fs::read(file) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return None,
+        read => read.and_then(|bytes| Ok(serde_json::from_slice(&bytes)?)),
+    };
+    match read {
         Ok(value) => Some(value),
         Err(error) => {
             let aside = file.with_extension("broken");

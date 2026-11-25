@@ -162,7 +162,9 @@ Each has a [plan of its own](README.md). The app serves its domain from the firs
 | A8 | [Fingerprint and security keys](apps/fingerprint.md) | | D19 | its part of `crates/apps/settings`, `crates/shell/lock`, `crates/services/polkit` | M |
 | A9 | [Mouse keys, dwell and colour filters](apps/assistive-input.md) | | C3 | `crates/platform` | M |
 | A10 | [Passwords](apps/passwords.md) | none | C2 | its part of `crates/apps/settings`, `crates/services/secrets` | M |
-| A11 | [Synced folders](apps/synced-folders.md) | part of `files` | D1a | `crates/services/sync` | L |
+| A11a | [Synced folders](apps/synced-folders.md): the engine and its simulator | | nothing | `crates/libs/sync` | L |
+| A11b | [Synced folders](apps/synced-folders.md): SFTP and WebDAV | | A11a, A1a | `crates/libs/sync`, `crates/libs/dav`, `crates/libs/askpass`, `crates/services/automount` | L |
+| A11c | [Synced folders](apps/synced-folders.md): service and Files | part of `files` | A11b, D1a | `crates/services/sync`, `crates/services/files-intents`, `crates/apps/files` | L |
 
 ### In waves
 
@@ -175,9 +177,9 @@ mail. An agent that reads, shows and changes needs no prompt.
 | 1 | C1 and C2 by one agent; D0 | gate 1 |
 | 2 | D1a, then D1b, then D1c; D2; D6; D21; D5, then A1c | |
 | 3 | C4, then C5 and C6; D23; D4 (drafts, reading); D7; D11; D14; D16; A2 | gate 2 |
-| 4 | C3; D12; D15; D18; A4; A6; A7 | |
-| 5 | A9; D4 (sending); D9; D10; D13; D20; D22; C8; A3 | |
-| 6 | A1b, then D3; D8; C9; D17, then D19; A10; A11 | |
+| 4 | C3; D12; D15; D18; A4; A6; A7; A11a | |
+| 5 | A9; D4 (sending); D9; D10; D13; D20; D22; C8; A3; A11b | |
+| 6 | A1b, then D3; D8; C9; D17, then D19; A10; A11c | |
 | 7 | A8; C7 and A5 as decided | |
 
 `crates/apps/settings` is changed by one package at a time: C2, D1a, C4, D12, D13, C8, A1b, D17,
@@ -224,6 +226,7 @@ package.
 | Decision | Proposal | When |
 | :--- | :--- | :--- |
 | Tests for the prompt, the sandbox and destructive intents beyond the usual budget | allowed, as security boundaries | before C3 |
+| The sync engine's simulator and tests beyond the usual budget | allowed: what it gets wrong is someone's files | before A11a |
 | Which of the planned apps to build, and their order | A1, A2, A6, A4, A7, A3, A10, then the rest | before wave 4 |
 | Whether MCP is an open protocol in the sense of the project rules | yes, for an optional adapter only | before C6 |
 | Whether a direct connection may read foreign content | off, and the person may turn it on | before C4 |

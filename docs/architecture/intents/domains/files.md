@@ -8,7 +8,7 @@ D1a, D1b.
 | :--- | :--- | :--- |
 | `files.file` | name\* text, size integer, kind enum, modified, created, used date_time, access `private` `group` `others`, origin\* url, digest text, trashed bool | name, size, modified, kind |
 | `files.location` | name~ text, kind `server` `volume` `folder`, connected bool, free integer, folder ref<files.file> (while connected) | all |
-| `files.sync` | folder ref<files.file>, location ref, last date_time | all |
+| `files.sync` | folder ref<files.file>, location ref, state `up-to-date` `syncing` `waiting` `paused` `needs-you`, waiting integer, last date_time | all |
 | `archives.archive` (a view of a file) | items, size integer, names\* list<text> | all |
 
 | Intent | Parameters | Effects | Undo | Code | P |
@@ -35,7 +35,8 @@ D1a, D1b.
 | `files.delete` | `files` | `critical`; shared: also `send` |  | ready | B |
 | `files.add_location` | `address` (`uri`: `sftp`, `smb`, `davs`) | `send` | `files.remove_location` | part: saved servers | B |
 | `files.remove_location` | `location` | `disrupt` |  | ready | B |
-| `files.start_sync` | `folder` | `send` |  | new, with Synced folders | B |
+| `files.start_sync` | `sync` (look now) | `change`; shared: `send` | | new, with Synced folders | B |
+| `files.pause_sync`, `files.resume_sync` | `sync` | `change` | each other | new, with Synced folders | B |
 | `files.set_access` | `files`, `who` (`group`, `others`), `access` (`none`, `read`, `write`) | `disrupt`; wider for others: `critical` | the earlier access | ready (`libs/fs/src/permissions.rs`) | C |
 
 Phrases in Search: "connect {location}".
@@ -50,3 +51,6 @@ on one side.
 `extract` makes one new folder and what is in it is foreign. `bande-fs` already refuses paths and
 links out of the folder, devices and bombs. A password has no parameter: the app asks. The Archives
 app is never started with a file, because it then expands at once.
+
+Setting up, changing and stopping a [synced folder](../../../plans/apps/synced-folders.md), and
+deciding a conflict, are the person's.

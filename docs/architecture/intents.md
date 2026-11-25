@@ -237,9 +237,9 @@ An intent declares every effect it can have; a plan has the ones its arguments c
   extracted (for files `user.xdg.origin.url` is kept through moves) and what an agent wrote are
   foreign whatever their type.
 - **Who can read what is written** is found out where it can be: a folder that is exported, readable
-  by other users, on a network or FUSE, and a collection whose server names a sharee or another
-  owner, and a clipboard shared with a remote screen or machine, are `send`; everything else is
-  `change`. Where several hold, the strongest does, at both ends of a move.
+  by other users, on a network or FUSE, or synced with a server, and a collection whose server names
+  a sharee or another owner, and a clipboard shared with a remote screen or machine, are `send`;
+  everything else is `change`. Where several hold, the strongest does, at both ends of a move.
 - Effects are found again at Perform, and by a job before each thing; one that is not in the plan is
   `Conflict`.
 - While a screen or window is shared, recorded or on a projector, `show` by an agent is `send`.

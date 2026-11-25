@@ -1,7 +1,11 @@
 # Routines
 
-Part of [Bande Intents](../../intents.md). Main noun `routine`. Owner: `crates/services/routines`.
-Work package C8.
+Part of [Bande Intents](../../intents.md). Main noun `routine`. Owner: `bande-routines`. Work
+package C8.
+
+| Thing | Properties (* foreign, ~ name) | In `find` |
+| :--- | :--- | :--- |
+| `routines.routine` | name~ text, trigger text, steps list<text>, enabled bool, last date_time, by_agent bool | name, enabled |
 
 | Intent | Parameters | Effects | Undo | Code | P |
 | :--- | :--- | :--- | :--- | :--- | :--- |

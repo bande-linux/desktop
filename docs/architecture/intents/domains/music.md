@@ -1,7 +1,11 @@
 # Music
 
 Part of [Bande Intents](../../intents.md). Main noun `track`; also `music.album`, `music.artist`,
-`music.playlist`. Owner: the Music app's engine. Work package A4.
+`music.playlist`. Owner: the Music app. Work package A4.
+
+| Thing | Properties (* foreign, ~ name) | In `find` |
+| :--- | :--- | :--- |
+| `music.track`, `.album`, `.artist`, `.playlist` | title\*, artist\*, album\* text, length duration, favourite bool; name~ text | title, artist |
 
 | Intent | Parameters | Effects | Undo | Code | P |
 | :--- | :--- | :--- | :--- | :--- | :--- |

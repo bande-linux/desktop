@@ -5,7 +5,7 @@ D9.
 
 | Intent | Parameters | Effects | Undo | Code | P |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| `terminal.open_folder` | `folder` | `disrupt` |  | app; `--working-directory` | C |
+| `terminal.open_folder` | `folder` | `show`; for an agent `disrupt` |  | app; `--working-directory` | B |
 
 Opening a terminal runs the person's shell startup files, and a folder may hold more of them, so it
 is asked every time. Commands, input, paste, titles, the working folder and the scrollback have no

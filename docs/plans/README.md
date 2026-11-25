@@ -18,13 +18,15 @@ Work that is planned and not built. A plan leaves when it is done; what it built
 | [PDF editing in Viewer](apps/pdf-editing.md) | pages, forms, notes |
 | [Fingerprint and security keys](apps/fingerprint.md) | enrolment, and use at sign-in, lock and polkit |
 | [On-screen keyboard and other input](apps/assistive-input.md) | without which the prompt is not for everyone |
+| [Feeds](apps/feeds.md) | news and podcasts the person subscribes to |
+| [Passwords](apps/passwords.md) | generator, one-time codes, export, in Settings |
+| [Synced folders](apps/synced-folders.md) | a folder here and on the person's server, kept the same |
+| [Help](apps/help.md) | offline help and a first start |
 
-Not planned: phone calls, whiteboard, journal (a Notes folder does it), weather and news (no open
-protocol without a fixed provider), a separate passwords app (Settings has one; a generator,
-one-time codes and export belong there), and an office suite of Bande's own (any application serves
-`documents`, `spreadsheets` and `presentations` as a
-[provider](../architecture/intents/providers.md)).
+Not planned: phone calls, whiteboard, journal (a Notes folder does it), weather (no open protocol
+without a fixed provider), and an office suite of Bande's own (any application serves `documents`,
+`spreadsheets` and `presentations` as a [provider](../architecture/intents/providers.md)).
 
-Every app starts with `ci/new-app.sh`, keeps its engine in a library without the toolkit, is the
-only writer of its store, and declares its domain from the first commit, so its menus, Search, the
-command line and agents use one implementation.
+Every app starts with `ci/new-app.sh`, starts without a window when asked, is the only writer of its
+store, and declares its domain from the first commit, so its menus, Search, the command line and
+agents use one implementation.

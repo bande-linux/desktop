@@ -11,8 +11,9 @@ There is one method for every application, and nothing in Bande names a particul
 | **Standard** | implementers of a desktop standard | nothing | what it covers: MPRIS in `media` |
 
 Only `documents`, `spreadsheets`, `presentations`, `photos` (changing and converting) and
-`recordings` take providers. Every other domain has its Bande owner, and ids under `org.bande` are
-reserved. More domains are opened by name here.
+`recordings` take providers; `documents` has Bande's Text Editor and Viewer for their types. Every
+other domain has its Bande owner, and ids under `org.bande` are reserved. This page is built when
+the first application wants it. More domains are opened by name here.
 
 ## Manifest
 
@@ -21,13 +22,13 @@ its deployment under `/var/lib/flatpak`. It names the application and how it is 
 intent, what differs from the definition: a raised effect, parameters it lacks, file types it
 handles. `app` and the file name are the id of the package that ships it, `bus` is that id or begins
 with it and a dot, and a Flatpak's manifest is native only; a grant is bound to the package too. A
-native manifest lists its `methods`: `Prepare` and `Perform` are required; without `PrepareUndo` its
-`change` intents are `disrupt`.
+native manifest lists its `methods`: `Prepare` and `Perform` are required; a `change` that gives no
+undo is `disrupt`.
 
 ```json
 { "app": "org.example.Writer", "name": "Writer",
   "native": { "bus": "org.example.Writer",
-              "methods": ["Get", "Prepare", "Perform", "PrepareUndo"] },
+              "methods": ["Get", "Prepare", "Perform"] },
   "intents": { "documents.get": { "types": ["application/vnd.oasis.opendocument.text"] },
                "documents.update": { "types": ["application/vnd.oasis.opendocument.text"] } } }
 ```
@@ -47,10 +48,11 @@ withheld until the person accepts it.
 The [interface](../intents.md#bus-interface) in any language: a D-Bus XML file, a JSON schema and a
 60-line example are shipped. A provider that is not Bande's is called only through a Bande owner,
 `bande-intents-providers`, which checks limits, resolves and files descriptors, asks for approval
-before it calls `Perform`, and keeps the digest. The provider gets descriptors, not paths or
-references; what it returns is foreign whatever it says; and it may return results at once instead
-of a job. Editing in place changes only an open window's unsaved content, matched by the
-descriptor's device and inode; saving it is the person's.
+before it calls `Perform`, and keeps the digest. A method that has not answered in 20 seconds is
+`Unavailable`, and a Perform `Interrupted`. The provider gets descriptors, not paths or references;
+what it returns is foreign whatever it says; and it may return results at once instead of a job.
+Editing in place changes only an open window's unsaved content, matched by the descriptor's device
+and inode; saving it is the person's.
 
 ## Adapter
 

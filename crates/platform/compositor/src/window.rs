@@ -247,7 +247,7 @@ impl Window {
         })
     }
 
-    fn placed_states(&self) -> (bool, bool) {
+    pub(crate) fn placed_states(&self) -> (bool, bool) {
         self.toplevel.with_pending_state(|pending| {
             (
                 pending.states.contains(xdg_toplevel::State::Fullscreen),
@@ -261,17 +261,23 @@ impl Window {
         location == area.loc && self.requested_size() == Some(area.size)
     }
 
-    fn floating_frame(&self) -> Option<Rectangle<i32, Logical>> {
+    pub(crate) fn asked_frame(&self) -> Option<Rectangle<i32, Logical>> {
         let geometry = self.geometry()?;
-        match self.pending_location {
-            Some((_, location)) if self.placed_states() == (false, false) => {
-                let size = self.requested_size().unwrap_or(geometry.size);
-                Some(Rectangle::new(location, size))
+        Some(match self.pending_location {
+            Some((_, location)) => {
+                Rectangle::new(location, self.requested_size().unwrap_or(geometry.size))
             }
-            _ => (!self.has_state(xdg_toplevel::State::Maximized)
-                && !self.has_state(xdg_toplevel::State::Fullscreen))
-            .then_some(geometry),
+            None => geometry,
+        })
+    }
+
+    pub(crate) fn floating_frame(&self) -> Option<Rectangle<i32, Logical>> {
+        if self.pending_location.is_some() && self.placed_states() == (false, false) {
+            return self.asked_frame();
         }
+        let placed = self.has_state(xdg_toplevel::State::Maximized)
+            || self.has_state(xdg_toplevel::State::Fullscreen);
+        self.geometry().filter(|_| !placed)
     }
 
     pub(crate) fn local_geometry(&self) -> Rectangle<i32, Logical> {
@@ -338,6 +344,12 @@ impl Window {
             .is_initial_configure_sent()
             .then(|| self.toplevel.send_pending_configure())
             .flatten()
+    }
+
+    fn answer_unchanged(&self) {
+        if self.toplevel.is_initial_configure_sent() {
+            self.toplevel.send_configure();
+        }
     }
 
     pub(crate) fn move_with_next_configure(&mut self, location: Point<i32, Logical>) {
@@ -641,6 +653,8 @@ impl State {
             window.configure();
         } else if maximized {
             self.place(index, xdg_toplevel::State::Maximized, None);
+        } else {
+            window.answer_unchanged();
         }
     }
 
@@ -679,6 +693,8 @@ impl State {
             self.place(index, xdg_toplevel::State::Maximized, Some(area));
         } else if full_screen {
             self.place(index, xdg_toplevel::State::Fullscreen, None);
+        } else {
+            self.windows[index].answer_unchanged();
         }
         self.leave_full_screen_space(index);
         self.tidy_workspaces();

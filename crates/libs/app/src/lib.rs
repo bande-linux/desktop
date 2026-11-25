@@ -2,6 +2,7 @@ mod cx;
 mod drop;
 mod files;
 mod instance;
+mod intents;
 mod menus;
 mod portal;
 mod print;
@@ -228,6 +229,18 @@ pub trait Program: Sized + 'static {
     fn runs_in_background() -> bool {
         false
     }
+
+    /// The intents it serves on its app id: `Owner::new(INFO.id, "/usr/bin/<package>")` with its
+    /// domains. They are served from the program's start, also when `--intents` started it without
+    /// a window and [`Program::start`] has not run.
+    fn intents() -> Option<bande_intents::Owner> {
+        None
+    }
+
+    /// The references of the thing type `kind` that its last focused window has selected or open.
+    fn current(&self, _cx: &Cx<Self>, _kind: &str) -> Vec<String> {
+        Vec::new()
+    }
 }
 
 fn argument_text(argument: OsString) -> String {
@@ -237,6 +250,20 @@ fn argument_text(argument: OsString) -> String {
     })
 }
 
+fn write_intents<P: Program>(folder: &Path) -> ExitCode {
+    let written = match P::intents() {
+        Some(owner) => owner.write_manifest(folder),
+        None => Err(std::io::Error::other("it serves no intents")),
+    };
+    match written {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            tracing::error!("cannot write the intents: {error}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
 pub fn run<P: Program>(info: &'static Info) -> ExitCode {
     let arguments: Vec<OsString> = std::env::args_os().skip(1).collect();
     if arguments == [VERSION_FLAG] {
@@ -244,6 +271,11 @@ pub fn run<P: Program>(info: &'static Info) -> ExitCode {
         return ExitCode::SUCCESS;
     }
     bande_log::init(info.package);
+    if let [flag, folder] = arguments.as_slice()
+        && flag == bande_intents::WRITE_INTENTS
+    {
+        return write_intents::<P>(Path::new(folder));
+    }
     let arguments = arguments.into_iter().map(argument_text).collect();
     match runner::run::<P>(info, arguments, None) {
         Ok(()) => ExitCode::SUCCESS,

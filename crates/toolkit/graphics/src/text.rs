@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt;
 use std::ops::Range;
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 use std::thread;
 
 use bande_design::{Color, TextRole, TextSize, Typeface};
@@ -508,6 +508,7 @@ impl TextSystem {
         Paragraph {
             layout: Arc::new(layout),
             text: Arc::from(text.as_ref()),
+            ink: Arc::default(),
         }
     }
 }
@@ -516,6 +517,7 @@ impl TextSystem {
 pub struct Paragraph {
     layout: Arc<Layout<Color>>,
     text: Arc<str>,
+    ink: Arc<OnceLock<Option<Rect>>>,
 }
 
 #[derive(Debug, Clone)]
@@ -622,6 +624,7 @@ impl Paragraph {
         Self {
             layout: Arc::new(layout),
             text: Arc::from(""),
+            ink: Arc::default(),
         }
     }
 
@@ -744,12 +747,10 @@ impl Paragraph {
             .fold(self.layout.width(), f32::max)
     }
 
-    pub(crate) fn largest_size(&self) -> f32 {
-        self.layout
-            .lines()
-            .flat_map(|line| line.runs())
-            .map(|run| run.font_size())
-            .fold(0.0, f32::max)
+    pub(crate) fn ink(&self) -> Option<Rect> {
+        *self
+            .ink
+            .get_or_init(|| crate::outline::ink(&self.glyph_runs()))
     }
 
     pub fn line_count(&self) -> usize {

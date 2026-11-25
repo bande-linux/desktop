@@ -928,6 +928,16 @@ mod tests {
             gpu.shared_image((SIDE, SIDE), &linear)
                 .expect("a shared image")
         };
+        let mut text = TextSystem::new();
+        let marks = Item::Text {
+            origin: Point::new(20.0, 24.0),
+            paragraph: text.paragraph(
+                &format!("a{}", "\u{303}".repeat(12)),
+                TextStyle::new(13.0, Color::BLACK),
+                None,
+                TextAlign::Start,
+            ),
+        };
         let pill = Shape::rounded(Rect::new(10.0, 20.0, 44.0, 12.0), 30.0);
         let ink: Paint = Color::hex(0x2040ff).into();
         let across_the_end = Region {
@@ -945,6 +955,11 @@ mod tests {
         let sheet = Shape::rect(Rect::new(0.0, 0.0, 64.0, 64.0));
         let changes = [
             Change::between("crowded", crowded(0.0), crowded(3.3)),
+            Change::between(
+                "stacked marks",
+                vec![marks],
+                vec![dot(0.0, 0.0, 4.0, 0x00ff00)],
+            ),
             Change::within(
                 "pill",
                 across_the_end,

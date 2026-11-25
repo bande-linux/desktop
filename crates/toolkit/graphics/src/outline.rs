@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io::Cursor;
 use std::sync::Arc;
@@ -7,7 +8,7 @@ use skrifa::instance::{LocationRef, NormalizedCoord, Size};
 use skrifa::outline::{DrawSettings, OutlinePen};
 use skrifa::raw::TableProvider;
 use skrifa::{FontRef, GlyphId, MetadataProvider, Tag};
-use vello_cpu::kurbo::{self, Affine, BezPath};
+use vello_cpu::kurbo::{self, Affine, BezPath, Vec2};
 
 use crate::scene::{Image, Rect};
 use crate::text::GlyphRun;
@@ -21,6 +22,8 @@ const COLOR_TABLES: [Tag; 4] = [
     Tag::new(b"SVG "),
 ];
 const UNUSED_FRAMES: u64 = 64;
+const KNOWN_BOUNDS: usize = 16384;
+const COLOUR_GLYPH: kurbo::Rect = kurbo::Rect::new(-1.0, -2.0, 2.0, 1.0);
 const LARGEST_BITMAP: u32 = 2048;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -120,13 +123,10 @@ impl GlyphOutlines {
     }
 
     pub(crate) fn is_color_font(&mut self, run: &GlyphRun) -> bool {
-        *self.color_fonts.entry(font_key(run)).or_insert_with(|| {
-            FontRef::from_index(run.font_bytes(), run.font_index()).is_ok_and(|font| {
-                COLOR_TABLES
-                    .iter()
-                    .any(|tag| font.table_data(*tag).is_some())
-            })
-        })
+        *self
+            .color_fonts
+            .entry(font_key(run))
+            .or_insert_with(|| has_color_tables(run))
     }
 
     pub(crate) fn outline(&mut self, run: &GlyphRun, glyph: u32) -> Option<Arc<GlyphOutline>> {
@@ -182,6 +182,14 @@ fn font_key(run: &GlyphRun) -> FontKey {
         blob: run.font_id(),
         index: run.font_index(),
     }
+}
+
+fn has_color_tables(run: &GlyphRun) -> bool {
+    FontRef::from_index(run.font_bytes(), run.font_index()).is_ok_and(|font| {
+        COLOR_TABLES
+            .iter()
+            .any(|tag| font.table_data(*tag).is_some())
+    })
 }
 
 fn glyph_key(run: &GlyphRun, glyph: u32) -> GlyphKey {
@@ -253,7 +261,7 @@ fn bitmap(run: &GlyphRun, glyph: u32, scale: f64) -> Option<GlyphBitmap> {
     })
 }
 
-fn draw(run: &GlyphRun, glyph: u32) -> Option<BezPath> {
+fn unscaled(run: &GlyphRun, glyph: u32) -> Option<(BezPath, f64)> {
     let font = FontRef::from_index(run.font_bytes(), run.font_index()).ok()?;
     let outline = font.outline_glyphs().get(GlyphId::new(glyph))?;
     let coords: Vec<NormalizedCoord> = run
@@ -268,13 +276,80 @@ fn draw(run: &GlyphRun, glyph: u32) -> Option<BezPath> {
             &mut pen,
         )
         .ok()?;
-    let units_per_em = f64::from(font.head().ok()?.units_per_em());
-    let mut path = pen.0;
-    path.apply_affine(Affine::scale(f64::from(run.size) / units_per_em));
-    if let Some(degrees) = run.skew_degrees {
-        path.apply_affine(Affine::skew(-f64::from(degrees.to_radians().tan()), 0.0));
-    }
+    Some((pen.0, f64::from(font.head().ok()?.units_per_em())))
+}
+
+fn run_transform(run: &GlyphRun) -> Affine {
+    let skew = match run.skew_degrees {
+        Some(degrees) => Affine::skew(-f64::from(degrees.to_radians().tan()), 0.0),
+        None => Affine::IDENTITY,
+    };
+    skew * Affine::scale(f64::from(run.size))
+}
+
+fn draw(run: &GlyphRun, glyph: u32) -> Option<BezPath> {
+    let (mut path, units_per_em) = unscaled(run, glyph)?;
+    path.apply_affine(run_transform(run) * Affine::scale(1.0 / units_per_em));
     let mut lines = BezPath::new();
     kurbo::flatten(path, TOLERANCE, |element| lines.push(element));
     Some(lines)
+}
+
+type GlyphBounds = HashMap<u32, Option<kurbo::Rect>>;
+
+#[derive(Default)]
+struct KnownBounds {
+    fonts: HashMap<(FontKey, Vec<i16>), (bool, GlyphBounds)>,
+    glyphs: usize,
+}
+
+thread_local! {
+    static BOUNDS: RefCell<KnownBounds> = RefCell::default();
+}
+
+fn em_bounds(known: &mut GlyphBounds, run: &GlyphRun, glyph: u32) -> Option<kurbo::Rect> {
+    *known.entry(glyph).or_insert_with(|| {
+        let (path, units_per_em) = unscaled(run, glyph)?;
+        (!path.is_empty())
+            .then(|| Affine::scale(1.0 / units_per_em).transform_rect_bbox(path.control_box()))
+    })
+}
+
+/// The area the glyphs of `runs` paint.
+pub(crate) fn ink(runs: &[GlyphRun]) -> Option<Rect> {
+    let painted = BOUNDS.with_borrow_mut(|bounds| {
+        let mut painted: Option<kurbo::Rect> = None;
+        for run in runs {
+            if bounds.glyphs > KNOWN_BOUNDS {
+                *bounds = KnownBounds::default();
+            }
+            let font = (font_key(run), run.variation_coords().to_vec());
+            let (coloured, known) = bounds
+                .fonts
+                .entry(font)
+                .or_insert_with(|| (has_color_tables(run), HashMap::new()));
+            let known_before = known.len();
+            let transform = run_transform(run);
+            for glyph in &run.glyphs {
+                let within_em = match *coloured {
+                    true => Some(COLOUR_GLYPH),
+                    false => em_bounds(known, run, glyph.id),
+                };
+                let Some(within_em) = within_em else {
+                    continue;
+                };
+                let at = Vec2::new(f64::from(glyph.x), f64::from(glyph.y));
+                let area = transform.transform_rect_bbox(within_em) + at;
+                painted = Some(painted.map_or(area, |painted| painted.union(area)));
+            }
+            bounds.glyphs += known.len() - known_before;
+        }
+        painted
+    })?;
+    Some(Rect::new(
+        painted.x0 as f32,
+        painted.y0 as f32,
+        painted.width() as f32,
+        painted.height() as f32,
+    ))
 }

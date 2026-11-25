@@ -33,7 +33,6 @@ pub(crate) trait Canvas {
 
 const ANTIALIASING_PIXEL: f64 = 1.0;
 const LYING_MARGIN: f64 = 2.0;
-const OVERHANG_EMS: f64 = 4.0;
 const SHADOW_DEVIATIONS: f64 = 2.5;
 
 pub(crate) const CLEAR: BlendMode = BlendMode::new(Mix::Normal, Compose::Clear);
@@ -360,16 +359,10 @@ impl Reach<'_> {
                 !self.touches(rect(shape.rect).inflate(reach, reach))
                     || self.lies_within(shape, 0.0)
             }
-            Item::Text { origin, paragraph } => {
-                let overhang = f64::from(paragraph.largest_size()) * OVERHANG_EMS;
-                let laid_out = rect(Rect::new(
-                    origin.x,
-                    origin.y,
-                    paragraph.painted_width(),
-                    paragraph.height(),
-                ));
-                !self.touches(laid_out.inflate(overhang, overhang))
-            }
+            Item::Text { origin, paragraph } => !paragraph.ink().is_some_and(|ink| {
+                let at = Vec2::new(f64::from(origin.x), f64::from(origin.y));
+                self.touches(rect(ink) + at)
+            }),
             Item::Picture(picture) => !picture
                 .bounds()
                 .is_some_and(|bounds| self.touches(rect(bounds))),

@@ -95,7 +95,7 @@ set_limits() {
     limit session.slice MemoryMin="$((memory / 10 < 524288 ? memory / 10 : 524288))K"
     reserve=$((memory / 5 < 3145728 ? memory / 5 : 3145728))
     reserve=$((reserve < ${swap:-0} / 2 ? reserve : ${swap:-0} / 2))
-    [ "$reserve" -eq 0 ] || limit app.slice MemoryHigh="$((memory - reserve))K" MemoryMax="$((memory - reserve / 2))K"
+    [ "$reserve" -eq 0 ] || limit app.slice MemoryHigh="$((memory - reserve))K" MemoryMax="$((memory - reserve * 7 / 8))K"
 }
 forget_limits() {
     [ -d "$limits" ] || return 0

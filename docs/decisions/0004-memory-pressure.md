@@ -47,7 +47,7 @@ memory settings stay the system's own.
   compositor locks what fits in the limit it has.
 - With swap, `app.slice` gets `MemoryHigh=` all memory but a fifth of it, at most 3 GiB and at most
   half the swap: the desktop's guarantee, the system and free memory. Apps together above that are
-  swapped and slowed, so the desktop and the system still find free memory at once. `MemoryMax=` at half that reserve
+  swapped and slowed, so the desktop and the system still find free memory at once. `MemoryMax=` an eighth of that reserve higher
   ends an app once swap is full too, before the whole computer runs out and the desktop waits for
   memory. Without swap there is neither: nothing could leave and every app would crawl beside
   unused memory.

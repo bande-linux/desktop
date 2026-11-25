@@ -66,6 +66,9 @@ const END_POLL: Duration = Duration::from_millis(5);
 const RESULT_PATIENCE: Duration = Duration::from_secs(2);
 const SCOPE_PATIENCE: Duration = Duration::from_secs(2);
 const STOPPED_UNTIL_PLACED: &str = r#"kill -STOP $$
+not_started=$1
+shift
+trap 'printf "%s\n" "$not_started"; read -r _' EXIT
 [ $# -gt 0 ] || set -- "${SHELL:-$(getent passwd "$(id -u)" | cut -d: -f7)}"
 exec "$@""#;
 
@@ -73,6 +76,9 @@ fn stopped_until_placed(shell: Option<ShellCommand>) -> ShellCommand {
     let mut wrapped = ["-c", STOPPED_UNTIL_PLACED, "sh"]
         .map(str::to_owned)
         .to_vec();
+    wrapped.push(tr!(
+        "The program could not be started. Press Return to close this tab."
+    ));
     if let Some((program, arguments)) = shell {
         wrapped.push(program);
         wrapped.extend(arguments);

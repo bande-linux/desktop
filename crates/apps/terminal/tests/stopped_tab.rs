@@ -27,7 +27,7 @@ fn read_until(
 }
 
 #[test]
-fn a_tab_starts_beside_a_silent_bus_and_closes_when_its_shell_is_killed() {
+fn a_tab_starts_beside_a_silent_bus_closes_when_its_shell_is_killed_and_says_what_cannot_start() {
     let folder = tempfile::tempdir().expect("a folder");
     let socket = folder.path().join("bus");
     let _silent = UnixListener::bind(&socket).expect("a bus that never answers");
@@ -73,5 +73,27 @@ fn a_tab_starts_beside_a_silent_bus_and_closes_when_its_shell_is_killed() {
     assert!(
         !session.terminal.all_text().contains("memory"),
         "a shell killed by hand was blamed on memory"
+    );
+
+    let missing = ("/nonexistent/shell".to_owned(), Vec::new());
+    let mut session = Session::spawn(Terminal::new(grid), Some(missing), None).expect("a wrapper");
+    read_until(
+        &mut session,
+        &theme,
+        TIMEOUT,
+        "no error in the tab",
+        |session| session.terminal.all_text().contains("could not be started"),
+    );
+    assert!(
+        !session.exited(),
+        "the tab closed before its error was read"
+    );
+    session.send(b"\r");
+    read_until(
+        &mut session,
+        &theme,
+        TIMEOUT,
+        "Return did not close the tab",
+        |session| session.exited(),
     );
 }

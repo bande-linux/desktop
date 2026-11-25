@@ -879,10 +879,13 @@ what the one before could not save:
 - **Frames stop reaching the display**: a failed frame is retried four times a second (one log
   line per distinct error) and a page flip missing for a second is written off. After 3 s without
   a frame on every display the compositor makes a new renderer and resets each display's DRM
-  state; after 15 s it exits. The login window, with no work to lose, asks logind to restart a
+  state; after 15 s it exits. Either is put off, for at most two minutes, while one of its threads
+  waits for a device: making a renderer reads the driver's files, which a disk too busy to show
+  frames cannot give in time. The login window, with no work to lose, asks logind to restart a
   computer up for over 5 minutes when it cannot reach the display for 15 s.
 - **The compositor crashes or hangs**: `bande-compositor.service` has `WatchdogSec=20s`, pinged
-  from the event loop, and `TimeoutAbortSec=10s`; the session ends, `bande-login` shows the login window
+  from the event loop and, while that is late, by a thread of its own only as long as a thread of the
+  compositor waits for a device (at most two minutes), so a busy disk does not end the session, and `TimeoutAbortSec=10s`; the session ends, `bande-login` shows the login window
   and the next session offers the open apps again. The login window's compositor arms
   `alarm(20)` every 10 s. `Ctrl+Alt+F1`…`F12` switch virtual terminals through logind while the
   compositor runs.

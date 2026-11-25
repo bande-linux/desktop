@@ -1,8 +1,11 @@
 use std::fs;
+use std::os::fd::OwnedFd;
 use std::process;
+use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver};
 use std::thread;
 
+use bande_bus::connected_process;
 use bande_bus::systemd::main_pid;
 use bande_inbox::Outbox;
 use zbus::blocking::fdo::DBusProxy;
@@ -39,6 +42,20 @@ pub enum TrayIcon {
     },
 }
 
+#[derive(Debug, Clone)]
+pub struct ItemProcess {
+    pub pid: u32,
+    pub handle: Arc<OwnedFd>,
+}
+
+impl PartialEq for ItemProcess {
+    fn eq(&self, other: &Self) -> bool {
+        self.pid == other.pid
+    }
+}
+
+impl Eq for ItemProcess {}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TrayItem {
     pub id: String,
@@ -46,7 +63,7 @@ pub struct TrayItem {
     pub icon: TrayIcon,
     pub menu: Option<String>,
     pub item_is_menu: bool,
-    pub pid: Option<u32>,
+    pub process: Option<ItemProcess>,
     pub names: Vec<String>,
 }
 
@@ -133,9 +150,12 @@ fn item_proxy<'a>(connection: &Connection, id: &'a str) -> zbus::Result<StatusNo
         .build()
 }
 
-fn owner_pid(connection: &Connection, id: &str) -> zbus::Result<u32> {
-    let owner = BusName::try_from(split(id).0)?;
-    Ok(DBusProxy::new(connection)?.get_connection_unix_process_id(owner)?)
+fn owner(connection: &Connection, id: &str) -> zbus::Result<Option<ItemProcess>> {
+    let owner = connected_process(connection, BusName::try_from(split(id).0)?)?;
+    Ok(owner.map(|(pid, handle)| ItemProcess {
+        pid,
+        handle: Arc::new(handle),
+    }))
 }
 
 fn own_unit(connection: &Connection, pid: u32) -> Option<String> {
@@ -188,23 +208,24 @@ fn fetch(connection: &Connection, id: &str) -> Option<TrayItem> {
         .ok()
         .filter(|path| path.as_str() != "/")
         .map(|path| format!("{}{}", split(id).0, path.as_str()));
-    let pid = owner_pid(connection, id)
+    let process = owner(connection, id)
         .inspect_err(|error| tracing::debug!("no process of the status item {id}: {error}"))
-        .ok();
+        .unwrap_or_default();
     Some(TrayItem {
         id: id.to_owned(),
         title: item.title().unwrap_or_default(),
         icon,
         menu,
         item_is_menu: item.item_is_menu().unwrap_or(false),
-        pid,
-        names: pid
-            .and_then(|pid| own_unit(connection, pid))
+        names: process
+            .as_ref()
+            .and_then(|process| own_unit(connection, process.pid))
             .map(|unit| bande_xdg::unit_app_ids(&unit))
             .into_iter()
             .flatten()
             .chain(item.id())
             .collect(),
+        process,
     })
 }
 

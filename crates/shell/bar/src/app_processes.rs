@@ -1,30 +1,18 @@
 use std::cell::RefCell;
-use std::io;
+use std::collections::HashSet;
 use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
-use std::rc::Rc;
-
-use rustix::process::{Pid, PidfdFlags, pidfd_open};
+use std::sync::Arc;
 
 thread_local! {
     static KNOWN: RefCell<Vec<AppProcess>> = const { RefCell::new(Vec::new()) };
+    static ENDED: RefCell<HashSet<u32>> = RefCell::new(HashSet::new());
 }
 
 #[derive(Clone)]
 struct AppProcess {
     app_id: Option<String>,
     pid: u32,
-    pidfd: Rc<OwnedFd>,
-}
-
-impl AppProcess {
-    fn open(app_id: &str, pid: u32) -> io::Result<Self> {
-        let raw = Pid::from_raw(pid.cast_signed()).ok_or(io::ErrorKind::InvalidInput)?;
-        Ok(Self {
-            app_id: Some(app_id.to_owned()),
-            pid,
-            pidfd: Rc::new(pidfd_open(raw, PidfdFlags::empty())?),
-        })
-    }
+    handle: Arc<OwnedFd>,
 }
 
 pub struct AppProcesses(Vec<AppProcess>);
@@ -38,17 +26,18 @@ impl AppProcesses {
         KNOWN.set(self.0.clone());
     }
 
-    pub fn follow(&mut self, app_id: &str, pid: u32) {
+    pub fn follow(&mut self, app_id: &str, pid: u32, handle: &Arc<OwnedFd>) {
+        if ENDED.with_borrow(|ended| ended.contains(&pid)) {
+            return;
+        }
         match self.0.iter_mut().find(|known| known.pid == pid) {
             Some(known) if known.app_id.as_deref().is_none_or(|known| known == app_id) => return,
             Some(known) => known.app_id = None,
-            None => match AppProcess::open(app_id, pid) {
-                Ok(process) => self.0.push(process),
-                Err(error) => {
-                    tracing::debug!("cannot follow the process of {app_id}: {error}");
-                    return;
-                }
-            },
+            None => self.0.push(AppProcess {
+                app_id: Some(app_id.to_owned()),
+                pid,
+                handle: Arc::clone(handle),
+            }),
         }
         self.share();
     }
@@ -70,12 +59,13 @@ impl AppProcesses {
     }
 
     pub fn fds(&self) -> impl Iterator<Item = BorrowedFd<'_>> {
-        self.0.iter().map(|process| process.pidfd.as_fd())
+        self.0.iter().map(|process| process.handle.as_fd())
     }
 
     pub fn ended(&mut self, index: usize) {
         if index < self.0.len() {
-            self.0.remove(index);
+            let process = self.0.remove(index);
+            ENDED.with_borrow_mut(|ended| ended.insert(process.pid));
             self.share();
         }
     }

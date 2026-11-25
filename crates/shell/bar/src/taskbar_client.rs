@@ -132,6 +132,7 @@ pub struct Taskbar {
     unresponsive: Vec<String>,
     windowed: Vec<String>,
     processes: AppProcesses,
+    unkept: Vec<String>,
     status: StatusHub,
     updates: Inbox<Update>,
     status_items: Vec<TrayItem>,
@@ -206,11 +207,10 @@ impl Taskbar {
             }
         }
         for (window_app, app_id) in &windows {
-            if find_app(entries, window_app).is_some()
-                && !app_id.starts_with(BANDE_APP_ID)
-                && let Some(pid) = window.app_pid(window_app)
-            {
-                self.processes.follow(app_id, pid);
+            if find_app(entries, window_app).is_some() && !app_id.starts_with(BANDE_APP_ID) {
+                for process in window.app_processes(window_app) {
+                    self.processes.follow(app_id, process.pid, &process.handle);
+                }
             }
         }
         self.windows = windows;
@@ -251,14 +251,21 @@ impl Taskbar {
         for app_id in self.kept.clone() {
             apps.extend(self.describe(&app_id, true));
         }
-        let mut unkept = self.running.clone();
-        for app_id in self.processes.app_ids() {
-            if !unkept.iter().any(|known| known == app_id) {
-                unkept.push(app_id.to_owned());
+        let shown: Vec<String> = self
+            .running
+            .iter()
+            .map(String::as_str)
+            .chain(self.processes.app_ids())
+            .filter(|app_id| !self.kept.iter().any(|kept| kept == app_id))
+            .map(str::to_owned)
+            .collect();
+        self.unkept.retain(|app_id| shown.contains(app_id));
+        for app_id in shown {
+            if !self.unkept.contains(&app_id) {
+                self.unkept.push(app_id);
             }
         }
-        unkept.retain(|app_id| !self.kept.contains(app_id));
-        for app_id in unkept {
+        for app_id in self.unkept.clone() {
             apps.extend(self.describe(&app_id, false));
         }
         self.state.borrow_mut().set_apps(apps, Instant::now());
@@ -272,8 +279,9 @@ impl Taskbar {
         self.status_items
             .iter()
             .filter(|item| {
-                item.pid
-                    .is_some_and(|pid| self.processes.is_of(pid, app_id))
+                item.process
+                    .as_ref()
+                    .is_some_and(|process| self.processes.is_of(process.pid, app_id))
             })
             .find_map(choose)
     }
@@ -288,10 +296,10 @@ impl Taskbar {
                 .map(DesktopEntry::app_id)
                 .collect();
             named.dedup();
-            if let ([app_id], Some(pid)) = (named.as_slice(), item.pid)
+            if let ([app_id], Some(process)) = (named.as_slice(), &item.process)
                 && !app_id.starts_with(BANDE_APP_ID)
             {
-                self.processes.follow(app_id, pid);
+                self.processes.follow(app_id, process.pid, &process.handle);
             }
         }
     }
@@ -1267,6 +1275,7 @@ impl Taskbar {
             unresponsive: Vec::new(),
             windowed: Vec::new(),
             processes: AppProcesses::known(),
+            unkept: Vec::new(),
             status: status.clone(),
             updates,
             status_items: Vec::new(),

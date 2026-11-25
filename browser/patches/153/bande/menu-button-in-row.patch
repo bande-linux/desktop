@@ -1,7 +1,7 @@
-Description: Put the app menu button beside the window controls
+Description: Put the app menu button beside the window controls, in whichever row they are
 Author: Mikael Hug <mikaelhug@gmail.com>
 Forwarded: not-needed
-Last-Update: 2026-11-21
+Last-Update: 2026-11-24
 
 --- a/browser/base/content/navigator-toolbox.inc.xhtml
 +++ b/browser/base/content/navigator-toolbox.inc.xhtml
@@ -37,3 +37,19 @@ Last-Update: 2026-11-21
      <hbox class="titlebar-spacer" type="post-tabs"/>
  #include private-browsing-indicator.inc.xhtml
      <toolbarbutton class="content-analysis-indicator toolbarbutton-1 content-analysis-indicator-icon"/>
+--- a/browser/components/tabbrowser/content/tabbrowser.js
++++ b/browser/components/tabbrowser/content/tabbrowser.js
+@@ -10141,6 +10141,13 @@
+     let navbar = document.getElementById("nav-bar");
+ 
+     gNavToolbox.toggleAttribute("tabs-hidden", hideTabsToolbar);
++    let controlsRow = hideTabsToolbar ? navbar : tabsToolbar;
++    let menuButton = document.getElementById("PanelUI-button");
++    if (menuButton.parentNode != controlsRow) {
++      controlsRow
++        .querySelector(":scope > .titlebar-buttonbox-container")
++        .before(menuButton);
++    }
+     // Should the nav-bar look and function like a titlebar?
+     navbar.classList.toggle(
+       "browser-titlebar",

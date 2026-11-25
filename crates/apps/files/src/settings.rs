@@ -118,7 +118,7 @@ impl Default for FilesSettings {
             new_window_folder: None,
             default_view: ViewMode::default(),
             show_hidden: false,
-            show_extensions: false,
+            show_extensions: true,
             desktop_disks: true,
             spring_loading: true,
             spring_delay: DEFAULT_SPRING_DELAY,

@@ -802,7 +802,7 @@ fn run_drm(
         if let Some(path) = window_sessions() {
             app.compositor.remember_sessions_in(path);
         }
-        keep_code_in_memory();
+        keep_code_in_memory(app.buses.session.as_ref());
     }
     let App {
         compositor, output, ..

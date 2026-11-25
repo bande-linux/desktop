@@ -13,6 +13,7 @@ use crate::proc::{
 };
 use crate::system::{DiskCounters, Memory, Transferred, read_disks, read_interfaces, read_memory};
 use crate::traffic::{Counted, socket_inodes, tcp_counts};
+use bande_status::devices::battery_in_kernel;
 
 const KERNEL_THREAD_DAEMON: u32 = 2;
 
@@ -175,17 +176,6 @@ fn read_gpu(folder: &Path) -> Option<DrmUse> {
     })
 }
 
-fn has_battery(root: &Path) -> bool {
-    fs::read_dir(root.join("sys/class/power_supply"))
-        .into_iter()
-        .flatten()
-        .filter_map(Result::ok)
-        .any(|supply| {
-            fs::read_to_string(supply.path().join("type"))
-                .is_ok_and(|kind| kind.trim() == "Battery")
-        })
-}
-
 fn rate(now: u64, then: u64, seconds: f64) -> f64 {
     if seconds > 0.0 {
         now.saturating_sub(then) as f64 / seconds
@@ -216,7 +206,7 @@ impl Sampler {
             wakeups: false,
             processes: true,
             processes_stale: false,
-            battery: has_battery(root),
+            battery: battery_in_kernel(),
             capacities: Vec::new(),
             buffer: Vec::new(),
         }

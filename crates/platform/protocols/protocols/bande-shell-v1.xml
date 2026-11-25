@@ -20,7 +20,12 @@
     </request>
 
     <event name="show_launcher">
-      <description summary="the user pressed the launcher shortcut"/>
+      <description summary="the user asked for the launcher">
+        Sent when the launcher shortcut is pressed and for show_launcher. The
+        serial is the one of the press that asked, or 0 when no press did. A
+        launcher that press closed stays closed.
+      </description>
+      <arg name="serial" type="uint"/>
     </event>
 
     <event name="capture_screen">
@@ -290,8 +295,10 @@
     <request name="show_launcher">
       <description summary="open the launcher">
         Sent by the bar when its Bande mark is clicked. The compositor sends
-        show_launcher to the shell clients, as tapping Super does.
+        show_launcher to the shell clients, as tapping Super does, with the
+        serial of the press.
       </description>
+      <arg name="serial" type="uint" summary="serial of the press, or 0 when none asked"/>
     </request>
 
     <enum name="launcher_mode">
@@ -417,9 +424,12 @@
       <description summary="the pointer pressed outside a surface">
         Sent to the client whose layer surface asked for
         dismiss_on_press_outside when a pointer button is pressed outside the
-        surface and its popups.
+        surface and its popups, or a finger or pen touches the screen there. The
+        serial is the one of that press, so the client can tell whether what the
+        press asks for afterwards is from the click that closed the surface.
       </description>
       <arg name="surface" type="object" interface="wl_surface"/>
+      <arg name="serial" type="uint"/>
     </event>
 
     <enum name="session_end">

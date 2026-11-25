@@ -661,10 +661,6 @@ impl TaskbarState {
         }
     }
 
-    pub fn is_menu_open(&self) -> bool {
-        self.menu_open
-    }
-
     pub fn is_shown(&self) -> bool {
         self.reveal.target() > 0.0
     }

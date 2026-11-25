@@ -14,7 +14,7 @@ use wgpu::hal;
 
 use crate::damage::Region;
 use crate::dmabuf::{SHARED_FORMAT, SharedImage, Sharing};
-use crate::draw::{self, Caches, Canvas, Frame};
+use crate::draw::{self, Caches, Canvas, Frame, Recording};
 use crate::render::{DrawError, Snapshot};
 use crate::scene::{Image, Scene};
 use crate::text::GlyphRun;
@@ -424,22 +424,18 @@ impl GpuRenderer {
     ) -> Result<wgpu::CommandEncoder, DrawError> {
         let (width, height) = crate::render::extent(scene, scale)?;
         self.scene.reset_and_resize(width, height);
-        self.upload_images(scene);
+        let frame = Frame {
+            scale,
+            origin: (0, 0),
+            size: (width, height),
+        };
+        let recording = Recording::new(&mut self.caches, &scene.items, &frame, damage);
+        self.upload_images(recording.images(&self.caches));
         let mut canvas = GpuCanvas {
             scene: &mut self.scene,
             resources: &mut self.resources,
         };
-        draw::encode(
-            &mut canvas,
-            &mut self.caches,
-            &scene.items,
-            &Frame {
-                scale,
-                origin: (0, 0),
-                size: (width, height),
-            },
-            damage.map(outline),
-        );
+        recording.replay(&mut canvas, &mut self.caches);
         let cleared: Vec<RectU16> = damage
             .unwrap_or_default()
             .iter()
@@ -494,9 +490,7 @@ impl GpuRenderer {
         Ok(encoder)
     }
 
-    fn upload_images(&mut self, scene: &Scene) {
-        let mut images = Vec::new();
-        draw::images(&scene.items, &mut images);
+    fn upload_images(&mut self, mut images: Vec<Image>) {
         images.sort_by_key(Image::id);
         images.dedup_by_key(|image| image.id());
         let needed = images
@@ -619,23 +613,6 @@ impl GpuRenderer {
     }
 }
 
-fn outline(regions: &[Region]) -> BezPath {
-    let mut path = BezPath::new();
-    for region in regions {
-        let (left, top) = (f64::from(region.x), f64::from(region.y));
-        let (right, bottom) = (
-            left + f64::from(region.width),
-            top + f64::from(region.height),
-        );
-        path.move_to((left, top));
-        path.line_to((right, top));
-        path.line_to((right, bottom));
-        path.line_to((left, bottom));
-        path.close_path();
-    }
-    path
-}
-
 struct GpuCanvas<'a> {
     scene: &'a mut vello_gpu::Scene,
     resources: &'a mut Resources,
@@ -714,10 +691,13 @@ mod tests {
 
     use super::*;
     use crate::dmabuf::SharedPlane;
-    use crate::scene::{Item, Paint, Rect, Shape};
+    use crate::scene::{Item, Paint, Point, Rect, Shape, Transform};
+    use crate::text::{TextAlign, TextStyle, TextSystem};
     use bande_design::Color;
 
     const LINEAR: u64 = 0;
+    const LAYER_ROUNDING: u8 = 1;
+    const SAMPLING_ROUNDING: u8 = 2;
     const SIDE: u32 = 64;
     const DMA_BUF_IOCTL_SYNC: libc::c_ulong = 0x4008_6200;
     const SYNC_READ_START: u64 = 1;
@@ -754,7 +734,8 @@ mod tests {
             revents: 0,
         };
         let SharedPlane { offset, stride } = image.planes[0];
-        let length = offset as usize + stride as usize * SIDE as usize;
+        let rows = at.iter().map(|(_, y)| y + 1).max().unwrap_or_default();
+        let length = offset as usize + stride as usize * rows as usize;
         // SAFETY: ready is a valid pollfd; the mapping covers the image's one plane, is only read
         // between the dma-buf's read sync calls and is unmapped before returning.
         unsafe {
@@ -848,6 +829,313 @@ mod tests {
             pixels(&image, &[inside, outside]),
             [bgra(blue), bgra(Color::hex(0xff0000))]
         );
+    }
+
+    struct Change {
+        name: &'static str,
+        before: Vec<Item>,
+        after: Vec<Item>,
+        damage: Option<Region>,
+    }
+
+    impl Change {
+        fn between(name: &'static str, before: Vec<Item>, after: Vec<Item>) -> Self {
+            Self {
+                name,
+                before,
+                after,
+                damage: None,
+            }
+        }
+
+        fn within(name: &'static str, damage: Region, item: Item) -> Self {
+            Self {
+                name,
+                before: vec![item.clone()],
+                after: vec![item],
+                damage: Some(damage),
+            }
+        }
+    }
+
+    fn dot(x: f32, y: f32, side: f32, color: u32) -> Item {
+        Item::Fill {
+            shape: Shape::rounded(Rect::new(x, y, side, side), side / 2.0),
+            paint: Paint::Solid(Color::hex(color).with_opacity(0.7)),
+        }
+    }
+
+    fn crowded(moved: f32) -> Vec<Item> {
+        let row =
+            |y: f32| (0..6).map(move |column| dot(column as f32 * 10.3 + 0.4, y, 11.0, 0x3060c0));
+        vec![
+            Item::Shadow {
+                shape: Shape::rect(Rect::new(6.0, 4.0, 20.0, 6.0)),
+                offset: Point::new(0.0, 2.0),
+                blur_radius: 8.0,
+                color: Color::BLACK,
+            },
+            Item::Clip {
+                shape: Shape::rounded(Rect::new(2.0, 2.0, 60.0, 60.0), 9.0),
+                items: (0..6).flat_map(|line| row(line as f32 * 9.7)).collect(),
+            },
+            Item::Clip {
+                shape: Shape::rect(Rect::new(0.0, 0.0, 64.0, 8.0)),
+                items: row(1.0).collect(),
+            },
+            Item::Opacity {
+                alpha: 0.6,
+                items: vec![dot(20.0 + moved, 28.0, 14.0, 0xd02020)],
+            },
+        ]
+    }
+
+    fn turned(moved: f32) -> Vec<Item> {
+        vec![Item::Transform {
+            transform: Transform::rotate(-0.7),
+            items: vec![Item::Translate {
+                offset: Point::new(-20.0 + moved, 30.0),
+                items: vec![Item::Fill {
+                    shape: Shape::rect(Rect::new(10.0, 10.0, 24.0, 4.0)),
+                    paint: Color::BLACK.into(),
+                }],
+            }],
+        }]
+    }
+
+    fn blended(items: Vec<Item>) -> Item {
+        Item::Blend {
+            mode: crate::scene::Blend::Multiply,
+            items,
+        }
+    }
+
+    fn scene_of(items: &[Item]) -> Scene {
+        Scene {
+            width: SIDE,
+            height: SIDE,
+            background: Color::hex(0xe8e0d8),
+            items: items.to_vec(),
+        }
+    }
+
+    fn everywhere(side: u32) -> Vec<(u32, u32)> {
+        (0..side)
+            .flat_map(|y| (0..side).map(move |x| (x, y)))
+            .collect()
+    }
+
+    fn furthest(one: &[[u8; 4]], other: &[[u8; 4]]) -> Option<u8> {
+        one.iter()
+            .flatten()
+            .zip(other.iter().flatten())
+            .map(|(one, other)| one.abs_diff(*other))
+            .max()
+    }
+
+    #[test]
+    fn a_partial_frame_is_the_whole_frame_s_pixels() {
+        let _turn = device_turn();
+        let linear = [vec![LINEAR]];
+        let Some(gpu) = GpuDevice::shared(false, None)
+            .ok()
+            .filter(|gpu| gpu.shares_images(&linear))
+        else {
+            eprintln!("skipped, no GPU to share images from");
+            return;
+        };
+        let mut renderer = GpuRenderer::with_device(Arc::clone(&gpu), (SIDE, SIDE));
+        let image = || {
+            gpu.shared_image((SIDE, SIDE), &linear)
+                .expect("a shared image")
+        };
+        let mut text = TextSystem::new();
+        let marks = Item::Text {
+            origin: Point::new(20.0, 24.0),
+            paragraph: text.paragraph(
+                &format!("a{}", "\u{303}".repeat(12)),
+                TextStyle::new(13.0, Color::BLACK),
+                None,
+                TextAlign::Start,
+            ),
+        };
+        let pill = Shape::rounded(Rect::new(10.0, 20.0, 44.0, 12.0), 30.0);
+        let ink: Paint = Color::hex(0x2040ff).into();
+        let across_the_end = Region {
+            x: 14,
+            y: 16,
+            width: 20,
+            height: 20,
+        };
+        let spot = Region {
+            x: 24,
+            y: 24,
+            width: 8,
+            height: 8,
+        };
+        let sheet = Shape::rect(Rect::new(0.0, 0.0, 64.0, 64.0));
+        let changes = [
+            Change::between("crowded", crowded(0.0), crowded(3.3)),
+            Change::between(
+                "stacked marks",
+                vec![marks],
+                vec![dot(0.0, 0.0, 4.0, 0x00ff00)],
+            ),
+            Change::between("translated in a rotation", turned(0.0), turned(4.0)),
+            Change::within(
+                "pill",
+                across_the_end,
+                Item::Fill {
+                    shape: pill,
+                    paint: ink.clone(),
+                },
+            ),
+            Change::within(
+                "pill clip",
+                across_the_end,
+                Item::Clip {
+                    shape: pill,
+                    items: vec![Item::Fill {
+                        shape: sheet,
+                        paint: ink.clone(),
+                    }],
+                },
+            ),
+            Change::within(
+                "pill outline",
+                across_the_end,
+                Item::Stroke {
+                    shape: pill,
+                    width: 2.0,
+                    paint: ink.clone(),
+                },
+            ),
+            Change::within(
+                "stroke wider than its shape",
+                spot,
+                Item::Stroke {
+                    shape: Shape::rect(Rect::new(16.0, 16.0, 24.0, 24.0)),
+                    width: 26.0,
+                    paint: ink,
+                },
+            ),
+            Change::between(
+                "blend",
+                vec![blended(vec![dot(20.0, 20.0, 20.0, 0xd02020)])],
+                vec![blended(vec![dot(23.0, 20.0, 20.0, 0xd02020)])],
+            ),
+            Change::between(
+                "shadows",
+                vec![],
+                vec![
+                    Item::Shadow {
+                        shape: Shape::rounded(Rect::new(12.0, 10.0, 24.0, 14.0), 5.0),
+                        offset: Point::new(1.0, 4.0),
+                        blur_radius: 4.0,
+                        color: Color::hex(0xb2b976).with_opacity(0.71),
+                    },
+                    Item::CastShadow {
+                        shape: Shape::rounded(Rect::new(14.0, 14.0, 16.0, 8.0), 4.0),
+                        offset: Point::new(-2.0, -3.0),
+                        blur_radius: 4.0,
+                        color: Color::hex(0x01f0b1).with_opacity(0.4),
+                    },
+                ],
+            ),
+            Change::within(
+                "blend in a clip",
+                spot,
+                Item::Clip {
+                    shape: Shape::rect(Rect::new(-8.0, -8.0, 80.0, 80.0)),
+                    items: vec![
+                        dot(10.0, 10.0, 20.0, 0x20d020),
+                        blended(vec![dot(20.0, 20.0, 20.0, 0xd02020)]),
+                    ],
+                },
+            ),
+        ];
+        let mut wrong = Vec::new();
+        for change in changes {
+            let (partial, whole) = (image(), image());
+            let (before, after) = (scene_of(&change.before), scene_of(&change.after));
+            let damage = match change.damage {
+                Some(region) => vec![region],
+                None => crate::damage::damage(&before, &after, 1.0).expect("little damage"),
+            };
+            renderer
+                .present(&before, 1.0, &partial, None)
+                .expect("the first frame");
+            renderer
+                .present(&after, 1.0, &partial, Some(&damage))
+                .expect("the partial frame");
+            renderer
+                .present(&after, 1.0, &whole, None)
+                .expect("the whole frame");
+            let differs = furthest(
+                &pixels(&partial, &everywhere(SIDE)),
+                &pixels(&whole, &everywhere(SIDE)),
+            );
+            if differs.is_none_or(|differs| differs > LAYER_ROUNDING) {
+                wrong.push((change.name, differs));
+            }
+        }
+        assert!(wrong.is_empty(), "channels differ: {wrong:?}");
+    }
+
+    #[test]
+    fn an_emoji_shows_the_same_on_the_gpu_and_the_cpu() {
+        let _turn = device_turn();
+        let linear = [vec![LINEAR]];
+        let Some(gpu) = GpuDevice::shared(false, None)
+            .ok()
+            .filter(|gpu| gpu.shares_images(&linear))
+        else {
+            eprintln!("skipped, no GPU to share images from");
+            return;
+        };
+        let mut text = TextSystem::new();
+        let mut renderer = GpuRenderer::with_device(Arc::clone(&gpu), (SIDE, SIDE));
+        let sizes = [9.0, 13.0, 20.0, 60.0];
+        let scales = [1.0, 1.25, 1.5, 1.75, 2.0];
+        for (size, scale) in sizes
+            .into_iter()
+            .flat_map(|size| scales.map(|scale| (size, scale)))
+        {
+            let scene = scene_of(&[Item::Text {
+                origin: Point::new(3.3, 2.0),
+                paragraph: text.paragraph(
+                    "🎉",
+                    TextStyle::new(size, Color::BLACK),
+                    None,
+                    TextAlign::Start,
+                ),
+            }]);
+            let side = crate::render::pixels(SIDE, scale);
+            let image = gpu
+                .shared_image((side, side), &linear)
+                .expect("a shared image");
+            renderer
+                .present(&scene, scale, &image, None)
+                .expect("a frame with an emoji");
+            let shown = pixels(&image, &everywhere(side));
+            let mut drawn = vec![0; (side * side * 4) as usize];
+            crate::cpu::CpuRenderer::new()
+                .render_into(&scene, scale, &mut drawn)
+                .expect("the same frame on the CPU");
+            let drawn: Vec<[u8; 4]> = drawn
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|&[red, green, blue, alpha]| [blue, green, red, alpha])
+                .collect();
+            let differs = furthest(&shown, &drawn);
+            let yellow = |&[blue, green, red, _]: &[u8; 4]| red > 180 && green > 100 && blue < 100;
+            assert!(shown.iter().any(yellow), "at {size}: no emoji is shown");
+            assert!(
+                differs.is_some_and(|differs| differs <= SAMPLING_ROUNDING),
+                "{size} at {scale}: a channel differs by {differs:?}"
+            );
+        }
     }
 
     #[test]

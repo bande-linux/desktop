@@ -27,7 +27,7 @@ Depends: bande-greeter, greetd, apt, debconf, passwd, python3, systemd
 Restrictions: needs-root, breaks-testbed, allow-stderr
 
 Tests: login-recovery
-Depends: bande-greeter, passwd, python3, systemd
+Depends: bande-greeter, bsdutils, passwd, python3, systemd
 Restrictions: needs-root, breaks-testbed, allow-stderr, isolation-machine
 
 Tests: coexistence

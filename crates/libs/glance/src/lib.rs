@@ -22,7 +22,7 @@ pub use panel::{GlanceLink, Link, Panel};
 pub use worker::serve_worker;
 
 const SIZE_FILE: &str = "bande/glance-size";
-const DEFAULT_SIZE: (f32, f32) = (720.0, 540.0);
+const DEFAULT_SIZE: (f32, f32) = (960.0, 720.0);
 const MIN_SIZE: (f32, f32) = (360.0, 260.0);
 const ZOOM_STEP: f32 = 1.25;
 const MAX_ZOOM: f32 = 8.0;
@@ -99,6 +99,7 @@ pub struct Glance {
     pan: Point,
     scroll: Point,
     size: (f32, f32),
+    opened_at: Option<(f32, f32)>,
     presence: Animated,
     closing: bool,
     reduce_motion: bool,
@@ -152,6 +153,7 @@ impl Glance {
     ) -> std::io::Result<Self> {
         let mut presence = Animated::new(if windowed { 1.0 } else { 0.0 });
         presence.animate_at(now, reduce_motion, 1.0, Spring::STANDARD);
+        let size = remembered_size();
         let mut glance = Self {
             at: at.min(subjects.len().saturating_sub(1)),
             subjects,
@@ -163,7 +165,8 @@ impl Glance {
             zoom: 1.0,
             pan: Point::default(),
             scroll: Point::default(),
-            size: remembered_size(),
+            size,
+            opened_at: (!windowed || full_screen).then_some(size),
             presence,
             closing: false,
             reduce_motion,
@@ -323,7 +326,8 @@ impl Glance {
         self.closing = true;
         self.resizing = None;
         self.moving = None;
-        if !self.windowed || !self.full_screen {
+        let resized = self.opened_at.is_some_and(|opened| opened != self.size);
+        if resized && (!self.windowed || !self.full_screen) {
             remember_size(self.size);
         }
         match self.windowed {
@@ -658,6 +662,7 @@ impl Glance {
     pub fn resized_window(&mut self, size: (f32, f32)) {
         if self.windowed && !self.full_screen {
             self.size = size;
+            self.opened_at.get_or_insert(size);
         }
     }
 }

@@ -7,6 +7,7 @@ use crate::widgets::{Row, Text, Tone};
 use bande_fs::format_size;
 use bande_packages::{Applies, Class};
 use bande_settings_panes::SettingId;
+use bande_status::devices::battery_in_kernel;
 use bande_toolkit::ui::{Axis, Button, Label, ProgressBar, Spinner, Stack, Widget};
 use bande_toolkit::{SessionEnd, Spacing};
 use jiff::Timestamp;
@@ -103,7 +104,7 @@ impl SettingsView {
                 ),
                 Reboot::Install { count, ending } => (
                     ending.title(count),
-                    ending.hint(),
+                    ending.hint(battery_in_kernel()),
                     ending.action(),
                     ending.session_end(),
                 ),
@@ -308,7 +309,11 @@ impl SettingsView {
                     Intent::EndSession(ending.session_end()),
                     true,
                 );
-                vec![self.status_row(&ending.title(count), Some(&ending.hint()), Some(restart))]
+                vec![self.status_row(
+                    &ending.title(count),
+                    Some(&ending.hint(battery_in_kernel())),
+                    Some(restart),
+                )]
             }
             SoftwareState::Installed {
                 count,

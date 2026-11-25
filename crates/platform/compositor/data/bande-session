@@ -71,7 +71,7 @@ limit() {
         ManagedOOMMemoryPressureDurationSec) record=ManagedOOMMemoryPressureDurationUSec ;;
         esac
         record="$limited.d/50-$record.conf"
-        if [ ! -e "$controls/$record" ] || cmp -s "$controls/$record" "$limits/$record"; then
+        if [ ! -e "$controls/$record" ]; then
             wanted="$wanted $assignment"
             records="$records $record"
         fi
@@ -111,6 +111,7 @@ forget_limits() {
     rm -rf "$limits"
     systemctl --user daemon-reload
 }
+forget_limits
 set_limits
 systemctl --user unset-environment $locale_variables BANDE_LOGIN_ACCESSIBILITY
 systemctl --user import-environment ELECTRON_OZONE_PLATFORM_HINT QT_QPA_PLATFORMTHEME GTK_USE_PORTAL PATH $locale_variables XDG_SEAT XDG_SESSION_ID XDG_SESSION_CLASS \
@@ -135,7 +136,7 @@ elif [ -z "$ending" ] && [ $(($(date +%s) - started)) -lt 5 ]; then
     note_failure quick
 fi
 systemctl --user stop bande-compositor.service
-systemctl --user unset-environment ELECTRON_OZONE_PLATFORM_HINT QT_QPA_PLATFORMTHEME GTK_USE_PORTAL WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE BANDE_LOGIN_ACCESSIBILITY
+systemctl --user unset-environment ELECTRON_OZONE_PLATFORM_HINT QT_QPA_PLATFORMTHEME GTK_USE_PORTAL WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE XDG_MENU_PREFIX BANDE_LOGIN_ACCESSIBILITY
 if [ -n "$session_proxy" ] || [ -e "$proxy_settings" ]; then
     systemctl --user unset-environment $proxy_variables
 fi

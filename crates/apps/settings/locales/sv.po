@@ -1505,9 +1505,6 @@ msgstr "Slutar ladda före fullt för att batteriet ska åldras långsammare."
 msgid "Power information isn’t available because the power service isn’t running."
 msgstr "Ströminformation är inte tillgänglig eftersom strömtjänsten inte körs."
 
-msgid "Power source"
-msgstr "Strömkälla"
-
 msgid "Power modes aren’t available because the power profiles service isn’t installed."
 msgstr "Strömlägen är inte tillgängliga eftersom tjänsten för strömprofiler inte är installerad."
 
@@ -2067,8 +2064,14 @@ msgstr "Uppdateringarna installeras medan datorn startar om"
 msgid "Updates install while the computer restarts. Keep the computer plugged in until it has started again."
 msgstr "Uppdateringarna installeras medan datorn startar om. Håll datorn ansluten till ström tills den har startat igen."
 
+msgid "Firmware installs while the computer is shut down. Then turn it on again."
+msgstr "Den inbyggda programvaran installeras medan datorn är avstängd. Starta den sedan igen."
+
 msgid "Firmware installs while the computer is shut down. Keep it plugged in, then turn it on again."
 msgstr "Den inbyggda programvaran installeras medan datorn är avstängd. Håll den ansluten till ström och starta den sedan igen."
+
+msgid "Firmware installs while the computer is shut down, and the other updates when you turn it on again."
+msgstr "Den inbyggda programvaran installeras medan datorn är avstängd och de andra uppdateringarna när du startar den igen."
 
 msgid "Firmware installs while the computer is shut down, and the other updates when you turn it on again. Keep it plugged in."
 msgstr "Den inbyggda programvaran installeras medan datorn är avstängd och de andra uppdateringarna när du startar den igen. Håll den ansluten till ström."

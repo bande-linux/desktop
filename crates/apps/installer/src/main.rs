@@ -1,6 +1,7 @@
 use std::os::fd::BorrowedFd;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
 use bande_app::{Cx, Info, Keys, Kind, Menus, Program, View, WindowId};
@@ -19,6 +20,8 @@ static INFO: Info = Info {
     keys: Keys::Standard,
     settings: None,
 };
+
+static FOLLOWS_OPENED_APP: AtomicBool = AtomicBool::new(false);
 
 struct Pane(Installer);
 
@@ -143,9 +146,16 @@ impl Program for Packages {
         }
     }
 
-    fn window_closed(&mut self, _cx: &mut Cx<Self>, _window: WindowId, view: Pane) {
-        self.parked.retain(|pane| !pane.0.closed());
-        self.parked.push(view);
+    fn window_closed(&mut self, cx: &mut Cx<Self>, _window: WindowId, view: Pane) {
+        if view.0.opened() {
+            FOLLOWS_OPENED_APP.store(true, Ordering::Relaxed);
+        }
+        if !view.0.closed() {
+            self.parked.push(view);
+        }
+        if self.parked.is_empty() && cx.windows().next().is_none() {
+            cx.quit();
+        }
     }
 
     fn changed(&mut self, cx: &mut Cx<Self>, window: WindowId) {
@@ -162,6 +172,10 @@ impl Program for Packages {
         if let Some(pane) = self.parked.get_mut(index) {
             pane.0.pump();
         }
+    }
+
+    fn runs_in_background() -> bool {
+        FOLLOWS_OPENED_APP.load(Ordering::Relaxed)
     }
 }
 

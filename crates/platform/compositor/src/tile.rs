@@ -284,12 +284,8 @@ impl State {
             return;
         }
         let window = &mut self.windows[index];
-        if window.restore.is_none()
-            && window.tile.is_none()
-            && !window.has_state(xdg_toplevel::State::Maximized)
-            && !window.has_state(xdg_toplevel::State::Fullscreen)
-        {
-            window.restore = window.geometry();
+        if window.restore.is_none() && window.tile.is_none() {
+            window.restore = window.floating_frame();
         }
         window.toplevel.with_pending_state(|pending| {
             pending.states.unset(xdg_toplevel::State::Maximized);
@@ -363,7 +359,8 @@ impl State {
             }
             _ => {
                 let surface = self.windows[index].surface().clone();
-                if self.windows[index].has_state(xdg_toplevel::State::Maximized) {
+                let (_, maximized) = self.windows[index].placed_states();
+                if maximized {
                     self.unmaximize(&surface);
                 } else if self.untile(index).is_some() {
                     self.animate_window(index, Spring::STANDARD, None);
@@ -384,7 +381,7 @@ impl State {
             return;
         }
         let tile = window.tile.map(|(tile, _)| tile);
-        let maximized = window.has_state(xdg_toplevel::State::Maximized);
+        let (_, maximized) = window.placed_states();
         match placing(tile, maximized, direction) {
             Some(Placing::Tile(tile)) => {
                 self.tile_window(index, tile, Spring::STANDARD);

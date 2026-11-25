@@ -346,9 +346,9 @@ impl StatusClient {
         );
     }
 
-    fn open(&mut self, window: &mut Window, slot: Slot) {
+    fn open(&mut self, window: &mut Window, slot: Slot, pressed: Option<u32>) {
         if slot == Slot::Search {
-            report("open the launcher", window.show_launcher());
+            report("open the launcher", window.show_launcher(pressed));
             return;
         }
         let Some(anchor) = self.bar.slot_rect(slot) else {
@@ -525,7 +525,7 @@ impl StatusClient {
             self.open_tray(window, index, anchor, true);
             return;
         }
-        self.open(window, slot);
+        self.open(window, slot, window.press_serial());
     }
 }
 
@@ -610,7 +610,7 @@ impl App for StatusClient {
                     accesskit::Action::Click | accesskit::Action::ShowContextMenu
                 ) && let Some(slot) = self.bar.slot_of_node(request.target_node, request.action)
                 {
-                    self.open(window, slot);
+                    self.open(window, slot, None);
                 }
             }
             WindowEvent::MenuClosed => {

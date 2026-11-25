@@ -3,6 +3,7 @@ mod damage;
 #[cfg(feature = "gpu")]
 mod dmabuf;
 mod draw;
+mod emoji;
 #[cfg(feature = "gpu")]
 mod gpu;
 mod input;
@@ -24,6 +25,7 @@ pub use cpu::CpuRenderer;
 pub use damage::{Region, damage};
 #[cfg(feature = "gpu")]
 pub use dmabuf::{SHARED_FOURCC, SharedImage, SharedPlane};
+pub use emoji::push_emoji;
 #[cfg(feature = "gpu")]
 pub use gpu::{GpuDevice, GpuRenderer};
 pub use input::{

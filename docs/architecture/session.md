@@ -404,7 +404,9 @@ PipeWire's socket.
 ### Session startup
 
 - Before starting any shell client, the compositor exports `WAYLAND_DISPLAY`,
-  `XDG_SESSION_TYPE` and `XDG_CURRENT_DESKTOP` to the user manager and D-Bus activation.
+  `XDG_SESSION_TYPE`, `XDG_CURRENT_DESKTOP` and `XDG_MENU_PREFIX` to the user manager and D-Bus
+  activation. `bande-shell` ships `bande-applications.menu` and a `desktop-directories` folder, without
+  which packages that register themselves with `xdg-desktop-menu` get no entry in Search.
 - `bande-session` sets `ELECTRON_OZONE_PLATFORM_HINT=auto`, `GTK_USE_PORTAL=1` and
   `QT_QPA_PLATFORMTHEME` (each unless already set), and takes the language and formats from
   `/etc/locale.conf` (or Debian's `/etc/default/locale` where there is none), then
@@ -724,8 +726,21 @@ the login window, still running, comes back with its content and the reason `ban
 for it (above). Whenever a session ends, the worker brings VT 1 to the front before it closes the session,
 so logind never finds the session's terminal on screen without one and starts no `getty` there. The
 kernel hung up every descriptor on that terminal when the session's leader exited, so the worker
-opens it again first, to acknowledge the switch. Logging out ends the session: logind gives the
-terminal back to the console, VT 1 shows only `deep`, and `bande-login` starts the login window again on VT 1, set to
+opens it again first, to acknowledge the switch. It empties it again and paints it in `deep`, also
+when the session had stopped its output (`tcflow`), without waiting for a terminal that does not
+take it; the login window's too, where Plymouth put back the console's black when it quit after
+boot.
+
+The sessions are registered without a terminal (`PAM_TTY` is emptied before `pam_open_session`;
+`XDG_VTNR` says which one they have), so `wall` and the message logind sends every terminal when
+the computer restarts or shuts down are not written to a console behind the desktop and shown the
+moment it ends. Restarting and shutting down go from the desktop over plain `deep`, the boot
+screen's own background, to Plymouth, which has a terminal of its own (`tty63`). The terminals are
+in text mode by then, so with `nosplash`, without Plymouth or when the shutdown is held up the
+console's messages are on screen.
+
+Logging out ends the session: logind gives the terminal back to the console, VT 1 shows only
+`deep`, and `bande-login` starts the login window again on VT 1, set to
 graphics mode before it comes to the front, which fades in from that colour. A compositor
 leaving the screen closes its framebuffers with `DRM_IOCTL_MODE_CLOSEFB`, which leaves them on
 their planes until something else is shown, so the login window imports what is on screen only

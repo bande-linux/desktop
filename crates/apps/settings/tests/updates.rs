@@ -199,3 +199,15 @@ fn firmware_is_refused_while_fwupd_reports_the_battery_too_low_and_others_still_
         [fwupd::Call::Install("dock".to_owned(), DOCK.cab())]
     );
 }
+
+#[test]
+fn only_a_computer_with_a_battery_is_told_to_stay_plugged_in() {
+    for ending in [
+        Ending::FirmwareRestart,
+        Ending::FirmwareShutDown,
+        Ending::FirmwareShutDownAndPackages,
+    ] {
+        assert!(ending.hint(true).contains("plugged in"));
+        assert!(!ending.hint(false).contains("plugged in"));
+    }
+}

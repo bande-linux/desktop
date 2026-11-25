@@ -1,3 +1,4 @@
+use std::os::fd::OwnedFd;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Sender};
 use std::thread::{self, JoinHandle};
@@ -5,6 +6,8 @@ use std::time::Duration;
 use std::{fs, io, ptr};
 
 use bande_bus::systemd::{ServiceManagerProxyBlocking, main_pid, memory_min, set_memory_min};
+use rustix::event::{PollFd, PollFlags, Timespec, poll};
+use rustix::process::{Pid, PidfdFlags, pidfd_open};
 use zbus::blocking::{Connection, connection};
 
 use crate::checked;
@@ -20,8 +23,19 @@ const ANSWER_PATIENCE: Duration = Duration::from_secs(2);
 const LOCKABLE: u64 = 256 << 20;
 
 struct Lockable {
-    manager: libc::pid_t,
+    manager: Pid,
+    running: OwnedFd,
     before: libc::rlimit,
+}
+
+impl Lockable {
+    fn undo(&self) -> io::Result<()> {
+        let mut ended = [PollFd::new(&self.running, PollFlags::IN)];
+        if poll(&mut ended, Some(&Timespec::default()))? == 0 {
+            lock_limit(self.manager, Some(&self.before))?;
+        }
+        Ok(())
+    }
 }
 
 /// Memory kept for one person's desktop on every level above their session while it runs, so the
@@ -49,14 +63,21 @@ fn total_memory() -> Option<u64> {
     Some(kilobytes * 1024)
 }
 
-fn lock_limit(process: libc::pid_t, new: Option<&libc::rlimit>) -> io::Result<libc::rlimit> {
+fn lock_limit(process: Pid, new: Option<&libc::rlimit>) -> io::Result<libc::rlimit> {
     let mut old = libc::rlimit {
         rlim_cur: 0,
         rlim_max: 0,
     };
     let new = new.map_or(ptr::null(), ptr::from_ref);
     // SAFETY: new is null or points to a limit, and old to one, both outliving the call.
-    checked(unsafe { libc::prlimit(process, libc::RLIMIT_MEMLOCK, new, &raw mut old) })?;
+    checked(unsafe {
+        libc::prlimit(
+            process.as_raw_nonzero().get(),
+            libc::RLIMIT_MEMLOCK,
+            new,
+            &raw mut old,
+        )
+    })?;
     Ok(old)
 }
 
@@ -69,10 +90,12 @@ fn slice_of(uid: u32) -> String {
 }
 
 fn let_lock_memory(system: &Connection, user_manager: &str) -> zbus::Result<Option<Lockable>> {
-    let manager = main_pid(system, user_manager)?.and_then(|pid| pid.try_into().ok());
+    let manager =
+        main_pid(system, user_manager)?.and_then(|pid| Pid::from_raw(pid.try_into().ok()?));
     let Some(manager) = manager else {
         return Ok(None);
     };
+    let running = pidfd_open(manager, PidfdFlags::empty()).map_err(io::Error::from)?;
     let before = lock_limit(manager, None)?;
     if before.rlim_max >= LOCKABLE {
         return Ok(None);
@@ -82,7 +105,11 @@ fn let_lock_memory(system: &Connection, user_manager: &str) -> zbus::Result<Opti
         ..before
     };
     lock_limit(manager, Some(&raised))?;
-    Ok(Some(Lockable { manager, before }))
+    Ok(Some(Lockable {
+        manager,
+        running,
+        before,
+    }))
 }
 
 fn user_manager_of(uid: u32) -> String {
@@ -129,7 +156,7 @@ impl Kept {
             bytes,
             held: Vec::new(),
         };
-        for unit in [USERS_SLICE.to_owned(), slice_of(uid), user_manager_of(uid)] {
+        for unit in [user_manager_of(uid), slice_of(uid), USERS_SLICE.to_owned()] {
             match kept.hold(&unit) {
                 Ok(true) => kept.held.push(unit),
                 Ok(false) => {}
@@ -143,11 +170,13 @@ impl Kept {
 
     fn hold(&self, unit: &str) -> zbus::Result<bool> {
         let current = memory_min(&self.system, unit)?;
-        if current == 0 && !drop_in(unit).exists() {
-            set_memory_min(&self.system, unit, self.bytes)?;
-            return Ok(true);
+        if drop_in(unit).exists() {
+            return Ok(current == self.bytes);
         }
-        Ok(current == self.bytes)
+        if current == 0 {
+            set_memory_min(&self.system, unit, self.bytes)?;
+        }
+        Ok(current == 0)
     }
 
     fn others_hold(&self) -> zbus::Result<bool> {
@@ -163,23 +192,16 @@ impl Kept {
     }
 
     fn release_all(&self) {
-        let mut removed = false;
-        for unit in self.held.iter().rev() {
-            match self.forget(unit) {
-                Ok(forgotten) => removed |= forgotten,
-                Err(error) => {
-                    tracing::warn!("the memory kept for the desktop stays kept in {unit}: {error}");
-                }
+        for unit in &self.held {
+            if let Err(error) = self.forget(unit) {
+                tracing::warn!("the memory kept for the desktop stays kept in {unit}: {error}");
             }
-        }
-        if removed && let Err(error) = self.reload() {
-            tracing::warn!("the memory kept for the desktop stays kept: {error}");
         }
     }
 
-    fn forget(&self, unit: &str) -> zbus::Result<bool> {
+    fn forget(&self, unit: &str) -> zbus::Result<()> {
         if unit == USERS_SLICE && self.others_hold()? {
-            return Ok(false);
+            return Ok(());
         }
         set_memory_min(&self.system, unit, 0)?;
         let drop_in = drop_in(unit);
@@ -187,15 +209,7 @@ impl Kept {
         if let Some(folder) = drop_in.parent() {
             let _ = fs::remove_dir(folder);
         }
-        Ok(true)
-    }
-
-    fn reload(&self) -> zbus::Result<()> {
-        let manager = ServiceManagerProxyBlocking::new(&self.system)?;
-        match manager.system_state()?.as_str() {
-            "stopping" => Ok(()),
-            _ => manager.reload(),
-        }
+        Ok(())
     }
 }
 
@@ -207,9 +221,8 @@ impl Drop for Protection {
         {
             tracing::warn!("the memory kept for the desktop stays kept");
         }
-        if let Some(Lockable { manager, before }) = &self.lockable
-            && let Err(error) = lock_limit(*manager, Some(before))
-            && error.raw_os_error() != Some(libc::ESRCH)
+        if let Some(lockable) = &self.lockable
+            && let Err(error) = lockable.undo()
         {
             tracing::warn!("the person may still lock more memory: {error}");
         }

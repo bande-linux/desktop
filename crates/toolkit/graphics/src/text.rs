@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt;
 use std::ops::Range;
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 use std::thread;
 
 use bande_design::{Color, TextRole, TextSize, Typeface};
@@ -15,6 +15,7 @@ use parley::{
 use skrifa::MetadataProvider;
 
 use crate::Rect;
+use crate::emoji::push_emoji;
 
 const DISPLAY_SIZE: f32 = 20.0;
 const ELLIPSIS: char = '\u{2026}';
@@ -95,7 +96,7 @@ static EMOJI_FAMILIES: [FontFamilyName<'static>; 3] = [
     FontFamilyName::Generic(GenericFamily::SansSerif),
 ];
 
-fn families(typeface: Typeface) -> FontFamily<'static> {
+pub(crate) fn families(typeface: Typeface) -> FontFamily<'static> {
     let families = match typeface {
         Typeface::Interface => INTERFACE_FAMILIES.as_slice(),
         Typeface::Display => DISPLAY_FAMILIES.as_slice(),
@@ -497,6 +498,7 @@ impl TextSystem {
                 );
             }
         }
+        push_emoji(&mut builder, &text);
         let mut layout = builder.build(&text);
         layout.break_all_lines(max_width);
         let alignment = match align {
@@ -508,6 +510,7 @@ impl TextSystem {
         Paragraph {
             layout: Arc::new(layout),
             text: Arc::from(text.as_ref()),
+            ink: Arc::default(),
         }
     }
 }
@@ -516,6 +519,7 @@ impl TextSystem {
 pub struct Paragraph {
     layout: Arc<Layout<Color>>,
     text: Arc<str>,
+    ink: Arc<OnceLock<Option<Rect>>>,
 }
 
 #[derive(Debug, Clone)]
@@ -622,6 +626,7 @@ impl Paragraph {
         Self {
             layout: Arc::new(layout),
             text: Arc::from(""),
+            ink: Arc::default(),
         }
     }
 
@@ -742,6 +747,12 @@ impl Paragraph {
             .lines()
             .map(|line| line.metrics().offset + line.metrics().advance)
             .fold(self.layout.width(), f32::max)
+    }
+
+    pub(crate) fn ink(&self) -> Option<Rect> {
+        *self
+            .ink
+            .get_or_init(|| crate::outline::ink(&self.glyph_runs()))
     }
 
     pub fn line_count(&self) -> usize {

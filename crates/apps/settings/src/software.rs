@@ -17,6 +17,7 @@ use bande_packages::{
     Applies, Class, Client, Error, ErrorCode, Failure, Mode, Progress, Restart, Status, flatpak,
     running_release,
 };
+use bande_status::devices::battery_in_kernel;
 use bande_toolkit::SessionEnd;
 use bande_xdg::{replace_file, state_home};
 use zbus::MatchRule;
@@ -145,16 +146,24 @@ impl Ending {
         }
     }
 
-    pub(crate) fn hint(self) -> String {
-        match self {
-            Self::Restart => tr!("Updates install while the computer restarts"),
-            Self::FirmwareRestart => tr!(
+    pub fn hint(self, battery: bool) -> String {
+        match (self, battery) {
+            (Self::Restart, _) | (Self::FirmwareRestart, false) => {
+                tr!("Updates install while the computer restarts")
+            }
+            (Self::FirmwareRestart, true) => tr!(
                 "Updates install while the computer restarts. Keep the computer plugged in until it has started again."
             ),
-            Self::FirmwareShutDown => tr!(
+            (Self::FirmwareShutDown, false) => {
+                tr!("Firmware installs while the computer is shut down. Then turn it on again.")
+            }
+            (Self::FirmwareShutDown, true) => tr!(
                 "Firmware installs while the computer is shut down. Keep it plugged in, then turn it on again."
             ),
-            Self::FirmwareShutDownAndPackages => tr!(
+            (Self::FirmwareShutDownAndPackages, false) => tr!(
+                "Firmware installs while the computer is shut down, and the other updates when you turn it on again."
+            ),
+            (Self::FirmwareShutDownAndPackages, true) => tr!(
                 "Firmware installs while the computer is shut down, and the other updates when you turn it on again. Keep it plugged in."
             ),
         }
@@ -995,7 +1004,11 @@ pub fn announce_updates(session: &Connection, system: &Connection) -> zbus::Resu
         _ => {}
     }
     if let Ok(Some(SoftwareState::Prepared { count, ending })) = waiting_offline(system) {
-        return announce(session, &ending.title(count), &ending.hint());
+        return announce(
+            session,
+            &ending.title(count),
+            &ending.hint(battery_in_kernel()),
+        );
     }
     if restart_pending() {
         return announce(
@@ -1146,9 +1159,11 @@ fn update_automatically(
         Some(SoftwareState::Failed { reason, .. }) => {
             announce(session, &tr!("Could not install updates"), &reason)
         }
-        Some(SoftwareState::Prepared { count, ending }) => {
-            announce(session, &ending.title(count), &ending.hint())
-        }
+        Some(SoftwareState::Prepared { count, ending }) => announce(
+            session,
+            &ending.title(count),
+            &ending.hint(battery_in_kernel()),
+        ),
         _ if approve + restart > 0 => announce_waiting(session, approve, restart),
         Some(SoftwareState::Installed {
             reboot: Some(_), ..

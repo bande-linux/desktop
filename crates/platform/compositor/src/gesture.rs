@@ -283,7 +283,7 @@ impl State {
             && scale < PINCH_FOR_LAUNCHER
             && self.pointing.trackpad().launcher_pinch
         {
-            self.show_launcher();
+            self.show_launcher(0);
         }
         if target != before {
             self.hand_keyboard_over(target);
@@ -480,7 +480,7 @@ impl State {
             }
             (Gesture::PinchEnd { cancelled }, Some(Route::Launcher { scale })) => {
                 if !cancelled && scale < PINCH_FOR_LAUNCHER && self.desktop.target == 0.0 {
-                    self.show_launcher();
+                    self.show_launcher(0);
                 }
                 None
             }

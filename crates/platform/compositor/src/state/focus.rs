@@ -40,13 +40,7 @@ impl State {
             .and_then(|surface| self.acting_app_of(surface));
         self.focused_behind_layer = match acting {
             Some(_) => None,
-            None => self
-                .focused_window()
-                .or_else(|| {
-                    self.focused()
-                        .filter(|focused| self.acting_app_of(focused).is_some())
-                })
-                .filter(|_| onto_layer),
+            None => self.behind_layer().filter(|_| onto_layer),
         };
         if surface.is_some() && !onto_layer {
             self.windowless_app = None;
@@ -118,11 +112,24 @@ impl State {
             .next()
     }
 
+    pub(crate) fn behind_layer(&self) -> Option<WlSurface> {
+        self.focused_window().or_else(|| {
+            [self.focused(), self.focused_behind_layer.clone()]
+                .into_iter()
+                .flatten()
+                .find(|key| self.acting_app_of(key).is_some())
+        })
+    }
+
     pub(crate) fn focus_behind_layer(&mut self) {
         let next = self
             .focused_behind_layer
             .clone()
-            .filter(|key| self.window_index(key).is_some() || self.acting_app_of(key).is_some())
+            .filter(|key| {
+                self.window_index(key)
+                    .is_some_and(|index| self.windows[index].visible())
+                    || self.acting_app_of(key).is_some()
+            })
             .or_else(|| self.frontmost_unless_windowless());
         self.focus(next);
     }

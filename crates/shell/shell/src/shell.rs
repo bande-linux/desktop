@@ -248,6 +248,10 @@ impl Shell {
     }
 
     fn memory_stalled(&mut self) {
+        if self.pressure.as_ref().is_some_and(PressureTrigger::is_gone) {
+            self.pressure = pressure_trigger(self.context.app_slice.as_deref());
+            return;
+        }
         let exhausted = std::fs::read_to_string(MEMINFO)
             .is_ok_and(|meminfo| memory_exhausted(&meminfo))
             || self.context.app_slice.as_deref().is_some_and(apps_at_limit);

@@ -5,7 +5,7 @@ use vello_cpu::{
 };
 
 use crate::damage::Region;
-use crate::draw::{self, Caches, Canvas, Frame};
+use crate::draw::{self, Caches, Canvas, Frame, Recording};
 use crate::render::{DrawError, Snapshot};
 use crate::scene::Scene;
 use crate::text::GlyphRun;
@@ -72,12 +72,16 @@ impl CpuRenderer {
         let width = u16::try_from(region.width).map_err(|_| too_large())?;
         let height = u16::try_from(region.height).map_err(|_| too_large())?;
         self.context.reset_and_resize(width, height);
-        let mut images = Vec::new();
-        draw::images(&scene.items, &mut images);
+        let frame = Frame {
+            scale,
+            origin: (region.x, region.y),
+            size: (width, height),
+        };
+        let recording = Recording::new(&mut self.caches, &scene.items, &frame, None);
         for id in self.caches.images.take_dropped() {
             self.resources.destroy_image(id);
         }
-        for image in images {
+        for image in recording.images(&self.caches) {
             if self.caches.images.get(image.id()).is_none()
                 && let Some(pixmap) = image.pixmap()
             {
@@ -85,19 +89,12 @@ impl CpuRenderer {
                 self.caches.images.insert(image.id(), id, image.liveness());
             }
         }
-        draw::encode(
+        recording.replay(
             &mut CpuCanvas {
                 context: &mut self.context,
                 resources: &mut self.resources,
             },
             &mut self.caches,
-            &scene.items,
-            &Frame {
-                scale,
-                origin: (region.x, region.y),
-                size: (width, height),
-            },
-            None,
         );
         self.context.flush();
         let target = PixmapMut::new(width, height, rgba).ok_or(DrawError::BufferSize)?;

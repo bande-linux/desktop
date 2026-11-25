@@ -111,6 +111,7 @@ pub struct Installer {
     ui: Ui,
     content: WidgetId,
     closed: bool,
+    opened: bool,
     restart: bool,
 }
 
@@ -145,6 +146,7 @@ impl Installer {
             ui,
             content: id,
             closed: false,
+            opened: false,
             restart: false,
         };
         installer.ask(Job::Inspect {
@@ -180,6 +182,10 @@ impl Installer {
 
     pub fn closed(&self) -> bool {
         self.closed
+    }
+
+    pub fn opened(&self) -> bool {
+        self.opened
     }
 
     fn ask(&self, job: Job) {
@@ -285,6 +291,7 @@ impl Installer {
                     if let Err(error) = bande_xdg::launch(entry, None) {
                         tracing::warn!("cannot open {}: {error}", entry.name);
                     }
+                    self.opened = true;
                     self.closed = true;
                 }
             }

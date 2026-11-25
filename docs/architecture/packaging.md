@@ -104,8 +104,8 @@ debhelper compat 14, built with Debian's `rustc` and `cargo` through dh-cargo's 
   systemd),
   `login-recovery` (on a booted machine, which autopkgtest's `null` runner does not offer, with a
   scripted login window and session: terminals are given back after a session that fails or ends,
-  guesses that are cancelled are slowed down, and a login window that keeps failing ends in a text
-  console),
+  guesses that are cancelled are slowed down, a message to everyone stays off the screen, and a
+  login window that keeps failing ends in a text console),
   `coexistence` (`bande-desktop` installs next to `gnome-core` without removing anything, and
   GNOME's keyring keeps its PAM profile, socket and activation, and Bande's keyring, started
   while logind (python-dbusmock's template) lists only a GNOME session of the user, exits

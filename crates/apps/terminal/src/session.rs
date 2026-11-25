@@ -109,6 +109,15 @@ fn place_and_start(shell: u32) {
     }
 }
 
+fn kill_stopped(shell: u32) {
+    let Some(pid) = i32::try_from(shell).ok().and_then(Pid::from_raw) else {
+        return;
+    };
+    if let Err(error) = kill_process(pid, Signal::KILL) {
+        tracing::warn!("cannot end the stopped shell: {error}");
+    }
+}
+
 fn ran_out_of_memory(shell: u32) -> bool {
     let Some(pid) = i32::try_from(shell).ok().and_then(Pid::from_raw) else {
         return false;
@@ -181,7 +190,8 @@ impl Session {
         let shell = pty.child().id();
         std::thread::Builder::new()
             .name("tab-scope".to_owned())
-            .spawn(move || place_and_start(shell))?;
+            .spawn(move || place_and_start(shell))
+            .inspect_err(|_| kill_stopped(shell))?;
         let readiness = epoll::create(CreateFlags::CLOEXEC)?;
         epoll::add(
             &readiness,

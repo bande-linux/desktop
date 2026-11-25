@@ -1,6 +1,7 @@
 use std::cell::Cell;
 use std::f32::consts::TAU;
 use std::rc::Rc;
+use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
 use accesskit::{Node, Role};
@@ -50,6 +51,14 @@ pub fn progress_cells_for(
     }
 }
 
+static MOVING_SINCE: OnceLock<Instant> = OnceLock::new();
+
+fn phase(cx: &Context, period: Duration) -> f32 {
+    let since = *MOVING_SINCE.get_or_init(|| cx.now());
+    let elapsed = cx.now().saturating_duration_since(since);
+    (elapsed.as_secs_f64() / period.as_secs_f64()).fract() as f32
+}
+
 fn eased(phase: f32) -> f32 {
     (1.0 - (phase * TAU).cos()) / 2.0
 }
@@ -68,7 +77,6 @@ pub struct ProgressBar {
     label: String,
     value: Option<f32>,
     shown: Animated,
-    started: Option<Instant>,
     frame: Rect,
 }
 
@@ -79,7 +87,6 @@ impl ProgressBar {
             label: label.to_owned(),
             value: value.map(|value| value.clamp(0.0, 1.0)),
             shown: Animated::new(value.unwrap_or_default().clamp(0.0, 1.0)),
-            started: None,
             frame: Rect::default(),
         }
     }
@@ -98,11 +105,8 @@ impl ProgressBar {
         self.value = value;
     }
 
-    fn sweep(&self, cx: &Context) -> impl Fn(f32) -> f32 {
-        let elapsed = self.started.map_or(0.0, |started| {
-            cx.now().saturating_duration_since(started).as_secs_f32()
-        });
-        let phase = (elapsed / SWEEP.as_secs_f32()).fract();
+    fn sweep(cx: &Context) -> impl Fn(f32) -> f32 {
+        let phase = phase(cx, SWEEP);
         cx.animating.set(true);
         let reduce_motion = cx.reduce_motion;
         let eased = eased(phase);
@@ -119,10 +123,7 @@ impl Widget for ProgressBar {
         self.id
     }
 
-    fn measure(&mut self, cx: &mut Context, available: Size) -> Size {
-        if self.value.is_none() {
-            self.started.get_or_insert(cx.now());
-        }
+    fn measure(&mut self, _cx: &mut Context, available: Size) -> Size {
         Size::new(available.width, PROGRESS_HEIGHT)
     }
 
@@ -136,7 +137,7 @@ impl Widget for ProgressBar {
 
     fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
         match self.value {
-            None => progress_cells_for(&cx.palette, self.frame, self.sweep(cx), items),
+            None => progress_cells_for(&cx.palette, self.frame, Self::sweep(cx), items),
             Some(_) => {
                 let lit = cx.sample(&self.shown) * PROGRESS_CELLS as f32;
                 progress_cells_for(&cx.palette, self.frame, |cell| lit - cell, items);
@@ -162,7 +163,6 @@ impl Widget for ProgressBar {
 pub struct Spinner {
     id: WidgetId,
     label: String,
-    started: Option<Instant>,
     frame: Rect,
 }
 
@@ -171,7 +171,6 @@ impl Spinner {
         Self {
             id: WidgetId::next(),
             label: label.to_owned(),
-            started: None,
             frame: Rect::default(),
         }
     }
@@ -182,8 +181,7 @@ impl Widget for Spinner {
         self.id
     }
 
-    fn measure(&mut self, cx: &mut Context, _available: Size) -> Size {
-        self.started.get_or_insert(cx.now());
+    fn measure(&mut self, _cx: &mut Context, _available: Size) -> Size {
         Size::new(SPINNER_SIZE, SPINNER_SIZE)
     }
 
@@ -197,10 +195,7 @@ impl Widget for Spinner {
 
     fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
         cx.animating.set(true);
-        let elapsed = self.started.map_or(0.0, |started| {
-            cx.now().saturating_duration_since(started).as_secs_f32()
-        });
-        let lead = ((elapsed / SPIN.as_secs_f32()).fract() * SPOKES as f32) as u32;
+        let lead = (phase(cx, SPIN) * SPOKES as f32) as u32;
         let centre = Point::new(
             self.frame.x + self.frame.width / 2.0,
             self.frame.y + self.frame.height / 2.0,
@@ -279,5 +274,40 @@ impl Widget for LevelIndicator {
         node.set_min_numeric_value(0.0);
         node.set_max_numeric_value(100.0);
         node
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use bande_graphics::{Scheme, TextSystem};
+
+    use super::*;
+
+    fn painted(cx: &mut Context, at: Instant, widget: &mut dyn Widget) -> Vec<Item> {
+        cx.now = at;
+        widget.measure(cx, Size::new(240.0, 40.0));
+        widget.place(cx, Rect::new(0.0, 0.0, 240.0, 40.0));
+        let mut items = Vec::new();
+        widget.paint(cx, &mut items);
+        items
+    }
+
+    #[test]
+    fn a_bar_or_spinner_built_again_moves_on_from_where_it_was() {
+        let mut cx = Context::new(TextSystem::new(), Palette::for_scheme(Scheme::Light));
+        let start = Instant::now();
+        let later = start + SWEEP * 3 / 8;
+        let mut bar = ProgressBar::new("Installing", None);
+        let mut spinner = Spinner::new("Reading");
+        painted(&mut cx, start, &mut bar);
+        painted(&mut cx, start, &mut spinner);
+        assert_eq!(
+            painted(&mut cx, later, &mut ProgressBar::new("Installing", None)),
+            painted(&mut cx, later, &mut bar)
+        );
+        assert_eq!(
+            painted(&mut cx, later, &mut Spinner::new("Reading")),
+            painted(&mut cx, later, &mut spinner)
+        );
     }
 }

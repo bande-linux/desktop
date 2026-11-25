@@ -36,10 +36,11 @@ pub trait ServiceManager {
         patterns: &[&str],
     ) -> zbus::Result<Vec<ListedUnit>>;
 
-    fn reload(&self) -> zbus::Result<()>;
+    #[zbus(property, name = "DefaultLimitMEMLOCK")]
+    fn default_limit_memlock(&self) -> zbus::Result<u64>;
 
-    #[zbus(property)]
-    fn system_state(&self) -> zbus::Result<String>;
+    #[zbus(property, name = "DefaultLimitMEMLOCKSoft")]
+    fn default_limit_memlock_soft(&self) -> zbus::Result<u64>;
 
     #[zbus(property)]
     fn virtualization(&self) -> zbus::Result<String>;
@@ -64,6 +65,17 @@ pub fn main_pid(bus: &Connection, unit: &str) -> zbus::Result<Option<u32>> {
         .build()?
         .main_pid()?;
     Ok((pid != 0).then_some(pid))
+}
+
+/// How much memory, in bytes, a unit that does not set it may lock: the soft and the hard limit.
+pub fn default_lock_limits(bus: &Connection) -> zbus::Result<(u64, u64)> {
+    let manager = ServiceManagerProxyBlocking::builder(bus)
+        .cache_properties(zbus::proxy::CacheProperties::No)
+        .build()?;
+    Ok((
+        manager.default_limit_memlock_soft()?,
+        manager.default_limit_memlock()?,
+    ))
 }
 
 /// How much memory `unit` is guaranteed, in bytes.

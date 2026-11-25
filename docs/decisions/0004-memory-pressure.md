@@ -32,19 +32,22 @@ memory settings stay the system's own.
   people's and ssh sessions included, cannot be reclaimed for system services meanwhile; several
   Bande sessions share the one amount. `MemoryMin=` and not `MemoryLow=`: when nothing else can be
   reclaimed, the kernel breaks `MemoryLow=` and the desktop stalls. A level with a value, or a
-  runtime value of 0, of the administrator is left alone. When the session ends `bande-login` removes
-  the runtime drop-ins it made and reloads the service manager, so nothing overrides the system's
-  own files; `user.slice` only when no other Bande session is left. A worker that is killed leaves
+  runtime value of 0, of the administrator is left alone. When the session ends `bande-login` sets
+  the levels it changed back to 0 and removes the runtime drop-ins it made, so nothing overrides the
+  system's own files; `user.slice` only when no other Bande session is left. It does not reload the
+  system's service manager: one person's log out must not put an administrator's half-made changes
+  into effect or keep the login window waiting. A worker that is killed leaves
   them until that person's next Bande session ends or the computer restarts.
 - `MemoryMin=` does not cover the compositor's code: file pages belong to the control group that read
   them first, the login window's compositor (the same program), which is gone by then. Reading them
   again took up to 0.3 s each while something swapped. The compositor of a person's session therefore
   locks the read-only file mappings of itself and its libraries on fault (`mlock2`,
-  `MLOCK_ONFAULT`: only pages that are used, and stay used), itself first, as far as its
-  `LimitMEMLOCK=256M` goes. The user manager may only grant that because `bande-login` raises that
-  process's hard limit while the session runs; other units keep the 8 MiB default, and the
-  compositor returns to it once it has locked, before it starts anything. Without it the
-  compositor locks what fits in the limit it has.
+  `MLOCK_ONFAULT`: only pages that are used, and stay used), itself first, up to 256 MiB, as far as
+  the user manager's hard limit goes (`LimitMEMLOCK=infinity` in its unit). `bande-login` raises that
+  limit to 256 MiB while the session runs; other units keep the manager's default (8 MiB unless the
+  administrator allows more, as for audio production), and the compositor returns to that default
+  once it has locked, before it starts anything. Without the raised limit the compositor locks what
+  fits in the limit it has.
 - With swap, `app.slice` gets `MemoryHigh=` all memory but a fifth of it, at most 3 GiB and at most
   half the swap: the desktop's guarantee, the system and free memory. Apps together above that are
   swapped and slowed, so the desktop and the system still find free memory at once. `MemoryMax=` an eighth of that reserve higher
@@ -59,7 +62,7 @@ memory settings stay the system's own.
   from the rest of the system.
 - `bande-session` keeps a copy of each runtime property file it made (`$XDG_RUNTIME_DIR/bande-limits`),
   leaves a person's own runtime value alone, and removes only files that still equal its copy when
-  the session ends.
+  the session ends, or before the next one sets its own when the script was killed.
 
 ### 1. Kill domain: `app.slice`
 

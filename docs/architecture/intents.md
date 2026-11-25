@@ -499,7 +499,7 @@ so nothing polls.
 trigger (a time, an event) and a fixed list of intents with fixed arguments. They need no agent.
 Making or changing one is approved by the strongest effect in it, and each run is bound to what was
 approved. A step with `send` or `disrupt` runs unattended only if the person chose so for that step
-in the prompt. An `critical` step never does, except `software.install_update` as an offline update
+in the prompt. A `critical` step never does, except `software.install_update` as an offline update
 that asks nothing when it is applied; otherwise it waits for the person.
 
 **Mandates** let a sandboxed agent act without the person at the screen. One is made in Settings ▸

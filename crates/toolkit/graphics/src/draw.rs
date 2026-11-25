@@ -30,6 +30,11 @@ pub(crate) trait Canvas {
     fn clear_path(&mut self, path: &BezPath);
 }
 
+const TILE: f64 = 4.0;
+const TILE_BYTES: f64 = 16.0;
+const SMALL_TILES: f64 = 64.0;
+const MOST_COVERAGE: f64 = 128.0 * 1024.0 * 1024.0;
+const MOST_PAINTS: u32 = 1 << 20;
 const FARTHEST: f64 = 1e8;
 const FARTHEST_ON_SCREEN: f64 = 1e12;
 const RELATIVE_TOLERANCE: f64 = 1e-6;
@@ -709,6 +714,10 @@ impl Recording {
             drawn: &self.drawn,
             clips: Vec::new(),
             isolated: false,
+            budget: Budget {
+                coverage: MOST_COVERAGE,
+                paints: MOST_PAINTS,
+            },
         };
         if let Some(clip) = &self.clip {
             encoder.canvas.set_transform(Affine::IDENTITY);
@@ -719,6 +728,38 @@ impl Recording {
             encoder.canvas.pop_clip();
         }
         encoder.caches.outlines.end_frame();
+    }
+}
+
+/// What the renderer has room for in one frame.
+struct Budget {
+    coverage: f64,
+    paints: u32,
+}
+
+impl Budget {
+    fn affords(&mut self, path: &BezPath, transform: Affine, drawn: &[kurbo::Rect]) -> bool {
+        let on_screen = transform.transform_rect_bbox(path.control_box());
+        let tiles = |area: kurbo::Rect| {
+            (area.width() / TILE + 2.0).max(0.0) * (area.height() / TILE + 2.0).max(0.0)
+        };
+        let inside: f64 = drawn
+            .iter()
+            .map(|drawn| tiles(drawn.intersect(on_screen)))
+            .sum();
+        let scale = transform.determinant().abs().sqrt();
+        let along = match inside > SMALL_TILES {
+            true => path.perimeter(1.0) * scale / TILE * 2.0 + 3.0 * path.elements().len() as f64,
+            false => inside,
+        };
+        self.coverage -= inside.min(along) * TILE_BYTES;
+        self.coverage >= 0.0
+    }
+
+    fn affords_paint(&mut self) -> bool {
+        let left = self.paints.checked_sub(1);
+        self.paints = left.unwrap_or_default();
+        left.is_some()
     }
 }
 
@@ -734,6 +775,7 @@ struct Encoder<'a, C> {
     drawn: &'a [kurbo::Rect],
     clips: Vec<(BezPath, Affine)>,
     isolated: bool,
+    budget: Budget,
 }
 
 impl<C: Canvas> Encoder<'_, C> {
@@ -775,7 +817,12 @@ impl<C: Canvas> Encoder<'_, C> {
         self.canvas.set_transform(transform);
         for op in ops {
             match op {
-                Op::Fill { path, paint } if self.reaches(path.control_box(), transform) => {
+                Op::Fill { path, paint }
+                    if self.reaches(path.control_box(), transform)
+                        && self.budget.affords(path, transform, self.drawn)
+                        && (matches!(paint, PaintType::Solid(_))
+                            || self.budget.affords_paint()) =>
+                {
                     self.canvas.set_paint(paint.clone());
                     self.canvas.fill_path(path);
                 }
@@ -786,7 +833,10 @@ impl<C: Canvas> Encoder<'_, C> {
                     sampler,
                     placement,
                 } => {
-                    if !self.reaches(path.control_box(), transform) {
+                    if !self.reaches(path.control_box(), transform)
+                        || !self.budget.affords(path, transform, self.drawn)
+                        || !self.budget.affords_paint()
+                    {
                         continue;
                     }
                     let Some(id) = self.caches.images.get(image.id()) else {
@@ -807,7 +857,9 @@ impl<C: Canvas> Encoder<'_, C> {
                     color,
                 } => {
                     let reach = f64::from(*std_dev) * SHADOW_DEVIATIONS;
-                    if !self.reaches(rect.inflate(reach, reach), transform) {
+                    if !self.reaches(rect.inflate(reach, reach), transform)
+                        || !self.budget.affords_paint()
+                    {
                         continue;
                     }
                     self.canvas.set_paint((*color).into());
@@ -818,7 +870,9 @@ impl<C: Canvas> Encoder<'_, C> {
                     self.canvas.set_paint((*color).into());
                     for (outline, at) in glyphs {
                         let placed = transform * Affine::translate(*at);
-                        if self.reaches(outline.bounds, placed) {
+                        if self.reaches(outline.bounds, placed)
+                            && self.budget.affords(&outline.path, placed, self.drawn)
+                        {
                             self.canvas.set_transform(placed);
                             self.canvas.fill_path(&outline.path);
                         }
@@ -956,6 +1010,32 @@ mod tests {
         assert!(
             (COLUMNS..=3 * COLUMNS).contains(&canvas.0),
             "{} glyphs were encoded for one line",
+            canvas.0
+        );
+    }
+
+    #[test]
+    fn no_more_is_encoded_than_the_renderer_has_room_for() {
+        let mut text = TextSystem::new();
+        let style = TextStyle::new(200.0, Color::BLACK);
+        let paragraph = text.paragraph("m", style, None, TextAlign::Start);
+        let items: Vec<Item> = std::iter::repeat_n(paragraph, 200_000)
+            .map(|paragraph| Item::Text {
+                origin: Point::new(0.0, 0.0),
+                paragraph,
+            })
+            .collect();
+        let mut canvas = Counted::default();
+        let frame = Frame {
+            scale: 1.0,
+            origin: (0, 0),
+            size: (2000, 1000),
+        };
+        let mut caches = Caches::default();
+        Recording::new(&mut caches, &items, &frame, None).replay(&mut canvas, &mut caches);
+        assert!(
+            (1_000..items.len()).contains(&canvas.0),
+            "{} glyphs were encoded",
             canvas.0
         );
     }

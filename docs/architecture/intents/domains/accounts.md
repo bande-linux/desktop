@@ -7,9 +7,9 @@ Part of [Bande Intents](../../intents.md). Main noun `account`. Owner:
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | `accounts.find` | `text`, `service` (`mail`, `notes`, `calendar`, `contacts`, `tasks`) | `read` |  | branch, and uncommitted work on it | A |
 | `accounts.get` | `accounts`, `properties` (services, state, last synced) | `read` |  | branch | A |
-| `accounts.add` | `address`, `kind`, `services`; opens the filled-in sheet, which shows the host found before it asks for the password | `authorise` | `accounts.remove` | branch | A |
+| `accounts.add` | `address`, `kind`, `services`; opens the filled-in sheet, which shows the host found before it asks for the password | `critical` | `accounts.remove` | branch | A |
 | `accounts.update` | `account`, `name`, `services` | `disrupt` | the earlier values | branch | B |
-| `accounts.remove` | `account` | `authorise` |  | branch | B |
+| `accounts.remove` | `account` | `critical` |  | branch | B |
 | `accounts.start_sync` | `account`, `service` | `send` |  | app | A |
 | `accounts.open` | `account` | `show` |  | branch | B |
 

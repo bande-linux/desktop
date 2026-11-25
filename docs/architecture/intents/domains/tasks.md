@@ -14,7 +14,7 @@ Part of [Bande Intents](../../intents.md). Main noun `task`; `tasks.list`. Owner
 | `tasks.create` | `title`, `list`, `parent`, `due`, `starts`, `priority`, `notes`, `repeats`, `alerts` | `change`; server: `send` | `tasks.trash` | new | A |
 | `tasks.open` | `task` | `show` |  | new | A |
 | `tasks.update_list` | `list`, `name`, `colour` | `change`; server: `send` | the earlier values | new | B |
-| `tasks.delete_list` | `list` | `authorise` |  | new | C |
+| `tasks.delete_list` | `list` | `critical` |  | new | C |
 
 Things: `tasks.task`, `tasks.list`. VTODO (RFC 5545) over CalDAV, and a local list.
 

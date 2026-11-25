@@ -16,7 +16,7 @@ Work that is planned and not built. A plan leaves when it is done; what it built
 | [Messages](apps/messages.md) | chat over an open protocol |
 | [Maps](apps/maps.md) | maps that work without a server |
 | [PDF editing in Viewer](apps/pdf-editing.md) | pages, forms, notes |
-| [Fingerprint and security keys](apps/fingerprint.md) | enrolment, and proof at the prompt |
+| [Fingerprint and security keys](apps/fingerprint.md) | enrolment, and use at sign-in, lock and polkit |
 | [On-screen keyboard and other input](apps/assistive-input.md) | without which the prompt is not for everyone |
 
 Not planned: phone calls, whiteboard, journal (a Notes folder does it), weather and news (no open

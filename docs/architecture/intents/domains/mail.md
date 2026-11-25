@@ -27,8 +27,8 @@ split from the app. Work package D4.
 | `mail.delete_rule` | `rule` | `disrupt` | the earlier rule | app | B |
 | `mail.create_mailbox` | `name`, `account` | `change`; shared: `send` | removes it while empty | app (`worker.rs`) | B |
 | `mail.update_mailbox` | `mailbox`, `name` | as `create_mailbox` | the earlier name | app | B |
-| `mail.delete_mailbox` | `mailbox` | `authorise` |  | app | C |
-| `mail.delete` | `messages` | `authorise` |  | app | C |
+| `mail.delete_mailbox` | `mailbox` | `critical` |  | app | C |
+| `mail.delete` | `messages` | `critical` |  | app | C |
 | `mail.set_signature` | `account`, `body` | `send` | the earlier one | app | C |
 | `mail.set_away` | `account`, `from`, `until`, `body` (Sieve, RFC 5230 and RFC 5804) | `send` | turns it off | new | B |
 

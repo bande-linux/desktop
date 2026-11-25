@@ -23,9 +23,9 @@ Work package D1.
 | `files.create_link` | `file`, `within` | `change`; server: `send` | `files.trash` | ready (`libs/fs/src/ops.rs`) | B |
 | `files.compute_usage` | `within`, `depth` | `read`; foreign for names outside own folders |  | app (`apps/settings/src/storage.rs`) | A |
 | `files.compute_changes` | `within`, `since` | `read`; foreign where what is in it is |  | new, on the backup client | B |
-| `files.set_access` | `files`, `class`, `access` | `disrupt`; wider for others: `authorise` | the earlier access | ready (`libs/fs/src/permissions.rs`) | C |
-| `files.delete` | `files` | `authorise` |  | ready | B |
-| `files.delete_trash` | `older_than` | `authorise` |  | ready | A |
+| `files.set_access` | `files`, `class`, `access` | `disrupt`; wider for others: `critical` | the earlier access | ready (`libs/fs/src/permissions.rs`) | C |
+| `files.delete` | `files` | `critical` |  | ready | B |
+| `files.delete_trash` | `older_than` | `critical` |  | ready | A |
 | `files.add_location` | `address` | `send` | `files.remove_location` | part: saved servers | B |
 | `files.remove_location` | `location` | `disrupt` |  | ready | B |
 

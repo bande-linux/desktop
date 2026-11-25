@@ -20,7 +20,7 @@ one. Without the second layer that is true of the model but not of the program i
 the person's own rights: the broker then guards against mistakes only. It cannot see what else a
 client can do, so one it did not start itself counts as unsandboxed.
 
-| Connected | `read` | `read_foreign` | `show`, `change` | `send`, `disrupt`, `authorise` | Mandates |
+| Connected | `read` | `read_foreign` | `show`, `change` | `send`, `disrupt`, `critical` | Mandates |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | By `bande-agent run`, sandboxed | granted | granted, taints | granted | asked every time | yes |
 | Directly to `bande-mcp` | granted, labelled "not a security boundary" | off; the person may turn it on per domain, told that strangers' text then reaches a program that can do anything they can | granted | asked every time | no |
@@ -43,8 +43,8 @@ what it does.
 
 Grants are offered as sets a person understands ("Files in Documents", "Read my calendar", "Write
 drafts"), each with the domains, effects and containers in it, and apps can be excluded from agents,
-search and recent files in one list. A grant for `read_foreign`, `send`, `disrupt` and `authorise`
-is the permission to ask, never the approval.
+search and recent files in one list. A grant for `read_foreign`, `send`, `disrupt` and `critical` is
+the permission to ask, never the approval.
 
 An agent may change or trash only drafts it made and the person has not edited since. For an agent,
 `contacts.create`, `contacts.update`, `contacts.merge` and `contacts.trash` are `disrupt`.
@@ -79,7 +79,7 @@ from the session.
 | `job` | Wait, at most 15 seconds | yes | no | no |
 | `undo` | Undo a receipt; cancel a job whose stop loses nothing | no | no | no |
 
-`run` refuses a plan with `send`, `disrupt` or `authorise` without doing anything, as does `undo`
+`run` refuses a plan with `send`, `disrupt` or `critical` without doing anything, as does `undo`
 when the undo has one; the answer holds the same call for `ask`. The hints are therefore true for
 every call, a client can let reads and `run` through, and the only prompt that matters is Bande's: a
 person whose client asks for `ask` too may allow it there. Nothing is approved or asked by

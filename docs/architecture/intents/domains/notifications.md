@@ -11,7 +11,7 @@ Part of [Bande Intents](../../intents.md). Main noun `notification`; also `clipb
 | `notifications.find_rule` | `app` | `read` |  | ready | B |
 | `notifications.set_rule` | `app`, `rule` (`on`, `quiet`, `off`) | `change` | the earlier rule | ready | A |
 | `clipboard.set` | `text` or a file | `change` or `disrupt`, see the [rules](../../intents.md#intents-that-would-add-up-to-one-of-these) | the earlier item, unless concealed | ready | B |
-| `clipboard.find`, `clipboard.get` | `text`; `items`; concealed items do not exist | `authorise`, foreign |  | ready | C |
+| `clipboard.find`, `clipboard.get` | `text`; `items`; concealed items do not exist | `critical`, foreign |  | ready | C |
 | `clipboard.delete` | `items`, `older_than` | `disrupt` |  | ready | B |
 
 Activating another program's notification has no intent.

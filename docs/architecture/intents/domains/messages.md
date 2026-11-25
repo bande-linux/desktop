@@ -12,7 +12,7 @@ Part of [Bande Intents](../../intents.md). Main noun `message`; also `messages.c
 | `messages.update_draft`, `messages.trash_draft` | `draft` and the same | `change` | the earlier draft | new | B |
 | `messages.send` | `draft` | `send` |  | new | B |
 | `messages.update` | `conversation`, `read`, `muted` | `change`; a read receipt: `send` | the earlier values | new | B |
-| `messages.delete` | `messages`, `for_everyone` | `authorise`; for everyone also `send` |  | new | C |
+| `messages.delete` | `messages`, `for_everyone` | `critical`; for everyone also `send` |  | new | C |
 | `messages.open` | `conversation` | `show` |  | new | B |
 
 Joining rooms, verifying devices, keys and accounts are the person's.

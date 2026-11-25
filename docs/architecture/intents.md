@@ -50,7 +50,7 @@ intent](https://specifications.freedesktop.org/intent-apps/latest/), which is a 
 | Agent | A program that decides what to call, usually with a language model |
 | Run | One start of an agent under its registered name; a session is one connection in it |
 | Grant | What the person has let one agent do, or ask for |
-| Approval, authorisation | The person's yes to one plan; the same with proof of who they are |
+| Approval | The person's yes to one plan |
 | Own, foreign | Text the person wrote; text someone else could have chosen |
 | Tainted | A run that has received foreign content |
 | Event | Notice that something happened, naming things without their content |
@@ -174,7 +174,7 @@ them must be granted.
 | `change` | A change only the person can see, with an undo that loses nothing | granted |
 | `send` | Leaves the machine, reaches a person, or writes where another can read | asked every time |
 | `disrupt` | Cannot be undone, may lose work, runs something, or may cut a connection | asked every time |
-| `authorise` | Destroys data for good, runs as administrator, installs or removes software, opens the computer to others, or lowers a protection | asked every time, with password or fingerprint |
+| `critical` | Destroys data for good, runs as administrator, installs or removes software, opens the computer to others, or lowers a protection | asked every time, never unattended; the system's own permission prompt follows where it has one |
 
 Candidates and errors carry effects and `foreign` like any answer. `documents.update` with words to
 find needs `read_foreign` as well as `change`, because finding them tells what is there. A run that
@@ -218,12 +218,12 @@ wrote. A mount inside a folder is judged by itself.
 `bande-intents` (traits, values, plans, jobs, interface), with `bande-intents-macros`, depends on
 `zbus`, `serde`, `serde_json` and `bande-l10n`. Each owner's crate declares its domain and writes a
 manifest from it to `/usr/share/bande/intents/domains/<domain>.json` when it is built: bus name,
-program, things, queries, intents, parameters, effects, polkit actions, results, and titles in
-English with their context. The command line, the launcher and the broker read these root-owned
-files, so no list of domains exists in code, and look titles up in the program's catalog. An owner
-translates summaries, thing titles and errors in its own language. `///` documentation is used in
-schemas and stays English. A declaration is the single source for the bus, the manifest, the command
-line and the tool schema.
+program, things, queries, intents, parameters, effects, results, and titles in English with their
+context. The command line, the launcher and the broker read these root-owned files, so no list of
+domains exists in code, and look titles up in the program's catalog. An owner translates summaries,
+thing titles and errors in its own language. `///` documentation is used in schemas and stays
+English. A declaration is the single source for the bus, the manifest, the command line and the tool
+schema.
 
 ```rust
 #[derive(Intent)]
@@ -312,7 +312,7 @@ interface org.bande.Intents.Job
 - **Perform** runs a plan once, within ten minutes not counting the wait for approval. A plan that
   fails before Perform returns is an error and is spent. What ends within 100 ms is returned at once
   with job `/`. `Conflict` means its state is no longer what the plan was made for. A plan with
-  `send`, `disrupt` or `authorise` waits for [approval](#approval).
+  `send`, `disrupt` or `critical` waits for [approval](#approval).
 - **Undo is a plan** with effects of its own: taking back an event others attend mails them, so it
   is `send`. It may do what no intent offers, limited to what the receipt made. It is refused while
   the thing differs from what the plan left, so later work is never overwritten; successive changes
@@ -358,24 +358,26 @@ Every error has the body `sa{sv}`: the message, then `parameter`, `accepts` and 
 
 ## Approval
 
-Three guards, by effect:
+Bande asks whether; the system asks who. No intent adds a password of its own: the permission
+prompts of Linux (polkit, and the question a program such as `sudo` or the keyring asks) are the
+only ones, with the rules the system has. Where the system asks nothing, as for formatting a
+removable disk or installing a Flatpak for oneself, neither does Bande.
 
-| Effects of the plan | Guard | By the person's own act in a Bande app |
+| Effects of the plan | Bande's own question | By the person's own act in a Bande app |
 | :--- | :--- | :--- |
-| `read`, `read_foreign`, `show`, `change` | the grant | none |
-| `send`, `disrupt` | **Allow** in the approval prompt | the click or key that names exactly that operation is the approval |
-| `authorise` | **Allow and prove who you are**: password, or fingerprint where one is enrolled | the app's own confirmation, then the same proof |
+| `read`, `read_foreign`, `show`, `change` | none, the grant | none |
+| `send`, `disrupt` | **Allow** in the approval prompt | the click or key that names exactly that operation |
+| `critical` | **Allow**, with what is lost, never unattended | the app's own confirmation |
 
-Programs, the command line, routines being made and agents always get the prompt, and so does the
-person's own Send on a draft an agent made or changed. Allow and authorisation are for one plan:
-nothing is remembered, and neither can be stored, granted or part of a mandate.
+Programs, the command line, routines being made and agents get the prompt, and so does the person's
+own Send on a draft an agent made or changed. Allow is for one plan: it cannot be stored, granted or
+part of a mandate.
 
 ### The prompt
 
-One session client, `bande-approval`, is the approval prompt and the session's polkit agent: one
-surface asks for everything. The compositor starts it on demand with a role of its own, above every
-other surface. Owners and the prompt speak over a channel the compositor hands out, never a name on
-the session bus.
+The prompt is a session client, `bande-approval`, that the compositor starts on demand with a role
+of its own, above every other surface. It is not the polkit agent, which stays as it is. Owners and
+the prompt speak over a channel the compositor hands out, never a name on the session bus.
 
 It shows who asks (the agent's registered name, or "a program"); for a mail every bare recipient
 address, the sending account, the time, the subject, the whole body and the full path of each
@@ -393,60 +395,43 @@ run. Deny and Stop This Agent are always there. A prompt is withdrawn after a ti
 (60 seconds at first, or never); the time stops while the session is locked, and a locked session
 shows none.
 
-Allow and the password field take input from devices the kernel did not get from uinput (a udev path
-under `/devices/virtual/input` is refused, uhid is not), from an assistive device or remapper the
-person registered with the account password, or, for Allow, through the accessibility tree from a
-screen reader the person turned on in Settings and confirmed with the account password, which runs
-without user scripts for the prompt. No virtual keyboard, EIS device, input method or other
-accessibility client reaches it, and key monitors do not see what is typed. Deny accepts everything.
+Allow takes input from devices the kernel did not get from uinput (a udev path under
+`/devices/virtual/input` is refused, uhid is not), from an assistive device or remapper the person
+registered through polkit, or through the accessibility tree from a screen reader the person turned
+on and confirmed the same way, which runs without user scripts for the prompt. No virtual keyboard,
+EIS device, input method or other accessibility client reaches it. Deny accepts everything.
 
-### Authorisation
+### Critical plans
 
-`authorise` covers what destroys data for good, runs as administrator, installs or removes software,
-opens the computer to others, or lowers a protection. Its plan also says what is lost, whether a
-copy can be made first, and what kind of proof is needed.
+`critical` covers what destroys data for good, runs as administrator, installs or removes software,
+opens the computer to others, or lowers a protection.
 
-1. **One proof.** PAM or polkit starts only after Allow has been pressed under the rules above;
-   until then no password field and no reader is active, and a request that arrives while another is
-   pending waits. Nothing typed is ever kept or replayed.
-2. **Where polkit asks**, its own conversation, in the same prompt with the plan still shown, is the
-   proof. Kept authorisations of the owner are revoked before the plan and when it ends, so it does
-   ask. A request belongs to the plan only if it is for an action that the intent's root-owned
-   manifest lists (never `policykit.exec` or `systemd1.*`), comes from the process systemd started
-   for the owner's unit, without loader variables and non-dumpable, and that owner performs no other
-   plan. Anything else is shown as a request of its own. A standard user is asked for an
-   administrator.
-3. **Where polkit would not ask**, as for a removable disk or a Flatpak, the prompt runs the whole
-   PAM conversation of the service `bande-approval` (`common-auth`) as the person, as the lock
-   screen does. Empty passwords are disallowed (`PAM_DISALLOW_NULL_AUTHTOK`), and success without an
-   answered question or a device's message is a refusal. "Place your finger" is read before the
-   reader is used. Wrong answers back off and count as a Deny after five.
-   Fingerprint, security key and one-time code work where PAM has them, with nothing Bande's own.
-4. **The thing.** The plan froze the target by identity (a disk by serial, size and UUID, a package
-   by name, version and source, a user by id), and the owner checks it again under its lock
-   immediately before it acts. Protection rules (the system disk, what is in use, the last
-   administrator, the disk with the backup) are the owner's, not the window's, and no proof
-   overrides them.
-5. **A copy first.** A partition table (never key slots) or a machine's snapshot is kept where it
-   can be, and the prompt says where. Deleting keeps none unless the person ticks it, and no agent
-   reaches one.
+- **The thing.** The plan freezes the target by identity (a disk by serial, size and UUID, a package
+  by name, version and source, a user by id), and the owner checks it again under its lock
+  immediately before it acts.
+- **Protection rules** (the system disk, what is in use, the last administrator, the disk with the
+  backup) are the owner's, not the window's, and no Allow overrides them.
+- **A copy first.** A partition table (never key slots) or a machine's snapshot is kept where it can
+  be, and the prompt says where. Deleting keeps none unless the person ticks it, and no agent
+  reaches one.
+- **The system's question** comes after Allow, from the backend, in the session's polkit agent, and
+  is answered as for any program: by password or fingerprint as the system is set up, kept or not as
+  its policy says, by an administrator where the person is not one. A No ends the plan as
+  `Declined`. The plan's owner calls the backend interactively and adds nothing.
 
-Someone without a password cannot authorise where polkit does not ask; the prompt says how to set
-one. The same guard is for everyone, agents and scripts included, so "reformat my USB stick so it
-works in Windows and Debian" is one plan, one prompt and one password, with every step (unmount, new
-table, new volume) in it.
+"Reformat my USB stick so it works in Windows and Debian" is one plan and one Allow that names the
+stick, its size and what is on it, with every step (unmount, new table, new volume) in it. An
+internal disk asks for an administrator as well.
 
-This guards intents. Backends have their own rules: formatting a removable disk or installing a
-Flatpak asks nothing of a program that calls them directly, and Bande does not change another
-package's policy. For an unsandboxed program the guard is what Bande's own interface asks, not a
-boundary; for a sandboxed agent it is one.
+Bande does not change another package's policy. A program that calls a backend directly gets the
+backend's rules and not Bande's question; only a sandboxed agent cannot.
 
 Prompts are few on purpose, because people accept nearly everything they are asked often: grants
 cover scope, undo covers mistakes, and the prompt is kept for what cannot be taken back.
 
 ## What never has an intent
 
-Dangerous is not impossible: what can be authorised has an intent. Four things have none, whoever
+Dangerous is not impossible: what the person can allow has an intent. Four things have none, whoever
 asks:
 
 - **Reading secrets**: the keyring, saved passwords, the Secret portal, pinentry, network secrets,
@@ -482,16 +467,16 @@ Each intent is reviewed for what it makes possible together with the others.
 | `apps.open` | an app that connects or restores a session | `show` for Bande's apps that do neither when opened, otherwise `disrupt` |
 | `contacts.create`, `contacts.update`, `contacts.merge`, `contacts.trash` | mail or a call to someone else | `disrupt` for an agent |
 | `calendar.*` with attendees | sending a message | `send` |
-| `settings.set` | weakening protection | an allow list, with `authorise` where it lowers one |
+| `settings.set` | weakening protection | an allow list, with `critical` where it lowers one |
 | `print.start` | paper that cannot be recalled | `send` |
-| `disks.*`, `machines.delete`, `files.delete` | losing what the person meant to keep | `authorise`, target frozen by identity, protection rules in the owner, a copy first where there can be one |
+| `disks.*`, `machines.delete`, `files.delete` | losing what the person meant to keep | `critical`, target frozen by identity, protection rules in the owner, a copy first where there can be one |
 | `software.install` | running what the caller chose | only from sources already set up, by name; its permissions are shown |
-| `screen.*`, `recordings.start` | watching or listening | `disrupt` or `authorise`, with an indicator; for an agent a picture or recording it made cannot be read, converted or attached, except the window the person picked in `screen.create` |
+| `screen.*`, `recordings.start` | watching or listening | `disrupt` or `critical`, with an indicator; for an agent a picture or recording it made cannot be read, converted or attached, except the window the person picked in `screen.create` |
 | `sharing.start` | someone else's input | view only, and every viewer is still asked for |
 | `clipboard.set` | a command pasted into a terminal, another account number | `disrupt` unless one line of plain text, and for an agent while the current item is concealed or was copied by the person in the last minute; a notification names the agent |
 | `mail.set_signature`, `mail.set_away` | text in every later mail | `send` |
-| `files.set_access` | letting others in | widening for group or others is `authorise`; never adds execute |
-| `accounts.add`, `network.add` | a password typed for someone else's server, a false network | `authorise`; the host is shown before the password field; an open network is refused for an agent |
+| `files.set_access` | letting others in | widening for group or others is `critical`; never adds execute |
+| `accounts.add`, `network.add` | a password typed for someone else's server, a false network | `critical`; the host is shown before the password field; an open network is refused for an agent |
 | `containers.start_project` | running a changed compose file | starts the project's existing containers through the engine; its files are never read |
 | `speech.start` | reading aloud to whoever is near | `send` for an agent; refused while locked |
 | `spreadsheets.*`, `documents.*`, `presentations.*` | fetching, leaking, running | inputs and every output are refused when they hold macros, external links, remote templates, data connections, embedded objects, or a field or formula outside an allow list of pure functions on the same file; CSV output prefixes cells that look like formulas |
@@ -514,12 +499,12 @@ so nothing polls.
 trigger (a time, an event) and a fixed list of intents with fixed arguments. They need no agent.
 Making or changing one is approved by the strongest effect in it, and each run is bound to what was
 approved. A step with `send` or `disrupt` runs unattended only if the person chose so for that step
-in the prompt. An `authorise` step never does, except `software.install_update` as an offline update
+in the prompt. An `critical` step never does, except `software.install_update` as an offline update
 that asks nothing when it is applied; otherwise it waits for the person.
 
 **Mandates** let a sandboxed agent act without the person at the screen. One is made in Settings ▸
 Privacy & Security ▸ Agents and approved once: the intents, the scope, the events, the end time, the
-most it may do. It never includes `send`, `disrupt` or `authorise`. It ends by itself, at the first
+most it may do. It never includes `send`, `disrupt` or `critical`. It ends by itself, at the first
 refusal, or with Stop. The broker starts the registered command once per event, with the references
 as its task, a number of times an hour the mandate sets.
 

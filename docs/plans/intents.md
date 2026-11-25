@@ -9,7 +9,7 @@ by itself.
 | Part | State |
 | :--- | :--- |
 | `bande-intents`, owners, command line, launcher rows, broker, sandbox, MCP server, providers, routines | not built |
-| Approval prompt with its own compositor role; authorisation; telling hardware input from other input | not built |
+| Approval prompt with its own compositor role; telling hardware input from other input | not built |
 | Own and foreign: origin of things, IMAP `NAMESPACE` and ACL, DAV owner and sharees, the account question | not built |
 | Engines without a window: Notes, Mail, Calendar, Clock, Contacts, Disks, Software, Monitor, Velox containers | not built |
 | Contacts and shared accounts | on branch `accounts`, with more on it that is not committed |
@@ -39,7 +39,7 @@ by itself.
 | `docs/quality/tests.md`, `docs/architecture/{apps,session,packaging,behaviour}.md`, `README.md`, `debian/tests/control`, `ci/release/check-debs.sh`, `data/icons/src/apps.py`, `data/x-bande-mimeapps.list` | the integrator's: the rows go in the hand-off |
 | `ci/runtime-deps` | a file per crate after C0 |
 | `debian/control` binary stanzas, `debian/<package>.install` | only the row's package; stanzas in order, and the integrator keeps both sides |
-| `debian/rules`, `ci/release/lint.sh` | C1, then C3 for its exemption; others in the hand-off |
+| `debian/rules`, `ci/release/lint.sh` | C1; others in the hand-off |
 | `crates/apps/settings`, `crates/libs/settings-panes`, `crates/platform`, `crates/libs/content`, `crates/shell/launcher` | one package at a time, in the [order below](#in-waves) |
 | `locales/*.po` | in the crate that owns the string, with Swedish, made by `bande-l10n-tool` |
 | `docs/architecture/intents/domains/<domain>.md` | the domain's own page; a row's Code becomes `done` in the same commit |
@@ -54,7 +54,6 @@ by itself.
 - Commit what is uncommitted on `accounts` to a branch of its own. It exists in one worktree only.
 - Push `main`: `origin/main` is far behind it.
 - Free build space: old target folders and package builds; 60 GB stay free.
-- Answer the [open decisions](#open-decisions) marked "first".
 
 ## Running many agents
 
@@ -92,7 +91,7 @@ package changes, and its domain pages.
 | C0 | `ci/runtime-deps` as a folder with a file per crate | branches landed | `ci/runtime-deps*`, `ci/check-runtime-deps.py` | none | the gate passes | S |
 | C1 | `bande-intents` and its macros: traits, values, plans, receipts, jobs, interface, client; manifests; `bande` from manifests | C0 | `crates/libs/intents*`, `crates/libs/l10n`, `crates/services/cli`, `debian/rules`, `ci/release/lint.sh` | `bande-cli` | with C2 | L |
 | C2 | `settings` and the launcher's intent rows, [step 1](#step-1-in-detail) | C1, by the same agent | `crates/services/settings-intents`, `crates/libs/settings-client`, `crates/libs/settings-panes`, `crates/apps/settings`, `crates/shell/launcher` | `bande-settings` | `bande settings set appearance light`, the launcher, and `bande undo` after a restart of the owner | L |
-| C3 | Approval and authorisation, [in detail](#c3-in-detail) | C1 | `crates/shell/approval`, `crates/services/polkit`, `crates/platform`, `crates/libs/pam`, `debian/bande-polkit.*`, `ci/review` | `bande-polkit` | a synthetic key, pointer, uinput or accessibility client cannot press Allow or type the password; a fingerprint is asked for on screen; one proof formats a stick, and one installs a package | L |
+| C3 | Approval prompt, [in detail](#c3-in-detail) | C1 | `crates/shell/approval`, `crates/platform`, `ci/review` | `bande-shell` | a synthetic key, pointer, uinput or accessibility client cannot press Allow; one Allow formats a stick; installing a package asks Allow and then polkit's own question, and nothing else | L |
 | C4 | Broker: registrations, grants, taint, limits, log, Stop; Settings ▸ Agents | C3, A12b | `crates/services/agentd`, its page in `crates/apps/settings` | `bande-agent` | an agent sees only what it was granted, in words a person understands | L |
 | C5 | Sandbox `bande-agent run` and its network proxy | C4 | `crates/services/agent-run` | `bande-agent` | escape tests (bus, Wayland, accessibility, keyring, paths, links, network) fail closed | L |
 | C6 | `bande-mcp`, direct tools, skill, `bande agent add` and `test`, evaluation set | C4 | `crates/services/mcp`, `data/skills` | `bande-agent` | three unrelated agent programs do the 30 requests without a line about any of them | L |
@@ -164,7 +163,7 @@ Each has a [plan of its own](README.md). Its domain needs C1; the app itself doe
 | A8 | [Messages](apps/messages.md) | `messages` | A1b | `crates/apps/messages`, `crates/libs/xmpp` | XL |
 | A9 | [Maps](apps/maps.md) | `maps` | nothing | `crates/apps/maps`, `crates/libs/maps` | XL |
 | A10 | [PDF editing in Viewer](apps/pdf-editing.md) | part of `documents` | D1 | `crates/apps/viewer`, `crates/toolkit/pdf`, `crates/libs/content` | L |
-| A11 | [Fingerprint and security keys](apps/fingerprint.md) | | C3, D19 | its part of `crates/apps/settings`, `crates/shell/lock` | M |
+| A11 | [Fingerprint and security keys](apps/fingerprint.md) | | D19 | its part of `crates/apps/settings`, `crates/shell/lock`, `crates/services/polkit` | M |
 | A12a | [On-screen keyboard and other input](apps/assistive-input.md) | | C3 | `crates/shell/keyboard`, `crates/platform` | L |
 | A12b | [Registering an assistive device](apps/assistive-input.md) | | A12a | `crates/shell/approval`, `crates/platform` | S |
 
@@ -189,13 +188,10 @@ D17, D19, A11. `crates/platform`: C3, A12a, A12b, D8. `crates/libs/content`: D1,
 | Part | What |
 | :--- | :--- |
 | Role | a fifth session-client role, started on demand like the screenshot tool (`Summoned` in `crates/platform/compositor/src/session.rs`); its surface is above every layer, which today go by the newest; no other client can take the name or the keyboard while it is open; hidden while locked |
-| Input | every key, button and touch carries where it came from: hardware (the udev path is not under `/devices/virtual/input`), uinput, EIS, virtual keyboard, input method; `handle_input` drops the device today. The prompt gets hardware and registered devices only; the key monitor for screen readers is off while a password field has focus |
+| Input | every key, button and touch carries where it came from: hardware (the udev path is not under `/devices/virtual/input`), uinput, EIS, virtual keyboard, input method; `handle_input` drops the device today. The prompt gets hardware and registered devices only |
 | Channel | one socket pair per request between owner and prompt, made by the compositor on the owner's request, checked as a Bande program (`verified_program`) |
-| Polkit | the agent moves into the prompt, so there is one surface; it registers for the session, and shows message, details and the program that asked, which today's does not |
-| PAM | service `bande-approval` (`common-auth`, `common-account`), the whole conversation through `bande-pam` with its back-off; the surface is shown before the first message: today a fingerprint's message before a prompt is dropped, and every prompt is labelled "Password" |
-| One proof | as the [specification](../architecture/intents.md#authorisation) says: polkit's own conversation where polkit asks, the person's PAM where it would not, never both and never replayed; which of the two is found by `CheckAuthorization` without interaction after kept authorisations are revoked |
-| Owners | `Plan` names its polkit actions, its target by identity, what is lost, and the copy it can make first |
-| Tests | formatting a loop disk with one proof; a wrong target swapped between Prepare and Perform is `Conflict`; synthetic input of each kind is refused; a standard user is asked for an administrator |
+| Owners | `Plan` names its target by identity, what is lost, and the copy it can make first; the owner calls the backend interactively after Allow |
+| Tests | formatting a loop disk with one Allow; a target swapped between Prepare and Perform is `Conflict`; synthetic input of each kind is refused; a No at polkit ends as `Declined` |
 
 ## Step 1 in detail
 
@@ -223,8 +219,6 @@ its owner, its manifest and one end-to-end test; the command line; the launcher.
 | Decision | Proposal | When |
 | :--- | :--- | :--- |
 | Whether MCP is an open protocol in the sense of the project rules | yes, for an optional adapter only | before C6 |
-| Whether the person's own acts in apps that destroy data (formatting in Disks) also ask for the password | yes: the guard is the same wherever it is asked from; the app's confirmation stays | before C3 |
-| Whether someone without a password may authorise | no | before C3 |
 | Tests for the prompt, the sandbox and destructive intents beyond the usual budget | allowed, as security boundaries | before C3 |
 | Which of the planned apps to build, and their order | A1, A7, A4, A2, A10, A3, A5, A8, then the rest | before wave 2 |
 | Whether names may reach an agent as `read` | yes, as limited: otherwise nearly everything taints and the mark means nothing | before C4 |
@@ -235,4 +229,3 @@ its owner, its manifest and one end-to-end test; the command line; the launcher.
 | Whether an application installed only for the person may be a provider | no: any of their programs can replace it | before C7 |
 | Whether a mandate may ever send | not until drafts have been used | after C9 |
 | Messages over XMPP or Matrix | XMPP: the parts are packaged, and sign-in is a password | before A8 |
-| The word "intent", which the XDG draft also uses | kept; the other is always written in full | first |

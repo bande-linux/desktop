@@ -11,8 +11,8 @@ Part of [Bande Intents](../../intents.md). Main noun `backup`. Owner:
 | `backups.pause`, `backups.resume` | `:only` | `disrupt`; `change` | each other | ready | B |
 | `backups.find_version` | `files`, `before` | `read`; foreign where what is in it is |  | ready | A |
 | `backups.restore` | `files`, `version`, `to`; keeps both | `change`; server: `send` | `files.trash` | app | A |
-| `backups.set_disk` | `disk`, `erase` | `authorise` |  | ready | B |
-| `backups.remove_disk` | `disk` | `authorise` |  | ready | C |
-| `backups.update` | `excluded` | `authorise` | the earlier list | ready | C |
+| `backups.set_disk` | `disk`, `erase` | `critical` |  | ready | B |
+| `backups.remove_disk` | `disk` | `critical` |  | ready | C |
+| `backups.update` | `excluded` | `critical` | the earlier list | ready | C |
 
 A restore never overwrites. The password of a backup is asked by its owner.

@@ -18,7 +18,7 @@ Part of [Bande Intents](../../intents.md). Main noun `event`; `calendar.calendar
 | `calendar.open` | `event` or `date` | `show` |  | app | B |
 | `calendar.create_calendar` | `name`, `colour`, `account` | `change`; server: `send` | removes it while empty | app (`worker.rs`) | B |
 | `calendar.update_calendar` | `calendar`, `name`, `colour`, `shown` | as `create_calendar` | the earlier values | app | B |
-| `calendar.delete_calendar` | `calendar` | `authorise` |  | app | C |
+| `calendar.delete_calendar` | `calendar` | `critical` |  | app | C |
 | `calendar.add_subscription` | `url` | `send` | `calendar.remove_subscription` | app | B |
 | `calendar.remove_subscription` | `calendar` | `change` | adds it again | app | B |
 | `calendar.import` | `file`, `calendar` | `change`; items with `ORGANIZER` or `ATTENDEE`, or server: `send` | removes those, with the same effect | app | B |

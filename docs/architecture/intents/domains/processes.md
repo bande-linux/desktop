@@ -8,7 +8,7 @@ Part of [Bande Intents](../../intents.md). Main noun `process`. Owner:
 | `processes.find` | `text`, `order` (`processor`, `memory`, `disk`, `network`, `energy`); returns the ordered value | `read` |  | app; no energy | B |
 | `processes.get` | `processes`, `properties` (name, app, processor, memory, disk, network, started) | `read` |  | app | B |
 | `processes.compute_load` | `properties` (processor, memory, disk, network, temperature) | `read` |  | app | B |
-| `processes.stop` | `process`, `force` | `disrupt`; with `force` `authorise` |  | app | A |
+| `processes.stop` | `process`, `force` | `disrupt`; with `force` `critical` |  | app | A |
 
 A process is known by its id, start time and boot. Command lines, environments, open files and
 connections are not returned: they hold secrets. `stop` asks it to quit and refuses the session's

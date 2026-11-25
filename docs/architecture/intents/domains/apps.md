@@ -10,7 +10,7 @@ Part of [Bande Intents](../../intents.md). Main nouns `app` and `window`. Owner:
 | `apps.find_permission` | `app` | `read` |  | app | B |
 | `apps.open` | `app` | `show` or `disrupt`, as above |  | ready | B |
 | `windows.open` | `window` | `show` |  | app | C |
-| `apps.stop` | `app`, `force` | `disrupt`; with `force` `authorise` |  | app | A |
+| `apps.stop` | `app`, `force` | `disrupt`; with `force` `critical` |  | app | A |
 | `apps.remove_permission` | `app`, `permission`; giving one back is the person's | `disrupt` |  | app (`apps/settings/src/permissions.rs`) | B |
 | `windows.move` | `windows`, `workspace`, `tile`, `display`, `on_top`, `minimised`, `full_screen` | `change` | the earlier places | app; only a client's own window | A |
 | `windows.stop` | `window`; its app may ask | `disrupt` |  | app | B |

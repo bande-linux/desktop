@@ -13,18 +13,18 @@ Part of [Bande Intents](../../intents.md). Main nouns `machine` and `container`;
 | `machines.create_snapshot` | `machine`, `name` | `change` | removes that snapshot | ready | C |
 | `containers.start`, `containers.stop`, `containers.pause`, `containers.resume` | `container` | `disrupt`; remote engine: also `send` |  | app | C |
 | `machines.pause`, `machines.resume` | `machine` | `disrupt` | each other | ready | B |
-| `machines.stop` | `machine`, `suspend`, `force` | `disrupt`; with `force` `authorise` |  | part | B |
-| `machines.create` | `image` (catalogue), `name`, `processors`, `memory`, `disk` | `authorise` | trash while unused | ready | B |
+| `machines.stop` | `machine`, `suspend`, `force` | `disrupt`; with `force` `critical` |  | part | B |
+| `machines.create` | `image` (catalogue), `name`, `processors`, `memory`, `disk` | `critical` | trash while unused | ready | B |
 | `machines.update` | `machine`, `name`, `processors`, `memory`, `start_at_login` | `disrupt` | the earlier values | app | B |
 | `machines.copy` | `machine`, `name` | `disrupt` |  | ready | C |
-| `machines.restore_snapshot` | `snapshot` | `authorise`, a new snapshot first |  | ready | B |
-| `machines.delete` | `machine` | `authorise` |  | ready | B |
-| `machines.delete_snapshot` | `snapshot` | `authorise` |  | ready | C |
+| `machines.restore_snapshot` | `snapshot` | `critical`, a new snapshot first |  | ready | B |
+| `machines.delete` | `machine` | `critical` |  | ready | B |
+| `machines.delete_snapshot` | `snapshot` | `critical` |  | ready | C |
 | `containers.start_project`, `containers.stop_project` | `project`: its existing containers | `disrupt`; remote engine: also `send` | each other | app | B |
-| `containers.delete` | `containers` | `authorise` |  | app | B |
-| `containers.delete_unused` | `kinds` (`containers`, `images`, `volumes`, `networks`) | `authorise` |  | app | A |
-| `containers.delete_image`, `containers.delete_volume` | `image`; `volume` | `authorise` |  | app | C |
-| `containers.start_engine`, `containers.stop_engine` |  | `disrupt`, or `authorise` as administrator | each other | app | C |
+| `containers.delete` | `containers` | `critical` |  | app | B |
+| `containers.delete_unused` | `kinds` (`containers`, `images`, `volumes`, `networks`) | `critical` |  | app | A |
+| `containers.delete_image`, `containers.delete_volume` | `image`; `volume` | `critical` |  | app | C |
+| `containers.start_engine`, `containers.stop_engine` |  | `disrupt`, or `critical` as administrator | each other | app | C |
 
 A machine is known by its manifest id, a container by its id and its engine. Environment, labels,
 logs, consoles, addresses and first-boot settings are not returned. Running, executing, building and

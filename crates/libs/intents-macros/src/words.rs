@@ -1,6 +1,6 @@
 use proc_macro2::TokenStream;
 use quote::quote;
-use syn::{Data, DeriveInput, Fields};
+use syn::{Data, DeriveInput, Fields, LitStr};
 
 fn kebab(name: &str) -> String {
     let mut word = String::new();
@@ -24,7 +24,13 @@ pub fn expand(input: DeriveInput) -> syn::Result<TokenStream> {
         if !matches!(variant.fields, Fields::Unit) {
             return Err(syn::Error::new_spanned(variant, "a word has no fields"));
         }
-        words.push(kebab(&variant.ident.to_string()));
+        let mut word = kebab(&variant.ident.to_string());
+        for attribute in &variant.attrs {
+            if attribute.path().is_ident("word") {
+                word = attribute.parse_args::<LitStr>()?.value();
+            }
+        }
+        words.push(word);
         variants.push(&variant.ident);
     }
     Ok(quote! {

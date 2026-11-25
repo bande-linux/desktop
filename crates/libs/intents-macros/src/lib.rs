@@ -22,9 +22,11 @@ pub fn intent(input: TokenStream) -> TokenStream {
 /// Declares a thing: a struct with a `reference` and a `title`, whose other fields are `Option`s
 /// of the properties' types, `None` where this thing has none.
 ///
-/// `#[thing(id = "clock.timer", title = text!("Timer"))]`, and on a field `#[thing(find)]` when
+/// `#[thing(id = "clock.timer", title = text!("Timer"))]`, with `view_of = ["files.file"]` when its
+/// references are those of another type, and on a field `#[thing(find)]` when
 /// `find` returns it too, `#[thing(foreign)]` when someone else could have chosen its text, and
-/// `#[thing(content)]` when it is returned only when asked for by name.
+/// `#[thing(content)]` when it is returned only when asked for by name. A field
+/// `foreign: Vec<&'static str>` is no property: it names those that are foreign in this thing only.
 #[proc_macro_derive(Thing, attributes(thing))]
 pub fn thing(input: TokenStream) -> TokenStream {
     derived(input, thing::expand)
@@ -36,8 +38,9 @@ pub fn record(input: TokenStream) -> TokenStream {
     derived(input, record::expand)
 }
 
-/// Makes an enum a closed list of words: `LowPower` is written `low-power`.
-#[proc_macro_derive(Words)]
+/// Makes an enum a closed list of words: `LowPower` is written `low-power`, and a variant with
+/// `#[word("90")]` as that says.
+#[proc_macro_derive(Words, attributes(word))]
 pub fn words(input: TokenStream) -> TokenStream {
     derived(input, words::expand)
 }

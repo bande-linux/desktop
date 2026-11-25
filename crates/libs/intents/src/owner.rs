@@ -11,16 +11,16 @@ use zbus::message::Header;
 use zbus::zvariant::{self, OwnedObjectPath};
 
 use crate::callers::Callers;
-use crate::domain::{Action, Entry, Matches, Ready, ThingEntry};
+use crate::domain::{Connect, Entry, FilesOpener, Finds, Gets, Matches, Ready, ThingEntry};
 use crate::guard::{self, Question};
 use crate::job::{JobObject, Outcome, Running};
 use crate::manifest::{Manifest, Manifests};
-use crate::plan::{locked, put};
+use crate::plan::{Step, locked, put};
 use crate::receipts::{self, KeptUndo, Receipt, Receipts, State, digest, now, unstored};
 use crate::value::SET_PREFIX;
 use crate::{
-    Definition, Dict, Domain, Effect, Job, Kind, LISTED, Limits, Reason, Refusal, Row, RowKind,
-    Store, Undo, Wanted, domain,
+    Access, Client, Definition, Dict, Domain, Effect, Job, Kind, LISTED, Limits, Parameter, Reason,
+    Refusal, Row, RowKind, Store, Undo, Wanted, Written, domain,
 };
 
 /// The object every owner serves its intents at.
@@ -31,7 +31,10 @@ pub(crate) const JOB_LASTS: Duration = Duration::from_secs(10 * 60);
 const AT_ONCE: Duration = Duration::from_millis(100);
 const END_IS_READ: Duration = Duration::from_millis(200);
 const MOST_PLANS: usize = 16;
+const MOST_JOBS: usize = 16;
 const MOST_SETS: usize = 16;
+const MOST_GOT: usize = 16 * 1024 * 1024;
+const ONLY: &str = "only";
 const MOST_FOUND: u32 = 100;
 const PROPERTIES: &str = "properties";
 const CURRENT: &str = "current";
@@ -45,6 +48,8 @@ pub struct Owner {
     program: PathBuf,
     entries: BTreeMap<String, Entry>,
     things: BTreeMap<String, ThingEntry>,
+    files: Option<Arc<FilesOpener>>,
+    connect: Vec<Box<Connect>>,
     current: Current,
 }
 
@@ -56,6 +61,8 @@ impl Owner {
             program: program.into(),
             entries: BTreeMap::new(),
             things: BTreeMap::new(),
+            files: None,
+            connect: Vec::new(),
             current: Arc::new(|_| Vec::new()),
         }
     }
@@ -63,6 +70,8 @@ impl Owner {
     pub fn with<O: Store>(mut self, domain: Domain<O>) -> Self {
         self.entries.extend(domain.entries);
         self.things.extend(domain.things);
+        self.files = domain.files.or(self.files);
+        self.connect.push(domain.connect);
         self
     }
 
@@ -103,9 +112,14 @@ impl Owner {
         let folder = bande_xdg::state_home()
             .map(|state| state.join("bande/intents"))
             .ok_or_else(|| zbus::Error::Failure("neither XDG_STATE_HOME nor HOME is set".into()))?;
+        for connect in &self.connect {
+            connect(connection);
+        }
+        let serves_files = self.files.is_some();
         let shared = Arc::new(Shared {
             entries: self.entries,
             things: self.things,
+            files: self.files,
             current: self.current,
             folder,
             connection: connection.clone(),
@@ -120,6 +134,11 @@ impl Owner {
         connection
             .object_server()
             .at(PATH, Intents(Arc::clone(&shared)))?;
+        if serves_files {
+            connection
+                .object_server()
+                .at(PATH, FilesObject(Intents(Arc::clone(&shared))))?;
+        }
         Ok(Serving(shared))
     }
 }
@@ -209,11 +228,12 @@ impl Serving {
     }
 }
 
+type FilesAnswered = (Vec<(zvariant::OwnedFd, String, Dict)>, Vec<String>);
 type Answered = (Vec<Dict>, String, String, bool, Vec<String>);
 
 struct Held {
     sender: String,
-    agent: Option<String>,
+    limits: Limits,
     made: Instant,
     domain: String,
     intent: String,
@@ -284,6 +304,7 @@ impl Waiting {
 struct Shared {
     entries: BTreeMap<String, Entry>,
     things: BTreeMap<String, ThingEntry>,
+    files: Option<Arc<FilesOpener>>,
     current: Current,
     folder: PathBuf,
     connection: Connection,
@@ -493,13 +514,7 @@ impl Shared {
             else {
                 continue;
             };
-            let references = match given.as_slice() {
-                [set] if set.starts_with(SET_PREFIX) => self.in_set(sender, set)?,
-                _ if given.len() > LISTED => {
-                    return Err(Refusal::invalid(&parameter.name, parameter.kind.accepts()));
-                }
-                _ => continue,
-            };
+            let references = self.references(sender, parameter, given)?;
             let fits = references.iter().all(|reference| {
                 of.iter()
                     .any(|kind| crate::reference_token(reference, kind).is_some())
@@ -510,6 +525,21 @@ impl Shared {
             put(arguments, &parameter.name, references)?;
         }
         Ok(())
+    }
+
+    fn references(
+        &self,
+        sender: &str,
+        parameter: &Parameter,
+        given: Vec<String>,
+    ) -> Result<Vec<String>, Refusal> {
+        match given.as_slice() {
+            [set] if set.starts_with(SET_PREFIX) => self.in_set(sender, set),
+            _ if given.len() > LISTED => {
+                Err(Refusal::invalid(&parameter.name, parameter.kind.accepts()))
+            }
+            _ => Ok(given),
+        }
     }
 
     fn in_set(&self, sender: &str, set: &str) -> Result<Vec<String>, Refusal> {
@@ -527,12 +557,11 @@ impl Shared {
         let mut refusal = refusal;
         refusal.candidates.retain(|candidate| {
             let kind = candidate.split(':').next().unwrap_or_default();
-            let wanted = Wanted { names: Vec::new() };
             limits.grants(domain(kind))
-                && self
-                    .things
-                    .get(kind)
-                    .is_none_or(|thing| (thing.describe)(candidate, &wanted, limits).is_ok())
+                && match self.things.get(kind) {
+                    Some(thing) => (thing.describe)(candidate, &Wanted::default(), limits).is_ok(),
+                    None => limits.within(domain(kind)).is_none(),
+                }
         });
         refusal
     }
@@ -547,13 +576,14 @@ impl Shared {
         count: u32,
     ) -> Result<Answered, Refusal> {
         let entry = self.entry(id, false)?;
-        let Action::Find(kind, finder) = &entry.action else {
-            return Err(unknown_intent(id));
-        };
+        let Finds { kind, finder } = entry.finds.as_ref().ok_or_else(|| unknown_intent(id))?;
         limits.check(domain(id), &[Effect::Read])?;
         let thing = self.things.get(kind).ok_or_else(|| unknown_intent(id))?;
         let (set, start) = match cursor.rsplit_once('/') {
-            Some((set, start)) => (set.to_owned(), start.parse().map_err(|_| expired())?),
+            Some((set, start)) => (
+                set.to_owned(),
+                start.parse::<usize>().map_err(|_| expired())?,
+            ),
             None if cursor.is_empty() => {
                 self.expand(&caller.sender, &entry.definition, &mut arguments)?;
                 let shown = entry.definition.parameter(CURRENT).is_some()
@@ -571,7 +601,8 @@ impl Shared {
             }
             None => return Err(expired()),
         };
-        let (references, cut, matched_foreign) = {
+        let count = count.clamp(1, MOST_FOUND) as usize;
+        let (references, more, cut, matched_foreign) = {
             let mut state = self.state();
             state.forget_old();
             let held = state
@@ -579,7 +610,15 @@ impl Shared {
                 .get(&set)
                 .filter(|held| held.sender == caller.sender && held.intent == id)
                 .ok_or_else(expired)?;
-            (held.references.clone(), held.cut, held.foreign)
+            let end = start.saturating_add(count);
+            let page: Vec<String> = held
+                .references
+                .iter()
+                .skip(start)
+                .take(count)
+                .cloned()
+                .collect();
+            (page, end < held.references.len(), held.cut, held.foreign)
         };
         let foreign_allowed = limits.allows(domain(id), Effect::ReadForeign);
         if matched_foreign {
@@ -593,19 +632,18 @@ impl Shared {
                 .filter(|(_, property)| property.find && (foreign_allowed || !property.foreign))
                 .map(|(name, _)| name.clone())
                 .collect(),
+            asked: None,
         };
-        let count = count.clamp(1, MOST_FOUND) as usize;
         let mut things = Vec::new();
-        for reference in references.iter().skip(start).take(count) {
+        for reference in &references {
             match (thing.describe)(reference, &wanted, limits) {
-                Ok(described) => things.push(described),
+                Ok((described, _)) => things.push(described),
                 Err(refusal) if refusal.reason == Reason::NotFound => {}
                 Err(refusal) => return Err(refusal),
             }
         }
-        let next = start.saturating_add(count);
-        let cursor = match next < references.len() {
-            true => format!("{set}/{next}"),
+        let cursor = match more {
+            true => format!("{set}/{}", start + count),
             false => String::new(),
         };
         let effects = effects_of(&things, matched_foreign);
@@ -647,50 +685,66 @@ impl Shared {
         id: &str,
         references: Vec<String>,
         properties: Vec<String>,
-        mut arguments: Dict,
+        arguments: Dict,
         limits: &Limits,
     ) -> Result<(Vec<Dict>, Vec<String>), Refusal> {
         let entry = self.entry(id, false)?;
-        let (Action::Get, Some(parameter)) = (&entry.action, entry.definition.parameters.first())
-        else {
-            return Err(unknown_intent(id));
-        };
-        if let Some(name) = arguments.keys().next() {
-            return Err(crate::definition::unknown(
-                id,
-                name,
-                entry.definition.names(),
-            ));
+        let Gets { types, check } = entry.gets.as_ref().ok_or_else(|| unknown_intent(id))?;
+        let parameter = entry
+            .definition
+            .parameters
+            .first()
+            .filter(|parameter| parameter.kind.names_things());
+        if let Some(name) = arguments
+            .keys()
+            .find(|name| *name == PROPERTIES || parameter.is_some_and(|it| it.name == **name))
+        {
+            return Err(Refusal::invalid(name, Vec::new()));
         }
         limits.check(domain(id), &[Effect::Read])?;
-        put(&mut arguments, &parameter.name, references)?;
-        self.expand(&caller.sender, &entry.definition, &mut arguments)?;
-        let references: Vec<String> = crate::take(&mut arguments, &parameter.name).map(
-            |crate::List::<crate::Text<SHOWN>, LISTED>(references)| {
-                references
-                    .into_iter()
-                    .map(|reference| reference.0)
-                    .collect()
-            },
-        )?;
-        if references.is_empty() {
-            return Err(Refusal::invalid(&parameter.name, parameter.kind.accepts()));
+        let refused =
+            |parameter: &Parameter| Refusal::invalid(&parameter.name, parameter.kind.accepts());
+        let references = match (parameter, references.len()) {
+            (None, 0) => types.iter().map(|kind| format!("{kind}:{ONLY}")).collect(),
+            (Some(parameter), 1..) => self.references(&caller.sender, parameter, references)?,
+            (None, _) => return Err(Refusal::invalid("references", Vec::new())),
+            (Some(parameter), 0) => return Err(refused(parameter)),
+        };
+        let is_list = parameter.is_some_and(|it| matches!(it.kind, Kind::List { .. }));
+        if let Some(parameter) = parameter
+            && !is_list
+            && references.len() > 1
+        {
+            return Err(refused(parameter));
+        }
+        let named = !arguments.is_empty();
+        let asking = |reference: &str| -> Result<Dict, Refusal> {
+            let mut asked = crate::job::copied(&arguments)?;
+            match parameter {
+                Some(parameter) if is_list => {
+                    put(&mut asked, &parameter.name, vec![reference.to_owned()])?;
+                }
+                Some(parameter) => put(&mut asked, &parameter.name, reference.to_owned())?,
+                None => {}
+            }
+            Ok(asked)
+        };
+        if let Some(reference) = references.first() {
+            check(asking(reference)?)?;
         }
         let foreign_allowed = limits.allows(domain(id), Effect::ReadForeign);
         let mut things = Vec::new();
+        let mut weight = 0;
         for reference in &references {
             let kind = reference.split(':').next().unwrap_or_default();
-            let fits = match &parameter.kind {
-                Kind::List { items, .. } => {
-                    matches!(&**items, Kind::Ref { of } if of.iter().any(|of| of == kind))
-                }
-                _ => false,
-            };
-            let thing = self
-                .things
-                .get(kind)
-                .filter(|_| fits)
-                .ok_or_else(|| Refusal::invalid(&parameter.name, parameter.kind.accepts()))?;
+            let thing = types
+                .iter()
+                .filter_map(|kind| self.things.get(*kind))
+                .find(|thing| thing.references.contains(&kind))
+                .ok_or_else(|| match parameter {
+                    Some(parameter) => refused(parameter),
+                    None => unknown_intent(id),
+                })?;
             let known = &thing.definition.properties;
             let names = match properties.is_empty() {
                 true => known
@@ -712,7 +766,28 @@ impl Shared {
                     properties.clone()
                 }
             };
-            things.push((thing.describe)(reference, &Wanted { names }, limits)?);
+            let wanted = Wanted {
+                names,
+                asked: match named {
+                    true => Some((id.to_owned(), asking(reference)?)),
+                    false => None,
+                },
+            };
+            let (described, withheld) = (thing.describe)(reference, &wanted, limits)?;
+            if withheld && !properties.is_empty() {
+                limits.check(domain(id), &[Effect::ReadForeign])?;
+            }
+            weight += described
+                .values()
+                .map(|value| text_in(value))
+                .sum::<usize>();
+            if weight > MOST_GOT {
+                return Err(Refusal::new(
+                    Reason::Limited,
+                    tr!("This is too much at once. Get fewer things or properties."),
+                ));
+            }
+            things.push(described);
         }
         let effects = effects_of(&things, false);
         Ok((things, effects))
@@ -727,9 +802,7 @@ impl Shared {
         private: bool,
     ) -> Result<(Ready, bool), Refusal> {
         let entry = self.entry(id, private)?;
-        let Action::Perform(prepare) = &entry.action else {
-            return Err(unknown_intent(id));
-        };
+        let prepare = entry.preparer.as_ref().ok_or_else(|| unknown_intent(id))?;
         if !limits.grants(domain(id)) {
             limits.check(domain(id), &[])?;
         }
@@ -737,6 +810,17 @@ impl Shared {
         let mut ready = prepare(arguments, limits)?;
         ready.effects.sort();
         ready.effects.dedup();
+        if let Some(effect) = ready
+            .effects
+            .iter()
+            .find(|effect| !entry.definition.effects.contains(effect))
+        {
+            tracing::error!("{id} does not declare that it can {effect}");
+            return Err(Refusal::failed(tr!(
+                "“{intent}” would do more than it says",
+                intent = id
+            )));
+        }
         limits.check(domain(id), &ready.effects)?;
         Ok((ready, entry.definition.undo))
     }
@@ -766,7 +850,7 @@ impl Shared {
         }
         self.hold(Held {
             sender: caller.sender.clone(),
-            agent: limits.agent().map(str::to_owned),
+            limits: limits.clone(),
             made: Instant::now(),
             domain: of,
             intent: id.to_owned(),
@@ -790,7 +874,7 @@ impl Shared {
         let waiting = state
             .plans
             .values()
-            .filter(|plan| plan.sender == held.sender && plan.agent == held.agent)
+            .filter(|plan| plan.sender == held.sender && plan.limits.agent() == held.limits.agent())
             .count();
         if waiting >= MOST_PLANS {
             return Err(Refusal::new(
@@ -831,22 +915,20 @@ impl Shared {
                 change = summary
             )));
         }
-        let arguments = self
-            .entry(&undo.intent, true)
-            .and_then(|entry| {
-                entry.definition.arguments_from_json(
-                    &undo.intent,
-                    undo.arguments.as_object().ok_or_else(expired)?,
-                )
-            })
-            .map_err(|refusal| {
-                tracing::warn!("a receipt cannot be used: {refusal}");
-                expired()
-            })?;
-        let (ready, _) = self.prepare_named(caller, &undo.intent, arguments, limits, true)?;
+        let ready = match self.entries.contains_key(&undo.intent) {
+            true => {
+                let arguments = self
+                    .entry(&undo.intent, true)
+                    .and_then(|entry| undo_arguments(&entry.definition, &undo))?;
+                let (ready, _) =
+                    self.prepare_named(caller, &undo.intent, arguments, limits, true)?;
+                ready
+            }
+            false => self.prepare_elsewhere(&undo, limits)?,
+        };
         self.hold(Held {
             sender: caller.sender.clone(),
-            agent: limits.agent().map(str::to_owned),
+            limits: limits.clone(),
             made: Instant::now(),
             domain: of.to_owned(),
             intent: undo.intent.clone(),
@@ -854,6 +936,26 @@ impl Shared {
             program: caller.program.clone(),
             unkept: true,
             undoes: Some(name.to_owned()),
+        })
+    }
+
+    fn prepare_elsewhere(&self, undo: &Undo, limits: &Limits) -> Result<Ready, Refusal> {
+        let manifests = Manifests::installed();
+        let (manifest, definition) = manifests.intent(&undo.intent).ok_or_else(|| {
+            Refusal::unavailable(tr!("The program that can undo this is not installed"))
+        })?;
+        let arguments = undo_arguments(definition, undo)?;
+        let client = Client::passing(&self.connection, limits)?;
+        let prepared = client.prepare(&manifest.bus, &undo.intent, &arguments)?;
+        Ok(Ready {
+            effects: prepared.effects.clone(),
+            summary: prepared.summary.clone(),
+            rows: prepared.rows.iter().map(Row::from_wire).collect(),
+            references: Vec::new(),
+            run: Box::new(move |_, _| {
+                client.perform(prepared)?;
+                Ok((Dict::new(), None))
+            }),
         })
     }
 
@@ -891,13 +993,13 @@ impl Shared {
 
     fn run(&self, plan: &str, held: Held, job: &Arc<Job>, record: &Record) -> Outcome {
         let question = Question {
-            agent: held.agent.as_deref(),
+            agent: held.limits.agent(),
             effects: &held.ready.effects,
         };
         if let Err(refusal) = guard::allow(&question) {
             return Outcome::refused(refusal);
         }
-        match &held.agent {
+        match held.limits.agent() {
             Some(_) => tracing::info!("performs {} for an agent", held.intent),
             None => tracing::info!("performs {} for {}", held.intent, held.program),
         }
@@ -907,7 +1009,7 @@ impl Shared {
         {
             return Outcome::refused(refusal);
         }
-        let outcome = (held.ready.run)(job);
+        let outcome = (held.ready.run)(job, &held.limits);
         reached("performed");
         let (output, left, refusal) = match outcome {
             Ok((output, undo)) => (output, Ok(undo), None),
@@ -924,6 +1026,7 @@ impl Shared {
             None => self.with_receipts(&held.domain, |receipts| {
                 if refusal.is_none()
                     && let Some(undone) = &held.undoes
+                    && !job.was_partial()
                 {
                     receipts.remove(undone).map_err(|error| unstored(&error))?;
                 }
@@ -935,7 +1038,15 @@ impl Shared {
         if let Err(refusal) = settled {
             tracing::warn!("{} {plan} has no undo: {refusal}", held.intent);
         }
-        let mut result = match job.result(output) {
+        if refusal.is_none()
+            && let Some(undone) = held.undoes.as_deref().filter(|_| job.was_partial())
+            && let Err(refusal) = self.look_again(&held.domain, undone)
+        {
+            tracing::warn!("what is left to undo is unknown: {refusal}");
+        }
+        let within = |refusal| self.within(refusal, &held.limits);
+        let refusal = refusal.map(within);
+        let mut result = match job.result(output, within) {
             Ok(result) => result,
             Err(refusal) => return Outcome::refused(refusal),
         };
@@ -956,6 +1067,48 @@ impl Shared {
         match kept {
             Some(undo) => self.store(&record.domain)?.recover(undo),
             None => Ok(None),
+        }
+    }
+
+    fn look_again(&self, of: &str, token: &str) -> Result<(), Refusal> {
+        let undo = self.with_receipts(of, |receipts| {
+            Ok(receipts
+                .find(token)
+                .and_then(|receipt| receipts.undo(receipt)))
+        })?;
+        let Some(undo) = undo else {
+            return Ok(());
+        };
+        let looks = self.looks(of, &undo)?;
+        self.with_receipts(of, |receipts| {
+            receipts
+                .look_again(token, looks)
+                .map_err(|error| unstored(&error))
+        })
+    }
+
+    fn keep_steps(&self, record: &Record, steps: &[Undo], step: Step) -> Result<(), Refusal> {
+        let add = |step: Option<&Undo>| {
+            self.with_receipts(&record.domain, |receipts| {
+                receipts
+                    .add_step(&record.token, step)
+                    .map_err(|error| unstored(&error))
+            })
+        };
+        match (step, steps) {
+            (Step::Kept, [first]) => {
+                self.store_receipt(record, State::Begun, Some((first.clone(), Vec::new())))
+            }
+            (Step::Kept, steps) => add(steps.last()),
+            (Step::Left, []) if record.asked.is_empty() => {
+                self.with_receipts(&record.domain, |receipts| {
+                    receipts
+                        .remove(&record.token)
+                        .map_err(|error| unstored(&error))
+                })
+            }
+            (Step::Left, []) => self.store_receipt(record, State::Begun, None),
+            (Step::Left, _) => add(None),
         }
     }
 
@@ -1000,7 +1153,7 @@ impl Shared {
             intent: held.intent.clone(),
             summary: held.ready.summary.clone(),
             references: held.ready.references.clone(),
-            agent: held.agent.clone(),
+            agent: held.limits.agent().map(str::to_owned),
             asked: held
                 .ready
                 .effects
@@ -1017,10 +1170,11 @@ impl Shared {
         let keeper = Arc::clone(self);
         let keeping = (!held.unkept).then(|| record.clone());
         let job = Job::new(
-            held.agent.clone(),
-            move |undo| {
+            held.limits.agent().map(str::to_owned),
+            held.ready.effects.clone(),
+            move |steps, step| {
                 if let Some(record) = &keeping {
-                    keeper.store_receipt(record, State::Begun, Some((undo, Vec::new())))?;
+                    keeper.keep_steps(record, steps, step)?;
                 }
                 reached("kept");
                 Ok(())
@@ -1028,7 +1182,7 @@ impl Shared {
             move || reporter.progressed(),
         );
         running.attach(Arc::clone(&job));
-        self.state().jobs.insert(path.clone(), Arc::clone(&running));
+        self.hold_job(&path, &running)?;
         let (ended, end) = mpsc::channel();
         let shared = Arc::clone(self);
         let worker = Arc::clone(&running);
@@ -1066,6 +1220,78 @@ impl Shared {
         Ok((path, state, running.result()?))
     }
 
+    fn hold_job(&self, path: &str, running: &Arc<Running>) -> Result<(), Refusal> {
+        let mut state = self.state();
+        let jobs = state
+            .jobs
+            .values()
+            .filter(|job| job.sender() == running.sender() && !job.has_ended())
+            .count();
+        if jobs >= MOST_JOBS {
+            return Err(Refusal::new(
+                Reason::Limited,
+                tr!("Too much is being done. Try again when some of it has ended."),
+            ));
+        }
+        state.jobs.insert(path.to_owned(), Arc::clone(running));
+        Ok(())
+    }
+
+    fn open_files(
+        &self,
+        references: &[String],
+        access: &str,
+        limits: &Limits,
+    ) -> Result<FilesAnswered, Refusal> {
+        let files = self.files.as_ref().ok_or_else(expired)?()?;
+        let access = Access::from_word(access).ok_or_else(|| {
+            Refusal::invalid(
+                "access",
+                [Access::Read, Access::Folder]
+                    .map(|it| it.word().to_owned())
+                    .to_vec(),
+            )
+        })?;
+        if references.len() > LISTED {
+            return Err(Refusal::invalid("references", Vec::new()));
+        }
+        let mut opened = Vec::new();
+        let mut effects = std::collections::BTreeSet::new();
+        for reference in references {
+            limits.check(domain(reference), &[Effect::Read])?;
+            let (file, caused) = files.open(reference, access, limits)?;
+            let mut about = Dict::new();
+            put(&mut about, "name", file.name)?;
+            put(&mut about, "media_type", file.media_type)?;
+            put(&mut about, "size", file.size)?;
+            opened.push((file.file.into(), file.reference, about));
+            effects.extend(caused);
+        }
+        let words = effects.iter().map(|effect| effect.word().to_owned());
+        Ok((opened, words.collect()))
+    }
+
+    fn register_files(
+        &self,
+        folder: zvariant::OwnedFd,
+        written: Vec<(String, String, String)>,
+        limits: &Limits,
+    ) -> Result<Vec<String>, Refusal> {
+        let files = self.files.as_ref().ok_or_else(expired)?()?;
+        if written.len() > LISTED {
+            return Err(Refusal::invalid("files", Vec::new()));
+        }
+        let written = written
+            .into_iter()
+            .map(|(temporary, name, replaces)| Written {
+                temporary,
+                name,
+                replaces: Some(replaces).filter(|reference| !reference.is_empty()),
+            })
+            .collect();
+        files.register(folder.into(), written, limits)
+    }
+
     fn receipts(&self, limits: &Limits, count: u32) -> Result<Vec<Dict>, Refusal> {
         let mut domains: Vec<&str> = self.entries.keys().map(|id| domain(id)).collect();
         domains.dedup();
@@ -1092,7 +1318,25 @@ impl Shared {
     }
 }
 
-const SHOWN: usize = 4096;
+fn undo_arguments(definition: &Definition, undo: &Undo) -> Result<Dict, Refusal> {
+    undo.arguments
+        .as_object()
+        .ok_or_else(expired)
+        .and_then(|arguments| definition.arguments_from_json(&undo.intent, arguments))
+        .map_err(|refusal| {
+            tracing::warn!("a receipt cannot be used: {refusal}");
+            expired()
+        })
+}
+
+fn text_in(value: &zvariant::Value<'_>) -> usize {
+    match value {
+        zvariant::Value::Str(text) => text.len(),
+        zvariant::Value::Value(inner) => text_in(inner),
+        zvariant::Value::Array(items) => items.iter().map(text_in).sum(),
+        _ => 0,
+    }
+}
 
 #[derive(Clone)]
 struct Record {
@@ -1303,5 +1547,40 @@ impl Intents {
             shared.prepare_undo(caller, &receipt, limits)
         })
         .await
+    }
+}
+
+struct FilesObject(Intents);
+
+#[zbus::interface(name = "org.bande.Intents.Files")]
+impl FilesObject {
+    #[zbus(out_args("files", "effects"))]
+    async fn open(
+        &self,
+        references: Vec<String>,
+        access: String,
+        limits: Dict,
+        #[zbus(header)] header: Header<'_>,
+    ) -> Result<FilesAnswered, Refusal> {
+        self.0
+            .answer(&header, limits, move |shared, _, limits| {
+                shared.open_files(&references, &access, limits)
+            })
+            .await
+    }
+
+    #[zbus(out_args("references"))]
+    async fn register(
+        &self,
+        folder: zvariant::OwnedFd,
+        files: Vec<(String, String, String)>,
+        limits: Dict,
+        #[zbus(header)] header: Header<'_>,
+    ) -> Result<Vec<String>, Refusal> {
+        self.0
+            .answer(&header, limits, move |shared, _, limits| {
+                shared.register_files(folder, files, limits)
+            })
+            .await
     }
 }

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
-use std::fs::{self, File, OpenOptions};
-use std::io;
-use std::os::unix::fs::OpenOptionsExt;
+use std::fs::{self, DirBuilder, File, OpenOptions};
+use std::io::{self, Write};
+use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -21,6 +21,7 @@ const MOST_BESIDE: u64 = 1_000_000_000;
 const LOCK_PATIENCE: Duration = Duration::from_secs(2);
 const LOCK_RETRY: Duration = Duration::from_millis(20);
 const PRIVATE: u32 = 0o600;
+const PRIVATE_FOLDER: u32 = 0o700;
 const PROBE: usize = 4096;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -42,6 +43,13 @@ pub(crate) struct Receipt {
     pub(crate) state: State,
     pub(crate) asked: Vec<Effect>,
     pub(crate) undo: Option<KeptUndo>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct KeptStep {
+    intent: String,
+    arguments: Json,
+    touched: Vec<(String, Vec<String>)>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -76,6 +84,15 @@ pub(crate) fn now() -> u64 {
         .map_or(0, |since| since.as_secs())
 }
 
+fn remove_stored(path: &Path) {
+    match fs::remove_file(path) {
+        Err(error) if error.kind() != io::ErrorKind::NotFound => {
+            tracing::warn!("cannot remove {}: {error}", path.display());
+        }
+        _ => {}
+    }
+}
+
 pub(crate) fn digest(text: &str) -> String {
     Sha256::digest(text.as_bytes())
         .iter()
@@ -100,7 +117,11 @@ pub(crate) struct Receipts {
 
 fn lock(folder: &Path, domain: &str) -> Result<File, Refusal> {
     let path = folder.join(format!("{domain}.lock"));
-    let opened = fs::create_dir_all(folder).and_then(|()| {
+    let made = DirBuilder::new()
+        .recursive(true)
+        .mode(PRIVATE_FOLDER)
+        .create(folder);
+    let opened = made.and_then(|()| {
         OpenOptions::new()
             .create(true)
             .truncate(false)
@@ -146,6 +167,68 @@ impl Receipts {
 
     fn beside(&self, token: &str) -> PathBuf {
         self.folder.join(&self.domain).join(format!("{token}.json"))
+    }
+
+    fn steps(&self, token: &str) -> PathBuf {
+        self.folder
+            .join(&self.domain)
+            .join(format!("{token}.steps"))
+    }
+
+    /// Adds a step to the undo of a job; without one, the last is left out.
+    pub(crate) fn add_step(&self, token: &str, step: Option<&Undo>) -> io::Result<()> {
+        let step = step.map(|undo| KeptStep {
+            intent: undo.intent.clone(),
+            arguments: undo.arguments.clone(),
+            touched: undo.touched.clone(),
+        });
+        let mut line = serde_json::to_vec(&step).map_err(io::Error::other)?;
+        line.push(b'\n');
+        let path = self.steps(token);
+        let folder = self.folder.join(&self.domain);
+        DirBuilder::new()
+            .recursive(true)
+            .mode(PRIVATE_FOLDER)
+            .create(&folder)?;
+        let is_new = !path.exists();
+        let mut file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .mode(PRIVATE)
+            .open(&path)?;
+        let before = file.metadata()?.len();
+        file.write_all(&line)
+            .and_then(|()| file.sync_data())
+            .inspect_err(|_| {
+                if let Err(error) = file.set_len(before) {
+                    tracing::warn!("cannot take back a step that was not kept: {error}");
+                }
+            })?;
+        match is_new {
+            true => bande_xdg::sync_folder(&folder),
+            false => Ok(()),
+        }
+    }
+
+    fn kept_steps(&self, token: &str) -> Vec<Option<KeptStep>> {
+        let path = self.steps(token);
+        let stored = match fs::read_to_string(&path) {
+            Ok(stored) => stored,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return Vec::new(),
+            Err(error) => {
+                tracing::warn!("cannot read {}: {error}", path.display());
+                return Vec::new();
+            }
+        };
+        stored
+            .split_inclusive('\n')
+            .filter(|line| line.ends_with('\n'))
+            .map_while(|line| {
+                serde_json::from_str(line)
+                    .inspect_err(|error| tracing::warn!("a kept step cannot be read: {error}"))
+                    .ok()
+            })
+            .collect()
     }
 
     fn load(&self) -> Vec<Receipt> {
@@ -199,11 +282,10 @@ impl Receipts {
     }
 
     fn remove_beside(&self, receipt: &Receipt) {
-        if receipt.undo.as_ref().is_some_and(|undo| undo.beside > 0)
-            && let Err(error) = fs::remove_file(self.beside(&receipt.token))
-        {
-            tracing::warn!("cannot remove the undo of {}: {error}", receipt.intent);
+        if receipt.undo.as_ref().is_some_and(|undo| undo.beside > 0) {
+            remove_stored(&self.beside(&receipt.token));
         }
+        remove_stored(&self.steps(&receipt.token));
     }
 
     pub(crate) fn can_keep(&self) -> bool {
@@ -236,10 +318,23 @@ impl Receipts {
             self.all = before;
             return Err(error);
         }
-        if let Some(replaced) = before.iter().find(|kept| inline && kept.token == token) {
-            self.remove_beside(replaced);
+        if let Some(replaced) = before.iter().find(|kept| kept.token == token) {
+            if inline && replaced.undo.as_ref().is_some_and(|undo| undo.beside > 0) {
+                remove_stored(&self.beside(&token));
+            }
+            remove_stored(&self.steps(&token));
         }
         Ok(())
+    }
+
+    /// Takes `left` as what the things must still look like.
+    pub(crate) fn look_again(&mut self, token: &str, left: Vec<String>) -> io::Result<()> {
+        let found = self.all.iter_mut().find(|receipt| receipt.token == token);
+        let Some(undo) = found.and_then(|receipt| receipt.undo.as_mut()) else {
+            return Ok(());
+        };
+        undo.left = left;
+        self.save()
     }
 
     pub(crate) fn remove(&mut self, token: &str) -> io::Result<()> {
@@ -267,6 +362,30 @@ impl Receipts {
     }
 
     pub(crate) fn undo(&self, receipt: &Receipt) -> Option<Undo> {
+        let first = self.first_undo(receipt);
+        if receipt.state == State::Whole {
+            return first;
+        }
+        let mut steps: Vec<Undo> = first.into_iter().collect();
+        for step in self.kept_steps(&receipt.token) {
+            match step {
+                Some(step) => steps.push(Undo {
+                    intent: step.intent,
+                    arguments: step.arguments,
+                    touched: step.touched,
+                }),
+                None => {
+                    steps.pop();
+                }
+            }
+        }
+        Undo::of_steps(&steps)
+            .inspect_err(|refusal| tracing::warn!("an undo cannot be put together: {refusal}"))
+            .ok()
+            .flatten()
+    }
+
+    fn first_undo(&self, receipt: &Receipt) -> Option<Undo> {
         let kept = receipt.undo.as_ref()?;
         let arguments = match &kept.arguments {
             Some(arguments) => arguments.clone(),
@@ -285,3 +404,62 @@ impl Receipts {
 }
 
 pub(crate) type Open = HashMap<String, Receipts>;
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+
+    use super::*;
+
+    fn step(number: u32) -> Undo {
+        Undo {
+            intent: "books.restore".to_owned(),
+            arguments: serde_json::json!({ "books": [number] }),
+            touched: vec![(number.to_string(), Vec::new())],
+        }
+    }
+
+    #[test]
+    fn a_job_cut_short_is_undone_by_the_steps_that_were_kept() {
+        let folder = tempfile::tempdir().unwrap();
+        let mut receipts = Receipts::open(folder.path(), "books").unwrap();
+        let undo = receipts.kept("job", step(1), Vec::new()).unwrap();
+        receipts
+            .keep(Receipt {
+                token: "job".to_owned(),
+                plan: String::new(),
+                intent: "books.trash".to_owned(),
+                summary: String::new(),
+                references: Vec::new(),
+                agent: None,
+                made: now(),
+                state: State::Begun,
+                asked: Vec::new(),
+                undo: Some(undo),
+            })
+            .unwrap();
+        for number in [2, 3] {
+            receipts.add_step("job", Some(&step(number))).unwrap();
+        }
+        receipts.add_step("job", None).unwrap();
+        receipts.add_step("job", Some(&step(4))).unwrap();
+        let steps = receipts.steps("job");
+        drop(receipts);
+        let mut file = OpenOptions::new().append(true).open(&steps).unwrap();
+        file.write_all(b"{\"intent\": \"books.re").unwrap();
+
+        let mut receipts = Receipts::open(folder.path(), "books").unwrap();
+        let begun = receipts.all()[0].clone();
+        let undo = receipts.undo(&begun).unwrap();
+        assert_eq!(undo.arguments["books"], serde_json::json!([1, 2, 4]));
+        assert_eq!(undo.touched.len(), 3);
+        let whole = Receipt {
+            state: State::Whole,
+            undo: Some(receipts.kept("job", undo, Vec::new()).unwrap()),
+            ..begun
+        };
+        receipts.keep(whole.clone()).unwrap();
+        assert!(!steps.exists());
+        assert_eq!(receipts.undo(&whole).unwrap().arguments["books"][2], 4);
+    }
+}

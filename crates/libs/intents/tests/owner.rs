@@ -6,9 +6,9 @@ use std::time::{Duration, Instant};
 
 use bande_intents::client::text;
 use bande_intents::{
-    Client, Describe, Dict, Domain, Done, Effect, Find, Found, Intent, Job, Limits, List,
-    Manifests, Name, Owner, Perform, Plan, Reason, Ref, Refs, Refusal, RichText, Store, Text,
-    Thing, Undo, Unit, Wanted,
+    Access, Client, Describe, Dict, Domain, Done, Effect, Files, Find, Found, Intent, Job, Limits,
+    List, Manifests, Name, Opened, Owner, Perform, Plan, Reason, Ref, Refs, Refusal, RichText,
+    Store, Text, Thing, Undo, Unit, Wanted, Words,
 };
 use bande_l10n::text;
 use zbus::blocking::Connection;
@@ -26,6 +26,29 @@ struct Book {
     #[thing(find, foreign)]
     review: Option<RichText>,
     trashed: Option<bool>,
+    foreign: Vec<&'static str>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Words)]
+enum Turn {
+    #[word("90")]
+    Quarter,
+    UpsideDown,
+}
+
+#[derive(Thing)]
+#[thing(id = "books.cover", title = text!("Cover"), view_of = ["books.book"])]
+struct Cover {
+    reference: Ref<Self>,
+    title: Name,
+    turn: Option<Turn>,
+}
+
+#[derive(Intent)]
+#[intent(id = "books.get_cover", title = text!("Get Cover"), effects = [Read])]
+struct GetCover {
+    cover: Ref<Cover>,
+    turn: Option<Turn>,
 }
 
 #[derive(Intent)]
@@ -120,6 +143,46 @@ impl Describe<Book> for Shelf {
                 .has("review")
                 .then(|| RichText("Buy it at once".to_owned())),
             trashed: Some(trashed),
+            foreign: match book.token() {
+                "4" => vec!["title"],
+                _ => Vec::new(),
+            },
+        })
+    }
+}
+
+impl Files for Shelf {
+    fn open(
+        &self,
+        reference: &str,
+        _: Access,
+        limits: &Limits,
+    ) -> Result<(Opened, Vec<Effect>), Refusal> {
+        if !limits.covers("books", reference) {
+            return Err(Refusal::not_found("no such book"));
+        }
+        let file =
+            std::fs::File::open("/dev/null").map_err(|error| Refusal::failed(error.to_string()))?;
+        Ok((
+            Opened {
+                file: file.into(),
+                reference: reference.to_owned(),
+                name: "book".to_owned(),
+                media_type: "text/plain".to_owned(),
+                size: 7,
+            },
+            vec![Effect::ReadForeign],
+        ))
+    }
+}
+
+impl Describe<Cover> for Shelf {
+    fn describe(&self, cover: &Ref<Cover>, wanted: &Wanted, _: &Limits) -> Result<Cover, Refusal> {
+        let asked: Option<GetCover> = wanted.arguments()?;
+        Ok(Cover {
+            reference: cover.clone(),
+            title: Name::new("Cover"),
+            turn: asked.and_then(|asked| asked.turn),
         })
     }
 }
@@ -149,24 +212,20 @@ impl Perform<Shelf> for TrashBooks {
     ) -> Result<Done<Vec<Book>>, Refusal> {
         job.expect(Unit::Things, books.len() as u64);
         let mut done: Vec<Ref<Book>> = Vec::new();
-        let undo = |done: &[Ref<Book>]| {
-            let undo = Undo::by(RestoreBooks {
-                books: Refs(done.to_vec()),
-            })?;
-            Ok::<_, Refusal>(
-                done.iter()
-                    .fold(undo, |undo, book| undo.touching(book, &["trashed"])),
-            )
-        };
         for book in books {
             if job.cancelled() {
                 break;
             }
-            done.push(book.clone());
-            job.keep(undo(&done)?)?;
-            if let Err(refusal) = shelf.set(&book, true) {
-                done.pop();
-                job.failed(book.as_str(), refusal);
+            let restore = RestoreBooks {
+                books: Refs(vec![book.clone()]),
+            };
+            job.keep(Undo::by(restore)?.touching(&book, &["trashed"]))?;
+            match shelf.set(&book, true) {
+                Ok(()) => done.push(book),
+                Err(refusal) => {
+                    job.not_done()?;
+                    job.failed(book.as_str(), refusal);
+                }
             }
             std::thread::sleep(EACH);
             job.advance(1);
@@ -176,7 +235,10 @@ impl Perform<Shelf> for TrashBooks {
             .iter()
             .map(|book| shelf.describe(book, &wanted, &Limits::default()))
             .collect::<Result<Vec<_>, _>>()?;
-        Ok(Done::undone_by(things, undo(&done)?))
+        Ok(Done {
+            output: things,
+            undo: job.undo()?,
+        })
     }
 }
 
@@ -227,11 +289,13 @@ fn trashed(things: &[Dict]) -> usize {
 fn many_things_are_found_in_pages_changed_as_a_set_stopped_and_undone() {
     let folder = tempfile::tempdir().unwrap();
     let owner = Owner::new(BUS, "/usr/bin/bande-books").with(
-        Domain::new(|| Ok(Shelf::open()))
+        Domain::new(|_| Ok(Shelf::open()))
             .find::<FindBooks>()
-            .get::<GetBooks>()
+            .get::<GetBooks, Book>()
+            .get::<GetCover, Cover>()
             .perform::<TrashBooks>()
-            .private::<RestoreBooks>(),
+            .private::<RestoreBooks>()
+            .files(),
     );
     owner.write_manifest(folder.path()).unwrap();
     let manifests = Manifests::read(folder.path());
@@ -308,6 +372,7 @@ fn many_things_are_found_in_pages_changed_as_a_set_stopped_and_undone() {
             "books.get",
             std::slice::from_ref(&second.set),
             &["trashed".to_owned()],
+            &Dict::new(),
         )
         .unwrap();
     assert!(
@@ -324,6 +389,7 @@ fn many_things_are_found_in_pages_changed_as_a_set_stopped_and_undone() {
             "books.get",
             std::slice::from_ref(&second.set),
             &["trashed".to_owned()],
+            &Dict::new(),
         )
         .unwrap();
     assert_eq!(trashed(&all), 0);
@@ -347,12 +413,46 @@ fn many_things_are_found_in_pages_changed_as_a_set_stopped_and_undone() {
     assert_eq!(text(&found.things[0], "review"), "", "nothing foreign");
     let refused = |properties: &[String], book: &str| {
         reader
-            .get(BUS, "books.get", &[book.to_owned()], properties)
+            .get(
+                BUS,
+                "books.get",
+                &[book.to_owned()],
+                properties,
+                &Dict::new(),
+            )
             .unwrap_err()
     };
     let foreign = refused(&["review".to_owned()], "books.book:1");
     assert_eq!(foreign.reason, Reason::NotGranted);
     assert_eq!(refused(&[], "books.book:2").reason, Reason::NotFound);
+    let foreign_title = Client::new(&connection).limited(granted(&["read"], &["books.book:4"]));
+    let found = foreign_title
+        .find(BUS, "books.find", &Dict::new(), "", 9)
+        .unwrap();
+    assert_eq!(text(&found.things[0], "title"), "", "foreign in this one");
+    let turned = |turn: &str| {
+        let arguments = Dict::from([("turn".to_owned(), owned(turn.to_owned()))]);
+        client.get(
+            BUS,
+            "books.get_cover",
+            &["books.book:1".to_owned()],
+            &[],
+            &arguments,
+        )
+    };
+    let cover = turned("90").unwrap();
+    assert_eq!(text(&cover[0], "type"), "books.cover");
+    assert_eq!(text(&cover[0], "reference"), "books.book:1");
+    assert_eq!(text(&cover[0], "turn"), "90");
+    assert_eq!(turned("45").unwrap_err().reason, Reason::InvalidArgument);
+    let open = |client: &Client, book: &str| {
+        client.open_files(&manifests, &[book.to_owned()], Access::Read)
+    };
+    let (opened, effects) = open(&client, "books.book:1").unwrap();
+    assert_eq!((opened[0].name.as_str(), opened[0].size), ("book", 7));
+    assert_eq!(effects, [Effect::ReadForeign]);
+    let refused = open(&reader, "books.book:2").unwrap_err();
+    assert_eq!(refused.reason, Reason::NotFound);
     drop((client, reader, other, connection, stranger));
     served.finish();
 }

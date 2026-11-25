@@ -9,7 +9,7 @@ an application](intents/providers.md) and one page for each [domain](intents/dom
 and [the plan](../plans/intents.md) says what is built and in which order. Built are the core
 (`bande-intents`, owners, manifests, the command line, rows in Search, Settings ▸ Activity) and what
 the domains' pages mark `done`; the approval prompt, providers, agents, events, times and routines
-are not, nor undo through another owner's intent.
+are not.
 
 "Intent" here never means an [XDG application
 intent](https://specifications.freedesktop.org/intent-apps/latest/), which is a role an app can fill
@@ -59,9 +59,11 @@ Swedish Activity is Historik, since the Taskbar is Aktivitetsfältet.)
 - **Search** shows what can be done as one typed line: "dark", "timer 10 min", "new note milk",
   "eject stick". An intent with at most one free parameter may declare translated phrases, on its
   domain's page. A placeholder is a parameter's name: a thing (matched by its owner's `find`), an
-  enum word, a time, a duration with a translated unit, a text whose thing has `accepts` (one of
-  those), or one free text at the end; a phrase may fix other arguments, and prose is never
-  interpreted. Return performs it. Nothing `critical` is offered there.
+  enum word, a time (also of a `date_time`, the next one), a duration with a translated unit, a text
+  whose thing has `accepts` (one of those), or one free text or address at the end; a phrase may fix
+  other arguments, and prose is never interpreted. Return performs it. Nothing `critical` is offered
+  there. Other results never wait for an owner: what it offers after they are shown is added below
+  them, and what still fits the next characters is ranked with the rest.
 - **Routines** are Settings ▸ Routines, and may have a key or a Quick Settings tile, which the
   person gives.
 
@@ -153,7 +155,7 @@ references, belongs to the connection that found it, and is taken only by the ow
 
 `files.file` is the only type of a file: photos, documents, workbooks, presentations, recordings and
 archives are views of it: a view's reference is the file's, also where a parameter names the view,
-and its `type` is the view's. A thing is declared in the manifest of the program that serves its
+and its `type` is the view's (`view_of` in its manifest). A thing is declared in the manifest of the program that serves its
 `get`, else its `find`. An account is `accounts.account` everywhere.
 
 | Thing | What the token maps to | Today |
@@ -272,8 +274,12 @@ pub struct CreateDraft {
 
 ### Writing an owner
 
-A thing is a struct with a `reference` and a `title`; every other field is an `Option`, filled in
-only when it is wanted. A thing of another program is a unit struct that implements `Referent`.
+A thing is a struct with a `reference` and a `title` (a `Name`, or a `Text` when it is foreign);
+every other field is an `Option`, filled in only when it is wanted. A field
+`foreign: Vec<&'static str>` is no property: it names those that are foreign in this thing only.
+`view_of = ["files.file"]` makes the type a view, whose references are the file's. A thing of another
+program is a unit struct that implements `Referent`. An enum's words come from its variants
+(`#[derive(Words)]`), or from `#[word("90")]` where a name cannot be one.
 
 ```rust
 #[derive(Thing)]
@@ -288,8 +294,14 @@ pub struct Timer {
 }
 ```
 
-The owner's `Store` is what the things are kept in. `Find` lists references and nothing else: the
-library pages them, makes the set, answers `current` and describes what is shown with `Describe`.
+The owner's `Store` is what the things are kept in, opened with the connection the owner serves on,
+which is the one to call other owners with. `Find` lists references and nothing else: the library
+pages them, makes the set, answers `current` and describes what is shown with `Describe`. A `get` is
+declared with its things, plural or singular, or with none, when it gives `:only`; parameters after
+`properties` reach `Describe` as `Wanted::arguments`. A `find` whose arguments can cause more than
+reading is added with `perform` too, and refuses those arguments in `Find`. The library leaves out
+foreign properties a caller may not read, also in results, and refuses a plan with an effect the
+intent does not declare.
 
 ```rust
 impl Find<Clock> for FindTimers {
@@ -335,21 +347,34 @@ pub fn owner() -> Owner {
     Owner::new("org.bande.Clock", "/usr/bin/bande-clock").with(
         Domain::new(Clock::open)
             .find::<FindTimers>()
-            .get::<GetTimers>()
+            .get::<GetTimers, Timer>()
             .perform::<CreateTimer>()
             .private::<CancelTimer>(),
     )
 }
 ```
 
-`Job::keep` is called **before** each change, with what takes back everything up to and including
-it; a crash then leaves that to `recover`, which says what is left of it: `None` when nothing was
-done. `look` gives the named properties as text that is equal while they mean the same, which is how
-undo sees that something else changed them. Each `keep` writes the whole undo to disk, so with many
-things an owner whose `recover` can tell which were changed keeps the undo of all of them once. Many things go through `Job::expect`, `advance`,
-`failed` and `cancelled`. `perform` blocks, on a thread of its own.
+`Job::keep` is called **before** each change, with what takes back that one; a crash then leaves what
+was kept to `recover`, which says what is left of it: `None` when nothing was done. `look` gives the
+named properties as text that is equal while they mean the same, which is how undo sees that
+something else changed them. Many things go through `Job::expect`, `advance`, `failed` and
+`cancelled`, and one or more of them are a step with its own `keep`; a step that fails is taken out
+with `Job::not_done`, and `Job::undo` is what takes back the rest, for `Done`. The steps are undone by
+one intent: its lists are those of the steps, one after another and in the order they were done, and
+its other arguments are the same in each. So a step costs one line added to a file. An undo intent
+must stand things that are already as it would leave them, since a step cut short may not have been
+done. `Job::still` compares the effects found again before a step with the plan's. `perform` blocks,
+on a thread of its own.
 
-An app returns its owner from `Program::intents`; a service calls `bande_intents::run(owner())` as
+`Client::passing` with the caller's limits, in Prepare, and with limits kept in `prepared`, in
+Perform, calls another owner; `open_files` and `register_files` are its files. An owner whose things
+are opened by others implements `Files` and adds `Domain::files`. `Undo::elsewhere` is an undo by
+another owner's intent, such as `files.trash`; what that does has a receipt of its own with that
+owner.
+
+An app returns its owner from `Program::intents`. The `MainLoop` it is given runs a closure on the
+program's thread, to change what a window shows, and gives `None` when the process only serves; its
+`launch` opens arguments as a launch would, for `show`. A service calls `bande_intents::run(owner())` as
 its `main`, and has a D-Bus service file, a user unit without `[Install]` and the
 [line](#manifest) that installs its manifest. Its test is `bande_test_intents::stands`.
 
@@ -443,7 +468,7 @@ routines.
 - **Find** and **Get** serve the rows with those verbs whose effects are only `read` and
   `read_foreign`; arguments that cause another effect go through Prepare. `count` is at most 100,
   text at most 64 KiB a property; a thing's `cut` (`as`) names what was shortened. Get returns all
-  of the references or fails. Across domains each owner has two seconds, no more than four start at
+  of the references, a whole set too, or fails; more than 16 MiB of text is `Limited`. Across domains each owner has two seconds, no more than four start at
   once, and the answer names those that did not answer.
 - **Limits** are `agent` (`s`) and `domains` (`a{sa{sv}}`): for each domain its `effects` (`as`)
   and, if it is limited, `within` (`as`). Without `domains` a call is unlimited; a domain missing
@@ -482,7 +507,9 @@ routines.
   one prepares it with the limits and it is performed inside the plan. Private intents cannot be
   prepared by name (`UnknownIntent`). It is refused while the thing differs from what the plan left
   in the properties the plan changed, compared by meaning: a server's new tag or rewriting of the
-  same values is no difference. Successive changes undo in order; an undo leaves no receipt.
+  same values is no difference. Successive changes undo in order; an undo leaves no receipt, except
+  what another owner's intent leaves there. One that was stopped or left things out can be done
+  again.
 - **A plan belongs to the connection** that made it; at most 16 wait per caller, and per agent for
   the broker. **A receipt belongs to the person**: any of their programs may prepare its undo. It
   has `receipt` (`<domain>:<token>`), `intent` (the one performed), `summary`, `references`, `made`

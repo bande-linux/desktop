@@ -1929,7 +1929,6 @@ dependencies = [
 name = "bande-settings-intents"
 version = "0.2.0"
 dependencies = [
- "bande-bus",
  "bande-cli",
  "bande-config",
  "bande-intents",

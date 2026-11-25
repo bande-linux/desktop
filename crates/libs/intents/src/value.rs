@@ -22,6 +22,7 @@ pub const LISTED: usize = 1000;
 /// The most things in a set.
 pub const IN_SET: usize = 10_000;
 const NAME: usize = 80;
+const DATE: &str = "2026-11-24";
 const ROWS: usize = 16 * 1024 * 1024;
 const ADDRESS: usize = 998;
 const URL: usize = 8 * 1024;
@@ -81,7 +82,7 @@ impl Kind {
                 _ => "a whole number".to_owned(),
             },
             Self::Number => "a number".to_owned(),
-            Self::Date => "2026-11-24".to_owned(),
+            Self::Date => DATE.to_owned(),
             Self::Time => "07:30".to_owned(),
             Self::DateTime => "2026-11-24T13:00:00+01:00[Europe/Stockholm]".to_owned(),
             Self::DateOrDateTime => {
@@ -103,6 +104,14 @@ impl Kind {
             }
         };
         vec![one]
+    }
+
+    /// Whether it is a reference or a list of them.
+    pub fn names_things(&self) -> bool {
+        match self {
+            Self::List { items, .. } => items.names_things(),
+            kind => matches!(kind, Self::Ref { .. }),
+        }
     }
 
     /// The D-Bus value written as `json`, or nothing when it is of another type.
@@ -251,32 +260,38 @@ pub fn give<T: Value>(values: &mut Dict, name: &str, value: T) -> Result<(), Ref
     Ok(())
 }
 
-macro_rules! plain {
-    ($type:ty, $kind:expr) => {
-        impl Value for $type {
-            fn kind() -> Kind {
-                $kind
-            }
-
-            fn decode(value: OwnedValue) -> Option<Self> {
-                value.try_into().ok()
-            }
-
-            fn encode(self) -> Option<zvariant::Value<'static>> {
-                Some(self.into())
-            }
+impl Value for i64 {
+    fn kind() -> Kind {
+        Kind::Integer {
+            minimum: None,
+            maximum: None,
         }
-    };
+    }
+
+    fn decode(value: OwnedValue) -> Option<Self> {
+        value.try_into().ok()
+    }
+
+    fn encode(self) -> Option<zvariant::Value<'static>> {
+        Some(self.into())
+    }
 }
 
-plain!(
-    i64,
-    Kind::Integer {
-        minimum: None,
-        maximum: None
+impl Value for f64 {
+    fn kind() -> Kind {
+        Kind::Number
     }
-);
-plain!(f64, Kind::Number);
+
+    fn decode(value: OwnedValue) -> Option<Self> {
+        Self::try_from(value)
+            .ok()
+            .filter(|number| number.is_finite())
+    }
+
+    fn encode(self) -> Option<zvariant::Value<'static>> {
+        Some(self.into())
+    }
+}
 
 impl Value for bool {
     fn kind() -> Kind {
@@ -361,7 +376,7 @@ textual!(
     /// CSV (RFC 4180).
     Rows,
     Kind::Rows,
-    |text| text.len() <= ROWS
+    |text| text.len() <= ROWS && plain_text(text)
 );
 textual!(
     /// An `https` or `http` URL without user information.
@@ -516,19 +531,17 @@ impl Value for Name {
     }
 }
 
-fn parsed<T: std::str::FromStr>(value: OwnedValue) -> Option<T> {
-    String::try_from(value).ok()?.parse().ok()
-}
-
 macro_rules! written {
-    ($type:ty, $kind:expr) => {
+    ($type:ty, $kind:expr, $form:expr) => {
         impl Value for $type {
             fn kind() -> Kind {
                 $kind
             }
 
             fn decode(value: OwnedValue) -> Option<Self> {
-                parsed(value)
+                let text = String::try_from(value).ok()?;
+                let form: fn(&str) -> bool = $form;
+                form(&text).then(|| text.parse().ok())?
             }
 
             fn encode(self) -> Option<zvariant::Value<'static>> {
@@ -538,8 +551,10 @@ macro_rules! written {
     };
 }
 
-written!(civil::Date, Kind::Date);
-written!(jiff::Span, Kind::Duration);
+written!(civil::Date, Kind::Date, |text| text.len() == DATE.len());
+written!(jiff::Span, Kind::Duration, |text| text
+    .trim_start_matches(['-', '+'])
+    .starts_with('P'));
 
 impl Value for civil::Time {
     fn kind() -> Kind {
@@ -547,7 +562,8 @@ impl Value for civil::Time {
     }
 
     fn decode(value: OwnedValue) -> Option<Self> {
-        parsed(value)
+        let text = String::try_from(value).ok()?;
+        matches!(text.len(), 5 | 8).then(|| text.parse().ok())?
     }
 
     fn encode(self) -> Option<zvariant::Value<'static>> {
@@ -592,7 +608,8 @@ impl Value for DateOrDateTime {
         let text = String::try_from(value).ok()?;
         match text.contains('T') {
             true => zoned(&text).map(Self::DateTime),
-            false => text.parse().ok().map(Self::Date),
+            false if text.len() == DATE.len() => text.parse().ok().map(Self::Date),
+            false => None,
         }
     }
 
@@ -623,7 +640,8 @@ impl Value for Picture {
     }
 }
 
-/// A closed list of words; derived for an enum with `#[derive(Words)]`.
+/// A closed list of words; derived for an enum with `#[derive(Words)]`, where `#[word("90")]`
+/// gives a variant a word its name cannot be.
 pub trait Words: Sized + 'static {
     const WORDS: &'static [&'static str];
 
@@ -649,17 +667,18 @@ impl<T: Words> Value for T {
 }
 
 /// The things a [`Ref`] can name: one thing type, a tuple of them, or a type of another program,
-/// named by a unit struct.
+/// named by a unit struct. The types are those references begin with; a view's are those of what it
+/// is a view of.
 pub trait Referent: 'static {
     const TYPES: &'static [&'static str];
 }
 
-impl<A: crate::Thing, B: crate::Thing> Referent for (A, B) {
-    const TYPES: &'static [&'static str] = &[A::TYPE, B::TYPE];
+impl<A: Referent, B: Referent> Referent for (A, B) {
+    const TYPES: &'static [&'static str] = &[A::TYPES[0], B::TYPES[0]];
 }
 
-impl<A: crate::Thing, B: crate::Thing, C: crate::Thing> Referent for (A, B, C) {
-    const TYPES: &'static [&'static str] = &[A::TYPE, B::TYPE, C::TYPE];
+impl<A: Referent, B: Referent, C: Referent> Referent for (A, B, C) {
+    const TYPES: &'static [&'static str] = &[A::TYPES[0], B::TYPES[0], C::TYPES[0]];
 }
 
 /// The token of `reference` when it is of the type `kind`.

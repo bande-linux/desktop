@@ -9,6 +9,8 @@ use bande_xdg::{
     Locale, applications, current_desktops, data_dirs, find_app, launch_with_arguments,
 };
 
+use zbus::blocking::Connection;
+
 use crate::intents::{self, OpenPane, Restore, Set, Setting};
 use crate::registry::{Served, panes, served};
 
@@ -72,10 +74,9 @@ pub struct Change<T> {
 }
 
 impl Settings {
-    pub fn open() -> Result<Self, Refusal> {
-        let connection = bande_bus::session()?;
+    pub fn open(connection: &Connection) -> Result<Self, Refusal> {
         Ok(Self {
-            client: SettingsClient::connect(&connection)?,
+            client: SettingsClient::connect(connection)?,
         })
     }
 

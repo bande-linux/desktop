@@ -55,7 +55,13 @@ fn serve(owner: Owner) -> zbus::Result<()> {
         if !serving.is_busy() {
             return Ok(());
         }
-        connection.request_name(name)?;
+        if let Err(error) = connection.request_name(name) {
+            serving.finish();
+            return match error {
+                zbus::Error::NameTaken => Ok(()),
+                error => Err(error),
+            };
+        }
     }
     Ok(())
 }

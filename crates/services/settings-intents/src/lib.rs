@@ -12,7 +12,7 @@ pub fn owner() -> Owner {
     Owner::new(BUS, PROGRAM).with(
         Domain::new(store::Settings::open)
             .find::<intents::Find>()
-            .get::<intents::Get>()
+            .get::<intents::Get, intents::Setting>()
             .perform::<intents::OpenPane>()
             .perform::<intents::Set>()
             .private::<intents::Restore>(),

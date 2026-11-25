@@ -1,11 +1,15 @@
+use std::os::fd::BorrowedFd;
+
 use futures_lite::{StreamExt, stream};
 use serde_json::Value as Json;
 use zbus::blocking::Connection;
 use zbus::proxy::CacheProperties;
-use zbus::zvariant::OwnedObjectPath;
+use zbus::zvariant::{Fd, OwnedFd, OwnedObjectPath};
 
 use crate::job::{CANCELLED, DONE, FAILED};
-use crate::{Dict, Effect, Manifests, PATH, Refusal, dict_to_json};
+use crate::{
+    Access, Dict, Effect, Limits, Manifests, Opened, PATH, Refusal, Written, dict_to_json,
+};
 
 #[zbus::proxy(interface = "org.bande.Intents", default_path = "/org/bande/Intents")]
 trait Intents {
@@ -38,6 +42,27 @@ trait Intents {
     fn receipts(&self, limits: &Dict, count: u32) -> zbus::Result<Vec<Dict>>;
 
     fn prepare_undo(&self, receipt: &str, limits: &Dict) -> zbus::Result<(String, Dict)>;
+}
+
+#[zbus::proxy(
+    interface = "org.bande.Intents.Files",
+    default_path = "/org/bande/Intents"
+)]
+trait Files {
+    #[allow(clippy::type_complexity)]
+    fn open(
+        &self,
+        references: &[String],
+        access: &str,
+        limits: &Dict,
+    ) -> zbus::Result<(Vec<(OwnedFd, String, Dict)>, Vec<String>)>;
+
+    fn register(
+        &self,
+        folder: Fd<'_>,
+        files: &[(&str, &str, &str)],
+        limits: &Dict,
+    ) -> zbus::Result<Vec<String>>;
 }
 
 #[zbus::proxy(interface = "org.bande.Intents.Job")]
@@ -120,10 +145,25 @@ fn taken<T: TryFrom<zbus::zvariant::OwnedValue> + Default>(dict: &mut Dict, name
         .unwrap_or_default()
 }
 
+fn effects(words: &[String]) -> Vec<Effect> {
+    words
+        .iter()
+        .filter_map(|word| Effect::from_word(word))
+        .collect()
+}
+
 impl Performed {
     /// The receipt that undoes it, if there is one.
     pub fn receipt(&self) -> Option<&str> {
         Some(text(&self.result, "receipt")).filter(|receipt| !receipt.is_empty())
+    }
+
+    /// The things it made, changed or found.
+    pub fn things(&self) -> Vec<Dict> {
+        self.result
+            .get("things")
+            .and_then(|things| things.try_clone().ok()?.try_into().ok())
+            .unwrap_or_default()
     }
 
     /// The result as JSON.
@@ -144,6 +184,11 @@ impl Client {
     pub fn limited(mut self, limits: Dict) -> Self {
         self.limits = limits;
         self
+    }
+
+    /// Calls other owners for a caller with these limits.
+    pub fn passing(connection: &Connection, limits: &Limits) -> Result<Self, Refusal> {
+        Ok(Self::new(connection).limited(limits.encode()?))
     }
 
     fn owner(&self, bus: &str) -> Result<IntentsProxyBlocking<'static>, Refusal> {
@@ -180,11 +225,75 @@ impl Client {
         intent: &str,
         references: &[String],
         properties: &[String],
+        arguments: &Dict,
     ) -> Result<Vec<Dict>, Refusal> {
         let (things, _) =
             self.owner(bus)?
-                .get(intent, references, properties, &Dict::new(), &self.limits)?;
+                .get(intent, references, properties, arguments, &self.limits)?;
         Ok(things)
+    }
+
+    fn files(
+        &self,
+        manifests: &Manifests,
+        kind: &str,
+    ) -> Result<FilesProxyBlocking<'static>, Refusal> {
+        let manifest = manifests
+            .thing(kind)
+            .ok_or_else(|| Refusal::unavailable(bande_l10n::tr!("Files cannot be opened now")))?;
+        Ok(FilesProxyBlocking::builder(&self.connection)
+            .destination(manifest.bus.clone())?
+            .cache_properties(CacheProperties::No)
+            .build()?)
+    }
+
+    /// Opens things of one type, such as files or attachments, through their owner, and gives the
+    /// effects that has.
+    pub fn open_files(
+        &self,
+        manifests: &Manifests,
+        references: &[String],
+        access: Access,
+    ) -> Result<(Vec<Opened>, Vec<Effect>), Refusal> {
+        let Some(kind) = references.first().and_then(|it| it.split(':').next()) else {
+            return Ok((Vec::new(), Vec::new()));
+        };
+        let (files, words) =
+            self.files(manifests, kind)?
+                .open(references, access.word(), &self.limits)?;
+        let opened = files
+            .into_iter()
+            .map(|(file, reference, mut about)| Opened {
+                file: file.into(),
+                reference,
+                name: taken(&mut about, "name"),
+                media_type: taken(&mut about, "media_type"),
+                size: taken(&mut about, "size"),
+            })
+            .collect();
+        Ok((opened, effects(&words)))
+    }
+
+    /// Has the files owner check and name what was written in `folder`, and gives the references.
+    pub fn register_files(
+        &self,
+        manifests: &Manifests,
+        folder: BorrowedFd<'_>,
+        written: &[Written],
+    ) -> Result<Vec<String>, Refusal> {
+        let files: Vec<(&str, &str, &str)> = written
+            .iter()
+            .map(|file| {
+                (
+                    file.temporary.as_str(),
+                    file.name.as_str(),
+                    file.replaces.as_deref().unwrap_or_default(),
+                )
+            })
+            .collect();
+        Ok(self
+            .files(manifests, "files.file")?
+            .register(folder.into(), &files, &self.limits)?)
     }
 
     pub fn prepare(&self, bus: &str, intent: &str, arguments: &Dict) -> Result<Prepared, Refusal> {
@@ -202,10 +311,7 @@ impl Client {
         let words: Vec<String> = taken(&mut description, "effects");
         Prepared {
             plan,
-            effects: words
-                .iter()
-                .filter_map(|word| Effect::from_word(word))
-                .collect(),
+            effects: effects(&words),
             summary: taken(&mut description, "summary"),
             rows: taken(&mut description, "rows"),
             bus: bus.to_owned(),

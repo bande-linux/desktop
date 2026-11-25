@@ -27,6 +27,7 @@ pub use bande_pdf::{Block, Orientation, Page, PageItem, PageSetup, Paper, flow};
 pub use cx::{Cx, WindowId};
 pub use drop::{Dropping, FileDrop, local_files};
 pub use files::show_in_files;
+pub use intents::MainLoop;
 pub use portal::{
     Filter, choose_file, choose_files, choose_folder, choose_save_file, parent_window,
 };
@@ -232,8 +233,8 @@ pub trait Program: Sized + 'static {
 
     /// The intents it serves on its app id: `Owner::new(INFO.id, "/usr/bin/<package>")` with its
     /// domains. They are served from the program's start, also when `--intents` started it without
-    /// a window and [`Program::start`] has not run.
-    fn intents() -> Option<bande_intents::Owner> {
+    /// a window and [`Program::start`] has not run; `main_loop` reaches the program once it has.
+    fn intents(_main_loop: &MainLoop<Self>) -> Option<bande_intents::Owner> {
         None
     }
 
@@ -251,10 +252,10 @@ fn argument_text(argument: OsString) -> String {
 }
 
 fn write_intents<P: Program>(folder: &Path) -> ExitCode {
-    let written = match P::intents() {
-        Some(owner) => owner.write_manifest(folder),
-        None => Err(std::io::Error::other("it serves no intents")),
-    };
+    let written = intents::Intents::<P>::new().and_then(|intents| match intents.owner() {
+        Some(owner) => Ok(owner.write_manifest(folder)?),
+        None => Err(std::io::Error::other("it serves no intents").into()),
+    });
     match written {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {

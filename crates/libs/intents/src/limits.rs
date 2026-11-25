@@ -3,6 +3,7 @@ use std::collections::{BTreeMap, HashMap};
 use bande_l10n::tr;
 use zbus::zvariant::{self, OwnedValue};
 
+use crate::plan::put;
 use crate::{Dict, Effect, Reason, Refusal};
 
 /// What the person has let a caller do, as the broker passes it on; a program of the person's own
@@ -46,6 +47,22 @@ impl Limits {
             Some(name) => Err(invalid(name)),
             None => Ok(Self { agent, domains }),
         }
+    }
+
+    /// What to pass on when an owner asks another one: the same, whole.
+    pub fn encode(&self) -> Result<Dict, Refusal> {
+        let mut limits = Dict::new();
+        if let Some(agent) = &self.agent {
+            put(&mut limits, "agent", agent.as_str())?;
+        }
+        if let Some(domains) = &self.domains {
+            let domains = domains
+                .iter()
+                .map(|(domain, grant)| Ok((domain.clone(), grant.encode()?)))
+                .collect::<Result<HashMap<String, Dict>, Refusal>>()?;
+            put(&mut limits, "domains", domains)?;
+        }
+        Ok(limits)
     }
 
     /// The registered name of the agent this is done for.
@@ -114,6 +131,16 @@ fn not_granted(domain: &str) -> Refusal {
 }
 
 impl Grant {
+    fn encode(&self) -> Result<Dict, Refusal> {
+        let mut grant = Dict::new();
+        let effects: Vec<&str> = self.effects.iter().map(|effect| effect.word()).collect();
+        put(&mut grant, "effects", effects)?;
+        if let Some(within) = &self.within {
+            put(&mut grant, "within", within.clone())?;
+        }
+        Ok(grant)
+    }
+
     fn decode(mut grant: HashMap<String, OwnedValue>) -> Result<Self, Refusal> {
         let mut list = |name: &str| {
             grant

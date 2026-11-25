@@ -90,6 +90,14 @@ pub(crate) fn claim(session: &Connection, id: &str) -> Result<Claim, Error> {
 }
 
 impl Request {
+    pub(crate) fn opening(arguments: Vec<String>) -> Self {
+        Self {
+            arguments,
+            directory: None,
+            token: None,
+        }
+    }
+
     pub(crate) fn from_launch(arguments: Vec<String>) -> Result<Self, Error> {
         let directory = match arguments.is_empty() {
             true => None,
@@ -151,12 +159,15 @@ impl Instance {
         self.requests.fd()
     }
 
+    pub(crate) fn add_request(&self, request: Request) {
+        self.requests.outbox().send(request);
+    }
+
     pub(crate) fn take_first_request(&mut self) -> Option<Request> {
         let mut requests = self.take_requests().into_iter();
         let first = requests.next();
-        let later = self.requests.outbox();
         for request in requests {
-            later.send(request);
+            self.add_request(request);
         }
         first
     }

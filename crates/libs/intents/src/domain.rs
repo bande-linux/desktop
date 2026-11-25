@@ -1,17 +1,22 @@
 use std::collections::BTreeMap;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
+
+use zbus::blocking::Connection;
 
 use crate::plan::{locked, thing_dict};
 use crate::{
-    Definition, Describe, Dict, Effect, Find, IN_SET, Intent, Job, Kind, Limits, Output, Perform,
-    Ref, Refusal, Returns, Row, Store, Thing, ThingDefinition, Undo, Wanted,
+    Definition, Describe, Dict, Effect, Files, Find, IN_SET, Intent, Job, Limits, Output, Perform,
+    Ref, Refusal, Returns, Row, Store, Thing, ThingDefinition, Undo, Wanted, domain,
 };
 
 type Finder = dyn Fn(Dict, &Limits) -> Result<Matches, Refusal> + Send + Sync;
-type Describer = dyn Fn(&str, &Wanted, &Limits) -> Result<Dict, Refusal> + Send + Sync;
+type Describer = dyn Fn(&str, &Wanted, &Limits) -> Result<(Dict, bool), Refusal> + Send + Sync;
 type Preparer = dyn Fn(Dict, &Limits) -> Result<Ready, Refusal> + Send + Sync;
 type Opener = dyn Fn() -> Result<Arc<dyn Store>, Refusal> + Send + Sync;
-type Run = dyn FnOnce(&Job) -> Result<(Dict, Option<Undo>), Refusal> + Send;
+pub(crate) type FilesOpener = dyn Fn() -> Result<Arc<dyn Files>, Refusal> + Send + Sync;
+pub(crate) type Connect = dyn Fn(&Connection) + Send + Sync;
+type Opens<O> = dyn Fn(&Connection) -> Result<O, Refusal> + Send + Sync;
+type Run = dyn FnOnce(&Job, &Limits) -> Result<(Dict, Option<Undo>), Refusal> + Send;
 
 pub(crate) struct Matches {
     pub(crate) references: Vec<String>,
@@ -27,21 +32,28 @@ pub(crate) struct Ready {
     pub(crate) run: Box<Run>,
 }
 
-pub(crate) enum Action {
-    Find(String, Box<Finder>),
-    Get,
-    Perform(Box<Preparer>),
+pub(crate) struct Finds {
+    pub(crate) kind: String,
+    pub(crate) finder: Box<Finder>,
+}
+
+pub(crate) struct Gets {
+    pub(crate) types: Vec<&'static str>,
+    pub(crate) check: Box<dyn Fn(Dict) -> Result<(), Refusal> + Send + Sync>,
 }
 
 pub(crate) struct Entry {
     pub(crate) definition: Definition,
     pub(crate) public: bool,
-    pub(crate) action: Action,
+    pub(crate) finds: Option<Finds>,
+    pub(crate) gets: Option<Gets>,
+    pub(crate) preparer: Option<Box<Preparer>>,
     pub(crate) store: Arc<Opener>,
 }
 
 pub(crate) struct ThingEntry {
     pub(crate) definition: ThingDefinition,
+    pub(crate) references: &'static [&'static str],
     pub(crate) describe: Arc<Describer>,
 }
 
@@ -51,10 +63,52 @@ pub struct Domain<O> {
     store: Arc<Lazy<O>>,
     pub(crate) entries: BTreeMap<String, Entry>,
     pub(crate) things: BTreeMap<String, ThingEntry>,
+    pub(crate) files: Option<Arc<FilesOpener>>,
+    pub(crate) connect: Box<Connect>,
+}
+
+/// The thing types a `get` gives: one, or a tuple of them.
+pub trait Things<O> {
+    #[doc(hidden)]
+    const TYPES: &'static [&'static str];
+
+    #[doc(hidden)]
+    fn add(domain: Domain<O>) -> Domain<O>;
+}
+
+impl<O: Store + Describe<T>, T: Thing> Things<O> for T {
+    const TYPES: &'static [&'static str] = &[T::TYPE];
+
+    fn add(domain: Domain<O>) -> Domain<O> {
+        domain.thing::<T>()
+    }
+}
+
+impl<O, A: Thing, B: Thing> Things<O> for (A, B)
+where
+    O: Store + Describe<A> + Describe<B>,
+{
+    const TYPES: &'static [&'static str] = &[A::TYPE, B::TYPE];
+
+    fn add(domain: Domain<O>) -> Domain<O> {
+        domain.thing::<A>().thing::<B>()
+    }
+}
+
+impl<O, A: Thing, B: Thing, C: Thing> Things<O> for (A, B, C)
+where
+    O: Store + Describe<A> + Describe<B> + Describe<C>,
+{
+    const TYPES: &'static [&'static str] = &[A::TYPE, B::TYPE, C::TYPE];
+
+    fn add(domain: Domain<O>) -> Domain<O> {
+        domain.thing::<A>().thing::<B>().thing::<C>()
+    }
 }
 
 struct Lazy<O> {
-    open: Box<dyn Fn() -> Result<O, Refusal> + Send + Sync>,
+    open: Box<Opens<O>>,
+    connection: OnceLock<Connection>,
     opened: Mutex<Option<Arc<O>>>,
 }
 
@@ -64,7 +118,11 @@ impl<O> Lazy<O> {
         match &*opened {
             Some(store) => Ok(Arc::clone(store)),
             None => {
-                let store = Arc::new((self.open)()?);
+                let connection = self
+                    .connection
+                    .get()
+                    .ok_or_else(|| Refusal::unavailable("not served"))?;
+                let store = Arc::new((self.open)(connection)?);
                 *opened = Some(Arc::clone(&store));
                 Ok(store)
             }
@@ -73,35 +131,54 @@ impl<O> Lazy<O> {
 }
 
 impl<O: Store> Domain<O> {
-    /// `open` is called again after it failed.
-    pub fn new(open: impl Fn() -> Result<O, Refusal> + Send + Sync + 'static) -> Self {
+    /// `open` gets the connection the owner serves on, the one to call other owners with, and is
+    /// called again after it failed.
+    pub fn new(open: impl Fn(&Connection) -> Result<O, Refusal> + Send + Sync + 'static) -> Self {
+        let store = Arc::new(Lazy {
+            open: Box::new(open),
+            connection: OnceLock::new(),
+            opened: Mutex::new(None),
+        });
+        let connected = Arc::clone(&store);
         Self {
-            store: Arc::new(Lazy {
-                open: Box::new(open),
-                opened: Mutex::new(None),
-            }),
+            store,
             entries: BTreeMap::new(),
             things: BTreeMap::new(),
+            files: None,
+            connect: Box::new(move |connection| {
+                connected.connection.get_or_init(|| connection.clone());
+            }),
         }
     }
 
-    fn add<I: Intent>(&mut self, public: bool, returns: Option<Returns>, action: Action) {
+    fn entry<I: Intent>(&mut self, public: bool, returns: Option<Returns>) -> &mut Entry {
         let store = Arc::clone(&self.store);
-        self.entries.insert(
-            I::ID.to_owned(),
-            Entry {
-                definition: Definition {
-                    returns,
-                    ..I::definition()
-                },
+        let entry = self
+            .entries
+            .entry(I::ID.to_owned())
+            .or_insert_with(|| Entry {
+                definition: I::definition(),
                 public,
-                action,
+                finds: None,
+                gets: None,
+                preparer: None,
                 store: Arc::new(move || Ok(store.get()? as Arc<dyn Store>)),
-            },
-        );
+            });
+        entry.definition.returns = returns;
+        entry
     }
 
-    /// Serves things of this type to `find` and `get`.
+    /// Serves `org.bande.Intents.Files` for the things of this store.
+    pub fn files(mut self) -> Self
+    where
+        O: Files,
+    {
+        let store = Arc::clone(&self.store);
+        self.files = Some(Arc::new(move || Ok(store.get()? as Arc<dyn Files>)));
+        self
+    }
+
+    /// Serves things of this type; `find` and `get` do it for theirs.
     pub fn thing<T: Thing>(mut self) -> Self
     where
         O: Describe<T>,
@@ -111,18 +188,21 @@ impl<O: Store> Domain<O> {
             T::TYPE.to_owned(),
             ThingEntry {
                 definition: T::definition(),
+                references: T::TYPES,
                 describe: Arc::new(move |reference, wanted, limits| {
                     let reference = Ref::<T>::parse(reference)
                         .ok_or_else(|| Refusal::not_found(reference.to_owned()))?;
                     let thing = store.get()?.describe(&reference, wanted, limits)?;
-                    thing_dict(thing, |name| wanted.has(name))
+                    let foreign = limits.allows(domain(T::TYPE), Effect::ReadForeign);
+                    thing_dict(thing, |name| wanted.has(name), foreign)
                 }),
             },
         );
         self
     }
 
-    /// Serves an intent that finds things.
+    /// Serves an intent that finds things. One whose arguments can cause more than reading is also
+    /// added with [`Self::perform`], and its `find` refuses those arguments.
     pub fn find<I: Find<O>>(mut self) -> Self
     where
         O: Describe<I::Thing>,
@@ -143,47 +223,45 @@ impl<O: Store> Domain<O> {
             })
         };
         let kind = <I::Thing as Thing>::TYPE.to_owned();
-        self.add::<I>(
-            true,
-            Some(Returns::List(kind.clone())),
-            Action::Find(kind, Box::new(finder)),
-        );
+        let returns = Returns::List(kind.clone());
+        self.entry::<I>(true, Some(returns)).finds = Some(Finds {
+            kind,
+            finder: Box::new(finder),
+        });
         self.thing::<I::Thing>()
     }
 
-    /// Serves an intent that gives properties of known things: its first parameter is the
-    /// [`crate::Refs`], the other `properties`.
-    pub fn get<I: Intent>(mut self) -> Self {
-        let returns = I::definition().parameters.first().and_then(|parameter| {
-            let Kind::List { items, .. } = &parameter.kind else {
-                return None;
-            };
-            match &**items {
-                Kind::Ref { of } => of.first().cloned().map(Returns::List),
-                _ => None,
-            }
+    /// Serves an intent that gives properties of known things of the types `T`. Its first parameter
+    /// is the [`crate::Refs`] or a [`Ref`]; without one it gives the thing `:only`. Then come
+    /// `properties`, if any, and what [`Wanted::arguments`] tells [`Describe`].
+    pub fn get<I: Intent, T: Things<O>>(mut self) -> Self {
+        let returns = T::TYPES
+            .first()
+            .map(|kind| Returns::List((*kind).to_owned()));
+        self.entry::<I>(true, returns).gets = Some(Gets {
+            types: T::TYPES.to_vec(),
+            check: Box::new(|arguments| I::decode(arguments).map(drop)),
         });
-        self.add::<I>(true, returns, Action::Get);
-        self
+        T::add(self)
     }
 
     /// Serves an intent that does something.
     pub fn perform<I: Perform<O>>(mut self) -> Self {
         let preparer = self.preparer::<I>();
-        self.add::<I>(true, I::Output::returns(), preparer);
+        self.entry::<I>(true, I::Output::returns()).preparer = Some(preparer);
         self
     }
 
     /// Adds an intent that only an [`Undo`] can name; no manifest lists it.
     pub fn private<I: Perform<O>>(mut self) -> Self {
         let preparer = self.preparer::<I>();
-        self.add::<I>(false, None, preparer);
+        self.entry::<I>(false, None).preparer = Some(preparer);
         self
     }
 
-    fn preparer<I: Perform<O>>(&self) -> Action {
+    fn preparer<I: Perform<O>>(&self) -> Box<Preparer> {
         let store = Arc::clone(&self.store);
-        Action::Perform(Box::new(move |arguments, limits| {
+        Box::new(move |arguments, limits| {
             let owner = store.get()?;
             let plan = I::decode(arguments)?.prepare(&owner, limits)?;
             let prepared = plan.prepared;
@@ -192,11 +270,11 @@ impl<O: Store> Domain<O> {
                 summary: plan.summary,
                 rows: plan.rows,
                 references: plan.references,
-                run: Box::new(move |job| {
+                run: Box::new(move |job, limits| {
                     let done = I::perform(prepared, &owner, job)?;
-                    Ok((done.output.into_result()?, done.undo))
+                    Ok((done.output.into_result(limits)?, done.undo))
                 }),
             })
-        }))
+        })
     }
 }

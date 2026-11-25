@@ -89,8 +89,13 @@ impl Manifests {
         self.0.push(manifest);
     }
 
-    /// The manifests installed on this computer.
+    /// The manifests installed on this computer; in a debug build, those in `$BANDE_INTENTS` if it
+    /// is set.
     pub fn installed() -> Self {
+        #[cfg(debug_assertions)]
+        if let Some(folder) = std::env::var_os("BANDE_INTENTS") {
+            return Self::read(Path::new(&folder));
+        }
         Self::read(Path::new(MANIFESTS))
     }
 
@@ -106,6 +111,13 @@ impl Manifests {
         self.0
             .iter()
             .find_map(|manifest| Some((manifest, manifest.intents.get(id)?)))
+    }
+
+    /// The manifest of the program that serves things of the type `kind`.
+    pub fn thing(&self, kind: &str) -> Option<&Manifest> {
+        self.0
+            .iter()
+            .find(|manifest| manifest.things.contains_key(kind))
     }
 
     /// The manifest of the program whose receipts are named with `of`'s domain.

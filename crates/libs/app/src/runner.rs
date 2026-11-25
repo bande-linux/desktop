@@ -39,7 +39,7 @@ struct Runner<P: Program> {
     cx: Cx<P>,
     menu: Option<AppMenu>,
     instance: Option<Instance>,
-    intents: Option<Intents>,
+    intents: Option<Intents<P>>,
     sources: RefCell<Vec<Source>>,
 }
 
@@ -72,14 +72,12 @@ pub(crate) fn run<P: Program>(
             tracing::warn!("no session bus, so no app menus and no single instance: {error}");
         })
         .ok();
-    let mut intents = session
-        .as_ref()
-        .zip(P::intents())
-        .and_then(|(session, owner)| {
-            Intents::serve(owner, session)
-                .inspect_err(|error| tracing::warn!("cannot serve intents: {error}"))
-                .ok()
-        });
+    let mut intents = session.as_ref().and_then(|session| {
+        Intents::<P>::serve(session)
+            .inspect_err(|error| tracing::warn!("cannot serve intents: {error}"))
+            .ok()
+            .flatten()
+    });
     if serves_only && intents.is_none() {
         return Ok(());
     }
@@ -116,6 +114,9 @@ pub(crate) fn run<P: Program>(
         arguments = request.arguments;
         activation = request.token;
         TextSystem::preload();
+    }
+    if let Some(intents) = &intents {
+        intents.begin();
     }
     let link = match display {
         Some(display) => AppConnection::connect_on(display, info.id)?,
@@ -396,7 +397,7 @@ impl<P: Program> Runner<P> {
     }
 
     fn finish_intents(&mut self) {
-        let Some(intents) = self.intents.take() else {
+        let Some(mut intents) = self.intents.take() else {
             return;
         };
         if !intents.is_working() {
@@ -824,8 +825,12 @@ impl<P: Program> Surfaces for Runner<P> {
                 }
             }
             Some(Source::Intents) => {
-                if let Some(intents) = &mut self.intents {
-                    intents.answer(|kind| self.program.current(&self.cx, kind));
+                let launches = match &mut self.intents {
+                    Some(intents) => intents.run_errands(&mut self.program, &mut self.cx),
+                    None => Vec::new(),
+                };
+                for request in launches {
+                    self.activated(request);
                 }
             }
             Some(Source::Installs) => {

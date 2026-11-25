@@ -1,12 +1,13 @@
 //! The phrases of installed intents, matched against one typed line.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use bande_l10n::tr;
 
 use crate::client::text;
 use crate::{
-    Client, Definition, Dict, Effect, Kind, Manifest, Manifests, Property, Returns, plan, to_json,
+    Client, Definition, Dict, Effect, Kind, Manifest, Manifests, Property, Reason, Refusal,
+    Returns, plan, to_json,
 };
 
 const FEWEST_CHARACTERS: usize = 2;
@@ -32,7 +33,7 @@ pub struct Offer {
 
 impl Offer {
     /// Does it, and gives the summary and the receipt that undoes it.
-    pub fn perform(&self, client: &Client) -> Result<(String, Option<String>), crate::Refusal> {
+    pub fn perform(&self, client: &Client) -> Result<(String, Option<String>), Refusal> {
         let prepared = client.prepare(&self.bus, &self.intent, &self.arguments)?;
         let summary = prepared.summary.clone();
         let performed = client.perform(prepared)?;
@@ -146,6 +147,8 @@ struct Chosen {
 struct Attempt<'a> {
     phrases: &'a Phrases,
     client: &'a Client,
+    wanted: &'a dyn Fn() -> bool,
+    silent: HashSet<String>,
     found: HashMap<(String, String), Vec<Dict>>,
 }
 
@@ -171,7 +174,9 @@ impl Phrases {
 
     /// What can be done as `typed`: at most three, each prepared once to see that it can, and
     /// nothing critical. Those plans end with the connection of `client`, so it is one of its own.
-    pub fn offers(&self, client: &Client, typed: &str) -> Vec<Offer> {
+    /// An owner that does not answer once is not asked again, and nobody is when `wanted` says that
+    /// something else has been typed.
+    pub fn offers(&self, client: &Client, typed: &str, wanted: &dyn Fn() -> bool) -> Vec<Offer> {
         let words: Vec<String> = typed.split_whitespace().map(str::to_lowercase).collect();
         if typed.trim().chars().count() < FEWEST_CHARACTERS || words.len() > MOST_WORDS {
             return Vec::new();
@@ -180,6 +185,8 @@ impl Phrases {
         let mut attempt = Attempt {
             phrases: self,
             client,
+            wanted,
+            silent: HashSet::new(),
             found: HashMap::new(),
         };
         let mut offers: Vec<Offer> = Vec::new();
@@ -188,19 +195,13 @@ impl Phrases {
                 let known = offers
                     .iter()
                     .any(|known| known.title == offer.title && known.intent == offer.intent);
-                if offers.len() < MOST_OFFERED && !known && can_be_done(client, &offer) {
+                if offers.len() < MOST_OFFERED && !known && attempt.can_be_done(&offer) {
                     offers.push(offer);
                 }
             }
         }
         offers
     }
-}
-
-fn can_be_done(client: &Client, offer: &Offer) -> bool {
-    client
-        .prepare(&offer.bus, &offer.intent, &offer.arguments)
-        .is_ok_and(|prepared| !prepared.effects.contains(&Effect::Critical))
 }
 
 fn spread<'a>(
@@ -233,6 +234,38 @@ fn spread<'a>(
 }
 
 impl Attempt<'_> {
+    fn asks(&self, bus: &str) -> bool {
+        (self.wanted)() && !self.silent.contains(bus)
+    }
+
+    fn heard<T>(&mut self, bus: &str, answer: Result<T, Refusal>) -> Option<T> {
+        answer
+            .inspect_err(|refusal| {
+                tracing::debug!("{bus} offers nothing: {refusal}");
+                if matches!(refusal.reason, Reason::Interrupted | Reason::Unavailable) {
+                    self.silent.insert(bus.to_owned());
+                }
+            })
+            .ok()
+    }
+
+    fn can_be_done(&mut self, offer: &Offer) -> bool {
+        if !self.asks(&offer.bus) {
+            return false;
+        }
+        let prepared = self
+            .client
+            .prepare(&offer.bus, &offer.intent, &offer.arguments);
+        match prepared {
+            Ok(prepared) => !prepared.effects.contains(&Effect::Critical),
+            Err(refusal) if refusal.reason == Reason::Interrupted => {
+                self.heard::<()>(&offer.bus, Err(refusal));
+                false
+            }
+            Err(_) => false,
+        }
+    }
+
     fn offers(&mut self, phrase: &Served, words: &[String], original: &[&str]) -> Vec<Offer> {
         let mut spreads = spread(&phrase.tokens, 0..words.len(), words);
         let placeholders: Vec<&str> = phrase
@@ -321,21 +354,21 @@ impl Attempt<'_> {
         if let Some(found) = self.found.get(&key) {
             return found.iter().filter_map(copied).collect();
         }
-        let found = self
-            .phrases
+        let phrases = self.phrases;
+        let found = phrases
             .things
             .get(kind)
-            .map(|findable| self.look_up(findable, wanted))
+            .filter(|findable| self.asks(&findable.bus))
+            .and_then(|findable| self.heard(&findable.bus, self.look_up(findable, wanted)))
             .unwrap_or_default();
         let copy = found.iter().filter_map(copied).collect();
         self.found.insert(key, found);
         copy
     }
 
-    fn look_up(&self, findable: &Findable, wanted: &str) -> Vec<Dict> {
+    fn look_up(&self, findable: &Findable, wanted: &str) -> Result<Vec<Dict>, Refusal> {
         let arguments = Dict::from([("text".to_owned(), plan::owned_text(wanted))]);
-        let found = self
-            .client
+        self.client
             .find(&findable.bus, &findable.find, &arguments, "", MOST_FOUND)
             .map(|page| page.things)
             .and_then(|things| match (&findable.get, findable.accepts) {
@@ -344,13 +377,11 @@ impl Attempt<'_> {
                         .iter()
                         .map(|thing| text(thing, "reference").to_owned())
                         .collect();
-                    self.client.get(&findable.bus, get, &references, &[])
+                    self.client
+                        .get(&findable.bus, get, &references, &[], &Dict::new())
                 }
                 _ => Ok(things),
-            });
-        found
-            .inspect_err(|refusal| tracing::debug!("{} finds nothing: {refusal}", findable.bus))
-            .unwrap_or_default()
+            })
     }
 }
 
@@ -403,7 +434,11 @@ fn value(
     shared: bool,
 ) -> Option<Chosen> {
     let typed = words.join(" ");
-    let (written, shown) = match kind {
+    let one = match kind {
+        Kind::List { items, .. } => items,
+        kind => kind,
+    };
+    let (written, shown) = match one {
         Kind::Text { .. } if thing.contains_key(ACCEPTS) || thing.contains_key("minimum") => {
             return accepted(words, thing, shared);
         }
@@ -415,7 +450,9 @@ fn value(
                 follows_thing: true,
             });
         }
-        Kind::Text { .. } | Kind::RichText if free => (original.join(" "), original.join(" ")),
+        Kind::Text { .. } | Kind::RichText | Kind::Address if free => {
+            (original.join(" "), original.join(" "))
+        }
         Kind::Enum { words } => {
             let word = words.iter().find(|word| word.replace('-', " ") == typed)?;
             (word.clone(), typed)
@@ -423,6 +460,10 @@ fn value(
         Kind::Time => {
             let time = clock_time(&typed)?;
             (time.clone(), time)
+        }
+        Kind::DateTime => {
+            let time = clock_time(&typed)?;
+            (next_at(&time)?, time)
         }
         Kind::Duration => (duration(&typed)?, typed),
         Kind::Integer { .. } | Kind::Number | Kind::Date => (typed.clone(), typed),
@@ -439,6 +480,17 @@ fn clock_time(typed: &str) -> Option<String> {
     let (hour, minute) = typed.split_once([':', '.'])?;
     let time = jiff::civil::Time::new(hour.parse().ok()?, minute.parse().ok()?, 0, 0).ok()?;
     Some(time.strftime("%H:%M").to_string())
+}
+
+fn next_at(time: &str) -> Option<String> {
+    let now = jiff::Zoned::now();
+    let time: jiff::civil::Time = time.parse().ok()?;
+    let today = now.with().time(time).build().ok()?;
+    let next = match today > now {
+        true => today,
+        false => today.tomorrow().ok()?,
+    };
+    Some(next.to_string())
 }
 
 fn duration(typed: &str) -> Option<String> {

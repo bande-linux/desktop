@@ -161,6 +161,20 @@ pub struct OfferInfo {
     pub intent: String,
 }
 
+fn still_offers(offer: &OfferInfo, typed: &str) -> bool {
+    let title = fold(&offer.title);
+    let words = |text: &str| -> Vec<String> {
+        text.split(|character: char| !character.is_alphanumeric())
+            .filter(|word| !word.is_empty())
+            .map(str::to_owned)
+            .collect()
+    };
+    let shown = words(&title);
+    words(&fold(typed))
+        .iter()
+        .all(|typed| shown.iter().any(|word| word.starts_with(typed.as_str())))
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
     Search,
@@ -550,14 +564,17 @@ impl Model {
         if query == self.query {
             return;
         }
+        match query.to_lowercase().starts_with(&self.query.to_lowercase()) {
+            true => self.offers.retain(|offer| still_offers(offer, query)),
+            false => self.offers.clear(),
+        }
         self.query = query.to_owned();
         self.generation += 1;
-        self.files_complete =
-            self.mode != Mode::Search || Query::new(query).is_none() || !self.searches_files();
-        self.offers.clear();
         self.offers_complete =
             self.mode != Mode::Search || Query::new(query).is_none() || !self.asks_offers;
-        if self.is_complete() {
+        self.files_complete =
+            self.mode != Mode::Search || Query::new(query).is_none() || !self.searches_files();
+        if self.files_complete {
             self.rebuild(None);
         } else {
             self.picked = false;
@@ -565,29 +582,70 @@ impl Model {
         }
     }
 
-    fn is_complete(&self) -> bool {
-        self.files_complete && self.offers_complete
-    }
-
-    /// Waits for the offers for each query, as for its files.
+    /// Expects offers for each query; what else is found is shown without waiting for them.
     pub fn ask_offers(&mut self) {
         self.asks_offers = true;
     }
 
+    /// Takes the offers of a query. With its results already shown, they are added below, and what
+    /// is shown stays where it is.
     pub fn set_offers(&mut self, generation: u64, offers: Vec<OfferInfo>) {
         if generation != self.generation {
             return;
         }
-        let keep = self.kept();
-        self.offers = offers;
         self.offers_complete = true;
-        self.rebuild_when_complete(keep);
+        let gone = self.offers.iter().any(|known| !offers.contains(known));
+        let fresh: Vec<OfferInfo> = offers
+            .iter()
+            .filter(|offer| !self.offers.contains(offer))
+            .cloned()
+            .collect();
+        self.offers = offers;
+        if self.mode != Mode::Search || self.held_since.is_some() {
+            return;
+        }
+        let Some(query) = Query::new(&self.query) else {
+            return;
+        };
+        if gone {
+            let keep = self.selection().map(|hit| hit.target.clone());
+            self.rebuild(keep);
+            return;
+        }
+        self.answered = self.is_complete();
+        self.revision += 1;
+        let late = self.offer_hits(&fresh, &query);
+        if late.is_empty() {
+            return;
+        }
+        let heading = match self.hits.is_empty() {
+            true => Heading::TopHit,
+            false => Heading::Actions,
+        };
+        self.headings.push((self.hits.len(), heading));
+        self.hits.extend(late);
     }
 
-    fn rebuild_when_complete(&mut self, keep: Option<Target>) {
-        if self.is_complete() || self.held_since.is_none() {
-            self.rebuild(keep);
-        }
+    fn is_complete(&self) -> bool {
+        self.files_complete && self.offers_complete
+    }
+
+    fn offer_hits(&self, offers: &[OfferInfo], query: &Query) -> Vec<Hit> {
+        offers
+            .iter()
+            .filter(|_| self.shows(SearchCategory::System))
+            .map(|offer| Hit {
+                kind: Kind::Offer,
+                title: offer.title.clone(),
+                detail: Some(offer.detail.clone()),
+                target: Target::Offer {
+                    intent: offer.intent.clone(),
+                    title: offer.title.clone(),
+                },
+                matched: query.matched(&fold(&offer.title)),
+                score: bande_search::WORD,
+            })
+            .collect()
     }
 
     /// When results of an earlier query give way to those found without the file index.
@@ -615,7 +673,7 @@ impl Model {
         self.files = results.hits;
         self.items = results.items;
         self.files_complete = true;
-        self.rebuild_when_complete(keep);
+        self.rebuild(keep);
     }
 
     pub fn record_use(&mut self, target: &Target) -> std::io::Result<()> {
@@ -787,22 +845,7 @@ impl Model {
             })
             .collect();
         commands.sort_by(by_score);
-        let mut offers: Vec<Hit> = self
-            .offers
-            .iter()
-            .filter(|_| self.shows(SearchCategory::System))
-            .map(|offer| Hit {
-                kind: Kind::Offer,
-                title: offer.title.clone(),
-                detail: Some(offer.detail.clone()),
-                target: Target::Offer {
-                    intent: offer.intent.clone(),
-                    title: offer.title.clone(),
-                },
-                matched: query.matched(&fold(&offer.title)),
-                score: bande_search::WORD,
-            })
-            .collect();
+        let mut offers = self.offer_hits(&self.offers, &query);
         let files: Vec<Hit> = self
             .files
             .iter()
@@ -1229,5 +1272,57 @@ impl Model {
         self.actions.push(Action::Copy(text));
         self.copied = true;
         true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn offer(title: &str) -> OfferInfo {
+        OfferInfo {
+            title: title.to_owned(),
+            detail: String::new(),
+            intent: "settings.set".to_owned(),
+        }
+    }
+
+    fn titles(model: &Model) -> Vec<&str> {
+        model.hits.iter().map(|hit| hit.title.as_str()).collect()
+    }
+
+    #[test]
+    fn late_offers_go_below_what_is_shown() {
+        let app = AppInfo {
+            app_id: "darkroom".to_owned(),
+            name: "Darkroom".to_owned(),
+            generic_name: None,
+            comment: None,
+            keywords: Vec::new(),
+        };
+        let usage = Usage::default();
+        let mut model = Model::new(vec![app], Vec::new(), PathBuf::new(), usage, 0);
+        model.ask_offers();
+        model.set_query("dar");
+        model.set_files(FileResults {
+            generation: model.generation,
+            hits: Vec::new(),
+            items: Vec::new(),
+        });
+        assert_eq!(titles(&model), ["Darkroom"], "nothing waits for offers");
+        let dark = offer("Appearance: Dark");
+        model.set_offers(model.generation, vec![dark.clone()]);
+        assert_eq!(titles(&model), ["Darkroom", "Appearance: Dark"]);
+        assert_eq!(model.selected, 0);
+
+        model.set_query("dark");
+        model.stop_holding();
+        assert!(
+            titles(&model).contains(&"Appearance: Dark"),
+            "it still fits"
+        );
+        model.set_query("darn");
+        model.stop_holding();
+        assert!(!titles(&model).contains(&"Appearance: Dark"));
     }
 }

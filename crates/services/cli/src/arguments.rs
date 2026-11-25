@@ -1,8 +1,10 @@
 use std::collections::BTreeMap;
 
 use bande_intents::{Definition, Dict, Kind, Parameter, Refusal, to_json};
+use serde_json::Value as Json;
 
 const TEXT: &str = "text";
+const ON: &str = "on";
 
 /// The arguments of one command line.
 pub struct Given {
@@ -10,20 +12,22 @@ pub struct Given {
 }
 
 impl Given {
-    pub fn named(&self, name: &str) -> Vec<String> {
-        match self.arguments.get(name).map(|value| to_json(value)) {
-            Some(serde_json::Value::Array(items)) => items
+    pub fn take(&mut self, name: &str) -> Vec<String> {
+        match self.arguments.remove(name).map(|value| to_json(&value)) {
+            Some(Json::Array(items)) => items
                 .iter()
                 .filter_map(|item| item.as_str().map(str::to_owned))
                 .collect(),
+            Some(Json::String(one)) => vec![one],
             _ => Vec::new(),
         }
     }
 
-    pub fn list(&self, parameter: Option<&Parameter>) -> Vec<String> {
-        parameter
-            .map(|parameter| self.named(&parameter.name))
-            .unwrap_or_default()
+    pub fn take_references(&mut self, definition: &Definition) -> Vec<String> {
+        match definition.parameters.first() {
+            Some(first) if first.kind.names_things() => self.take(&first.name),
+            _ => Vec::new(),
+        }
     }
 }
 
@@ -43,7 +47,7 @@ fn unknown(definition: &Definition, word: &str) -> Refusal {
 pub fn given(definition: &Definition, words: &[String]) -> Result<Given, Refusal> {
     let mut gathered: BTreeMap<&str, Vec<String>> = BTreeMap::new();
     let mut bare = Vec::new();
-    let mut words = words.iter();
+    let mut words = words.iter().peekable();
     while let Some(word) = words.next() {
         if word == "--" {
             bare.extend(words.by_ref().cloned());
@@ -61,7 +65,14 @@ pub fn given(definition: &Definition, words: &[String]) -> Result<Given, Refusal
             .parameter(&name.replace('-', "_"))
             .ok_or_else(|| unknown(definition, name))?;
         let value = value
-            .or_else(|| words.next().cloned())
+            .or_else(|| match &parameter.kind {
+                Kind::Bool => {
+                    let said = words
+                        .next_if(|word| parameter.kind.from_words(&[(*word).clone()]).is_some());
+                    Some(said.map_or(ON, String::as_str).to_owned())
+                }
+                _ => words.next().cloned(),
+            })
             .ok_or_else(|| Refusal::invalid(&parameter.name, parameter.kind.accepts()))?;
         gathered.entry(&parameter.name).or_default().push(value);
     }

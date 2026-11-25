@@ -14,6 +14,7 @@ const JSON: &str = "--json";
 const HELP: &str = "--help";
 const UNDO: &str = "undo";
 const PAGE: u32 = 100;
+const PROPERTIES: &str = "properties";
 
 /// Carries out the command line `words` with the programs of `manifests`, and gives what to
 /// print: an answer, or an error.
@@ -136,22 +137,29 @@ fn call(
     given: Given,
     json: bool,
 ) -> Result<String, Refusal> {
-    if gives(definition, id, "find") {
+    if definition.only_reads() && gives(definition, id, "find") {
         let things = find_all(client, &manifest.bus, id, &given.arguments)?;
         return Ok(things_text(&things, json, false));
     }
-    if gives(definition, id, "get") {
+    if definition.only_reads() && gives(definition, id, "get") {
+        let mut given = given;
+        let references = given.take_references(definition);
+        let properties = given.take(PROPERTIES);
         let things = client.get(
             &manifest.bus,
             id,
-            &given.list(definition.parameters.first()),
-            &given.named("properties"),
+            &references,
+            &properties,
+            &given.arguments,
         )?;
         return Ok(things_text(&things, json, true));
     }
     let prepared = client.prepare(&manifest.bus, id, &given.arguments)?;
     let (summary, effects) = (prepared.summary.clone(), prepared.effects.clone());
     let performed = client.perform(prepared)?;
+    if gives(definition, id, "find") {
+        return Ok(things_text(&performed.things(), json, false));
+    }
     Ok(match json {
         true => json!({
             "summary": summary,

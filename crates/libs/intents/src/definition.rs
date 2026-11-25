@@ -147,6 +147,13 @@ pub struct Definition {
 }
 
 impl Definition {
+    /// Whether it only reads, so that `find` and `get` answer it without a plan.
+    pub fn only_reads(&self) -> bool {
+        self.effects
+            .iter()
+            .all(|effect| matches!(effect, Effect::Read | Effect::ReadForeign))
+    }
+
     pub fn parameter(&self, name: &str) -> Option<&Parameter> {
         self.parameters
             .iter()
@@ -254,6 +261,9 @@ impl Property {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ThingDefinition {
     pub title: Label,
+    /// The types its references are of, when it is a view of other things.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub view_of: Vec<String>,
     pub properties: BTreeMap<String, Property>,
 }
 
@@ -264,6 +274,10 @@ pub trait Thing: crate::Referent + Sized + Send + 'static {
     fn definition() -> ThingDefinition;
 
     fn reference(&self) -> &str;
+
+    /// The properties whose text someone else could have chosen in this thing, besides those that
+    /// are foreign in every thing of the type.
+    fn also_foreign(&self) -> Vec<&'static str>;
 
     /// The properties this thing has, the title among them.
     fn properties(self) -> Result<Dict, Refusal>;

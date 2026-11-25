@@ -100,10 +100,10 @@ impl Program for Example {
         open(cx);
     }
 
-    fn intents() -> Option<Owner> {
+    fn intents(_: &bande_app::MainLoop<Self>) -> Option<Owner> {
         Some(
             Owner::new(INFO.id, "/usr/bin/bande-pages")
-                .with(Domain::new(|| Ok(Pages)).find::<FindPages>()),
+                .with(Domain::new(|_| Ok(Pages)).find::<FindPages>()),
         )
     }
 

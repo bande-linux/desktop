@@ -13,11 +13,17 @@ msgstr "Ett program i en sandlåda kan inte göra det här"
 msgid "This program cannot act for an agent"
 msgstr "Det här programmet kan inte handla åt en agent"
 
+msgid "Files cannot be opened now"
+msgstr "Filer kan inte öppnas just nu"
+
 msgid "There is nothing to undo"
 msgstr "Det finns inget att ångra"
 
 msgid "{intent} has no “{parameter}”"
 msgstr "{intent} har ingen ”{parameter}”"
+
+msgid "Files cannot be written here"
+msgstr "Filer kan inte skrivas här"
 
 msgid "This has to be allowed first, and there is nothing to ask with yet"
 msgstr "Det här måste tillåtas först, och det finns inget att fråga med än"
@@ -37,6 +43,12 @@ msgstr "Det här är för gammalt eller redan gjort"
 msgid "This was interrupted. It may have been done."
 msgstr "Det här avbröts. Det kan ha blivit gjort."
 
+msgid "This is too much at once. Get fewer things or properties."
+msgstr "Det här är för mycket på en gång. Hämta färre saker eller egenskaper."
+
+msgid "“{intent}” would do more than it says"
+msgstr "”{intent}” skulle göra mer än det säger"
+
 msgid "Undo cannot be kept now, so this is not done"
 msgstr "Ångra kan inte sparas just nu, så det här görs inte"
 
@@ -52,8 +64,14 @@ msgstr "För mycket väntar. Försök igen om 10 minuter."
 msgid "This was changed again since: {change}"
 msgstr "Det här har ändrats igen sedan dess: {change}"
 
+msgid "The program that can undo this is not installed"
+msgstr "Programmet som kan ångra det här är inte installerat"
+
 msgid "This was prepared by another program"
 msgstr "Det här förbereddes av ett annat program"
+
+msgid "Too much is being done. Try again when some of it has ended."
+msgstr "För mycket görs just nu. Försök igen när något av det är klart."
 
 msgid "The caller is unknown"
 msgstr "Anroparen är okänd"
@@ -66,6 +84,9 @@ msgstr "m, min, minut, minuter"
 
 msgid "h, hr, hrs, hour, hours"
 msgstr "h, tim, timme, timmar"
+
+msgid "This would now do more than what was prepared"
+msgstr "Det här skulle nu göra mer än det som förbereddes"
 
 msgid "Undo cannot be kept: {error}"
 msgstr "Ångra kan inte sparas: {error}"

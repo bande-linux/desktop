@@ -2,10 +2,13 @@ use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
+use bande_l10n::tr;
 use zbus::zvariant::OwnedValue;
 
+use crate::client::text;
 use crate::{
-    Dict, Effect, Intent, Kind, Limits, Ref, Referent, Refusal, Returns, Thing, Value, dict_to_json,
+    Dict, Effect, Intent, Kind, Limits, Ref, Referent, Refusal, Returns, Thing, Value,
+    dict_to_json, domain,
 };
 
 pub(crate) const FAILURES: usize = 100;
@@ -42,15 +45,27 @@ pub trait Describe<T: Thing> {
 }
 
 /// The properties a caller gets; others need not be read.
-#[derive(Debug, Clone)]
+#[derive(Debug, Default)]
 pub struct Wanted {
     pub(crate) names: Vec<String>,
+    pub(crate) asked: Option<(String, Dict)>,
 }
 
 impl Wanted {
     pub fn of(properties: &[&str]) -> Self {
         Self {
             names: properties.iter().map(|name| (*name).to_owned()).collect(),
+            asked: None,
+        }
+    }
+
+    /// The `get` that asks, when it is `I` and was given arguments besides the things.
+    pub fn arguments<I: Intent>(&self) -> Result<Option<I>, Refusal> {
+        match &self.asked {
+            Some((id, arguments)) if id == I::ID => {
+                I::decode(crate::job::copied(arguments)?).map(Some)
+            }
+            _ => Ok(None),
         }
     }
 
@@ -63,7 +78,8 @@ impl Wanted {
 pub trait Perform<O>: Intent {
     /// What Prepare froze for Perform.
     type Prepared: Send + 'static;
-    /// `()`, a [`Thing`], a list of them, [`Computed`] or [`ComputedList`].
+    /// `()`, a [`Thing`], a list of them, references to another program's things, [`Computed`] or
+    /// [`ComputedList`].
     type Output: Output;
 
     /// Checks everything that can be checked and changes nothing.
@@ -105,18 +121,23 @@ pub enum RowKind {
 }
 
 impl RowKind {
+    const ALL: [(Self, &'static str); 9] = [
+        (Self::Text, "text"),
+        (Self::RichText, "rich_text"),
+        (Self::Address, "address"),
+        (Self::Path, "path"),
+        (Self::Size, "size"),
+        (Self::Count, "count"),
+        (Self::Thing, "thing"),
+        (Self::Loss, "loss"),
+        (Self::Copy, "copy"),
+    ];
+
     fn word(self) -> &'static str {
-        match self {
-            Self::Text => "text",
-            Self::RichText => "rich_text",
-            Self::Address => "address",
-            Self::Path => "path",
-            Self::Size => "size",
-            Self::Count => "count",
-            Self::Thing => "thing",
-            Self::Loss => "loss",
-            Self::Copy => "copy",
-        }
+        Self::ALL
+            .iter()
+            .find(|(kind, _)| *kind == self)
+            .map_or("", |(_, word)| word)
     }
 }
 
@@ -135,6 +156,15 @@ impl Row {
             kind,
             value: value.into(),
         }
+    }
+
+    pub(crate) fn from_wire(row: &Dict) -> Self {
+        let word = text(row, "kind");
+        let kind = RowKind::ALL
+            .iter()
+            .find(|(_, known)| *known == word)
+            .map_or(RowKind::Text, |(kind, _)| *kind);
+        Self::new(kind, text(row, "label"), text(row, "value"))
     }
 
     pub(crate) fn wire(&self) -> Dict {
@@ -192,6 +222,45 @@ impl Undo {
         })
     }
 
+    /// An undo by an intent another program serves, such as `files.trash` of what was made in a
+    /// folder. That program prepares it with the limits of whoever undoes, and what it does has a
+    /// receipt of its own there.
+    pub fn elsewhere(intent: &str, arguments: &Dict) -> Self {
+        Self {
+            intent: intent.to_owned(),
+            arguments: dict_to_json(arguments),
+            touched: Vec::new(),
+        }
+    }
+
+    pub(crate) fn then(&mut self, step: &Self) -> Result<(), Refusal> {
+        let same = || Refusal::failed("the steps of a job are undone by one intent");
+        if self.intent != step.intent {
+            return Err(same());
+        }
+        let all = self.arguments.as_object_mut().ok_or_else(same)?;
+        for (name, value) in step.arguments.as_object().ok_or_else(same)? {
+            match (all.get_mut(name), value) {
+                (Some(serde_json::Value::Array(all)), serde_json::Value::Array(more)) => {
+                    all.extend(more.iter().cloned());
+                }
+                (Some(known), value) if known == value => {}
+                _ => return Err(same()),
+            }
+        }
+        self.touched.extend(step.touched.iter().cloned());
+        Ok(())
+    }
+
+    pub(crate) fn of_steps(steps: &[Self]) -> Result<Option<Self>, Refusal> {
+        let Some((first, rest)) = steps.split_first() else {
+            return Ok(None);
+        };
+        let mut all = first.clone();
+        rest.iter().try_for_each(|step| all.then(step))?;
+        Ok(Some(all))
+    }
+
     /// The change touched these properties of `thing`; undo is refused when [`Store::look`] then
     /// tells them differently.
     pub fn touching<T: Referent>(mut self, thing: &Ref<T>, properties: &[&str]) -> Self {
@@ -216,7 +285,8 @@ impl Undo {
 
 /// What an owner keeps the things of its domains in.
 pub trait Store: Send + Sync + 'static {
-    /// The named properties of a thing as text that is the same as long as they mean the same.
+    /// The named properties of a thing as text that is the same as long as they mean the same; also
+    /// of another program's thing, when an undo touches one.
     fn look(&self, reference: &str, properties: &[String]) -> Result<String, Refusal>;
 
     /// What is left to undo of a change that a crash or a failure cut short, after the owner has
@@ -230,7 +300,8 @@ pub trait Store: Send + Sync + 'static {
 pub trait Output: Send + 'static {
     fn returns() -> Option<Returns>;
 
-    fn into_result(self) -> Result<Dict, Refusal>;
+    #[doc(hidden)]
+    fn into_result(self, limits: &Limits) -> Result<Dict, Refusal>;
 }
 
 impl Output for () {
@@ -238,7 +309,7 @@ impl Output for () {
         None
     }
 
-    fn into_result(self) -> Result<Dict, Refusal> {
+    fn into_result(self, _limits: &Limits) -> Result<Dict, Refusal> {
         Ok(Dict::new())
     }
 }
@@ -248,11 +319,35 @@ impl<T: Thing> Output for Vec<T> {
         Some(Returns::List(T::TYPE.to_owned()))
     }
 
-    fn into_result(self) -> Result<Dict, Refusal> {
+    fn into_result(self, limits: &Limits) -> Result<Dict, Refusal> {
+        let domain = domain(T::TYPE);
+        let shown = limits.allows(domain, Effect::Read);
+        let foreign = limits.allows(domain, Effect::ReadForeign);
         let things = self
             .into_iter()
-            .map(|thing| thing_dict(thing, |_| true))
-            .collect::<Result<Vec<_>, _>>()?;
+            .map(|thing| Ok(thing_dict(thing, |_| shown, foreign)?.0))
+            .collect::<Result<Vec<_>, Refusal>>()?;
+        entry("things", things)
+    }
+}
+
+impl<T: Referent> Output for Vec<Ref<T>> {
+    fn returns() -> Option<Returns> {
+        T::TYPES
+            .first()
+            .map(|kind| Returns::List((*kind).to_owned()))
+    }
+
+    fn into_result(self, _limits: &Limits) -> Result<Dict, Refusal> {
+        let things = self
+            .into_iter()
+            .map(|reference| {
+                let mut thing = Dict::new();
+                put(&mut thing, "type", reference.thing_type())?;
+                put(&mut thing, "reference", reference.as_str())?;
+                Ok(thing)
+            })
+            .collect::<Result<Vec<_>, Refusal>>()?;
         entry("things", things)
     }
 }
@@ -262,8 +357,8 @@ impl<T: Thing> Output for T {
         Vec::<T>::returns()
     }
 
-    fn into_result(self) -> Result<Dict, Refusal> {
-        vec![self].into_result()
+    fn into_result(self, limits: &Limits) -> Result<Dict, Refusal> {
+        vec![self].into_result(limits)
     }
 }
 
@@ -275,7 +370,7 @@ impl<T: Value + Send + 'static> Output for Computed<T> {
         Some(Returns::Value(T::kind()))
     }
 
-    fn into_result(self) -> Result<Dict, Refusal> {
+    fn into_result(self, _limits: &Limits) -> Result<Dict, Refusal> {
         let mut result = Dict::new();
         crate::give(&mut result, "value", self.0)?;
         Ok(result)
@@ -297,7 +392,7 @@ impl<T: Record> Output for ComputedList<T> {
         Some(Returns::Values(T::kinds()))
     }
 
-    fn into_result(self) -> Result<Dict, Refusal> {
+    fn into_result(self, _limits: &Limits) -> Result<Dict, Refusal> {
         let values = self
             .0
             .into_iter()
@@ -326,8 +421,13 @@ pub(crate) fn put<'a>(
     Ok(())
 }
 
-pub(crate) fn thing_dict<T: Thing>(thing: T, kept: impl Fn(&str) -> bool) -> Result<Dict, Refusal> {
+pub(crate) fn thing_dict<T: Thing>(
+    thing: T,
+    kept: impl Fn(&str) -> bool,
+    foreign_allowed: bool,
+) -> Result<(Dict, bool), Refusal> {
     let reference = thing.reference().to_owned();
+    let also_foreign = thing.also_foreign();
     let mut properties = thing.properties()?;
     properties.retain(|name, _| kept(name));
     let definition = T::definition();
@@ -338,9 +438,15 @@ pub(crate) fn thing_dict<T: Thing>(thing: T, kept: impl Fn(&str) -> bool) -> Res
                 .properties
                 .get(*name)
                 .is_some_and(|property| property.foreign)
+                || also_foreign.contains(&name.as_str())
         })
         .cloned()
         .collect();
+    let withheld = !foreign_allowed && !foreign.is_empty();
+    if withheld {
+        properties.retain(|name, _| !foreign.contains(name));
+        foreign.clear();
+    }
     foreign.sort();
     let mut cut = Vec::new();
     for (name, value) in &mut properties {
@@ -359,7 +465,7 @@ pub(crate) fn thing_dict<T: Thing>(thing: T, kept: impl Fn(&str) -> bool) -> Res
     if !cut.is_empty() {
         put(&mut properties, "cut", cut)?;
     }
-    Ok(properties)
+    Ok((properties, withheld))
 }
 
 /// What a job counts.
@@ -378,12 +484,20 @@ impl Unit {
     }
 }
 
-type Keep = dyn Fn(Undo) -> Result<(), Refusal> + Send + Sync;
+type Keep = dyn Fn(&[Undo], Step) -> Result<(), Refusal> + Send + Sync;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Step {
+    Kept,
+    Left,
+}
 
 /// A running plan: what it has done, what failed, and whether it was cancelled.
 pub struct Job {
     agent: Option<String>,
+    effects: Vec<Effect>,
     keep: Box<Keep>,
+    steps: Mutex<Vec<Undo>>,
     changed: Box<dyn Fn() + Send + Sync>,
     pub(crate) progress: Progress,
 }
@@ -405,12 +519,15 @@ pub(crate) fn locked<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 impl Job {
     pub(crate) fn new(
         agent: Option<String>,
-        keep: impl Fn(Undo) -> Result<(), Refusal> + Send + Sync + 'static,
+        effects: Vec<Effect>,
+        keep: impl Fn(&[Undo], Step) -> Result<(), Refusal> + Send + Sync + 'static,
         changed: impl Fn() + Send + Sync + 'static,
     ) -> Arc<Self> {
         Arc::new(Self {
             agent,
+            effects,
             keep: Box::new(keep),
+            steps: Mutex::default(),
             changed: Box::new(changed),
             progress: Progress::default(),
         })
@@ -421,13 +538,42 @@ impl Job {
         self.agent.as_deref()
     }
 
-    /// Stores what takes back everything up to and including the step about to start, so that a
-    /// crash from here on leaves something to undo. An error is returned from Perform at once,
-    /// since nothing may be changed that could not be taken back. Each call writes the whole undo to
-    /// disk: with many things, an owner whose [`Store::recover`] can tell which were changed keeps
-    /// the undo of all of them once.
-    pub fn keep(&self, undo: Undo) -> Result<(), Refusal> {
-        (self.keep)(undo)
+    /// Stores what takes back the step about to start, so that a crash from here on leaves something
+    /// to undo. An error is returned from Perform at once, since nothing may be changed that could
+    /// not be taken back. With many things there are many steps, of one or more things each: they
+    /// are undone by one intent, whose lists are those of the steps after one another and whose other
+    /// arguments are the same in each. A step is added to what is on disk, which costs one write.
+    pub fn keep(&self, step: Undo) -> Result<(), Refusal> {
+        let mut steps = locked(&self.steps);
+        steps.push(step);
+        (self.keep)(&steps, Step::Kept).inspect_err(|_| {
+            steps.pop();
+        })
+    }
+
+    /// The step kept last was not made after all, so it is left out of the undo.
+    pub fn not_done(&self) -> Result<(), Refusal> {
+        let mut steps = locked(&self.steps);
+        match steps.pop() {
+            Some(_) => (self.keep)(&steps, Step::Left),
+            None => Ok(()),
+        }
+    }
+
+    /// What takes back every step that was kept, for [`Done`].
+    pub fn undo(&self) -> Result<Option<Undo>, Refusal> {
+        Undo::of_steps(&locked(&self.steps))
+    }
+
+    /// Looks at what a step turned out to cause, before it starts: `Conflict` when the plan did not
+    /// have one of `effects`.
+    pub fn still(&self, effects: &[Effect]) -> Result<(), Refusal> {
+        match effects.iter().all(|effect| self.effects.contains(effect)) {
+            true => Ok(()),
+            false => Err(Refusal::conflict(tr!(
+                "This would now do more than what was prepared"
+            ))),
+        }
     }
 
     /// How much there is to do.
@@ -468,11 +614,20 @@ impl Job {
         self.progress.stopped.load(Ordering::Relaxed)
     }
 
-    pub(crate) fn result(&self, output: Dict) -> Result<Dict, Refusal> {
+    pub(crate) fn was_partial(&self) -> bool {
+        self.was_stopped() || !locked(&self.progress.failed).is_empty()
+    }
+
+    pub(crate) fn result(
+        &self,
+        output: Dict,
+        within: impl Fn(Refusal) -> Refusal,
+    ) -> Result<Dict, Refusal> {
         let mut result = output;
         let failed = locked(&self.progress.failed)
             .iter()
             .map(|(reference, refusal)| {
+                let refusal = within(refusal.clone());
                 let mut entry = refusal.details();
                 put(&mut entry, "reference", reference.as_str())?;
                 put(&mut entry, "error", refusal.reason.word())?;

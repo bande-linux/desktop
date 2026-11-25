@@ -48,11 +48,11 @@ impl Callers {
             .get_connection_credentials(name)
             .await
             .map_err(zbus::Error::from)?;
-        let process = match credentials.process_fd() {
-            Some(handle) => bande_bus::pid_of_handle(handle.as_fd()),
-            None => credentials.process_id(),
-        };
-        let program = process.and_then(program_of).ok_or_else(refused)?;
+        let process = || bande_bus::pid_of_handle(credentials.process_fd()?.as_fd());
+        let program = process()
+            .and_then(program_of)
+            .filter(|_| process().is_some())
+            .ok_or_else(refused)?;
         let mut known = locked(&self.0);
         if known.len() >= REMEMBERED {
             known.clear();

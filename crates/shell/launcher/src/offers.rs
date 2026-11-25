@@ -1,5 +1,7 @@
 use std::os::fd::BorrowedFd;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::time::{Duration, SystemTime};
 
@@ -23,6 +25,7 @@ enum Asked {
 
 /// What can be done as one typed line, asked and done on a thread of its own.
 pub struct Offers {
+    newest: Arc<AtomicU64>,
     asked: Sender<Asked>,
     offered: Inbox<(u64, Vec<Offer>)>,
 }
@@ -67,13 +70,20 @@ impl Offers {
         let (asked, questions) = channel();
         let offered = Inbox::new()?;
         let answers = offered.outbox();
+        let newest = Arc::new(AtomicU64::new(0));
+        let wanted = Arc::clone(&newest);
         std::thread::Builder::new()
             .name("offers".to_owned())
-            .spawn(move || serve(folder, &questions, &answers))?;
-        Ok(Self { asked, offered })
+            .spawn(move || serve(folder, &questions, &answers, &wanted))?;
+        Ok(Self {
+            newest,
+            asked,
+            offered,
+        })
     }
 
     pub fn ask(&self, generation: u64, typed: String) {
+        self.newest.store(generation, Ordering::Relaxed);
         let _ = self.asked.send(Asked::Typed(generation, typed));
     }
 
@@ -91,7 +101,12 @@ impl Offers {
     }
 }
 
-fn serve(folder: PathBuf, questions: &Receiver<Asked>, answers: &Outbox<(u64, Vec<Offer>)>) {
+fn serve(
+    folder: PathBuf,
+    questions: &Receiver<Asked>,
+    answers: &Outbox<(u64, Vec<Offer>)>,
+    newest: &AtomicU64,
+) {
     let mut known = Known::read(folder);
     while let Ok(first) = questions.recv() {
         let mut typed = None;
@@ -108,7 +123,12 @@ fn serve(folder: PathBuf, questions: &Receiver<Asked>, answers: &Outbox<(u64, Ve
         let offers = match text.trim().is_empty() || known.phrases.is_empty() {
             true => Vec::new(),
             false => answering_soon()
-                .map(|connection| known.phrases.offers(&Client::new(&connection), &text))
+                .map(|connection| {
+                    let wanted = || newest.load(Ordering::Relaxed) == generation;
+                    known
+                        .phrases
+                        .offers(&Client::new(&connection), &text, &wanted)
+                })
                 .inspect_err(|error| tracing::warn!("cannot ask what can be done: {error}"))
                 .unwrap_or_default(),
         };

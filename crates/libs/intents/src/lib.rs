@@ -11,6 +11,7 @@ mod callers;
 pub mod client;
 mod definition;
 mod domain;
+mod files;
 mod guard;
 mod job;
 mod limits;
@@ -29,7 +30,8 @@ pub use definition::{
     Definition, Effect, Intent, Label, Parameter, Phrase, Property, Returns, Thing,
     ThingDefinition, domain, reject_unknown,
 };
-pub use domain::Domain;
+pub use domain::{Domain, Things};
+pub use files::{Access, Files, Opened, Written};
 pub use limits::Limits;
 pub use manifest::{MANIFESTS, Manifest, Manifests};
 pub use owner::{Current, Owner, PATH, Serving};

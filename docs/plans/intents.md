@@ -118,10 +118,10 @@ Search or a menu use it.
 | D1a | `files`, with Open and Register | C2 | `crates/services/files-intents`, `crates/libs/fs`, `crates/apps/settings/src/storage.rs` | L |
 | D1b | `archives` | D1a | `crates/services/files-intents` | M |
 | D1c | facts for `photos`, `documents.get` | D1b | `crates/services/files-intents`, `crates/services/index`, `crates/libs/content` | M |
-| D2 | `notes`, with IMAP `NAMESPACE` and ACL | D0, A1a | `crates/apps/notes`, `crates/libs/mail-core` | M |
+| D2 | `notes`, with IMAP `NAMESPACE` and ACL | | `crates/apps/notes`, `crates/libs/mail-core` | M |
 | D3 | `accounts` | A1b | `crates/libs/intents-accounts` (`crates/libs/accounts` has no toolkit) | M |
-| D4 | `mail`: drafts with a store of their own, then reading, attachments with D1a; with C3 the outbox and sending | A1a, D1a | `crates/apps/mail` | L |
-| D5 | `calendar`, with `DAV:owner` and sharees | A1a | `crates/apps/calendar`, `crates/libs/dav` | M |
+| D4 | `mail`: drafts with a store of their own, then reading, attachments with D1a; with C3 the outbox and sending | D1a | `crates/apps/mail` | L |
+| D5 | `calendar`, with `DAV:owner` and sharees | | `crates/apps/calendar`, `crates/libs/dav` | M |
 | D6 | `clock` | | `crates/apps/clock` | S |
 | D7 | `media` | | `crates/libs/intents-media`, `crates/shell/quick-settings` | S |
 | D8 | `apps`, `windows`, `desktop` | C3 | `crates/libs/intents-apps`, `crates/platform` | M |
@@ -139,7 +139,7 @@ Search or a menu use it.
 | D20 | `machines`, `containers` | C3 | `crates/apps/velox` | M |
 | D21 | `calculator`, `dictionary` | | `crates/libs/intents-lookup` | S |
 | D22 | `speech` | | `crates/libs/intents-speech` | S |
-| D23 | `documents` for text, Markdown, RTF, ODT and DOCX | D0, D1a | `crates/apps/text-editor` | M |
+| D23 | `documents` for text, Markdown, RTF, ODT and DOCX | D1a | `crates/apps/text-editor` | M |
 
 ### Apps
 
@@ -147,9 +147,9 @@ Each has a [plan of its own](README.md). The app serves its domain from the firs
 
 | Id | App | Domain | Needs | Owns | Size |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| A1b | [Shared accounts](apps/contacts.md) | | A1a, C2 | `crates/libs/accounts`, `crates/libs/mail-core`, `crates/apps/{mail,notes,calendar,contacts,tasks}`, its pane in `crates/apps/settings` | L |
+| A1b | [Shared accounts](apps/contacts.md) | | C2 | `crates/libs/accounts`, `crates/libs/mail-core`, `crates/apps/{mail,notes,calendar,contacts,tasks}`, its pane in `crates/apps/settings` | L |
 | A1c | [Contacts' domain](apps/contacts.md) | `contacts` | D5 | `crates/apps/contacts`, `crates/libs/address-book` | M |
-| A2 | [Tasks](apps/tasks.md) | `tasks` | A1a, D5 | `crates/apps/tasks`, `crates/libs/{dav,content-lines}` | M |
+| A2 | [Tasks](apps/tasks.md) | `tasks` | D5 | `crates/apps/tasks`, `crates/libs/{dav,content-lines}` | M |
 | A3 | [Photos](apps/photos.md) | `photos` | D1c | `crates/apps/photos` | L |
 | A4 | [Music](apps/music.md) | `music` | C1 | `crates/apps/music` | L |
 | A5 | [Camera](apps/camera.md) | `camera` | C3, a computer with a camera | `crates/apps/camera` | M |
@@ -159,7 +159,7 @@ Each has a [plan of its own](README.md). The app serves its domain from the firs
 | A9 | [Mouse keys, dwell and colour filters](apps/assistive-input.md) | | C3 | `crates/platform` | M |
 | A10 | [Passwords](apps/passwords.md) | none | C2 | its part of `crates/apps/settings`, `crates/services/secrets` | M |
 | A11a | [Synced folders](apps/synced-folders.md): the engine and its simulator | | nothing | `crates/libs/sync` | L |
-| A11b | [Synced folders](apps/synced-folders.md): SFTP and WebDAV | | A11a, A1a | `crates/libs/sync`, `crates/libs/dav`, `crates/libs/askpass`, `crates/services/automount` | L |
+| A11b | [Synced folders](apps/synced-folders.md): SFTP and WebDAV | | A11a | `crates/libs/sync`, `crates/libs/dav`, `crates/libs/askpass`, `crates/services/automount` | L |
 | A11c | [Synced folders](apps/synced-folders.md): service and Files | part of `files` | A11b, D1a | `crates/services/sync`, `crates/services/files-intents`, `crates/apps/files` | L |
 
 ### In waves
@@ -179,7 +179,7 @@ mail. An agent that reads, shows and changes needs no prompt.
 
 `crates/apps/settings` is changed by one package at a time: C2, D1a, C4, D12, D13, C8, A1b, D17,
 D19, A10, A8. `crates/platform`: C3, A9, D8. `crates/libs/content`: D1c, A7.
-`crates/shell/quick-settings`: D7, C8. `crates/apps/{mail,calendar,contacts,notes}`: A1a, then D2,
+`crates/shell/quick-settings`: D7, C8. `crates/apps/{mail,calendar,contacts,notes}`: D2,
 D4, D5, A1c, then A1b.
 
 ## C3 in detail

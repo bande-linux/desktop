@@ -47,5 +47,5 @@ pub use reopen::{
     running_apps_contents, running_apps_file, saved_windows_file, set_aside_apps_of_unclean_end,
     take_apps_to_reopen,
 };
-pub use units::unit_app_ids;
+pub use units::{cgroup_unit, is_scope_of, unit_app_ids};
 pub use uri::{file_uri, path_from_file_uri, percent_decode, percent_encode};

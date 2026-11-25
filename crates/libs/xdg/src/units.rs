@@ -36,6 +36,20 @@ pub(crate) fn scope_name(app_id: &str, pid: u32) -> String {
     format!("app-bande-{escaped}-{pid}.scope")
 }
 
+pub fn cgroup_unit(cgroup: &str) -> Option<&str> {
+    cgroup
+        .lines()
+        .find_map(|line| line.strip_prefix("0::"))?
+        .rsplit('/')
+        .next()
+}
+
+pub fn is_scope_of(unit: &str, pid: u32) -> bool {
+    unit.strip_suffix(".scope")
+        .and_then(|scope| scope.rsplit_once('-'))
+        .is_some_and(|(_, number)| number == pid.to_string())
+}
+
 pub fn unit_app_ids(unit: &str) -> Vec<String> {
     let Some(rest) = unit.strip_prefix("app-") else {
         return Vec::new();

@@ -3,7 +3,7 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
 use crate::entry::{DesktopEntry, find_executable};
-use crate::units::unit_app_ids;
+use crate::units::{cgroup_unit, is_scope_of, unit_app_ids};
 
 const LAUNCHERS: &[&str] = &[
     "bash", "dash", "env", "fish", "flatpak", "java", "node", "perl", "pkexec", "python",
@@ -123,16 +123,9 @@ pub fn running_app<'a>(
 }
 
 fn trusted_scope(cgroup: &str, pid: u32) -> Option<&str> {
-    let unit = cgroup
-        .lines()
-        .find_map(|line| line.strip_prefix("0::"))?
-        .rsplit('/')
-        .next()?;
+    let unit = cgroup_unit(cgroup)?;
     let scope = unit.strip_suffix(".scope")?;
-    let own = scope
-        .rsplit_once('-')
-        .is_some_and(|(_, number)| number == pid.to_string());
-    (own || scope.starts_with("app-flatpak-")).then_some(unit)
+    (is_scope_of(unit, pid) || scope.starts_with("app-flatpak-")).then_some(unit)
 }
 
 fn process_executable(process: &Path) -> Option<PathBuf> {

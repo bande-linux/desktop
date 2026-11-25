@@ -3,9 +3,10 @@ use std::process;
 use std::sync::mpsc::{self, Receiver};
 use std::thread;
 
+use bande_bus::systemd::main_pid;
 use bande_inbox::Outbox;
 use zbus::blocking::fdo::DBusProxy;
-use zbus::blocking::{Connection, MessageIterator, Proxy};
+use zbus::blocking::{Connection, MessageIterator};
 use zbus::fdo::RequestNameFlags;
 use zbus::names::BusName;
 use zbus::proxy::CacheProperties;
@@ -20,10 +21,6 @@ const ITEM_INTERFACE: &str = "org.kde.StatusNotifierItem";
 const WATCHER_INTERFACE: &str = "org.kde.StatusNotifierWatcher";
 const WATCHER: &str = "org.kde.StatusNotifierWatcher";
 const MENU_INTERFACE: &str = "com.canonical.dbusmenu";
-const SYSTEMD: &str = "org.freedesktop.systemd1";
-const SYSTEMD_PATH: &str = "/org/freedesktop/systemd1";
-const SYSTEMD_MANAGER: &str = "org.freedesktop.systemd1.Manager";
-const SYSTEMD_SERVICE: &str = "org.freedesktop.systemd1.Service";
 const AUTOSTARTED: &str = "@autostart.service";
 const ICON_PIXELS: i32 = 32;
 const BUS: &str = "org.freedesktop.DBus";
@@ -136,34 +133,21 @@ fn item_proxy<'a>(connection: &Connection, id: &'a str) -> zbus::Result<StatusNo
         .build()
 }
 
-fn owner_pid(connection: &Connection, id: &str) -> Option<u32> {
-    let owner = BusName::try_from(split(id).0).ok()?;
-    let bus = DBusProxy::new(connection).ok()?;
-    bus.get_connection_unix_process_id(owner).ok()
-}
-
-fn main_pid(connection: &Connection, unit: &str) -> zbus::Result<u32> {
-    let manager = Proxy::new(connection, SYSTEMD, SYSTEMD_PATH, SYSTEMD_MANAGER)?;
-    let path: OwnedObjectPath = manager.call("GetUnit", &unit)?;
-    Proxy::new(connection, SYSTEMD, path, SYSTEMD_SERVICE)?.get_property("MainPID")
+fn owner_pid(connection: &Connection, id: &str) -> zbus::Result<u32> {
+    let owner = BusName::try_from(split(id).0)?;
+    Ok(DBusProxy::new(connection)?.get_connection_unix_process_id(owner)?)
 }
 
 fn own_unit(connection: &Connection, pid: u32) -> Option<String> {
-    let cgroup = fs::read_to_string(format!("/proc/{pid}/cgroup")).ok()?;
-    let unit = cgroup
-        .lines()
-        .find_map(|line| line.strip_prefix("0::"))?
-        .rsplit('/')
-        .next()?;
-    let own = match unit.strip_suffix(".scope") {
-        Some(scope) => scope.ends_with(&format!("-{pid}")),
-        None => {
-            unit.ends_with(AUTOSTARTED)
-                && main_pid(connection, unit)
-                    .inspect_err(|error| tracing::debug!("no main process of {unit}: {error}"))
-                    .is_ok_and(|main| main == pid)
-        }
-    };
+    let cgroup = fs::read_to_string(format!("/proc/{pid}/cgroup"))
+        .inspect_err(|error| tracing::debug!("no unit of process {pid}: {error}"))
+        .ok()?;
+    let unit = bande_xdg::cgroup_unit(&cgroup)?;
+    let own = bande_xdg::is_scope_of(unit, pid)
+        || (unit.ends_with(AUTOSTARTED)
+            && main_pid(connection, unit)
+                .inspect_err(|error| tracing::debug!("no main process of {unit}: {error}"))
+                .is_ok_and(|main| main == Some(pid)));
     own.then(|| unit.to_owned())
 }
 
@@ -204,7 +188,9 @@ fn fetch(connection: &Connection, id: &str) -> Option<TrayItem> {
         .ok()
         .filter(|path| path.as_str() != "/")
         .map(|path| format!("{}{}", split(id).0, path.as_str()));
-    let pid = owner_pid(connection, id);
+    let pid = owner_pid(connection, id)
+        .inspect_err(|error| tracing::debug!("no process of the status item {id}: {error}"))
+        .ok();
     Some(TrayItem {
         id: id.to_owned(),
         title: item.title().unwrap_or_default(),

@@ -330,6 +330,11 @@ UI.
 - Every toolkit widget produces an AccessKit node, published on AT-SPI2 for screen readers
   ([toolkit](toolkit.md)).
 
+### Intent owners
+
+- `bande-settings-intents` and `bande-system-intents` serve [intents](intents.md) (`org.bande.Intents.*`).
+  Both are D-Bus activated user units outside every target and end after an idle minute.
+
 ### Keyring (`bande-secrets`)
 
 - `crates/services/secrets` is the session's `org.freedesktop.secrets` (`plain` and

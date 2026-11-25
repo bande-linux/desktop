@@ -1,12 +1,15 @@
 use std::collections::HashMap;
+use std::io::Cursor;
 use std::sync::Arc;
 
+use skrifa::bitmap::{BitmapData, Origin};
 use skrifa::instance::{LocationRef, NormalizedCoord, Size};
 use skrifa::outline::{DrawSettings, OutlinePen};
 use skrifa::raw::TableProvider;
 use skrifa::{FontRef, GlyphId, MetadataProvider, Tag};
 use vello_cpu::kurbo::{self, Affine, BezPath};
 
+use crate::scene::{Image, Rect};
 use crate::text::GlyphRun;
 
 pub(crate) const TOLERANCE: f64 = 0.004;
@@ -18,6 +21,7 @@ const COLOR_TABLES: [Tag; 4] = [
     Tag::new(b"SVG "),
 ];
 const UNUSED_FRAMES: u64 = 64;
+const LARGEST_BITMAP: u32 = 2048;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct FontKey {
@@ -39,14 +43,22 @@ pub(crate) struct GlyphOutline {
     pub(crate) bounds: kurbo::Rect,
 }
 
-struct Entry {
-    outline: Option<Arc<GlyphOutline>>,
+pub(crate) struct GlyphBitmap {
+    pub(crate) image: Image,
+    area: Rect,
+    on_pixels: bool,
+}
+
+struct Entry<T> {
+    drawn: Option<Arc<T>>,
     used: u64,
 }
 
 #[derive(Default)]
 pub(crate) struct GlyphOutlines {
-    glyphs: HashMap<GlyphKey, Entry>,
+    glyphs: HashMap<GlyphKey, Entry<GlyphOutline>>,
+    bitmaps: HashMap<GlyphKey, Entry<GlyphBitmap>>,
+    scale: f64,
     color_fonts: HashMap<FontKey, bool>,
     frame: u64,
 }
@@ -82,7 +94,31 @@ impl OutlinePen for Pen {
     }
 }
 
+impl GlyphBitmap {
+    pub(crate) fn placed(&self, x: f32, y: f32, scale: f64) -> Rect {
+        if !self.on_pixels {
+            return Rect {
+                x: x + self.area.x,
+                y: y + self.area.y,
+                ..self.area
+            };
+        }
+        let on_pixel = |at: f32| ((f64::from(at) * scale).round() / scale) as f32;
+        let length = |pixels: u32| (f64::from(pixels) / scale) as f32;
+        Rect::new(
+            on_pixel(x + self.area.x),
+            on_pixel(y + self.area.y),
+            length(self.image.width()),
+            length(self.image.height()),
+        )
+    }
+}
+
 impl GlyphOutlines {
+    pub(crate) fn scale(&self) -> f64 {
+        self.scale
+    }
+
     pub(crate) fn is_color_font(&mut self, run: &GlyphRun) -> bool {
         *self.color_fonts.entry(font_key(run)).or_insert_with(|| {
             FontRef::from_index(run.font_bytes(), run.font_index()).is_ok_and(|font| {
@@ -94,28 +130,48 @@ impl GlyphOutlines {
     }
 
     pub(crate) fn outline(&mut self, run: &GlyphRun, glyph: u32) -> Option<Arc<GlyphOutline>> {
-        let key = GlyphKey {
-            font: font_key(run),
-            glyph,
-            size: run.size.to_bits(),
-            skew: run.skew_degrees.map(f32::to_bits),
-            coords: run.variation_coords().to_vec(),
-        };
         let frame = self.frame;
-        let entry = self.glyphs.entry(key).or_insert_with(|| Entry {
-            outline: draw(run, glyph).map(|path| {
-                let bounds = path.control_box();
-                Arc::new(GlyphOutline { path, bounds })
-            }),
-            used: frame,
-        });
+        let entry = self
+            .glyphs
+            .entry(glyph_key(run, glyph))
+            .or_insert_with(|| Entry {
+                drawn: draw(run, glyph).map(|path| {
+                    let bounds = path.control_box();
+                    Arc::new(GlyphOutline { path, bounds })
+                }),
+                used: frame,
+            });
         entry.used = frame;
-        entry.outline.clone()
+        entry.drawn.clone()
+    }
+
+    pub(crate) fn bitmap(&mut self, run: &GlyphRun, glyph: u32) -> Option<Arc<GlyphBitmap>> {
+        let (frame, scale) = (self.frame, self.scale);
+        let entry = self
+            .bitmaps
+            .entry(glyph_key(run, glyph))
+            .or_insert_with(|| Entry {
+                drawn: bitmap(run, glyph, scale).map(Arc::new),
+                used: frame,
+            });
+        entry.used = frame;
+        entry.drawn.clone()
+    }
+
+    pub(crate) fn rescale(&mut self, scale: f64) -> bool {
+        let rescaled = self.scale != scale;
+        if rescaled {
+            self.scale = scale;
+            self.bitmaps.clear();
+        }
+        rescaled
     }
 
     pub(crate) fn end_frame(&mut self) {
         let frame = self.frame;
         self.glyphs
+            .retain(|_, entry| frame - entry.used < UNUSED_FRAMES);
+        self.bitmaps
             .retain(|_, entry| frame - entry.used < UNUSED_FRAMES);
         self.frame += 1;
     }
@@ -126,6 +182,75 @@ fn font_key(run: &GlyphRun) -> FontKey {
         blob: run.font_id(),
         index: run.font_index(),
     }
+}
+
+fn glyph_key(run: &GlyphRun, glyph: u32) -> GlyphKey {
+    GlyphKey {
+        font: font_key(run),
+        glyph,
+        size: run.size.to_bits(),
+        skew: run.skew_degrees.map(f32::to_bits),
+        coords: run.variation_coords().to_vec(),
+    }
+}
+
+fn bitmap(run: &GlyphRun, glyph: u32, scale: f64) -> Option<GlyphBitmap> {
+    let font = FontRef::from_index(run.font_bytes(), run.font_index()).ok()?;
+    let id = GlyphId::new(glyph);
+    if font.color_glyphs().get(id).is_some() {
+        return None;
+    }
+    let strike = font
+        .bitmap_strikes()
+        .glyph_for_size(Size::new(run.size), id)?;
+    let BitmapData::Png(png) = strike.data else {
+        return None;
+    };
+    let mut reader = image::ImageReader::with_format(Cursor::new(png), image::ImageFormat::Png);
+    let mut limits = image::Limits::default();
+    limits.max_image_width = Some(LARGEST_BITMAP);
+    limits.max_image_height = Some(LARGEST_BITMAP);
+    reader.limits(limits);
+    let mut pixels = reader.decode().ok()?.into_rgba8();
+    for pixel in pixels.pixels_mut() {
+        let alpha = u16::from(pixel[3]);
+        for channel in &mut pixel.0[..3] {
+            *channel = ((u16::from(*channel) * alpha + 127) / 255) as u8;
+        }
+    }
+    let (width, height) = pixels.dimensions();
+    let (across, down) = (run.size / strike.ppem_x, run.size / strike.ppem_y);
+    let em = run.size / f32::from(font.head().ok()?.units_per_em());
+    let top = match strike.placement_origin {
+        Origin::TopLeft => 0.0,
+        Origin::BottomLeft => -(height as f32),
+    };
+    let area = Rect::new(
+        strike.bearing_x * em + strike.inner_bearing_x * across,
+        -strike.bearing_y * em + (top - strike.inner_bearing_y) * down,
+        width as f32 * across,
+        height as f32 * down,
+    );
+    let on_screen = |length: f32| ((f64::from(length) * scale).round() as u32).max(1);
+    let sized = (on_screen(area.width), on_screen(area.height));
+    let on_pixels = sized.0.max(sized.1) <= LARGEST_BITMAP;
+    let shown = match on_pixels {
+        true => sized,
+        false => (width, height),
+    };
+    if shown != (width, height) {
+        pixels = image::imageops::resize(
+            &pixels,
+            shown.0,
+            shown.1,
+            image::imageops::FilterType::Triangle,
+        );
+    }
+    Some(GlyphBitmap {
+        image: Image::from_premultiplied(shown.0, shown.1, pixels.into_raw())?,
+        area,
+        on_pixels,
+    })
 }
 
 fn draw(run: &GlyphRun, glyph: u32) -> Option<BezPath> {

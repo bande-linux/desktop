@@ -14,7 +14,7 @@ use wgpu::hal;
 
 use crate::damage::Region;
 use crate::dmabuf::{SHARED_FORMAT, SharedImage, Sharing};
-use crate::draw::{self, Caches, Canvas, Frame};
+use crate::draw::{self, Caches, Canvas, Frame, Recording};
 use crate::render::{DrawError, Snapshot};
 use crate::scene::{Image, Scene};
 use crate::text::GlyphRun;
@@ -424,22 +424,18 @@ impl GpuRenderer {
     ) -> Result<wgpu::CommandEncoder, DrawError> {
         let (width, height) = crate::render::extent(scene, scale)?;
         self.scene.reset_and_resize(width, height);
-        self.upload_images(scene);
+        let frame = Frame {
+            scale,
+            origin: (0, 0),
+            size: (width, height),
+        };
+        let recording = Recording::new(&mut self.caches, &scene.items, &frame, damage);
+        self.upload_images(recording.images(&self.caches));
         let mut canvas = GpuCanvas {
             scene: &mut self.scene,
             resources: &mut self.resources,
         };
-        draw::encode(
-            &mut canvas,
-            &mut self.caches,
-            &scene.items,
-            &Frame {
-                scale,
-                origin: (0, 0),
-                size: (width, height),
-            },
-            damage,
-        );
+        recording.replay(&mut canvas, &mut self.caches);
         let cleared: Vec<RectU16> = damage
             .unwrap_or_default()
             .iter()
@@ -494,9 +490,7 @@ impl GpuRenderer {
         Ok(encoder)
     }
 
-    fn upload_images(&mut self, scene: &Scene) {
-        let mut images = Vec::new();
-        draw::images(&scene.items, &mut images);
+    fn upload_images(&mut self, mut images: Vec<Image>) {
         images.sort_by_key(Image::id);
         images.dedup_by_key(|image| image.id());
         let needed = images
@@ -698,10 +692,12 @@ mod tests {
     use super::*;
     use crate::dmabuf::SharedPlane;
     use crate::scene::{Item, Paint, Point, Rect, Shape};
+    use crate::text::{TextAlign, TextStyle, TextSystem};
     use bande_design::Color;
 
     const LINEAR: u64 = 0;
     const LAYER_ROUNDING: u8 = 1;
+    const SAMPLING_ROUNDING: u8 = 2;
     const SIDE: u32 = 64;
     const DMA_BUF_IOCTL_SYNC: libc::c_ulong = 0x4008_6200;
     const SYNC_READ_START: u64 = 1;
@@ -1013,6 +1009,55 @@ mod tests {
             }
         }
         assert!(wrong.is_empty(), "channels differ: {wrong:?}");
+    }
+
+    #[test]
+    fn an_emoji_shows_the_same_on_the_gpu_and_the_cpu() {
+        let _turn = device_turn();
+        let linear = [vec![LINEAR]];
+        let Some(gpu) = GpuDevice::shared(false, None)
+            .ok()
+            .filter(|gpu| gpu.shares_images(&linear))
+        else {
+            eprintln!("skipped, no GPU to share images from");
+            return;
+        };
+        let mut text = TextSystem::new();
+        let mut renderer = GpuRenderer::with_device(Arc::clone(&gpu), (SIDE, SIDE));
+        for size in [9.0, 20.0, 60.0] {
+            let scene = scene_of(&[Item::Text {
+                origin: Point::new(3.3, 2.0),
+                paragraph: text.paragraph(
+                    "🎉",
+                    TextStyle::new(size, Color::BLACK),
+                    None,
+                    TextAlign::Start,
+                ),
+            }]);
+            let image = gpu
+                .shared_image((SIDE, SIDE), &linear)
+                .expect("a shared image");
+            renderer
+                .present(&scene, 1.0, &image, None)
+                .expect("a frame with an emoji");
+            let shown = pixels(&image, &everywhere());
+            let drawn: Vec<[u8; 4]> = crate::cpu::CpuRenderer::new()
+                .render(&scene)
+                .expect("the same frame on the CPU")
+                .rgba
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|&[red, green, blue, alpha]| [blue, green, red, alpha])
+                .collect();
+            let differs = furthest(&shown, &drawn);
+            let yellow = |&[blue, green, red, _]: &[u8; 4]| red > 180 && green > 100 && blue < 100;
+            assert!(shown.iter().any(yellow), "at {size}: no emoji is shown");
+            assert!(
+                differs.is_some_and(|differs| differs <= SAMPLING_ROUNDING),
+                "at {size}: a channel differs by {differs:?}"
+            );
+        }
     }
 
     #[test]

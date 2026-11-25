@@ -1,3 +1,6 @@
+use std::borrow::Cow;
+use std::cmp::Reverse;
+
 use crate::{
     Builder, ListMarker, Paragraph, ParagraphAttributes, RichText, TextAttributes, code, heading,
     heading_level, is_code, link, paragraphs,
@@ -6,7 +9,11 @@ use crate::{
 const SEARCH_LIMIT: usize = 4096;
 const MAX_LEVEL: usize = 8;
 const MAX_BRACKETS: usize = 32;
+const MAX_NUMBER_DIGITS: usize = 9;
 const MIN_FENCE: usize = 3;
+const BYTE_ORDER_MARK: char = '\u{feff}';
+const FOREIGN_AUTOLINKS: [&str; 2] = ["ftp", "xmpp"];
+const MARKERS: [&str; 3] = ["**", "*", "~~"];
 
 #[derive(Clone, Copy, PartialEq)]
 enum Dialect {
@@ -56,17 +63,12 @@ fn list_item(line: &str) -> Option<(usize, ListMarker, &str)> {
         digits,
         rest.strip_prefix(". ").or_else(|| rest.strip_prefix(") ")),
     ) {
-        (1..=9, Some(rest)) => Some((level, ListMarker::Number, rest)),
+        (1..=MAX_NUMBER_DIGITS, Some(rest)) => Some((level, ListMarker::Number, rest)),
         _ => None,
     }
 }
 
-const DELIMITERS: [&str; 7] = ["`", "](", "**", "__", "~~", "*", "_"];
-
-fn is_escaped(text: &str, at: usize) -> bool {
-    let before = &text[..at];
-    (before.len() - before.trim_end_matches('\\').len()) % 2 == 1
-}
+const DELIMITERS: [&str; 6] = ["`", "**", "__", "~~", "*", "_"];
 
 struct Closings(Vec<Vec<usize>>);
 
@@ -75,12 +77,7 @@ impl Closings {
         Self(
             DELIMITERS
                 .iter()
-                .map(|delimiter| {
-                    text.match_indices(delimiter)
-                        .map(|(at, _)| at)
-                        .filter(|at| *delimiter != "](" || !is_escaped(text, *at))
-                        .collect()
-                })
+                .map(|delimiter| text.match_indices(delimiter).map(|(at, _)| at).collect())
                 .collect(),
         )
     }
@@ -95,22 +92,33 @@ impl Closings {
     }
 }
 
-fn is_balanced(label: &str) -> bool {
-    let mut depth = 0;
-    let mut characters = label.chars();
-    while let Some(character) = characters.next() {
+fn label_end(text: &str, from: usize, dialect: Dialect) -> Option<usize> {
+    let mut open_images = Vec::new();
+    let mut previous = None;
+    let mut characters = text[from..].char_indices();
+    while let Some((at, character)) = characters.next() {
+        if at > SEARCH_LIMIT {
+            return None;
+        }
         match character {
             '\\' => {
                 characters.next();
             }
-            '[' if depth == MAX_BRACKETS => return false,
-            '[' => depth += 1,
-            ']' if depth == 0 => return false,
-            ']' => depth -= 1,
+            '[' if open_images.len() == MAX_BRACKETS => return None,
+            '[' => open_images.push(dialect == Dialect::Sanitised && previous == Some('!')),
+            ']' => {
+                let targeted = text[from + at + 1..].starts_with('(');
+                match open_images.pop() {
+                    None => return targeted.then_some(from + at),
+                    Some(false) if targeted => return None,
+                    Some(_) => {}
+                }
+            }
             _ => {}
         }
+        previous = Some(character);
     }
-    depth == 0
+    None
 }
 
 fn destination_end(text: &str, from: usize) -> Option<usize> {
@@ -168,11 +176,10 @@ fn allowed(url: &str) -> Option<String> {
         .then(|| url.trim().to_owned())
 }
 
-fn written_url(url: &str) -> String {
+fn percent_encoded(url: &str) -> String {
     let mut out = String::with_capacity(url.len());
     for character in url.chars() {
         match character {
-            '&' => out.push_str("&amp;"),
             '(' | ')' | '<' | '>' | '"' | '\\' | '`' => {
                 out.push_str(&format!("%{:02X}", u32::from(character)));
             }
@@ -200,6 +207,7 @@ fn linked(url: &str, attributes: &TextAttributes) -> TextAttributes {
 fn inline(builder: &mut Builder, text: &str, base: &TextAttributes, dialect: Dialect) {
     let closings = Closings::new(text);
     let mut attributes = base.clone();
+    let mut toggled = [false; 3];
     let mut plain = String::new();
     let mut at = 0;
     let flush = |builder: &mut Builder, plain: &mut String, attributes: &TextAttributes| {
@@ -231,8 +239,7 @@ fn inline(builder: &mut Builder, text: &str, base: &TextAttributes, dialect: Dia
         let image = dialect == Dialect::Sanitised && rest.starts_with("![");
         let label = at + 1 + usize::from(image);
         if (character == '[' || image)
-            && let Some(middle) = closings.after(label, "](")
-            && is_balanced(&text[label..middle])
+            && let Some(middle) = label_end(text, label, dialect)
             && let Some(end) = destination_end(text, middle + 2)
         {
             flush(builder, &mut plain, &attributes);
@@ -262,20 +269,10 @@ fn inline(builder: &mut Builder, text: &str, base: &TextAttributes, dialect: Dia
             .iter()
             .find(|(delimiter, _)| rest.starts_with(delimiter));
         let toggle = longest.filter(|(delimiter, kind)| {
-            let allowed = match kind {
-                1 if *delimiter == "_" => {
-                    let before = text[..at].chars().next_back();
-                    attributes.italic || !before.is_some_and(char::is_alphanumeric)
-                }
-                _ => true,
-            };
-            let active = match kind {
-                0 => attributes.bold,
-                1 => attributes.italic,
-                _ => attributes.strikethrough,
-            };
-            let after = rest[delimiter.len()..].chars().next();
+            let active = toggled[*kind];
             let before = text[..at].chars().next_back();
+            let allowed = *delimiter != "_" || active || !before.is_some_and(char::is_alphanumeric);
+            let after = rest[delimiter.len()..].chars().next();
             let flanking = match active {
                 true => before.is_some_and(|character| !character.is_whitespace()),
                 false => after.is_some_and(|character| !character.is_whitespace()),
@@ -286,11 +283,10 @@ fn inline(builder: &mut Builder, text: &str, base: &TextAttributes, dialect: Dia
         });
         if let Some((delimiter, kind)) = toggle {
             flush(builder, &mut plain, &attributes);
-            match kind {
-                0 => attributes.bold = !attributes.bold,
-                1 => attributes.italic = !attributes.italic,
-                _ => attributes.strikethrough = !attributes.strikethrough,
-            }
+            toggled[*kind] = !toggled[*kind];
+            attributes.bold = base.bold || toggled[0];
+            attributes.italic = base.italic || toggled[1];
+            attributes.strikethrough = base.strikethrough || toggled[2];
             at += delimiter.len();
             continue;
         }
@@ -314,6 +310,15 @@ fn fence(content: &str) -> Option<(char, usize)> {
 
 pub fn read(text: &str) -> RichText {
     parse(text, Dialect::Authored)
+}
+
+fn printable(character: char) -> char {
+    match character {
+        '\t' => character,
+        BYTE_ORDER_MARK | '\u{2028}' | '\u{2029}' => ' ',
+        _ if character.is_control() => ' ',
+        _ => character,
+    }
 }
 
 fn without_metadata(text: &str) -> &str {
@@ -342,11 +347,10 @@ fn without_metadata(text: &str) -> &str {
 /// block is left out and only links to `https`, `http` and `mailto` keep their target.
 pub fn read_sanitised(text: &str) -> RichText {
     let text: String = text
-        .trim_start_matches('\u{feff}')
         .replace("\r\n", "\n")
-        .replace('\r', "\n")
+        .replace(['\r', '\u{2028}', '\u{2029}'], "\n")
         .chars()
-        .filter(|character| !character.is_control() || matches!(character, '\n' | '\t'))
+        .filter(|character| *character == '\n' || printable(*character) == *character)
         .collect();
     parse(without_metadata(&text), Dialect::Sanitised)
 }
@@ -443,10 +447,11 @@ fn parse(text: &str, dialect: Dialect) -> RichText {
                 level: 1,
                 ..ParagraphAttributes::default()
             };
-            if !reader.open {
-                reader.start(attributes, false);
-            } else {
+            if reader.open && *reader.builder.paragraph() == attributes {
                 reader.builder.text(" ", &TextAttributes::default());
+            } else {
+                reader.gap |= reader.open;
+                reader.start(attributes, false);
             }
             let italic = TextAttributes {
                 italic: true,
@@ -470,19 +475,33 @@ fn parse(text: &str, dialect: Dialect) -> RichText {
     reader.builder.finish()
 }
 
-fn escape(text: &str, dialect: Dialect, line_start: bool, out: &mut String) {
-    let digits = text.chars().take_while(char::is_ascii_digit).count();
-    let mut characters = text.char_indices().peekable();
-    while let Some((at, character)) = characters.next() {
-        let next = characters.peek().map(|(_, next)| *next);
+fn is_list_number(text: &str) -> bool {
+    (1..=MAX_NUMBER_DIGITS).contains(&text.len()) && text.bytes().all(|byte| byte.is_ascii_digit())
+}
+
+fn is_foreign_autolink(written: &str) -> bool {
+    let word = written
+        .rsplit(|character: char| !character.is_ascii_alphabetic())
+        .next()
+        .unwrap_or_default();
+    FOREIGN_AUTOLINKS
+        .iter()
+        .any(|scheme| word.eq_ignore_ascii_case(scheme))
+}
+
+fn escape(text: &str, dialect: Dialect, line_start: usize, out: &mut String) {
+    let mut characters = text.chars().peekable();
+    while let Some(character) = characters.next() {
+        let next = characters.peek();
         let special = match character {
             '\\' | '*' | '_' | '`' | '[' | ']' | '~' => true,
             _ if dialect == Dialect::Authored => false,
             '<' | '#' => true,
-            '&' => next.is_none_or(|next| next == '#' || next.is_ascii_alphanumeric()),
+            '&' => next.is_none_or(|next| *next == '#' || next.is_ascii_alphanumeric()),
             '!' => next.is_none(),
-            '-' | '+' | '=' | '>' => line_start && at == 0,
-            '.' | ')' => line_start && at > 0 && at == digits,
+            '-' | '+' | '=' | '>' => out.len() == line_start,
+            ':' => is_foreign_autolink(&out[line_start..]),
+            '.' | ')' => is_list_number(&out[line_start..]),
             _ => false,
         };
         if special {
@@ -504,8 +523,24 @@ fn is_code_block(paragraph: &Paragraph<'_>) -> bool {
 fn span_target(span: &TextAttributes, dialect: Dialect) -> Option<String> {
     let url = span.link.as_deref()?;
     match dialect {
-        Dialect::Authored => Some(url.to_owned()),
-        Dialect::Sanitised => allowed(url).map(|url| written_url(&url)),
+        Dialect::Authored if destination_end(&format!("{url})"), 0) == Some(url.len()) => {
+            Some(url.to_owned())
+        }
+        Dialect::Authored => Some(percent_encoded(url)),
+        Dialect::Sanitised => allowed(url).map(|url| percent_encoded(&url).replace('&', "&amp;")),
+    }
+}
+
+fn is_marked(
+    marker: &str,
+    span: &TextAttributes,
+    paragraph: ParagraphAttributes,
+    heading: bool,
+) -> bool {
+    match marker {
+        "**" => span.bold && !heading,
+        "*" => span.italic && (paragraph.level == 0 || paragraph.list.is_some()),
+        _ => span.strikethrough,
     }
 }
 
@@ -529,43 +564,56 @@ fn line(paragraph: &Paragraph<'_>, number: usize, dialect: Dialect) -> String {
         (None, None) if attributes.level > 0 => out.push_str("> "),
         (None, None) => {}
     }
-    let marker = out.len();
-    for (text, span) in &paragraph.spans {
-        let line_start = out.len() == marker;
-        let text = match line_start && dialect == Dialect::Sanitised && !is_code(span) {
-            true => text.trim_start(),
-            false => text,
+    let line_start = out.len();
+    let mut open: Vec<&str> = Vec::new();
+    let mut gap = String::new();
+    for (index, (text, span)) in paragraph.spans.iter().enumerate() {
+        let text: Cow<'_, str> = match dialect {
+            Dialect::Authored => Cow::Borrowed(text),
+            Dialect::Sanitised => text.chars().map(printable).collect(),
         };
-        if text.is_empty() {
-            continue;
-        }
-        let mut open = String::new();
-        if level.is_none() && span.bold {
-            open.push_str("**");
-        }
-        if span.italic && attributes.level == 0 || span.italic && attributes.list.is_some() {
-            open.push('*');
-        }
-        if span.strikethrough {
-            open.push_str("~~");
-        }
-        let close: String = open.chars().rev().collect();
-        let shown = match open.is_empty() || is_code(span) {
-            true => text,
+        let shown = match is_code(span) {
+            true => &text,
             false => text.trim(),
         };
         if shown.is_empty() {
-            out.push_str(text);
+            gap.push_str(&text);
             continue;
         }
-        let leading = text.len() - text.trim_start().len();
-        let (before, after) = match shown.len() == text.len() {
+        let (before, after) = match is_code(span) {
             true => ("", ""),
-            false => (&text[..leading], &text[leading + shown.len()..]),
+            false => (
+                &text[..text.len() - text.trim_start().len()],
+                &text[text.trim_end().len()..],
+            ),
         };
-        out.push_str(before);
-        let line_start = line_start && open.is_empty();
-        out.push_str(&open);
+        let kept = open
+            .iter()
+            .take_while(|marker| is_marked(marker, span, attributes, level.is_some()))
+            .count();
+        out.extend(open.drain(kept..).rev());
+        if out.len() > line_start || dialect == Dialect::Authored {
+            out.push_str(&gap);
+            out.push_str(before);
+        }
+        gap.clear();
+        gap.push_str(after);
+        let mut opened: Vec<&str> = MARKERS
+            .into_iter()
+            .filter(|marker| {
+                !open.contains(marker) && is_marked(marker, span, attributes, level.is_some())
+            })
+            .collect();
+        opened.sort_by_key(|marker| {
+            Reverse(
+                paragraph.spans[index..]
+                    .iter()
+                    .take_while(|(_, span)| is_marked(marker, span, attributes, level.is_some()))
+                    .count(),
+            )
+        });
+        out.extend(opened.iter().copied());
+        open.append(&mut opened);
         match (span_target(span, dialect), is_code(span)) {
             (_, true) => {
                 out.push('`');
@@ -574,15 +622,17 @@ fn line(paragraph: &Paragraph<'_>, number: usize, dialect: Dialect) -> String {
             }
             (Some(url), false) => {
                 out.push('[');
-                escape(shown, dialect, false, &mut out);
+                escape(shown, dialect, line_start, &mut out);
                 out.push_str("](");
                 out.push_str(&url);
                 out.push(')');
             }
             (None, false) => escape(shown, dialect, line_start, &mut out),
         }
-        out.push_str(&close);
-        out.push_str(after);
+    }
+    out.extend(open.into_iter().rev());
+    if dialect == Dialect::Authored {
+        out.push_str(&gap);
     }
     out
 }
@@ -597,9 +647,8 @@ pub fn write_sanitised(rich: &RichText) -> String {
     compose(rich, Dialect::Sanitised)
         .chars()
         .map(|character| match character {
-            '\n' | '\t' => character,
-            _ if character.is_control() => ' ',
-            _ => character,
+            '\n' => character,
+            _ => printable(character),
         })
         .collect()
 }
@@ -734,12 +783,26 @@ mod tests {
             ("````\n```\n<img>\n````", "````\n```\n<img>\n````\n"),
             ("[a [b]](https://e.org)", "[a \\[b\\]](https://e.org)\n"),
             ("a\u{0}\rb", "a b\n"),
+            ("a\u{2028}b", "a b\n"),
+            (
+                "see FTP://e.org or https://e.org",
+                "see FTP\\://e.org or https://e.org\n",
+            ),
+            ("\u{0}\u{feff}---\na: b\n---\ntext", "text\n"),
+            (
+                "[![p](https://e.org/p.png)](https://e.org)",
+                "[p](https://e.org)\n",
+            ),
+            ("# **T** 2**8", "# T 2\\*\\*8\n"),
+            ("*`x`, y*\n> a_b", "*`x`, y*\n\n> a\\_b\n"),
         ] {
             assert_eq!(sanitise(source), expected, "{source}");
             assert_eq!(sanitise(expected), expected, "{source}");
         }
 
         let mut builder = Builder::default();
+        builder.text("\u{feff}---", &TextAttributes::default());
+        builder.end_paragraph(ParagraphAttributes::default());
         builder.text("!", &TextAttributes::default());
         builder.text("x", &link("https://e.org/) <img src=x>"));
         builder.text("y", &link("javascript:z"));
@@ -749,7 +812,7 @@ mod tests {
         builder.text("<img>", &code());
         assert_eq!(
             write_sanitised(&builder.finish()),
-            "\\![x](https://e.org/%29%20%3Cimg%20src=x%3E)y\n\n````\n```\n<img>\n````\n"
+            "\\---\n\n\\![x](https://e.org/%29%20%3Cimg%20src=x%3E)y\n\n````\n```\n<img>\n````\n"
         );
 
         for hostile in [

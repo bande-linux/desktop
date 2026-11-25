@@ -52,6 +52,11 @@ pub(crate) struct GlyphBitmap {
     on_pixels: bool,
 }
 
+pub(crate) enum ColourGlyph {
+    Layers,
+    Bitmap(GlyphBitmap),
+}
+
 struct Entry<T> {
     drawn: Option<Arc<T>>,
     used: u64,
@@ -60,7 +65,7 @@ struct Entry<T> {
 #[derive(Default)]
 pub(crate) struct GlyphOutlines {
     glyphs: HashMap<GlyphKey, Entry<GlyphOutline>>,
-    bitmaps: HashMap<GlyphKey, Entry<GlyphBitmap>>,
+    coloured: HashMap<GlyphKey, Entry<ColourGlyph>>,
     scale: f64,
     color_fonts: HashMap<FontKey, bool>,
     frame: u64,
@@ -144,13 +149,13 @@ impl GlyphOutlines {
         entry.drawn.clone()
     }
 
-    pub(crate) fn bitmap(&mut self, run: &GlyphRun, glyph: u32) -> Option<Arc<GlyphBitmap>> {
+    pub(crate) fn coloured(&mut self, run: &GlyphRun, glyph: u32) -> Option<Arc<ColourGlyph>> {
         let (frame, scale) = (self.frame, self.scale);
         let entry = self
-            .bitmaps
+            .coloured
             .entry(glyph_key(run, glyph))
             .or_insert_with(|| Entry {
-                drawn: bitmap(run, glyph, scale).map(Arc::new),
+                drawn: coloured(run, glyph, scale).map(Arc::new),
                 used: frame,
             });
         entry.used = frame;
@@ -161,7 +166,7 @@ impl GlyphOutlines {
         let rescaled = self.scale != scale;
         if rescaled {
             self.scale = scale;
-            self.bitmaps.clear();
+            self.coloured.clear();
         }
         rescaled
     }
@@ -170,7 +175,7 @@ impl GlyphOutlines {
         let frame = self.frame;
         self.glyphs
             .retain(|_, entry| frame - entry.used < UNUSED_FRAMES);
-        self.bitmaps
+        self.coloured
             .retain(|_, entry| frame - entry.used < UNUSED_FRAMES);
         self.frame += 1;
     }
@@ -201,12 +206,16 @@ fn glyph_key(run: &GlyphRun, glyph: u32) -> GlyphKey {
     }
 }
 
-fn bitmap(run: &GlyphRun, glyph: u32, scale: f64) -> Option<GlyphBitmap> {
+fn coloured(run: &GlyphRun, glyph: u32, scale: f64) -> Option<ColourGlyph> {
     let font = FontRef::from_index(run.font_bytes(), run.font_index()).ok()?;
     let id = GlyphId::new(glyph);
     if font.color_glyphs().get(id).is_some() {
-        return None;
+        return Some(ColourGlyph::Layers);
     }
+    bitmap(&font, run, id, scale).map(ColourGlyph::Bitmap)
+}
+
+fn bitmap(font: &FontRef<'_>, run: &GlyphRun, id: GlyphId, scale: f64) -> Option<GlyphBitmap> {
     let strike = font
         .bitmap_strikes()
         .glyph_for_size(Size::new(run.size), id)?;
@@ -218,7 +227,13 @@ fn bitmap(run: &GlyphRun, glyph: u32, scale: f64) -> Option<GlyphBitmap> {
     limits.max_image_width = Some(LARGEST_BITMAP);
     limits.max_image_height = Some(LARGEST_BITMAP);
     reader.limits(limits);
-    let mut pixels = reader.decode().ok()?.into_rgba8();
+    let mut pixels = match reader.decode() {
+        Ok(decoded) => decoded.into_rgba8(),
+        Err(error) => {
+            tracing::warn!("cannot read a glyph's bitmap: {error}");
+            return None;
+        }
+    };
     for pixel in pixels.pixels_mut() {
         let alpha = u16::from(pixel[3]);
         for channel in &mut pixel.0[..3] {
@@ -238,6 +253,12 @@ fn bitmap(run: &GlyphRun, glyph: u32, scale: f64) -> Option<GlyphBitmap> {
         width as f32 * across,
         height as f32 * down,
     );
+    if ![area.x, area.y, area.width, area.height]
+        .iter()
+        .all(|length| length.is_finite())
+    {
+        return None;
+    }
     let on_screen = |length: f32| ((f64::from(length) * scale).round() as u32).max(1);
     let sized = (on_screen(area.width), on_screen(area.height));
     let on_pixels = sized.0.max(sized.1) <= LARGEST_BITMAP;
@@ -330,9 +351,10 @@ pub(crate) fn ink(runs: &[GlyphRun]) -> Option<Rect> {
             let known_before = known.len();
             let transform = run_transform(run);
             for glyph in &run.glyphs {
+                let outline = em_bounds(known, run, glyph.id);
                 let within_em = match *coloured {
-                    true => Some(COLOUR_GLYPH),
-                    false => em_bounds(known, run, glyph.id),
+                    true => Some(outline.map_or(COLOUR_GLYPH, |area| area.union(COLOUR_GLYPH))),
+                    false => outline,
                 };
                 let Some(within_em) = within_em else {
                     continue;

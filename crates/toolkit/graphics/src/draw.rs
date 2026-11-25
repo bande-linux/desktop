@@ -6,13 +6,13 @@ use vello_cpu::peniko::{BlendMode, Compose, Extend, Gradient, ImageQuality, Imag
 use vello_cpu::{Glyph, ImageId, ImageSource, PaintType};
 
 use crate::damage::Region;
-use crate::outline::{GlyphOutline, GlyphOutlines, TOLERANCE};
+use crate::outline::{ColourGlyph, GlyphOutline, GlyphOutlines, TOLERANCE};
 use crate::scene::{
     Image, Item, Paint, Path, PathElement, Picture, Pixels, Point, Recorded, Rect, Shape, Stop,
     Transform,
 };
 use crate::surface::{SurfaceScaling, surface_area};
-use crate::text::{GlyphRun, PositionedGlyph};
+use crate::text::GlyphRun;
 use bande_design::Color;
 
 pub(crate) trait Canvas {
@@ -230,40 +230,40 @@ fn snapped(base: Affine, offset: Point) -> Affine {
 }
 
 fn record_run(outlines: &mut GlyphOutlines, run: &GlyphRun, origin: Point, ops: &mut Vec<Op>) {
-    let at = |glyph: &PositionedGlyph| (origin.x + glyph.x, origin.y + glyph.y);
-    if outlines.is_color_font(run) {
-        let mut style = run.clone();
-        style.glyphs.clear();
-        for glyph in &run.glyphs {
-            let (x, y) = at(glyph);
-            ops.push(match outlines.bitmap(run, glyph.id) {
-                Some(bitmap) => {
-                    let area = bitmap.placed(x, y, outlines.scale());
-                    image_op(area, area, &bitmap.image, Extend::Pad, ImageQuality::Medium)
-                }
-                None => Op::Glyphs {
-                    run: style.clone(),
-                    glyphs: vec![Glyph { id: glyph.id, x, y }],
-                },
-            });
+    let coloured = outlines.is_color_font(run);
+    let (mut layered, mut plain) = (Vec::new(), Vec::new());
+    for glyph in &run.glyphs {
+        let (x, y) = (origin.x + glyph.x, origin.y + glyph.y);
+        let drawn = match coloured {
+            true => outlines.coloured(run, glyph.id),
+            false => None,
+        };
+        match drawn.as_deref() {
+            Some(ColourGlyph::Bitmap(bitmap)) => {
+                let area = bitmap.placed(x, y, outlines.scale());
+                let quality = ImageQuality::Medium;
+                ops.push(image_op(area, area, &bitmap.image, Extend::Pad, quality));
+            }
+            Some(ColourGlyph::Layers) => layered.push(Glyph { id: glyph.id, x, y }),
+            None => plain.extend(
+                outlines
+                    .outline(run, glyph.id)
+                    .map(|outline| (outline, Vec2::new(f64::from(x), f64::from(y)))),
+            ),
         }
-        return;
     }
-    let glyphs = run
-        .glyphs
-        .iter()
-        .filter_map(|glyph| {
-            let (x, y) = at(glyph);
-            Some((
-                outlines.outline(run, glyph.id)?,
-                Vec2::new(f64::from(x), f64::from(y)),
-            ))
-        })
-        .collect();
-    ops.push(Op::Outlines {
-        color: color(run.color),
-        glyphs,
-    });
+    if !layered.is_empty() {
+        ops.push(Op::Glyphs {
+            run: run.clone(),
+            glyphs: layered,
+        });
+    }
+    if !plain.is_empty() {
+        ops.push(Op::Outlines {
+            color: color(run.color),
+            glyphs: plain,
+        });
+    }
 }
 
 fn image_quality(tile: Rect, image: &Image) -> ImageQuality {

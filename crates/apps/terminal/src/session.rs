@@ -61,8 +61,8 @@ pub struct Session {
 
 pub type ShellCommand = (String, Vec<String>);
 
-const END_PATIENCE: Duration = Duration::from_millis(200);
-const END_POLL: Duration = Duration::from_millis(2);
+const END_PATIENCE: Duration = Duration::from_secs(5);
+const END_POLL: Duration = Duration::from_millis(5);
 const RESULT_PATIENCE: Duration = Duration::from_secs(2);
 const SCOPE_PATIENCE: Duration = Duration::from_secs(2);
 const STOPPED_UNTIL_PLACED: &str = r#"kill -STOP $$

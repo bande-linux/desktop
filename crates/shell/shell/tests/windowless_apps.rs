@@ -33,7 +33,7 @@ const BANDE: &str = "org.bande.Example";
 const BANDE_NAME: &str = "Example Bande";
 const UNNAMED: &str = "unnamed-dialog";
 const ITEM_NAME: &str = "Example Item";
-const SEARCH: &str = "Search";
+const LOGO: (f64, f64) = (40.0, 34.0);
 const QUIT: i32 = 7;
 const HELPER_SECONDS: &str = "1";
 const ITEM: &str = "org.example.TrayItem";
@@ -300,6 +300,11 @@ fn an_app_is_in_the_taskbar_exactly_as_long_as_its_process_runs() {
         .unwrap();
     let registry = FakeRegistry::start(&bus).expect("AT-SPI registry");
     let mut server = headless(1024, 768);
+    let [mut first, second] = [64, 80].map(|side| {
+        let mut app = SeparateApp::launch(&mut server, TEST);
+        app.show_window_of(&mut server, side, TRAY);
+        app
+    });
     server
         .start_session_client(
             Path::new(env!("CARGO_BIN_EXE_bande-shell")),
@@ -323,6 +328,27 @@ fn an_app_is_in_the_taskbar_exactly_as_long_as_its_process_runs() {
         root: root.expect("the shell's accessible root"),
     };
 
+    scene.wait("a window marks its app", |scene| scene.marked(TRAY_NAME));
+    scene.pass(SETTLED);
+    first.close_windows();
+    scene.wait("the first closes", |scene| {
+        scene.server.windows().len() == 1
+    });
+    drop(second);
+    scene.wait("the second ends", |scene| scene.server.windows().is_empty());
+    scene.pass(SETTLED);
+    assert!(scene.marked(TRAY_NAME), "the first still runs");
+    let mut third = SeparateApp::launch(&mut scene.server, TEST);
+    third.show_window_of(&mut scene.server, 72, TRAY);
+    scene.pass(SETTLED);
+    drop(first);
+    scene.pass(SETTLED);
+    assert!(scene.marked(TRAY_NAME), "the third has a window");
+    drop(third);
+    scene.wait("an ended process never comes back", |scene| {
+        scene.button(TRAY_NAME).is_none()
+    });
+
     fs::write(home("item"), TRAY).unwrap();
     let mut hidden = SeparateApp::launch(&mut scene.server, TEST);
     scene.wait("an app that started in the tray", |scene| {
@@ -345,9 +371,9 @@ fn an_app_is_in_the_taskbar_exactly_as_long_as_its_process_runs() {
     chord(&mut scene.server, &[KEY_ESC]);
     scene.pass(SETTLED);
     fs::write(home("slow-menu"), "1500").unwrap();
-    let (icon, logo) = (scene.middle(TRAY_NAME), scene.middle(SEARCH));
+    let icon = scene.middle(TRAY_NAME);
     scene.right_click_at_once(icon);
-    scene.right_click_at_once(logo);
+    scene.right_click_at_once(LOGO);
     scene.pass(Duration::from_secs(3));
     chord(&mut scene.server, &[KEY_DOWN]);
     chord(&mut scene.server, &[KEY_ENTER]);
@@ -383,29 +409,6 @@ fn an_app_is_in_the_taskbar_exactly_as_long_as_its_process_runs() {
     assert_eq!(noted("launches"), format!("{TRAY}\n"), "opened once");
     drop(plain);
     scene.wait("a helper left behind is not the app", |scene| {
-        scene.button(TRAY_NAME).is_none()
-    });
-
-    let mut first = scene.app(TRAY);
-    let mut second = SeparateApp::launch(&mut scene.server, TEST);
-    second.show_window_of(&mut scene.server, 80, TRAY);
-    scene.pass(SETTLED);
-    first.close_windows();
-    scene.wait("the first closes", |scene| {
-        scene.server.windows().len() == 1
-    });
-    drop(second);
-    scene.wait("the second ends", |scene| scene.server.windows().is_empty());
-    scene.pass(SETTLED);
-    assert!(scene.marked(TRAY_NAME), "the first still runs");
-    let mut third = SeparateApp::launch(&mut scene.server, TEST);
-    third.show_window_of(&mut scene.server, 72, TRAY);
-    scene.pass(SETTLED);
-    drop(first);
-    scene.pass(SETTLED);
-    assert!(scene.marked(TRAY_NAME), "the third has a window");
-    drop(third);
-    scene.wait("an ended process never comes back", |scene| {
         scene.button(TRAY_NAME).is_none()
     });
 

@@ -450,6 +450,9 @@ msgstr "Kopiera länk"
 msgid "Copy Address"
 msgstr "Kopiera adress"
 
+msgid "Add to Contacts"
+msgstr "Lägg till i Kontakter"
+
 msgid "Open Attachment"
 msgstr "Öppna bilaga"
 
@@ -1021,9 +1024,6 @@ msgstr "Ingen brevlåda matchar"
 
 msgid "{shortcut}: {action}"
 msgstr "{shortcut}: {action}"
-
-msgid "Add to Contacts"
-msgstr "Lägg till i Kontakter"
 
 msgid "{first} to {last}: the first nine mailboxes in the sidebar"
 msgstr "{first} till {last}: de nio första brevlådorna i sidofältet"

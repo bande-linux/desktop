@@ -234,11 +234,11 @@ msgstr "Lägg till ett CardDAV-konto"
 msgid "Contacts looks up the CardDAV server of your address’s domain and shows it to you before it signs in."
 msgstr "Kontakter slår upp CardDAV-servern för adressens domän och visar den för dig innan den loggar in."
 
-msgid "https://dav.example.org/"
-msgstr "https://dav.exempel.se/"
-
 msgid "Server"
 msgstr "Server"
+
+msgid "https://dav.example.org/"
+msgstr "https://dav.exempel.se/"
 
 msgid "User name"
 msgstr "Användarnamn"

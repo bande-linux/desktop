@@ -29,8 +29,7 @@ impl Scanner<'_> {
         Some(next)
     }
 
-    /// Reads one emoji sequence and tells whether it is shown as an emoji rather than as text.
-    fn sequence(&mut self) -> Option<bool> {
+    fn sequence_shown_as_emoji(&mut self) -> Option<bool> {
         let first = self.peek()?;
         let properties = Properties::get(first);
         if properties.is_region_indicator() {
@@ -41,12 +40,17 @@ impl Scanner<'_> {
         if !properties.is_emoji() {
             return None;
         }
+        if first.is_ascii() {
+            self.take(|_| true);
+            let selected = self.take(|next| next == AS_EMOJI).is_some();
+            return Some(selected && self.take(|next| next == KEYCAP).is_some());
+        }
         let mut shown = self.element(properties.is_emoji_presentation());
         loop {
             let before = self.at;
             let joined = self.take(|next| next == JOINER).and_then(|_| self.peek());
-            match joined.map(Properties::get) {
-                Some(next) if next.is_emoji() => {
+            match joined {
+                Some(next) if !next.is_ascii() && Properties::get(next).is_emoji() => {
                     self.element(true);
                     shown = true;
                 }
@@ -59,19 +63,18 @@ impl Scanner<'_> {
     }
 
     fn element(&mut self, presentation: bool) -> bool {
-        let first = self.take(|_| true);
+        self.take(|_| true);
         let modified = self
             .take(|next| Properties::get(next).is_emoji_modifier())
             .is_some();
         let selector = self.take(|next| matches!(next, AS_TEXT | AS_EMOJI));
-        let keycap = self.take(|next| next == KEYCAP).is_some();
         let mut tagged = false;
         while self.take(|next| TAGS.contains(&next)).is_some() {
             tagged = true;
         }
         match selector {
             Some(AS_TEXT) => false,
-            Some(_) => keycap || first.is_some_and(|first| !first.is_ascii()),
+            Some(_) => true,
             None => presentation || modified || tagged,
         }
     }
@@ -85,7 +88,7 @@ pub(crate) fn ranges(text: &str) -> Vec<Range<usize>> {
     let mut scanner = Scanner { text, at: 0 };
     while scanner.at < text.len() {
         let start = scanner.at;
-        match scanner.sequence() {
+        match scanner.sequence_shown_as_emoji() {
             Some(true) => match found.last_mut() {
                 Some(last) if last.end == start => last.end = scanner.at,
                 _ => found.push(start..scanner.at),
@@ -149,8 +152,17 @@ mod tests {
             ] {
                 assert_eq!(runs(emoji), [(true, 1)], "{emoji}");
             }
-            for plain in ["1234#*", "© ™", "✔", "❤", "☺", "⚡\u{fe0e}", "é – … 漢字"]
-            {
+            for plain in [
+                "1234#*",
+                "1\u{200d}2",
+                "1\u{e0031}",
+                "© ™",
+                "✔",
+                "❤",
+                "☺",
+                "⚡\u{fe0e}",
+                "é – … 漢字",
+            ] {
                 assert!(runs(plain).iter().all(|(colour, _)| !colour), "{plain}");
             }
             let mixed = runs("a⚡b");

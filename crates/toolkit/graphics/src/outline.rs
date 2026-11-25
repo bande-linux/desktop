@@ -10,7 +10,7 @@ use skrifa::raw::TableProvider;
 use skrifa::{FontRef, GlyphId, MetadataProvider, Tag};
 use vello_cpu::kurbo::{self, Affine, BezPath, Vec2};
 
-use crate::scene::{Image, Rect};
+use crate::scene::{Image, Rect, premultiply};
 use crate::text::GlyphRun;
 
 pub(crate) const TOLERANCE: f64 = 0.004;
@@ -234,12 +234,7 @@ fn bitmap(font: &FontRef<'_>, run: &GlyphRun, id: GlyphId, scale: f64) -> Option
             return None;
         }
     };
-    for pixel in pixels.pixels_mut() {
-        let alpha = u16::from(pixel[3]);
-        for channel in &mut pixel.0[..3] {
-            *channel = ((u16::from(*channel) * alpha + 127) / 255) as u8;
-        }
-    }
+    premultiply(&mut pixels);
     let (width, height) = pixels.dimensions();
     let (across, down) = (run.size / strike.ppem_x, run.size / strike.ppem_y);
     let em = run.size / f32::from(font.head().ok()?.units_per_em());
@@ -335,7 +330,6 @@ fn em_bounds(known: &mut GlyphBounds, run: &GlyphRun, glyph: u32) -> Option<kurb
     })
 }
 
-/// The area the glyphs of `runs` paint.
 pub(crate) fn ink(runs: &[GlyphRun]) -> Option<Rect> {
     let painted = BOUNDS.with_borrow_mut(|bounds| {
         let mut painted: Option<kurbo::Rect> = None;

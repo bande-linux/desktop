@@ -71,8 +71,8 @@ memory settings stay the system's own.
   (`bande_xdg::spawn_detached`), and what runs in a Terminal tab in
   `app-bande-org.bande.Terminal-tab<pid>.scope` (`place_tab_in_scope`), so oomd and Force Quit end
   that tab alone. The shell of a new tab waits, stopped, until it is in its scope (2 s at most, whatever the bus does), so
-  nothing it starts is left behind. The tab scope has `OOMPolicy=continue`: a kernel kill of one
-  process leaves the tab's shell. A tab whose scope systemd says ended for lack of
+  nothing it starts is left behind. The tab scope keeps systemd's `OOMPolicy=stop`, the only policy with which
+  systemd records that memory ran out. A tab whose scope systemd says ended for lack of
   memory stays open and says so until Return. Force Quit of Terminal ends its tabs' scopes too.
 - The compositor (and with it the shell and every session client it starts) runs in
   `bande-compositor.service` in `session.slice`, with `ManagedOOMPreference=avoid` and

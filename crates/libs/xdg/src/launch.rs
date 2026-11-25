@@ -708,9 +708,7 @@ fn place_in_scope(bus: &Connection, app_id: &str, instance: &str, pid: u32) -> z
         ("Before", Value::from(vec![COMPOSITOR_UNIT])),
         ("TimeoutStopUSec", Value::from(APP_STOP_TIMEOUT_USEC)),
     ];
-    if is_tab(&scope) {
-        properties.push(("OOMPolicy", Value::from("continue")));
-    } else {
+    if !is_tab(&scope) {
         properties.push(("CollectMode", Value::from("inactive-or-failed")));
         properties.push(("MemoryMin", Value::from(APP_MEMORY_GUARANTEED)));
         properties.push(("MemoryLow", Value::from(APP_MEMORY_KEPT)));

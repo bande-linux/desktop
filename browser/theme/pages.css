@@ -1,0 +1,40 @@
+@media not (forced-colors) {
+  :root {
+    --background-color-canvas: var(--bande-sheet) !important;
+    --background-color-box: var(--bande-overlay) !important;
+    --background-color-box-info: var(--bande-chassis) !important;
+    --background-color-list-item-hover: var(--bande-well) !important;
+    --text-color: var(--bande-ink) !important;
+    --text-color-deemphasized: var(--bande-ink2) !important;
+    --text-color-disabled: var(--bande-ink3) !important;
+    --text-color-accent-primary-selected: var(--bande-on-accent) !important;
+    --icon-color: var(--bande-ink2) !important;
+    --border-color: var(--bande-edge) !important;
+    --border-color-deemphasized: var(--bande-hairline) !important;
+    --border-color-interactive: var(--bande-edge) !important;
+    --card-border-color: var(--bande-hairline) !important;
+    --color-accent-primary: var(--bande-accent) !important;
+    --color-accent-primary-selected: var(--bande-accent-fill) !important;
+    --focus-outline-color: var(--bande-accent) !important;
+    --link-color: var(--bande-accent) !important;
+    --link-color-hover: var(--bande-accent) !important;
+    --link-color-active: var(--bande-accent) !important;
+    --button-background-color: var(--bande-well) !important;
+    --button-background-color-hover: var(--bande-hairline) !important;
+    --button-background-color-active: var(--bande-edge) !important;
+    --button-text-color: var(--bande-ink) !important;
+    --button-background-color-primary: var(--bande-accent-fill) !important;
+    --button-background-color-primary-hover: color-mix(in srgb, var(--bande-accent-fill) 88%, var(--bande-ink)) !important;
+    --button-background-color-primary-active: color-mix(in srgb, var(--bande-accent-fill) 78%, var(--bande-ink)) !important;
+    --button-text-color-primary: var(--bande-on-accent) !important;
+    --input-text-background-color: var(--bande-sheet) !important;
+    --input-text-color: var(--bande-ink) !important;
+    --table-background-color: var(--bande-overlay) !important;
+    --table-row-background-color: var(--bande-overlay) !important;
+    --table-row-background-color-alternate: var(--bande-sheet) !important;
+    --panel-background-color: var(--bande-overlay) !important;
+    --panel-border-color: var(--bande-hairline) !important;
+    --panel-text-color: var(--bande-ink) !important;
+  }
+  :root[dialogroot] { --background-color-canvas: var(--bande-overlay) !important; }
+}

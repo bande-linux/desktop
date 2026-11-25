@@ -1,0 +1,17 @@
+Description: Take the accent colour from the settings portal under every GTK theme, so it changes while the browser runs
+Author: Mikael Hug <mikaelhug@gmail.com>
+Forwarded: not-needed
+Last-Update: 2026-11-24
+
+--- a/widget/gtk/nsLookAndFeel.cpp
++++ b/widget/gtk/nsLookAndFeel.cpp
+@@ -1525,7 +1525,8 @@
+ 
+   auto MaybeApplyDbusOrAdwaitaAccentColor =
+       [](PerThemeData& aTheme, const DBusSettings& aDBusSettings) {
+-        if (aTheme.mFamily != ThemeFamily::Adwaita) {
++        if (aTheme.mFamily != ThemeFamily::Adwaita &&
++            !aDBusSettings.HasAccentColor()) {
+           return;
+         }
+         if (aDBusSettings.HasAccentColor()) {

@@ -589,7 +589,9 @@ impl State {
                 let window = &self.windows[index];
                 if self.screen_of(window) != screen
                     || self.on_full_screen_space(window)
-                    || window.has_state(xdg_toplevel::State::Fullscreen)
+                    || window.toplevel.with_pending_state(|pending| {
+                        pending.states.contains(xdg_toplevel::State::Fullscreen)
+                    })
                 {
                     continue;
                 }
@@ -659,7 +661,11 @@ impl State {
             .toplevel
             .with_pending_state(|pending| pending.states.contains(xdg_toplevel::State::Maximized));
         if stays_maximized {
-            let area = self.placement_area(self.screen_of(&self.windows[index]));
+            let screen = self.screen_of(&self.windows[index]);
+            let area = match self.screens[screen].fitted_to {
+                beside_the_bar if !beside_the_bar.is_empty() => beside_the_bar,
+                _ => self.placement_area(screen),
+            };
             self.place(index, xdg_toplevel::State::Maximized, Some(area));
         } else {
             self.place(index, xdg_toplevel::State::Fullscreen, None);

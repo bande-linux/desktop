@@ -1,3 +1,4 @@
+use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_client::{Connection, Dispatch, QueueHandle, delegate_noop};
 use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_shell_v1::{
     Layer, ZwlrLayerShellV1,
@@ -8,6 +9,11 @@ use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::{
 };
 
 use crate::{Compositor, Globals, ShmImage, TestClient};
+
+pub struct Bar {
+    surface: WlSurface,
+    bar: ZwlrLayerSurfaceV1,
+}
 
 impl TestClient {
     pub fn show_blurred_panel(&mut self, server: &mut Compositor, image: &ShmImage) {
@@ -26,7 +32,7 @@ impl TestClient {
         self.exchange(server);
     }
 
-    pub fn show_bar(&mut self, server: &mut Compositor, anchor: Anchor, zone: i32) {
+    pub fn show_bar(&mut self, server: &mut Compositor, anchor: Anchor, zone: i32) -> Bar {
         let qh = self.queue.handle();
         let shell: ZwlrLayerShellV1 = self.bind("zwlr_layer_shell_v1", 1);
         let compositor = self.globals.compositor.as_ref().expect("wl_compositor");
@@ -48,10 +54,22 @@ impl TestClient {
         bar.set_exclusive_zone(zone);
         surface.commit();
         self.exchange(server);
+        Bar { surface, bar }
+    }
+
+    pub fn set_bar_zone(&mut self, server: &mut Compositor, bar: &Bar, zone: i32) {
+        bar.bar.set_exclusive_zone(zone);
+        bar.surface.commit();
+        self.exchange(server);
     }
 
     pub fn make_full_screen(&mut self, server: &mut Compositor, index: usize) {
         self.windows[index].2.set_fullscreen(None);
+        self.exchange(server);
+    }
+
+    pub fn leave_full_screen(&mut self, server: &mut Compositor, index: usize) {
+        self.windows[index].2.unset_fullscreen();
         self.exchange(server);
     }
 }

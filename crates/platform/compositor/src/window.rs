@@ -247,6 +247,20 @@ impl Window {
         })
     }
 
+    fn placed_states(&self) -> (bool, bool) {
+        self.toplevel.with_pending_state(|pending| {
+            (
+                pending.states.contains(xdg_toplevel::State::Fullscreen),
+                pending.states.contains(xdg_toplevel::State::Maximized),
+            )
+        })
+    }
+
+    fn asked_to_fill(&self, area: Rectangle<i32, Logical>) -> bool {
+        let location = self.pending_location.map_or(self.location, |(_, at)| at);
+        location == area.loc && self.requested_size() == Some(area.size)
+    }
+
     pub(crate) fn local_geometry(&self) -> Rectangle<i32, Logical> {
         let surface = self.toplevel.wl_surface();
         let bounds = bbox_from_surface_tree(surface, (0, 0));
@@ -452,12 +466,7 @@ impl State {
     fn release_placement(&mut self, index: usize) {
         let window = &self.windows[index];
         let surface = window.surface().clone();
-        let (maximized, fullscreen) = window.toplevel.with_pending_state(|pending| {
-            (
-                pending.states.contains(xdg_toplevel::State::Maximized),
-                pending.states.contains(xdg_toplevel::State::Fullscreen),
-            )
-        });
+        let (fullscreen, maximized) = window.placed_states();
         if fullscreen {
             self.unfullscreen(&surface);
         } else if maximized {
@@ -553,10 +562,11 @@ impl State {
         if target.is_none() {
             window.restore = None;
         }
-        if let Some(serial) = window.configure()
-            && let Some(location) = location
-        {
-            window.pending_location = Some((serial, location));
+        match location {
+            Some(location) => window.move_with_next_configure(location),
+            None => {
+                window.configure();
+            }
         }
         if target.is_some() {
             self.set_tile(index, None);
@@ -581,39 +591,30 @@ impl State {
             let full_screen = workspaces
                 .id_at(workspaces.active())
                 .is_some_and(|id| workspaces.is_full_screen(id));
-            if full_screen || self.screens[screen].fitted_to == area {
+            if full_screen {
                 continue;
             }
-            self.screens[screen].fitted_to = area;
+            let before = std::mem::replace(&mut self.screens[screen].fitted_to, area);
             for index in 0..self.windows.len() {
                 let window = &self.windows[index];
-                let (full_screen, maximized) = window.toplevel.with_pending_state(|pending| {
-                    (
-                        pending.states.contains(xdg_toplevel::State::Fullscreen),
-                        pending.states.contains(xdg_toplevel::State::Maximized),
-                    )
-                });
+                let (full_screen, maximized) = window.placed_states();
                 if self.screen_of(window) != screen
                     || self.on_full_screen_space(window)
                     || full_screen
                 {
                     continue;
                 }
-                let (fitted, target) = match window.tile {
-                    Some((tile, rect)) => (rect == self.tile_rect(screen, tile), Some(tile)),
-                    None if maximized => {
-                        let settled = window.pending_location.is_none();
-                        (settled && window.geometry() == Some(area), None)
+                match window.tile {
+                    Some((tile, rect)) => {
+                        if before != area && rect != self.tile_rect(screen, tile) {
+                            self.tile_window(index, tile, Spring::STANDARD);
+                        }
                     }
-                    None => continue,
-                };
-                match (fitted, target) {
-                    (true, _) => {}
-                    (false, Some(tile)) => self.tile_window(index, tile, Spring::STANDARD),
-                    (false, None) => {
+                    None if maximized && !window.asked_to_fill(area) => {
                         let surface = window.surface().clone();
                         self.maximize(&surface);
                     }
+                    None => {}
                 }
             }
         }
@@ -643,7 +644,7 @@ impl State {
             .filter(|index| !self.windows[*index].fixed_size())
         {
             let output = self.screen_rect(self.screen_of(&self.windows[index]));
-            let was_maximized = self.windows[index].has_state(xdg_toplevel::State::Maximized);
+            let (_, was_maximized) = self.windows[index].placed_states();
             self.place(index, xdg_toplevel::State::Fullscreen, Some(output));
             self.windows[index].resize = None;
             if was_maximized {
@@ -662,17 +663,15 @@ impl State {
         let Some(index) = self.window_index(surface) else {
             return;
         };
-        let stays_maximized = self.windows[index]
-            .toplevel
-            .with_pending_state(|pending| pending.states.contains(xdg_toplevel::State::Maximized));
-        if stays_maximized {
+        let (full_screen, stays_maximized) = self.windows[index].placed_states();
+        if full_screen && stays_maximized {
             let screen = self.screen_of(&self.windows[index]);
             let area = match self.screens[screen].fitted_to {
                 beside_the_bar if !beside_the_bar.is_empty() => beside_the_bar,
                 _ => self.placement_area(screen),
             };
             self.place(index, xdg_toplevel::State::Maximized, Some(area));
-        } else {
+        } else if full_screen {
             self.place(index, xdg_toplevel::State::Fullscreen, None);
         }
         self.leave_full_screen_space(index);

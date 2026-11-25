@@ -176,7 +176,22 @@ fn neighbours_keep_the_gap_while_filled_dragged_and_respaced() {
     desktop.server.move_pointer_to((736.0, 450.0).into(), 10);
     desktop.server.press_button(BTN_LEFT, false, 20);
     desktop.settle();
-    assert_eq!(desktop.tiles(), [(80, 8, 652, 884), (740, 8, 452, 884)]);
+    let shared = [(80, 8, 652, 884), (740, 8, 452, 884)];
+    assert_eq!(desktop.tiles(), shared);
+    let tiled = desktop.front_frame();
+    desktop.front.leave_full_screen(&mut desktop.server, 0);
+    assert_eq!(desktop.front_frame(), tiled);
+
+    let mut pinned = config(true, 8);
+    pinned.bar.apps.push("org.example.Front".to_owned());
+    desktop.server.set_display_config(pinned);
+    assert_eq!(desktop.tiles(), shared);
+
+    let mut settings = desktop.server.output_settings("HEADLESS-1").expect("shown");
+    settings.mode.refresh /= 2;
+    desktop.server.configure_output("HEADLESS-1", settings);
+    desktop.server.set_display_config(config(true, 8));
+    assert_eq!(desktop.tiles(), shared);
 
     desktop.server.set_display_config(config(true, 24));
     assert_eq!(desktop.tiles(), [(80, 24, 536, 852), (640, 24, 536, 852)]);
@@ -206,12 +221,15 @@ fn a_maximized_window_leaving_full_screen_stays_clear_of_the_bar_that_returns() 
         .shell
         .set_bar_zone(&mut desktop.server, &desktop.bar, 0);
     desktop.settle();
+    desktop.behind.maximize(&mut desktop.server, 0);
 
     desktop.front.leave_full_screen(&mut desktop.server, 0);
     desktop
         .shell
         .set_bar_zone(&mut desktop.server, &desktop.bar, THICKNESS + 16);
     assert_eq!(desktop.front_frame(), area);
+    desktop.behind.fill_configured_size(&mut desktop.server, 0);
+    assert_eq!(desktop.frame(BEHIND), area);
 }
 
 #[test]

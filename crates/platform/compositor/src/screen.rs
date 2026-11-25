@@ -192,6 +192,7 @@ impl Screen {
     }
 
     pub(crate) fn apply(&mut self, settings: OutputSettings) {
+        let before = self.rect();
         self.settings = settings;
         self.output.change_current_state(
             Some(settings.mode.wayland()),
@@ -200,7 +201,9 @@ impl Screen {
             Some(settings.position),
         );
         layer_map_for_output(&self.output).arrange();
-        self.fitted_to = Rectangle::default();
+        if self.rect() != before {
+            self.fitted_to = Rectangle::default();
+        }
         self.redraw = true;
     }
 

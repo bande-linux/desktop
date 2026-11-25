@@ -194,8 +194,6 @@ impl zbus::DBusError for Refusal {
     }
 }
 
-/// An owner's answer read from the bus; an owner that is gone is `Unavailable`, one that ended
-/// while it was asked `Interrupted`.
 impl From<zbus::Error> for Refusal {
     fn from(error: zbus::Error) -> Self {
         if bande_bus::is_unowned(&error) {

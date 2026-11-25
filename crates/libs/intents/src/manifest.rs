@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use crate::{Definition, Label, Property, ThingDefinition, domain};
+use crate::{Definition, Label, ThingDefinition, domain};
 
 /// Where packages install manifests.
 pub const MANIFESTS: &str = "/usr/share/bande/intents";
@@ -85,7 +85,7 @@ impl Manifests {
         });
         manifest
             .things
-            .retain(|thing, _| self.thing(thing).is_none());
+            .retain(|thing, _| !self.0.iter().any(|other| other.things.contains_key(thing)));
         self.0.push(manifest);
     }
 
@@ -106,12 +106,6 @@ impl Manifests {
         self.0
             .iter()
             .find_map(|manifest| Some((manifest, manifest.intents.get(id)?)))
-    }
-
-    pub fn thing(&self, kind: &str) -> Option<(&Manifest, &BTreeMap<String, Property>)> {
-        self.0
-            .iter()
-            .find_map(|manifest| Some((manifest, &manifest.things.get(kind)?.properties)))
     }
 
     /// The manifest of the program whose receipts are named with `of`'s domain.

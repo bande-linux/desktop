@@ -4,8 +4,6 @@ mod store;
 
 use bande_intents::{Domain, Owner};
 
-pub use intents::{Find, Get, OpenPane, Set, Setting};
-
 const BUS: &str = "org.bande.Intents.Settings";
 const PROGRAM: &str = "/usr/libexec/bande-settings-intents";
 

@@ -756,7 +756,7 @@ impl LauncherShell {
                 .ok()
         });
         let offers = session.and_then(|_| {
-            Offers::spawn(MANIFESTS, bande_bus::session)
+            Offers::spawn(MANIFESTS)
                 .inspect_err(|error| tracing::warn!("cannot offer what can be done: {error}"))
                 .ok()
         });

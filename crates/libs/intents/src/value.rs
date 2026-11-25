@@ -555,7 +555,6 @@ impl Value for civil::Time {
     }
 }
 
-/// An instant with its zone; one without a zone is taken in the computer's.
 impl Value for jiff::Zoned {
     fn kind() -> Kind {
         Kind::DateTime

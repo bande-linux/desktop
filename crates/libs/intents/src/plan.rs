@@ -63,7 +63,7 @@ impl Wanted {
 pub trait Perform<O>: Intent {
     /// What Prepare froze for Perform.
     type Prepared: Send + 'static;
-    /// `()`, a [`Thing`], a list of them, or [`Computed`].
+    /// `()`, a [`Thing`], a list of them, [`Computed`] or [`ComputedList`].
     type Output: Output;
 
     /// Checks everything that can be checked and changes nothing.
@@ -326,8 +326,6 @@ pub(crate) fn put<'a>(
     Ok(())
 }
 
-/// `thing` as it travels: its reference, type, the properties `kept` keeps, which of them are
-/// foreign, and which were cut.
 pub(crate) fn thing_dict<T: Thing>(thing: T, kept: impl Fn(&str) -> bool) -> Result<Dict, Refusal> {
     let reference = thing.reference().to_owned();
     let mut properties = thing.properties()?;

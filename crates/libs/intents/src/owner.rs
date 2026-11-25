@@ -14,7 +14,7 @@ use crate::callers::Callers;
 use crate::domain::{Action, Entry, Matches, Ready, ThingEntry};
 use crate::guard::{self, Question};
 use crate::job::{JobObject, Outcome, Running};
-use crate::manifest::{MANIFESTS, Manifest, Manifests};
+use crate::manifest::{Manifest, Manifests};
 use crate::plan::{locked, put};
 use crate::receipts::{self, KeptUndo, Receipt, Receipts, State, digest, now, unstored};
 use crate::value::SET_PREFIX;
@@ -45,7 +45,6 @@ pub struct Owner {
     entries: BTreeMap<String, Entry>,
     things: BTreeMap<String, ThingEntry>,
     current: Current,
-    manifests: PathBuf,
 }
 
 impl Owner {
@@ -57,7 +56,6 @@ impl Owner {
             entries: BTreeMap::new(),
             things: BTreeMap::new(),
             current: Arc::new(|_| Vec::new()),
-            manifests: PathBuf::from(MANIFESTS),
         }
     }
 
@@ -70,12 +68,6 @@ impl Owner {
     /// Answers `current` in every `find`.
     pub fn current(mut self, current: Current) -> Self {
         self.current = current;
-        self
-    }
-
-    /// Reads the manifests of other programs from `folder` instead of where they are installed.
-    pub fn manifests(mut self, folder: impl Into<PathBuf>) -> Self {
-        self.manifests = folder.into();
         self
     }
 
@@ -114,7 +106,6 @@ impl Owner {
             entries: self.entries,
             things: self.things,
             current: self.current,
-            manifests: self.manifests,
             folder,
             connection: connection.clone(),
             callers: Callers::default(),
@@ -284,7 +275,6 @@ struct Shared {
     entries: BTreeMap<String, Entry>,
     things: BTreeMap<String, ThingEntry>,
     current: Current,
-    manifests: PathBuf,
     folder: PathBuf,
     connection: Connection,
     callers: Callers,
@@ -293,7 +283,6 @@ struct Shared {
     changed: Condvar,
 }
 
-/// One random name; the system always has random numbers to give once it runs.
 fn token() -> Result<String, Refusal> {
     let mut bytes = [0u8; 16];
     let mut filled = 0;
@@ -1125,8 +1114,7 @@ impl Intents {
         let bus = self.0.connection.inner();
         let program = self.0.callers.admit(bus, &sender).await?;
         if limits.agent().is_some() {
-            let folder = self.0.manifests.clone();
-            let manifests = blocking::unblock(move || Manifests::read(&folder)).await;
+            let manifests = blocking::unblock(Manifests::installed).await;
             self.0.callers.passes_on(bus, &sender, &manifests).await?;
         }
         Ok(Caller { sender, program })

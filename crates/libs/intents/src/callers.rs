@@ -13,7 +13,6 @@ use crate::{Reason, Refusal};
 const REMEMBERED: usize = 64;
 const PASSING_ON: [&str; 2] = ["org.bande.Agents", "org.bande.Routines"];
 
-/// Which connections may call, and the program each is.
 #[derive(Default)]
 pub(crate) struct Callers(Mutex<HashMap<String, String>>);
 
@@ -35,7 +34,6 @@ fn program_of(process: u32) -> Option<String> {
 }
 
 impl Callers {
-    /// The program behind `sender`, refused when it runs in a sandbox.
     pub(crate) async fn admit(
         &self,
         bus: &zbus::Connection,
@@ -63,7 +61,6 @@ impl Callers {
         Ok(program)
     }
 
-    /// Whether `sender` may pass on the name of an agent.
     pub(crate) async fn passes_on(
         &self,
         bus: &zbus::Connection,

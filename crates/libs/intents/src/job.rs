@@ -34,7 +34,6 @@ impl Outcome {
     }
 }
 
-/// A plan being performed, and how it ended.
 pub(crate) struct Running {
     connection: Connection,
     sender: String,
@@ -130,7 +129,6 @@ impl Running {
         }
     }
 
-    /// The whole answer, unless it failed with something done, which only the job can tell.
     pub(crate) fn answer_at_once(&self) -> Option<Result<(String, Dict), Refusal>> {
         let (_, word, outcome) = self.ended.get()?;
         let partial = |name: &str| {

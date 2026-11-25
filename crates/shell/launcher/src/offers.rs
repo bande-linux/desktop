@@ -1,7 +1,7 @@
 use std::os::fd::BorrowedFd;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, Sender, channel};
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 
 use bande_inbox::{Inbox, Outbox};
 use bande_intents::phrases::{Offer, Phrases};
@@ -10,7 +10,9 @@ use bande_l10n::tr;
 use bande_notify::Urgency;
 use bande_notify::client::{Listener, Request, Signal, notify};
 use zbus::blocking::Connection;
+use zbus::blocking::connection::Builder;
 
+const ANSWERED: Duration = Duration::from_secs(2);
 const UNDO: &str = "undo";
 const ICON: &str = "system-search-symbolic";
 
@@ -59,18 +61,15 @@ fn stamp(folder: &Path) -> Option<SystemTime> {
 }
 
 impl Offers {
-    /// Offers the phrases of the manifests in `folder`, with connections made by `connect`.
-    pub fn spawn(
-        folder: impl Into<PathBuf>,
-        connect: impl Fn() -> zbus::Result<Connection> + Send + Clone + 'static,
-    ) -> std::io::Result<Self> {
+    /// Offers the phrases of the manifests in `folder`.
+    pub fn spawn(folder: impl Into<PathBuf>) -> std::io::Result<Self> {
         let folder = folder.into();
         let (asked, questions) = channel();
         let offered = Inbox::new()?;
         let answers = offered.outbox();
         std::thread::Builder::new()
             .name("offers".to_owned())
-            .spawn(move || serve(folder, &connect, &questions, &answers))?;
+            .spawn(move || serve(folder, &questions, &answers))?;
         Ok(Self { asked, offered })
     }
 
@@ -92,19 +91,14 @@ impl Offers {
     }
 }
 
-fn serve(
-    folder: PathBuf,
-    connect: &(impl Fn() -> zbus::Result<Connection> + Send + Clone + 'static),
-    questions: &Receiver<Asked>,
-    answers: &Outbox<(u64, Vec<Offer>)>,
-) {
+fn serve(folder: PathBuf, questions: &Receiver<Asked>, answers: &Outbox<(u64, Vec<Offer>)>) {
     let mut known = Known::read(folder);
     while let Ok(first) = questions.recv() {
         let mut typed = None;
         for asked in std::iter::once(first).chain(questions.try_iter()) {
             match asked {
                 Asked::Typed(generation, text) => typed = Some((generation, text)),
-                Asked::Perform(offer) => spawn_perform(offer, &known.manifests, connect.clone()),
+                Asked::Perform(offer) => spawn_perform(offer, &known.manifests),
             }
         }
         let Some((generation, text)) = typed else {
@@ -113,7 +107,7 @@ fn serve(
         known.follow();
         let offers = match text.trim().is_empty() || known.phrases.is_empty() {
             true => Vec::new(),
-            false => connect()
+            false => answering_soon()
                 .map(|connection| known.phrases.offers(&Client::new(&connection), &text))
                 .inspect_err(|error| tracing::warn!("cannot ask what can be done: {error}"))
                 .unwrap_or_default(),
@@ -124,16 +118,17 @@ fn serve(
     }
 }
 
-fn spawn_perform(
-    offer: Offer,
-    manifests: &Manifests,
-    connect: impl Fn() -> zbus::Result<Connection> + Send + 'static,
-) {
+fn answering_soon() -> zbus::Result<Connection> {
+    Builder::session()?.method_timeout(ANSWERED).build()
+}
+
+fn spawn_perform(offer: Offer, manifests: &Manifests) {
     let manifests = manifests.clone();
     let spawned = std::thread::Builder::new()
         .name("offer".to_owned())
         .spawn(move || {
-            let shown = connect().and_then(|connection| perform(&connection, &manifests, &offer));
+            let shown = bande_bus::session()
+                .and_then(|connection| perform(&connection, &manifests, &offer));
             if let Err(error) = shown {
                 tracing::warn!("cannot tell what was done: {error}");
             }

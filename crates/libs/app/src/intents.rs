@@ -63,8 +63,6 @@ impl Intents {
         }
     }
 
-    /// Serves without a window until the app is first opened, which is returned, or nothing has
-    /// been asked for a minute.
     pub(crate) fn wait_for_launch(
         &mut self,
         session: &Connection,
@@ -109,7 +107,6 @@ impl Intents {
         self.serving.is_working()
     }
 
-    /// Blocks until running jobs have ended, after cancelling them when the session ends.
     pub(crate) fn finish(&self, session_ending: bool) {
         match session_ending {
             true => self.serving.stop(),

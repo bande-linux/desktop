@@ -81,7 +81,6 @@ impl Served {
         })
     }
 
-    /// Each word it accepts, with its label.
     fn choices(&self) -> Vec<(String, String)> {
         match self.form() {
             Some(Form::Switch) => vec![(ON.to_owned(), tr!("On")), (OFF.to_owned(), tr!("Off"))],
@@ -196,7 +195,6 @@ impl Served {
     }
 }
 
-/// `value` as `settings.get` writes it.
 fn word(value: &Value) -> Option<String> {
     Some(match value {
         Value::Keyword(word) | Value::Text(word) => word.clone(),

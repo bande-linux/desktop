@@ -1,7 +1,6 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::collections::HashMap;
-use std::path::Path;
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -73,7 +72,7 @@ fn dark_in_search_darkens_the_desktop_and_the_notice_undoes_it() {
     let notifier = Connection::session().unwrap();
     let shown = notices(&notifier);
 
-    let mut offers = Offers::spawn(Path::new(&manifests), Connection::session).unwrap();
+    let mut offers = Offers::spawn(&manifests).unwrap();
     offers.ask(1, "dark".to_owned());
     let mut offered = Vec::new();
     eventually("what can be done", || {

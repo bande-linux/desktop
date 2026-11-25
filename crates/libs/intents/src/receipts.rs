@@ -90,7 +90,6 @@ pub(crate) fn unstored(error: &io::Error) -> Refusal {
     ))
 }
 
-/// The receipts of one domain, held by the one owner that holds its lock.
 pub(crate) struct Receipts {
     folder: PathBuf,
     domain: String,
@@ -205,7 +204,6 @@ impl Receipts {
         }
     }
 
-    /// Whether an undo can be stored now.
     pub(crate) fn can_keep(&self) -> bool {
         let probe = self.folder.join(format!(".{}.probe", self.domain));
         let kept = fs::write(&probe, [0; PROBE]);
@@ -228,7 +226,6 @@ impl Receipts {
         self.all.iter().any(|receipt| receipt.plan == plan)
     }
 
-    /// Stores `receipt`, replacing the one of the same token.
     pub(crate) fn keep(&mut self, receipt: Receipt) -> io::Result<()> {
         let before = self.all.clone();
         match self.all.iter_mut().find(|kept| kept.token == receipt.token) {
@@ -247,7 +244,6 @@ impl Receipts {
         self.save()
     }
 
-    /// `undo` as it is stored, with its arguments in a file of their own when they are large.
     pub(crate) fn kept(&self, token: &str, undo: Undo, left: Vec<String>) -> io::Result<KeptUndo> {
         let arguments = serde_json::to_vec(&undo.arguments).map_err(io::Error::other)?;
         let inline = arguments.len() <= INLINE;

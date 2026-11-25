@@ -2,7 +2,6 @@ use bande_l10n::tr;
 
 use crate::{Effect, Refusal};
 
-/// A plan about to be performed.
 pub(crate) struct Question<'a> {
     pub(crate) agent: Option<&'a str>,
     pub(crate) effects: &'a [Effect],
@@ -18,7 +17,6 @@ impl Question<'_> {
     }
 }
 
-/// Asks the person when one of the plan's effects is asked.
 pub(crate) fn allow(question: &Question<'_>) -> Result<(), Refusal> {
     if !question.is_asked() {
         return Ok(());

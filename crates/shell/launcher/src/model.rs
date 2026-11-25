@@ -19,6 +19,7 @@ pub const MAX_SETTINGS: usize = 3;
 pub const MAX_FOLDERS: usize = 3;
 pub const MAX_DOCUMENTS: usize = 5;
 pub const MAX_COMMANDS: usize = 2;
+pub const MAX_OFFERS: usize = 3;
 const MIN_COMMAND_QUERY: usize = 2;
 const DESCRIBED_PENALTY: u32 = 150;
 const COMMENT_PENALTY: u32 = 300;
@@ -150,6 +151,14 @@ impl IndexedPane {
             .flatten()
             .max_by_key(|(score, _)| *score)
     }
+}
+
+/// Something that can be done as typed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OfferInfo {
+    pub title: String,
+    pub detail: String,
+    pub intent: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -303,6 +312,7 @@ pub enum Kind {
     Application,
     Setting,
     Command,
+    Offer,
     Folder,
     Document,
     Mail,
@@ -319,6 +329,7 @@ pub enum Target {
     Emoji(String),
     Clip(u64),
     Command(SystemCommand),
+    Offer { intent: String, title: String },
     Item { app: String, argument: String },
 }
 
@@ -330,7 +341,7 @@ impl Target {
             Self::Path(path) => path.to_str().map(|path| format!("file:{path}")),
             Self::Emoji(character) => Some(format!("{EMOJI_KEY}{character}")),
             Self::Command(command) => Some(format!("command:{}", command.key())),
-            Self::Value(_) | Self::Clip(_) | Self::Item { .. } => None,
+            Self::Value(_) | Self::Clip(_) | Self::Offer { .. } | Self::Item { .. } => None,
         }
     }
 }
@@ -348,6 +359,7 @@ pub struct Hit {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Heading {
     TopHit,
+    Actions,
     Applications,
     Settings,
     System,
@@ -388,6 +400,9 @@ pub struct Model {
     pub generation: u64,
     files: Vec<FileHit>,
     items: Vec<Found>,
+    offers: Vec<OfferInfo>,
+    asks_offers: bool,
+    offers_complete: bool,
     recent_documents: Vec<PathBuf>,
     search: Search,
     excluded: Vec<PathBuf>,
@@ -438,6 +453,9 @@ impl Model {
             generation: 0,
             files: Vec::new(),
             items: Vec::new(),
+            offers: Vec::new(),
+            asks_offers: false,
+            offers_complete: true,
             recent_documents: Vec::new(),
             search: Search::default(),
             excluded: Vec::new(),
@@ -536,11 +554,39 @@ impl Model {
         self.generation += 1;
         self.files_complete =
             self.mode != Mode::Search || Query::new(query).is_none() || !self.searches_files();
-        if self.files_complete {
+        self.offers.clear();
+        self.offers_complete =
+            self.mode != Mode::Search || Query::new(query).is_none() || !self.asks_offers;
+        if self.is_complete() {
             self.rebuild(None);
         } else {
             self.picked = false;
             self.held_since.get_or_insert_with(Instant::now);
+        }
+    }
+
+    fn is_complete(&self) -> bool {
+        self.files_complete && self.offers_complete
+    }
+
+    /// Waits for the offers for each query, as for its files.
+    pub fn ask_offers(&mut self) {
+        self.asks_offers = true;
+    }
+
+    pub fn set_offers(&mut self, generation: u64, offers: Vec<OfferInfo>) {
+        if generation != self.generation {
+            return;
+        }
+        let keep = self.kept();
+        self.offers = offers;
+        self.offers_complete = true;
+        self.rebuild_when_complete(keep);
+    }
+
+    fn rebuild_when_complete(&mut self, keep: Option<Target>) {
+        if self.is_complete() || self.held_since.is_none() {
+            self.rebuild(keep);
         }
     }
 
@@ -569,7 +615,7 @@ impl Model {
         self.files = results.hits;
         self.items = results.items;
         self.files_complete = true;
-        self.rebuild(keep);
+        self.rebuild_when_complete(keep);
     }
 
     pub fn record_use(&mut self, target: &Target) -> std::io::Result<()> {
@@ -633,7 +679,7 @@ impl Model {
     fn rebuild(&mut self, keep: Option<Target>) {
         self.revision += 1;
         self.held_since = None;
-        self.answered = self.files_complete;
+        self.answered = self.is_complete();
         self.copied = false;
         self.hits.clear();
         self.headings.clear();
@@ -741,6 +787,22 @@ impl Model {
             })
             .collect();
         commands.sort_by(by_score);
+        let mut offers: Vec<Hit> = self
+            .offers
+            .iter()
+            .filter(|_| self.shows(SearchCategory::System))
+            .map(|offer| Hit {
+                kind: Kind::Offer,
+                title: offer.title.clone(),
+                detail: Some(offer.detail.clone()),
+                target: Target::Offer {
+                    intent: offer.intent.clone(),
+                    title: offer.title.clone(),
+                },
+                matched: query.matched(&fold(&offer.title)),
+                score: bande_search::WORD,
+            })
+            .collect();
         let files: Vec<Hit> = self
             .files
             .iter()
@@ -769,6 +831,7 @@ impl Model {
         let top = match calculation {
             Some(calculation) => Some(calculation),
             None => [
+                &mut offers,
                 &mut apps,
                 &mut settings,
                 &mut folders,
@@ -787,6 +850,7 @@ impl Model {
             self.hits.push(top);
         }
         for (heading, group, limit) in [
+            (Heading::Actions, offers, MAX_OFFERS),
             (Heading::Applications, apps, MAX_APPS),
             (Heading::Settings, settings, MAX_SETTINGS),
             (Heading::System, commands, MAX_COMMANDS),
@@ -1154,7 +1218,11 @@ impl Model {
                 return true;
             }
             Some(
-                Target::App(_) | Target::Settings(_) | Target::Command(_) | Target::Item { .. },
+                Target::App(_)
+                | Target::Settings(_)
+                | Target::Command(_)
+                | Target::Offer { .. }
+                | Target::Item { .. },
             )
             | None => return false,
         };

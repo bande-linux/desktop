@@ -8,7 +8,8 @@ use bande_l10n::{text, tr};
 
 use crate::emoji::EMOJI;
 use crate::model::{
-    Action as LauncherAction, AppInfo, Clip, Heading, Hit, Kind, Mode, Model, PaneInfo, Target,
+    Action as LauncherAction, AppInfo, Clip, Heading, Hit, Kind, Mode, Model, OfferInfo, PaneInfo,
+    Target,
 };
 use crate::preview::PreviewPane;
 use crate::rows::{
@@ -101,6 +102,7 @@ struct Card {
 fn heading_text(heading: Heading) -> String {
     (match heading {
         Heading::TopHit => text!("Best Match"),
+        Heading::Actions => text!("Actions"),
         Heading::Applications => text!("Applications"),
         Heading::Settings => text!("Settings"),
         Heading::System => text!("System"),
@@ -1031,6 +1033,14 @@ impl Launcher {
 
     pub fn set_files(&mut self, results: FileResults) {
         self.state.borrow_mut().model.set_files(results);
+    }
+
+    pub fn ask_offers(&mut self) {
+        self.state.borrow_mut().model.ask_offers();
+    }
+
+    pub fn set_offers(&mut self, generation: u64, offers: Vec<OfferInfo>) {
+        self.state.borrow_mut().model.set_offers(generation, offers);
     }
 
     pub fn preview_request(&mut self) -> Option<PathBuf> {

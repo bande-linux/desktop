@@ -307,7 +307,7 @@ impl PreviewPane {
                 Kind::Calculation => tr!("Return or Ctrl+C to copy"),
                 Kind::Application => tr!("Return to open"),
                 Kind::Setting => tr!("Return to open in Settings"),
-                Kind::Command => tr!("Return to choose"),
+                Kind::Command | Kind::Offer => tr!("Return to choose"),
                 Kind::Emoji => tr!("Return to copy, then paste with Ctrl+V"),
                 Kind::CopiedText if state.model.inserts => {
                     tr!("Return to paste · Delete to remove")

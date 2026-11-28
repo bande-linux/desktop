@@ -1161,6 +1161,14 @@ impl VulkanRenderer {
         self.blur_chains = kept;
     }
 
+    /// Gives back the memory that drawing makes again when it needs it, while nothing is drawn.
+    pub fn rest(&mut self) {
+        self.collect_garbage();
+        self.forget_blurs();
+        self.retire();
+        self.free_spare_staging();
+    }
+
     /// Draws with every dma-buf bound by `draw` shown in `colour`; other targets stay sRGB.
     pub fn converting<T>(
         &mut self,

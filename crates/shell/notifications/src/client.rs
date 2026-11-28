@@ -231,8 +231,7 @@ impl App for Notifications {
                 self.carry_out(window);
             }
             WindowEvent::AppearanceChanged(appearance) => {
-                self.screen
-                    .set_appearance(appearance.palette(), appearance.reduce_motion, now);
+                self.screen.set_appearance(appearance, now);
                 window.request_redraw();
             }
             WindowEvent::TogglePanel(Panel::Notifications) => {
@@ -419,11 +418,7 @@ impl Notifications {
             Box::new(sender_lookup(entries.clone())),
             DateFormats::from_env(),
         );
-        screen.set_appearance(
-            appearance.palette(),
-            appearance.reduce_motion,
-            Instant::now(),
-        );
+        screen.set_appearance(appearance, Instant::now());
         Ok(Self {
             screen,
             inbox,

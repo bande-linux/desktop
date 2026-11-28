@@ -28,12 +28,16 @@ fn read_until(
 }
 
 #[test]
-fn a_tab_closes_at_once_and_starts_beside_a_silent_bus_and_closes_when_its_shell_is_killed() {
+fn a_tab_closes_at_once_starts_beside_a_silent_bus_closes_when_its_shell_is_killed_and_says_what_cannot_start()
+ {
     let folder = tempfile::tempdir().expect("a folder");
     let socket = folder.path().join("bus");
     let _silent = UnixListener::bind(&socket).expect("a bus that never answers");
-    // SAFETY: the only test of this program sets the variable before it starts a thread.
+    let server_folder = folder.path().join("bande/volumes/share");
+    std::fs::create_dir_all(&server_folder).expect("a server's folder");
+    // SAFETY: the only test of this program sets the variables before it starts a thread.
     unsafe {
+        std::env::set_var("XDG_RUNTIME_DIR", folder.path());
         std::env::set_var(
             "DBUS_SESSION_BUS_ADDRESS",
             format!("unix:path={}", socket.display()),
@@ -90,5 +94,45 @@ fn a_tab_closes_at_once_and_starts_beside_a_silent_bus_and_closes_when_its_shell
     assert!(
         !session.terminal.all_text().contains("memory"),
         "a shell killed by hand was blamed on memory"
+    );
+
+    let shell = ("/bin/sleep".to_owned(), vec!["60".to_owned()]);
+    let mut remote = Session::spawn(
+        Terminal::new(grid),
+        Some(shell),
+        Some(server_folder.clone()),
+    )
+    .expect("a shell");
+    let place = format!("/proc/{}/cwd", remote.id());
+    read_until(
+        &mut remote,
+        &theme,
+        START,
+        "the shell did not enter the server's folder",
+        |_| std::fs::read_link(&place).is_ok_and(|place| place == server_folder),
+    );
+    drop(remote);
+
+    let missing = ("/nonexistent/shell".to_owned(), Vec::new());
+    let mut session =
+        Session::spawn(Terminal::new(grid), Some(missing), Some(server_folder)).expect("a wrapper");
+    read_until(
+        &mut session,
+        &theme,
+        TIMEOUT,
+        "no error in the tab",
+        |session| session.terminal.all_text().contains("could not be started"),
+    );
+    assert!(
+        !session.exited(),
+        "the tab closed before its error was read"
+    );
+    session.send(b"\r");
+    read_until(
+        &mut session,
+        &theme,
+        TIMEOUT,
+        "Return did not close the tab",
+        |session| session.exited(),
     );
 }

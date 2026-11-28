@@ -2,7 +2,9 @@ use std::collections::VecDeque;
 use std::io;
 use std::time::Duration;
 
+use crate::keepalive::LONGEST_DEVICE_WAIT;
 use crate::pacing::{Commit, FramePacing};
+use crate::progress::waits_for_a_device;
 use crate::reveal::ShownFrame;
 use crate::state::Compositor;
 
@@ -11,6 +13,7 @@ const FLIP_TIMEOUT: Duration = Duration::from_secs(1);
 const FAILED_FRAME_RETRY: Duration = Duration::from_millis(250);
 const RESTART_DISPLAY_AFTER: Duration = Duration::from_secs(3);
 const GIVE_UP_AFTER: Duration = Duration::from_secs(15);
+const LONGEST_COUNTED_GAP: Duration = Duration::from_secs(5);
 const MEASURED_GRACE: Duration = Duration::from_secs(1);
 const JANK_WINDOW: Duration = Duration::from_secs(10);
 const JANK_PERCENT: u64 = 5;
@@ -291,14 +294,35 @@ pub enum RecoveryStep {
 #[derive(Debug, Default)]
 pub struct FrameRecovery {
     restarted: bool,
+    excused: Duration,
+    seen: Duration,
 }
 
 impl FrameRecovery {
     pub fn step(&mut self, stalled_for: Option<Duration>) -> RecoveryStep {
-        let Some(stalled_for) = stalled_for else {
-            self.restarted = false;
+        self.step_unless(stalled_for, waits_for_a_device)
+    }
+
+    fn step_unless(
+        &mut self,
+        stalled_for: Option<Duration>,
+        waits_for_a_device: impl FnOnce() -> bool,
+    ) -> RecoveryStep {
+        let Some(whole) = stalled_for else {
+            *self = Self::default();
             return RecoveryStep::Wait;
         };
+        let gap = whole.saturating_sub(std::mem::replace(&mut self.seen, whole));
+        self.excused += gap.saturating_sub(LONGEST_COUNTED_GAP);
+        let stalled_for = whole.saturating_sub(self.excused);
+        let next = match self.restarted {
+            true => GIVE_UP_AFTER,
+            false => RESTART_DISPLAY_AFTER,
+        };
+        if stalled_for >= next && whole < LONGEST_DEVICE_WAIT && waits_for_a_device() {
+            self.excused = whole;
+            return RecoveryStep::Wait;
+        }
         if stalled_for >= GIVE_UP_AFTER {
             RecoveryStep::GiveUp
         } else if stalled_for >= RESTART_DISPLAY_AFTER && !self.restarted {
@@ -900,5 +924,49 @@ mod tests {
         assert_eq!(failed_at.len(), 2);
         assert!(failed_at[1] - failed_at[0] >= FAILED_FRAME_RETRY);
         Ok(())
+    }
+
+    #[test]
+    fn a_busy_disk_puts_off_giving_up_on_the_display_but_not_for_ever() {
+        let mut recovery = FrameRecovery::default();
+        let after = |seconds| Some(Duration::from_secs(seconds));
+        for second in 0..150 {
+            let expected = match second {
+                120 => RecoveryStep::RestartDisplay,
+                132.. => RecoveryStep::GiveUp,
+                _ => RecoveryStep::Wait,
+            };
+            assert_eq!(
+                recovery.step_unless(after(second), || true),
+                expected,
+                "at {second} s"
+            );
+            if expected == RecoveryStep::GiveUp {
+                break;
+            }
+        }
+        assert_eq!(recovery.step_unless(None, || true), RecoveryStep::Wait);
+        for second in 0..=15 {
+            let expected = match second {
+                3 => RecoveryStep::RestartDisplay,
+                15 => RecoveryStep::GiveUp,
+                _ => RecoveryStep::Wait,
+            };
+            assert_eq!(
+                recovery.step_unless(after(second), || false),
+                expected,
+                "at {second} s"
+            );
+        }
+    }
+
+    #[test]
+    fn a_kept_event_loop_tries_the_display_again_before_giving_up() {
+        let mut recovery = FrameRecovery::default();
+        let mut step = |seconds| recovery.step_unless(Some(Duration::from_secs(seconds)), || false);
+        assert_eq!(step(40), RecoveryStep::RestartDisplay);
+        assert_eq!(step(80), RecoveryStep::Wait);
+        assert_eq!(step(84), RecoveryStep::Wait);
+        assert_eq!(step(85), RecoveryStep::GiveUp);
     }
 }

@@ -66,23 +66,26 @@ const END_POLL: Duration = Duration::from_millis(5);
 const RESULT_PATIENCE: Duration = Duration::from_secs(2);
 const SCOPE_PATIENCE: Duration = Duration::from_secs(2);
 const STOPPED_UNTIL_PLACED: &str = r#"kill -STOP $$
-[ $# -gt 0 ] || set -- "${SHELL:-$(getent passwd "$(id -u)" | cut -d: -f7)}"
+not_started=$1
+server_folder=$2
+shift 2
+trap 'printf "%s\n" "$not_started"; read -r _' EXIT
+[ -z "$server_folder" ] || cd -- "$server_folder"
+[ $# -gt 0 ] || set -- "${SHELL:-$(getent passwd "$(id -u)" | cut -d: -f7)}" ${server_folder:+-l}
 exec "$@""#;
 
-fn is_runnable(program: &str, directory: Option<&Path>) -> bool {
-    let program = match directory {
-        Some(directory) if program.contains('/') => {
-            directory.join(program).to_string_lossy().into_owned()
-        }
-        _ => program.to_owned(),
-    };
-    bande_xdg::find_executable(&program).is_some()
-}
-
-fn stopped_until_placed(shell: Option<ShellCommand>) -> ShellCommand {
+fn stopped_until_placed(shell: Option<ShellCommand>, server_folder: Option<&Path>) -> ShellCommand {
     let mut wrapped = ["-c", STOPPED_UNTIL_PLACED, "sh"]
         .map(str::to_owned)
         .to_vec();
+    wrapped.push(tr!(
+        "The program could not be started. Press Return to close this tab."
+    ));
+    wrapped.push(
+        server_folder
+            .map(|folder| folder.to_string_lossy().into_owned())
+            .unwrap_or_default(),
+    );
     if let Some((program, arguments)) = shell {
         wrapped.push(program);
         wrapped.extend(arguments);
@@ -151,35 +154,6 @@ fn ran_out_of_memory(shell: u32) -> bool {
         .unwrap_or_default()
 }
 
-fn enter_server_folder_in_the_shell(
-    shell: Option<ShellCommand>,
-    directory: Option<PathBuf>,
-) -> (Option<ShellCommand>, Option<PathBuf>) {
-    let Some(folder) = directory
-        .as_ref()
-        .filter(|folder| bande_volumes::on_connected_volume(folder))
-        .cloned()
-    else {
-        return (shell, directory);
-    };
-    let (program, arguments) = shell.unwrap_or_default();
-    let start = match program.is_empty() {
-        true => r#"cd -- "$1"; exec "${SHELL:-/bin/sh}" -l"#,
-        false => r#"cd -- "$1"; shift; exec "$@""#,
-    };
-    let mut wrapped = vec![
-        "-c".to_owned(),
-        start.to_owned(),
-        "sh".to_owned(),
-        folder.to_string_lossy().into_owned(),
-    ];
-    if !program.is_empty() {
-        wrapped.push(program);
-        wrapped.extend(arguments);
-    }
-    (Some(("/bin/sh".to_owned(), wrapped)), None)
-}
-
 impl Drop for Session {
     fn drop(&mut self) {
         signal_unreaped(self.shell, &[Signal::HUP, Signal::CONT]);
@@ -192,16 +166,11 @@ impl Session {
         shell: Option<ShellCommand>,
         directory: Option<PathBuf>,
     ) -> io::Result<Self> {
-        let (shell, directory) = enter_server_folder_in_the_shell(shell, directory);
-        if let Some((program, _)) = &shell
-            && !is_runnable(program, directory.as_deref())
-        {
-            return Err(io::Error::new(
-                io::ErrorKind::NotFound,
-                format!("cannot run {program}"),
-            ));
-        }
-        let (program, arguments) = stopped_until_placed(shell);
+        let (server_folder, directory): (Option<PathBuf>, Option<PathBuf>) = match directory {
+            Some(folder) if bande_volumes::on_connected_volume(&folder) => (Some(folder), None),
+            directory => (None, directory),
+        };
+        let (program, arguments) = stopped_until_placed(shell, server_folder.as_deref());
         let options = Options {
             shell: Some(Shell::new(program, arguments)),
             working_directory: directory,

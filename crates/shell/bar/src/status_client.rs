@@ -67,7 +67,7 @@ pub struct StatusClient {
     status: StatusHub,
     tray: Vec<TrayItem>,
     tray_icons: TrayIcons,
-    open_anchor: Option<Rect>,
+    open_tray: Option<(String, Rect)>,
     app_id: String,
     menu_key: String,
     app_root: Option<Node>,
@@ -461,7 +461,7 @@ impl StatusClient {
         let menu_first = item.item_is_menu || !secondary;
         match (&item.menu, menu_first) {
             (Some(menu), true) => {
-                self.open_anchor = Some(anchor);
+                self.open_tray = Some((menu.clone(), anchor));
                 self.status.errand(Errand::ShowMenu {
                     menu: menu.clone(),
                     parent: 0,
@@ -673,8 +673,9 @@ impl App for StatusClient {
                     self.refresh_tray_icons(window);
                 }
                 Update::Menu { menu, root } => {
-                    if self.bar.open().is_some()
-                        && let Some(anchor) = self.open_anchor
+                    if matches!(self.bar.open(), Some(Slot::StatusItem(_)))
+                        && let Some((_, anchor)) =
+                            self.open_tray.take_if(|(known, _)| *known == menu)
                     {
                         report(
                             "open the menu",
@@ -774,7 +775,7 @@ impl StatusClient {
             status: status.clone(),
             tray: Vec::new(),
             tray_icons: HashMap::new(),
-            open_anchor: None,
+            open_tray: None,
             app_id: String::new(),
             menu_key: String::new(),
             app_root: None,

@@ -319,7 +319,7 @@ fn lid_left_to_the_session(manager: &ManagerProxyBlocking<'_>) -> zbus::Result<b
 
 pub fn follow_session(
     connection: &Connection,
-    lock_reports: Receiver<SessionReport>,
+    lock_reports: &mut Option<Receiver<SessionReport>>,
     requests: Sender<SessionRequest>,
 ) -> zbus::Result<()> {
     let manager = ManagerProxyBlocking::builder(connection)
@@ -336,6 +336,9 @@ pub fn follow_session(
             }
         }
     });
+    let Some(lock_reports) = lock_reports.take() else {
+        return Ok(());
+    };
     thread::spawn(move || {
         for report in lock_reports {
             match report {

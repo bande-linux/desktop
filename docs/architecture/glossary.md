@@ -11,7 +11,7 @@ the part today.
 | App menu | The cascade the menu button opens: the app's menus as submenus (File, Edit, View…, Window ending in About), then Settings… and Quit; typing searches it | `menus::cascade`, `bande_app::menus::assemble` |
 | Search | The centred card on a tap of Super: apps, settings, files, calculator; also Clipboard History (Super+V) and Emoji & Symbols (Super+.) | crate `bande-launcher`, `Action::ShowLauncher` |
 | Taskbar icons | The app icons of the Taskbar: kept apps, a hairline, running apps, then the Trash | `Taskbar`, `TaskbarLayout` |
-| Kept apps / running apps | The two groups of the Taskbar icons: apps kept in the Taskbar, and running apps that are not | `kept`, `running` |
+| Kept apps / running apps | The two groups of the Taskbar icons: apps kept in the Taskbar, and running apps, with or without windows, that are not | `kept`, `running` |
 | Focus frame | The accent frame around the icon of the active app, with or without windows | `paint_frame`, `framed` |
 | Running dot | The small grey square beside every app that runs, the active one too | `RUNNING_DOT` |
 | Badge, progress, attention ring | A count, a progress bar, or a pulsing orange ring on an app's icon | `LauncherEntry`, `attention` |

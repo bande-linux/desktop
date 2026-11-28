@@ -40,6 +40,7 @@ mod idle;
 mod ime;
 mod input;
 mod input_settings;
+mod keepalive;
 mod keyboard_monitor;
 mod keymap;
 mod label;
@@ -109,6 +110,7 @@ pub use global_shortcuts::{GlobalShortcutsHandle, serve_global_shortcuts};
 pub use input_settings::{
     InputSettings, follow_input_settings, follow_login_settings, user_config,
 };
+pub use keepalive::Keepalive;
 pub use keyboard_monitor::{
     KEYBOARD_MONITOR_NAME, KeyboardMonitorHandle, SCREEN_READER_NAME, serve_keyboard_monitor,
 };

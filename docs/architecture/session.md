@@ -879,11 +879,17 @@ what the one before could not save:
 - **Frames stop reaching the display**: a failed frame is retried four times a second (one log
   line per distinct error) and a page flip missing for a second is written off. After 3 s without
   a frame on every display the compositor makes a new renderer and resets each display's DRM
-  state; after 15 s it exits. The login window, with no work to lose, asks logind to restart a
+  state; after 15 s it exits. Either is put off, for at most two minutes, while one of its threads
+  waits for a device: making a renderer reads the driver's files, which a disk too busy to show
+  frames cannot give in time. Time in which the event loop did not run counts as 5 s at most, so
+  a display kept waiting is always tried again before the compositor exits. The login window, with no work to lose, asks logind to restart a
   computer up for over 5 minutes when it cannot reach the display for 15 s.
 - **The compositor crashes or hangs**: `bande-compositor.service` has `WatchdogSec=20s`, pinged
-  from the event loop, and `TimeoutAbortSec=10s`; the session ends, `bande-login` shows the login window
-  and the next session offers the open apps again. The login window's compositor arms
+  from the event loop and, while that is late, by a thread of its own only as long as a thread of the
+  compositor waits for a device or its first thread is kept in a driver's call (at most two
+  minutes), so a busy disk, or a driver reading swapped pictures back from it, does not end the
+  session, and `TimeoutAbortSec=10s`; the session ends, `bande-login` shows the login window and
+  the next session offers the open apps again. The login window's compositor arms
   `alarm(20)` every 10 s. `Ctrl+Alt+F1`…`F12` switch virtual terminals through logind while the
   compositor runs.
 - **The GPU is lost, hangs or runs out of memory** (`VK_ERROR_DEVICE_LOST`, a fence unsignalled

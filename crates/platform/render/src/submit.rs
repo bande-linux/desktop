@@ -381,6 +381,12 @@ impl VulkanRenderer {
         }
     }
 
+    pub(crate) fn free_spare_staging(&mut self) {
+        for staging in &std::mem::take(&mut self.submissions.spare) {
+            self.destroy_staging(staging);
+        }
+    }
+
     fn free_unused_staging(&mut self) {
         let (kept, unused) = std::mem::take(&mut self.submissions.spare)
             .into_iter()

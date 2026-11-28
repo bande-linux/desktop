@@ -40,6 +40,7 @@ mod idle;
 mod ime;
 mod input;
 mod input_settings;
+mod keepalive;
 mod keyboard_monitor;
 mod keymap;
 mod label;
@@ -62,6 +63,7 @@ mod recall;
 mod release;
 mod remote_input;
 mod render;
+mod residency;
 mod resume;
 mod reveal;
 mod scanout;
@@ -108,6 +110,7 @@ pub use global_shortcuts::{GlobalShortcutsHandle, serve_global_shortcuts};
 pub use input_settings::{
     InputSettings, follow_input_settings, follow_login_settings, user_config,
 };
+pub use keepalive::Keepalive;
 pub use keyboard_monitor::{
     KEYBOARD_MONITOR_NAME, KeyboardMonitorHandle, SCREEN_READER_NAME, serve_keyboard_monitor,
 };
@@ -121,6 +124,7 @@ pub use night::NightTick;
 pub use pointing::PointerSettings;
 pub use progress::Progress;
 pub use render::{FrameStats, Renderer, Snapshot, background};
+pub use residency::keep_code_in_memory;
 pub use reveal::{Awaited, ShownFrame};
 pub use screen::{OutputConfig, OutputMode, OutputSettings, automatic_scale};
 pub use session::{

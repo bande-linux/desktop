@@ -1,5 +1,19 @@
-use zbus::blocking::Connection;
-use zbus::zvariant::OwnedObjectPath;
+use zbus::blocking::proxy::Builder;
+use zbus::blocking::{Connection, Proxy};
+use zbus::zvariant::{OwnedObjectPath, Value};
+
+type ListedUnit = (
+    String,
+    String,
+    String,
+    String,
+    String,
+    String,
+    OwnedObjectPath,
+    u32,
+    String,
+    OwnedObjectPath,
+);
 
 #[zbus::proxy(
     interface = "org.freedesktop.systemd1.Manager",
@@ -8,6 +22,25 @@ use zbus::zvariant::OwnedObjectPath;
 )]
 pub trait ServiceManager {
     fn get_unit(&self, name: &str) -> zbus::Result<OwnedObjectPath>;
+
+    fn set_unit_properties(
+        &self,
+        name: &str,
+        runtime: bool,
+        properties: &[(&str, Value<'_>)],
+    ) -> zbus::Result<()>;
+
+    fn list_units_by_patterns(
+        &self,
+        states: &[&str],
+        patterns: &[&str],
+    ) -> zbus::Result<Vec<ListedUnit>>;
+
+    #[zbus(property, name = "DefaultLimitMEMLOCK")]
+    fn default_limit_memlock(&self) -> zbus::Result<u64>;
+
+    #[zbus(property, name = "DefaultLimitMEMLOCKSoft")]
+    fn default_limit_memlock_soft(&self) -> zbus::Result<u64>;
 
     #[zbus(property)]
     fn virtualization(&self) -> zbus::Result<String>;
@@ -32,4 +65,40 @@ pub fn main_pid(bus: &Connection, unit: &str) -> zbus::Result<Option<u32>> {
         .build()?
         .main_pid()?;
     Ok((pid != 0).then_some(pid))
+}
+
+/// How much memory, in bytes, a unit that does not set it may lock: the soft and the hard limit.
+pub fn default_lock_limits(bus: &Connection) -> zbus::Result<(u64, u64)> {
+    let manager = ServiceManagerProxyBlocking::builder(bus)
+        .cache_properties(zbus::proxy::CacheProperties::No)
+        .build()?;
+    Ok((
+        manager.default_limit_memlock_soft()?,
+        manager.default_limit_memlock()?,
+    ))
+}
+
+/// How much memory `unit` is guaranteed, in bytes.
+pub fn memory_min(bus: &Connection, unit: &str) -> zbus::Result<u64> {
+    let interface = match unit.ends_with(".slice") {
+        true => "org.freedesktop.systemd1.Slice",
+        false => "org.freedesktop.systemd1.Service",
+    };
+    let path = ServiceManagerProxyBlocking::new(bus)?.get_unit(unit)?;
+    let unit: Proxy<'_> = Builder::new(bus)
+        .destination("org.freedesktop.systemd1")?
+        .path(path)?
+        .interface(interface)?
+        .cache_properties(zbus::proxy::CacheProperties::No)
+        .build()?;
+    unit.get_property("MemoryMin")
+}
+
+/// Guarantees `unit` this much memory until the computer restarts or it is changed again.
+pub fn set_memory_min(bus: &Connection, unit: &str, bytes: u64) -> zbus::Result<()> {
+    ServiceManagerProxyBlocking::new(bus)?.set_unit_properties(
+        unit,
+        true,
+        &[("MemoryMin", Value::from(bytes))],
+    )
 }

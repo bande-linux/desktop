@@ -23,6 +23,7 @@ use zbus::proxy::CacheProperties;
 
 use crate::account::Account;
 use crate::journal::JournalStream;
+use crate::protection::Protection;
 use crate::vt::{self, GREETER_VT, Terminal};
 use crate::{GREETER_SOCKET, checked, signals};
 
@@ -385,6 +386,10 @@ fn launch(
     environment: &[(OsString, OsString)],
     links: Links<'_>,
 ) -> Result<(), Failure> {
+    let _protection = match class {
+        Class::User => Protection::of(account.uid),
+        Class::Greeter => None,
+    };
     let marked = match class {
         Class::User => {
             variable(environment, "XDG_RUNTIME_DIR").map(|runtime| (runtime, DESKTOP_SHOWN))

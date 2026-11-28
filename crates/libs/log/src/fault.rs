@@ -116,8 +116,13 @@ fn hang_request(kind: &str, pid: u32, seconds: u64) -> String {
 }
 
 pub fn report_hang_and_wait(kind: &str, pid: u32, seconds: u64, wait: Duration) {
-    if let Err(error) = send(hang_request(kind, pid, seconds), Some(wait)) {
-        tracing::warn!("cannot leave a hang report: {error}");
+    match send(hang_request(kind, pid, seconds), Some(wait)) {
+        Ok(()) => {}
+        Err(error) if error.kind() == io::ErrorKind::WouldBlock => tracing::warn!(
+            "the hang report was asked for but not written within {} s",
+            wait.as_secs()
+        ),
+        Err(error) => tracing::warn!("cannot leave a hang report: {error}"),
     }
 }
 
@@ -234,6 +239,30 @@ impl StallWatch {
     }
 }
 
+fn first_thread() -> String {
+    let read = |file: &str| {
+        std::fs::read_to_string(format!("/proc/self/task/{}/{file}", std::process::id()))
+            .unwrap_or_default()
+    };
+    let stat = read("stat");
+    let state = stat
+        .rsplit_once(") ")
+        .and_then(|(_, rest)| rest.split(' ').next())
+        .unwrap_or("unknown");
+    let syscall = read("syscall");
+    let pressure = std::fs::read_to_string("/proc/pressure/io").unwrap_or_default();
+    format!(
+        "state {state}, in {}, system call {}, i/o pressure {}",
+        read("wchan").trim(),
+        syscall.split(' ').next().unwrap_or_default().trim(),
+        pressure
+            .lines()
+            .find_map(|line| line.strip_prefix("full "))
+            .and_then(|full| full.split(' ').next())
+            .unwrap_or("unknown")
+    )
+}
+
 fn watch(shared: &StallShared, kind: &'static str, limit: Duration) {
     let mut expirations = [0u8; 8];
     let mut reported = None;
@@ -263,8 +292,9 @@ fn watch(shared: &StallShared, kind: &'static str, limit: Duration) {
         if elapsed >= limit && reported != Some(generation) {
             reported = Some(generation);
             tracing::warn!(
-                "the event loop has not come back for {} s; asking for a hang report",
-                elapsed.as_secs()
+                "the event loop has not come back for {} s ({}); asking for a hang report",
+                elapsed.as_secs(),
+                first_thread()
             );
             report_hang_and_wait(kind, std::process::id(), elapsed.as_secs(), WAIT_FOR_ANSWER);
         }

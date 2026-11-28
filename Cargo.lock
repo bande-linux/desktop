@@ -823,6 +823,7 @@ dependencies = [
  "serde_json",
  "signal-hook",
  "smithay",
+ "tempfile",
  "tracing",
  "wayland-client",
  "zbus",
@@ -1125,6 +1126,7 @@ dependencies = [
  "libc",
  "libloading",
  "parley",
+ "parley_data",
  "resvg",
  "serde_json",
  "skrifa 0.44.0",
@@ -2140,6 +2142,7 @@ dependencies = [
  "bande-xdg",
  "rustix 1.1.6",
  "serde",
+ "tempfile",
  "tracing",
  "zbus",
 ]

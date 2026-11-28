@@ -1,4 +1,7 @@
+use std::path::Path;
 use std::time::Duration;
+
+const OWN_TASKS: &str = "/proc/self/task";
 
 /// How long a program that should show itself may do nothing at all before it counts as hung:
 /// longer than D-Bus lets a service take to start, which it may be waiting for.
@@ -51,6 +54,28 @@ impl Progress {
     }
 }
 
+fn any_waits_for_a_device(tasks: &Path) -> bool {
+    std::fs::read_dir(tasks)
+        .into_iter()
+        .flatten()
+        .filter_map(|task| std::fs::read_to_string(task.ok()?.path().join("stat")).ok())
+        .any(|stat| work_in(&stat).is_some_and(|work| work.waits_for_a_device))
+}
+
+fn is_in_a_driver(syscall: &str) -> bool {
+    syscall
+        .split_whitespace()
+        .next()
+        .is_some_and(|number| number.parse() == Ok(libc::SYS_ioctl))
+}
+
+pub(crate) fn waits_for_a_device() -> bool {
+    let first = Path::new(OWN_TASKS).join(std::process::id().to_string());
+    any_waits_for_a_device(Path::new(OWN_TASKS))
+        || std::fs::read_to_string(first.join("syscall"))
+            .is_ok_and(|syscall| is_in_a_driver(&syscall))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -92,5 +117,28 @@ mod tests {
         assert!(work.is_some_and(|work| work.waits_for_a_device && work.done == (9, 50)));
         assert!(work_in(&stat("S")).is_some_and(|work| !work.waits_for_a_device));
         assert!(work_in("7 (x").is_none());
+    }
+
+    #[test]
+    fn one_thread_waiting_for_a_device_is_enough() -> std::io::Result<()> {
+        let tasks = tempfile::tempdir()?;
+        let add = |task: &str, state: &str| {
+            let folder = tasks.path().join(task);
+            std::fs::create_dir(&folder)?;
+            let stat = format!("{task} (a) {state} 1 1 1 0 -1 0 5 0 9 0 20 30 0 0 20 0 1 0 1");
+            std::fs::write(folder.join("stat"), stat)
+        };
+        add("1", "S")?;
+        assert!(!any_waits_for_a_device(tasks.path()));
+        assert!(is_in_a_driver(
+            "16 0x9 0xc0406469 0x7ffd 0x0 0x0 0x0 0x7ffd 0x7f12\n"
+        ));
+        assert!(!is_in_a_driver(
+            "202 0x7f 0x80 0x2 0x0 0x0 0x0 0x7ffd 0x7f12\n"
+        ));
+        assert!(!is_in_a_driver("running\n"));
+        add("2", "D")?;
+        assert!(any_waits_for_a_device(tasks.path()));
+        Ok(())
     }
 }

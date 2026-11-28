@@ -11,8 +11,8 @@ use bande_notify::{DEFAULT_ACTION, Notification, Presentation, Stack};
 use bande_spring::rubber_band;
 use bande_toolkit::ui::{Animated, Event, Key, Spring, focus_ring_for, past_drag_slop};
 use bande_toolkit::{
-    Color, ControlSize, DisplayEdge, Elevation, Item, Palette, Paragraph, Point, Radius, Rect,
-    Scene, Shape, Spacing, TextAlign, TextRole, TextStyle, TextSystem,
+    Appearance, Color, ControlSize, DisplayEdge, Elevation, Item, Palette, Paragraph, Point,
+    Radius, Rect, Scene, Shape, Spacing, TextAlign, TextRole, TextStyle, TextSystem, WindowButtons,
 };
 use jiff::civil::Date;
 
@@ -135,6 +135,7 @@ pub type Senders = Box<dyn FnMut(&Notification, &str) -> Sender>;
 pub struct Screen {
     palette: Palette,
     text: TextSystem,
+    close_side: WindowButtons,
     reduce_motion: bool,
     senders: Senders,
     presentation: Presentation,
@@ -172,6 +173,7 @@ impl Screen {
         Self {
             palette,
             text,
+            close_side: WindowButtons::default(),
             reduce_motion: false,
             senders,
             presentation: Presentation::default(),
@@ -199,9 +201,10 @@ impl Screen {
         }
     }
 
-    pub fn set_appearance(&mut self, palette: Palette, reduce_motion: bool, now: Instant) {
-        self.palette = palette;
-        self.reduce_motion = reduce_motion;
+    pub fn set_appearance(&mut self, appearance: Appearance, now: Instant) {
+        self.palette = appearance.palette();
+        self.close_side = appearance.window_buttons;
+        self.reduce_motion = appearance.reduce_motion;
         self.rebuild(now);
     }
 
@@ -331,6 +334,7 @@ impl Screen {
             &age,
             width,
             lines,
+            self.close_side,
             &self.palette,
             &mut self.text,
         )

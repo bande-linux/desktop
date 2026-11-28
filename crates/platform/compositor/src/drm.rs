@@ -95,6 +95,8 @@ impl Head {
     fn darken(&mut self) -> Result<(), DrmBackendError> {
         if !self.dark {
             self.compositor.clear()?;
+            self.compositor.reset_buffers();
+            self.on_screen = None;
             self.dark = true;
             self.flip_pending = false;
         }
@@ -1259,7 +1261,14 @@ impl DrmBackend {
                 head.darken()?;
             }
         }
+        self.rest_when_all_dark();
         Ok(())
+    }
+
+    fn rest_when_all_dark(&mut self) {
+        if self.heads.iter().all(|head| head.dark) {
+            self.renderer.rest();
+        }
     }
 
     fn head(&mut self, name: &str) -> Option<&mut Head> {
@@ -2129,6 +2138,7 @@ impl DrmBackend {
         }
         if !compositor.output_powered(output) {
             head.darken()?;
+            self.rest_when_all_dark();
             return Ok(Submission::Paused);
         }
         if head.dark

@@ -12,6 +12,7 @@ use wayland_client::protocol::wl_shm::Format;
 use crate::{Globals, ShmImage, TestClient, quadrants};
 
 const SOCKET: &str = "BANDE_TEST_SEPARATE_APP_SOCKET";
+const CLOSE: &str = "close";
 
 pub struct SeparateApp {
     orders: ChildStdin,
@@ -46,6 +47,10 @@ impl SeparateApp {
         self.show_window_of(server, side, "");
     }
 
+    pub fn close_windows(&mut self) {
+        writeln!(self.orders, "{CLOSE}").expect("order the windows closed");
+    }
+
     pub fn show_window_of(&mut self, server: &mut Compositor, side: i32, app_id: &str) {
         writeln!(self.orders, "{side} {app_id}").expect("order a window");
         let deadline = Instant::now() + Duration::from_secs(10);
@@ -59,6 +64,10 @@ impl SeparateApp {
             std::thread::sleep(Duration::from_millis(5));
         }
     }
+}
+
+pub fn is_separate_app() -> bool {
+    env::var_os(SOCKET).is_some()
 }
 
 pub fn act_as_separate_app() -> bool {
@@ -80,6 +89,14 @@ pub fn act_as_separate_app() -> bool {
     };
     for order in std::io::stdin().lock().lines() {
         let order = order.expect("order");
+        if order == CLOSE {
+            for (_, xdg_surface, toplevel) in client.windows.drain(..) {
+                toplevel.destroy();
+                xdg_surface.destroy();
+            }
+            client.connection.flush().expect("client flush");
+            continue;
+        }
         let (side, app_id) = order.split_once(' ').unwrap_or((&order, ""));
         client.show_window_blocking(side.parse().expect("window side"), app_id);
     }

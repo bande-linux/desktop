@@ -734,7 +734,8 @@ mod tests {
             revents: 0,
         };
         let SharedPlane { offset, stride } = image.planes[0];
-        let length = offset as usize + stride as usize * SIDE as usize;
+        let rows = at.iter().map(|(_, y)| y + 1).max().unwrap_or_default();
+        let length = offset as usize + stride as usize * rows as usize;
         // SAFETY: ready is a valid pollfd; the mapping covers the image's one plane, is only read
         // between the dma-buf's read sync calls and is unmapped before returning.
         unsafe {
@@ -918,9 +919,9 @@ mod tests {
         }
     }
 
-    fn everywhere() -> Vec<(u32, u32)> {
-        (0..SIDE)
-            .flat_map(|y| (0..SIDE).map(move |x| (x, y)))
+    fn everywhere(side: u32) -> Vec<(u32, u32)> {
+        (0..side)
+            .flat_map(|y| (0..side).map(move |x| (x, y)))
             .collect()
     }
 
@@ -1071,8 +1072,8 @@ mod tests {
                 .present(&after, 1.0, &whole, None)
                 .expect("the whole frame");
             let differs = furthest(
-                &pixels(&partial, &everywhere()),
-                &pixels(&whole, &everywhere()),
+                &pixels(&partial, &everywhere(SIDE)),
+                &pixels(&whole, &everywhere(SIDE)),
             );
             if differs.is_none_or(|differs| differs > LAYER_ROUNDING) {
                 wrong.push((change.name, differs));
@@ -1094,7 +1095,12 @@ mod tests {
         };
         let mut text = TextSystem::new();
         let mut renderer = GpuRenderer::with_device(Arc::clone(&gpu), (SIDE, SIDE));
-        for size in [9.0, 20.0, 60.0] {
+        let sizes = [9.0, 13.0, 20.0, 60.0];
+        let scales = [1.0, 1.25, 1.5, 1.75, 2.0];
+        for (size, scale) in sizes
+            .into_iter()
+            .flat_map(|size| scales.map(|scale| (size, scale)))
+        {
             let scene = scene_of(&[Item::Text {
                 origin: Point::new(3.3, 2.0),
                 paragraph: text.paragraph(
@@ -1104,17 +1110,19 @@ mod tests {
                     TextAlign::Start,
                 ),
             }]);
+            let side = crate::render::pixels(SIDE, scale);
             let image = gpu
-                .shared_image((SIDE, SIDE), &linear)
+                .shared_image((side, side), &linear)
                 .expect("a shared image");
             renderer
-                .present(&scene, 1.0, &image, None)
+                .present(&scene, scale, &image, None)
                 .expect("a frame with an emoji");
-            let shown = pixels(&image, &everywhere());
-            let drawn: Vec<[u8; 4]> = crate::cpu::CpuRenderer::new()
-                .render(&scene)
-                .expect("the same frame on the CPU")
-                .rgba
+            let shown = pixels(&image, &everywhere(side));
+            let mut drawn = vec![0; (side * side * 4) as usize];
+            crate::cpu::CpuRenderer::new()
+                .render_into(&scene, scale, &mut drawn)
+                .expect("the same frame on the CPU");
+            let drawn: Vec<[u8; 4]> = drawn
                 .as_chunks::<4>()
                 .0
                 .iter()
@@ -1125,7 +1133,7 @@ mod tests {
             assert!(shown.iter().any(yellow), "at {size}: no emoji is shown");
             assert!(
                 differs.is_some_and(|differs| differs <= SAMPLING_ROUNDING),
-                "at {size}: a channel differs by {differs:?}"
+                "{size} at {scale}: a channel differs by {differs:?}"
             );
         }
     }

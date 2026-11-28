@@ -13,6 +13,7 @@ ExecStart=/usr/bin/bande-compositor
 WatchdogSec=20s
 TimeoutStopSec=10s
 TimeoutAbortSec=10s
+LimitMEMLOCK=infinity
 OOMScoreAdjust=100
 OOMPolicy=continue
 ManagedOOMPreference=avoid

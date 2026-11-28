@@ -606,7 +606,8 @@ part of login small and the UI unprivileged:
    an expired password with `pam_chauthtok`), refuses uid 0 and a login shell `/etc/shells` does
    not list (`nologin`, `false`), takes the person's groups (`getgrouplist`) before
    `pam_setcred` adds `pam_group`'s, establishes credentials, opens the session, reinitialises
-   the credentials, runs the session's processes as the person (`setsid`, the virtual terminal
+   the credentials, keeps memory for the person's desktop while the session runs
+   ([decision 0004](../decisions/0004-memory-pressure.md)), runs the session's processes as the person (`setsid`, the virtual terminal
    as controlling terminal, `PR_SET_PDEATHSIG`, every descriptor past standard error closed at
    `exec`), and closes the session and deletes the credentials when they end, also when signing
    in is called off after the password was accepted. People
@@ -893,11 +894,17 @@ what the one before could not save:
 - **Frames stop reaching the display**: a failed frame is retried four times a second (one log
   line per distinct error) and a page flip missing for a second is written off. After 3 s without
   a frame on every display the compositor makes a new renderer and resets each display's DRM
-  state; after 15 s it exits. The login window, with no work to lose, asks logind to restart a
+  state; after 15 s it exits. Either is put off, for at most two minutes, while one of its threads
+  waits for a device: making a renderer reads the driver's files, which a disk too busy to show
+  frames cannot give in time. Time in which the event loop did not run counts as 5 s at most, so
+  a display kept waiting is always tried again before the compositor exits. The login window, with no work to lose, asks logind to restart a
   computer up for over 5 minutes when it cannot reach the display for 15 s.
 - **The compositor crashes or hangs**: `bande-compositor.service` has `WatchdogSec=20s`, pinged
-  from the event loop, and `TimeoutAbortSec=10s`; the session ends, `bande-login` shows the login window
-  and the next session offers the open apps again. The login window's compositor arms
+  from the event loop and, while that is late, by a thread of its own only as long as a thread of the
+  compositor waits for a device or its first thread is kept in a driver's call (at most two
+  minutes), so a busy disk, or a driver reading swapped pictures back from it, does not end the
+  session, and `TimeoutAbortSec=10s`; the session ends, `bande-login` shows the login window and
+  the next session offers the open apps again. The login window's compositor arms
   `alarm(20)` every 10 s. `Ctrl+Alt+F1`…`F12` switch virtual terminals through logind while the
   compositor runs.
 - **The GPU is lost, hangs or runs out of memory** (`VK_ERROR_DEVICE_LOST`, a fence unsignalled
@@ -909,7 +916,8 @@ what the one before could not save:
   `OOMScoreAdjust=100` with oomd `avoid` and `OOMPolicy=continue`; the session clients it starts,
   apps and services sit at 200, so a kernel OOM kill takes one of them and the compositor starts a
   killed shell again; the session bus, PipeWire, WirePlumber and the portal get oomd `avoid` from
-  `bande-session` at start.
+  `bande-session` at start. Memory is kept for the desktop on every level above it while a Bande
+  session runs (`bande-login`, below), and `app.slice` is slowed before memory runs out.
 - **Session services crash**: every Bande user service has `Restart=on-failure` with systemd's
   start limit, runs in `session.slice`, and is D-Bus activated again on the next call after that.
 - **Too many processes**: each app scope gets the default `TasksMax` (15 % of the kernel's limit)
@@ -918,9 +926,13 @@ what the one before could not save:
 - **The processor is busy** (a big build): `bande-session` gives `app.slice` half the CPU weight
   of `session.slice`, and the compositor asks `rtkit` to raise its drawing and input thread to
   nice −11 (`MakeThreadHighPriority`), keeping the normal priority when rtkit is missing or
-  refuses, so the pointer and animations stay smooth. That thread is also set to reset on
-  fork (`SCHED_RESET_ON_FORK`), so every thread and client started from it begins at the
-  normal priority; without that flag it is not raised at all.
+  refuses, so the pointer and animations stay smooth. That thread also asks the scheduler for
+  short 0.1 ms slices (`sched_setattr`, with or without rtkit), so it runs soon after it wakes among
+  busy programs, and is set to reset on fork (`SCHED_RESET_ON_FORK`), so every thread and client
+  started from it begins at the normal priority; without that it is not raised at all. It is not real-time: the
+  kernel kills a real-time thread that computes for 200 ms without sleeping, which a mode change
+  or a driver compiling shaders can take. Each app and each Terminal tab has its own scope, so the
+  focused app gets an equal share however many programs another one runs.
 - **The disk is full**: configuration and state are written to a staging file and renamed
   (`bande_xdg::replace_file`), so a failed write leaves the old file whole.
 - **After a crash**: the compositor keeps the open apps in `$XDG_STATE_HOME/bande/running` and

@@ -5,21 +5,26 @@ use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use bande_xdg::{DesktopEntry, find_app, unit_app_ids};
+use bande_l10n::tr;
+use bande_xdg::{DesktopEntry, find_app, is_tab, unit_app_ids};
+use rustix::buffer::spare_capacity;
+use rustix::event::Timespec;
 use rustix::event::epoll::{self, CreateFlags, EventData, EventFlags};
 use zbus::blocking::Connection;
 
-pub const SYSTEM_PRESSURE: &str = "/proc/pressure/memory";
+const SYSTEM_PRESSURE: &str = "/proc/pressure/memory";
 pub const MEMINFO: &str = "/proc/meminfo";
+const SLICE_PRESSURE: &str = "memory.pressure";
 pub const OWN_CGROUP: &str = "/proc/self/cgroup";
 pub const CGROUP_ROOT: &str = "/sys/fs/cgroup";
 
 const STALL: Duration = Duration::from_millis(100);
 const WINDOW: Duration = Duration::from_secs(2);
-const SUSTAINED: Duration = Duration::from_secs(10);
+const SUSTAINED: Duration = Duration::from_secs(4);
 const STREAK_GAP: Duration = Duration::from_secs(5);
 const CALM: Duration = Duration::from_secs(60);
 const SIGKILL: i32 = 9;
+const NO_SUCH_UNIT: &str = "org.freedesktop.systemd1.NoSuchUnit";
 const NEARLY_EXHAUSTED: u64 = 10;
 
 fn trigger(stall: Duration, window: Duration) -> String {
@@ -32,7 +37,19 @@ pub struct PressureTrigger {
 }
 
 impl PressureTrigger {
-    pub fn open(pressure: &Path) -> io::Result<Self> {
+    pub fn of_apps(app_slice: Option<&Path>) -> io::Result<Self> {
+        app_slice
+            .and_then(|slice| {
+                Self::open(&slice.join(SLICE_PRESSURE))
+                    .inspect_err(|error| {
+                        tracing::debug!("watching the whole computer's memory: {error}");
+                    })
+                    .ok()
+            })
+            .map_or_else(|| Self::open(Path::new(SYSTEM_PRESSURE)), Ok)
+    }
+
+    fn open(pressure: &Path) -> io::Result<Self> {
         let mut file = OpenOptions::new().read(true).write(true).open(pressure)?;
         file.write_all(trigger(STALL, WINDOW).as_bytes())?;
         let events = epoll::create(CreateFlags::CLOEXEC)?;
@@ -45,6 +62,17 @@ impl PressureTrigger {
 
     pub fn fd(&self) -> BorrowedFd<'_> {
         self.events.as_fd()
+    }
+
+    /// Whether what it watches is gone, after which its descriptor stays ready.
+    pub fn is_gone(&self) -> bool {
+        let mut events = Vec::<epoll::Event>::with_capacity(1);
+        let now = Timespec::default();
+        epoll::wait(&self.events, spare_capacity(&mut events), Some(&now)).is_ok()
+            && events.iter().any(|event| {
+                let flags = event.flags;
+                flags.contains(EventFlags::ERR)
+            })
     }
 }
 
@@ -67,6 +95,23 @@ pub fn memory_exhausted(meminfo: &str) -> bool {
     let swap_total = read("SwapTotal").unwrap_or(0);
     let swap_free = read("SwapFree").unwrap_or(0).min(swap_total);
     (available + swap_free) * NEARLY_EXHAUSTED < total + swap_total
+}
+
+/// Whether the apps use nearly all the memory they may, not counting files the kernel can read
+/// again.
+pub fn apps_at_limit(app_slice: &Path) -> bool {
+    let read = |file: &str| fs::read_to_string(app_slice.join(file)).unwrap_or_default();
+    let number = |file: &str| read(file).trim().parse::<u64>().ok();
+    let (Some(current), Some(high)) = (number("memory.current"), number("memory.high")) else {
+        return false;
+    };
+    let cache: u64 = read("memory.stat")
+        .lines()
+        .filter_map(|line| line.split_once(' '))
+        .filter(|(name, _)| matches!(*name, "inactive_file" | "active_file"))
+        .filter_map(|(_, bytes)| bytes.parse::<u64>().ok())
+        .sum();
+    current.saturating_sub(cache) >= high / NEARLY_EXHAUSTED * (NEARLY_EXHAUSTED - 1)
 }
 
 #[derive(Debug, Default)]
@@ -134,12 +179,26 @@ pub fn footprint(smaps_rollup: &str) -> Option<u64> {
     Some((anonymous + swapped) * 1024)
 }
 
+fn heaviest_program(folder: &Path) -> Option<String> {
+    let pids = fs::read_to_string(folder.join("cgroup.procs")).ok()?;
+    let (_, pid) = pids
+        .lines()
+        .filter_map(|pid| Some((process_footprint(pid)?, pid)))
+        .max_by_key(|(bytes, _)| *bytes)?;
+    let name = fs::read_to_string(format!("/proc/{}/comm", pid.trim())).ok()?;
+    Some(name.trim_end().to_owned())
+}
+
+fn process_footprint(pid: &str) -> Option<u64> {
+    let rollup = fs::read_to_string(format!("/proc/{}/smaps_rollup", pid.trim())).ok()?;
+    footprint(&rollup)
+}
+
 fn cgroup_footprint(folder: &Path) -> u64 {
     let own: u64 = fs::read_to_string(folder.join("cgroup.procs"))
         .unwrap_or_default()
         .lines()
-        .filter_map(|pid| fs::read_to_string(format!("/proc/{}/smaps_rollup", pid.trim())).ok())
-        .filter_map(|rollup| footprint(&rollup))
+        .filter_map(process_footprint)
         .sum();
     let nested: u64 = fs::read_dir(folder)
         .into_iter()
@@ -157,6 +216,7 @@ pub fn heaviest_apps(app_slice: &Path, entries: &[DesktopEntry], limit: usize) -
     };
     let mut apps = Vec::<AppMemory>::new();
     let mut positions = HashMap::<String, usize>::new();
+    let mut tabs = Vec::new();
     for unit in units.filter_map(Result::ok) {
         let Some(name) = unit.file_name().to_str().map(str::to_owned) else {
             continue;
@@ -170,11 +230,23 @@ pub fn heaviest_apps(app_slice: &Path, entries: &[DesktopEntry], limit: usize) -
             continue;
         };
         let bytes = cgroup_footprint(&unit.path());
-        let position = *positions.entry(app_id.clone()).or_insert_with(|| {
+        let app_name = entry.map_or_else(|| app_id.clone(), |entry| entry.name.clone());
+        let (key, shown) = match is_tab(&name) {
+            true => {
+                let Some(program) = heaviest_program(&unit.path()) else {
+                    continue;
+                };
+                let shown = tr!("{program} in {app}", program = program, app = app_name);
+                tabs.push((app_id, name.clone()));
+                (name.clone(), shown)
+            }
+            false => (app_id, app_name),
+        };
+        let position = *positions.entry(key.clone()).or_insert_with(|| {
             apps.push(AppMemory {
-                name: entry.map_or_else(|| app_id.clone(), |entry| entry.name.clone()),
+                name: shown,
                 icon: entry.and_then(|entry| entry.icon.clone()),
-                app_id,
+                app_id: key,
                 units: Vec::new(),
                 bytes: 0,
             });
@@ -183,6 +255,11 @@ pub fn heaviest_apps(app_slice: &Path, entries: &[DesktopEntry], limit: usize) -
         let app = &mut apps[position];
         app.units.push(name);
         app.bytes += bytes;
+    }
+    for (app_id, tab) in tabs {
+        if let Some(position) = positions.get(&app_id) {
+            apps[*position].units.push(tab);
+        }
     }
     apps.sort_by(|left, right| {
         right
@@ -195,14 +272,19 @@ pub fn heaviest_apps(app_slice: &Path, entries: &[DesktopEntry], limit: usize) -
 }
 
 pub fn force_quit(session: &Connection, app: &AppMemory) -> zbus::Result<()> {
+    let mut killed = Ok(());
     for unit in &app.units {
-        session.call_method(
+        match session.call_method(
             Some("org.freedesktop.systemd1"),
             "/org/freedesktop/systemd1",
             Some("org.freedesktop.systemd1.Manager"),
             "KillUnit",
             &(unit, "all", SIGKILL),
-        )?;
+        ) {
+            Ok(_) => {}
+            Err(zbus::Error::MethodError(name, ..)) if name.as_str() == NO_SUCH_UNIT => {}
+            Err(error) => killed = Err(error),
+        }
     }
-    Ok(())
+    killed
 }

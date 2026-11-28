@@ -2,9 +2,11 @@ use std::collections::HashMap;
 use std::thread;
 use zbus::zvariant::Value;
 
+use bande_bus::HeldProcess;
 use bande_protocols::client::bande_app_control_v1::{self, BandeAppControlV1};
 use bande_protocols::client::bande_app_v1::{self, BandeAppV1, Offer, Placement};
 use bande_protocols::client::bande_shell_v1::{self, BandeShellV1, SessionEnd};
+use wayland_client::protocol::wl_callback::{self, WlCallback};
 use wayland_client::protocol::wl_registry::WlRegistry;
 use wayland_client::protocol::wl_seat::WlSeat;
 use wayland_client::{Connection, Dispatch, Proxy, QueueHandle, WEnum, event_created_child};
@@ -22,6 +24,7 @@ use bande_graphics::{Key, Modifiers, Rect};
 use wayland_protocols::xdg::shell::client::xdg_toplevel::XdgToplevel;
 
 use crate::app_connection::modifier_bits;
+use crate::processes::{Announced, Processes};
 use crate::seat::keysym_for;
 use crate::window::{State, Window, WindowError, WindowEvent};
 
@@ -61,7 +64,7 @@ pub(crate) struct Shell {
     pub(crate) app_control_global: Option<(WlRegistry, u32)>,
     app_control: Option<BandeAppControlV1>,
     toplevels: Vec<Toplevel>,
-    processes: HashMap<String, u32>,
+    processes: Processes,
     windowless: Vec<String>,
     minimized: Vec<String>,
     token: Option<String>,
@@ -304,7 +307,12 @@ impl Window {
     }
 
     pub fn app_pid(&self, app_id: &str) -> Option<u32> {
-        self.state.shell.processes.get(app_id).copied()
+        self.state.shell.processes.latest_pid(app_id)
+    }
+
+    /// The running processes whose connections showed the open windows of `app_id`.
+    pub fn app_processes(&self, app_id: &str) -> Vec<HeldProcess> {
+        self.state.shell.processes.of(app_id)
     }
 
     pub fn activate_app(&mut self, app_id: &str) -> Result<(), WindowError> {
@@ -542,8 +550,8 @@ impl Dispatch<BandeShellV1, ()> for State {
         shell: &BandeShellV1,
         event: bande_shell_v1::Event,
         _: &(),
-        _: &Connection,
-        _: &QueueHandle<Self>,
+        connection: &Connection,
+        queue: &QueueHandle<Self>,
     ) {
         match event {
             bande_shell_v1::Event::Ping { serial } => shell.pong(serial),
@@ -701,7 +709,7 @@ impl Dispatch<BandeShellV1, ()> for State {
                 shell.windowless.retain(|known| *known != app_id);
                 if windowless != 0 {
                     if let Ok(pid) = u32::try_from(pid) {
-                        shell.processes.insert(app_id.clone(), pid);
+                        shell.processes.announce(&app_id, pid);
                     }
                     shell.windowless.push(app_id);
                 }
@@ -711,11 +719,30 @@ impl Dispatch<BandeShellV1, ()> for State {
                 let Ok(pid) = u32::try_from(pid) else {
                     return;
                 };
-                if !app_id.is_empty() && state.shell.processes.insert(app_id, pid) != Some(pid) {
+                if !app_id.is_empty()
+                    && let Some(announced) = state.shell.processes.announce(&app_id, pid)
+                {
+                    connection.display().sync(queue, announced);
                     state.events.push(WindowEvent::AppsChanged);
                 }
             }
             _ => {}
+        }
+    }
+}
+
+impl Dispatch<WlCallback, Announced> for State {
+    fn event(
+        state: &mut Self,
+        _: &WlCallback,
+        event: wl_callback::Event,
+        announced: &Announced,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        if let wl_callback::Event::Done { .. } = event {
+            state.shell.processes.confirm(announced);
+            state.events.push(WindowEvent::AppsChanged);
         }
     }
 }
@@ -786,13 +813,10 @@ impl Dispatch<ExtForeignToplevelHandleV1, ()> for State {
                     .retain(|identifier| *identifier != closed.identifier);
                 closed.handle.destroy();
                 let shell = &mut state.shell;
-                shell.processes.retain(|app_id, _| {
-                    shell
-                        .toplevels
-                        .iter()
-                        .any(|toplevel| toplevel.app_id == *app_id)
+                let toplevels = &shell.toplevels;
+                shell.processes.window_closed(&closed.app_id, |app_id| {
+                    toplevels.iter().any(|toplevel| toplevel.app_id == app_id)
                 });
-
                 state.events.push(WindowEvent::AppsChanged);
             }
             _ => {}

@@ -412,16 +412,17 @@ impl Image {
     }
 }
 
-fn premultiplied(width: u16, height: u16, mut rgba: Vec<u8>) -> Option<Pixmap> {
-    if rgba.len() != usize::from(width) * usize::from(height) * 4 {
-        return None;
-    }
+pub(crate) fn premultiply(rgba: &mut [u8]) {
     for pixel in rgba.as_chunks_mut::<4>().0 {
         let alpha = u16::from(pixel[3]);
         for channel in &mut pixel[..3] {
             *channel = ((u16::from(*channel) * alpha + 127) / 255) as u8;
         }
     }
+}
+
+fn premultiplied(width: u16, height: u16, mut rgba: Vec<u8>) -> Option<Pixmap> {
+    premultiply(&mut rgba);
     pixmap(width, height, rgba)
 }
 

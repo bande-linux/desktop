@@ -8,7 +8,8 @@ pub mod systemd_config;
 
 pub use reading::Reading;
 
-use std::os::fd::{AsFd, AsRawFd, BorrowedFd};
+use std::os::fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd};
+use std::sync::Arc;
 use std::time::Duration;
 
 use zbus::blocking::fdo::DBusProxy;
@@ -68,16 +69,46 @@ pub fn pid_of_handle(handle: BorrowedFd<'_>) -> Option<u32> {
         .ok()
 }
 
+/// A process by its number and a pidfd, so one that later takes the number is told from it.
+#[derive(Debug, Clone)]
+pub struct HeldProcess {
+    pub pid: u32,
+    pub handle: Arc<OwnedFd>,
+}
+
+impl PartialEq for HeldProcess {
+    fn eq(&self, other: &Self) -> bool {
+        self.pid == other.pid
+    }
+}
+
+impl Eq for HeldProcess {}
+
+/// The process that connected to `bus` as `name`, by the handle the bus took when it connected,
+/// so one that later took the number is never returned. `None` when it ended or the bus has no
+/// handle.
+pub fn connected_process(bus: &Connection, name: BusName<'_>) -> zbus::Result<Option<HeldProcess>> {
+    let credentials = DBusProxy::new(bus)?.get_connection_credentials(name)?;
+    let (Some(pid), Some(handle)) = (credentials.process_id(), credentials.process_fd()) else {
+        return Ok(None);
+    };
+    if pid_of_handle(handle.as_fd()) != Some(pid) {
+        return Ok(None);
+    }
+    Ok(Some(HeldProcess {
+        pid,
+        handle: Arc::new(handle.as_fd().try_clone_to_owned()?),
+    }))
+}
+
 /// Whether the connection `caller` on `bus` belongs to the main process of the service manager's
 /// `unit` (on the same bus), checked through the process handle the bus took when it connected,
 /// so a process that only shares that program, or that later took the number, does not pass.
 pub fn is_main_process_of(bus: &Connection, caller: BusName<'_>, unit: &str) -> zbus::Result<bool> {
-    let credentials = DBusProxy::new(bus)?.get_connection_credentials(caller)?;
-    let (Some(process), Some(handle)) = (credentials.process_id(), credentials.process_fd()) else {
-        return Ok(false);
-    };
-    Ok(pid_of_handle(handle.as_fd()) == Some(process)
-        && systemd::main_pid(bus, unit)? == Some(process))
+    match connected_process(bus, caller)? {
+        Some(process) => Ok(systemd::main_pid(bus, unit)? == Some(process.pid)),
+        None => Ok(false),
+    }
 }
 
 /// Whether `message` came from the program that owns `name` now.

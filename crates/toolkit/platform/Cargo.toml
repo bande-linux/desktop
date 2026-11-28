@@ -10,7 +10,7 @@ repository.workspace = true
 [dependencies]
 accesskit.workspace = true
 accesskit_unix.workspace = true
-rustix = { workspace = true, features = ["fs", "pipe", "time"] }
+rustix = { workspace = true, features = ["fs", "pipe", "process", "time"] }
 tracing.workspace = true
 bande-bus.workspace = true
 bande-xdg.workspace = true

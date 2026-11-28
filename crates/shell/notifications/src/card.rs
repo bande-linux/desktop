@@ -4,7 +4,7 @@ use bande_notify::{DEFAULT_ACTION, Notification};
 use bande_toolkit::ui::focus_ring_for;
 use bande_toolkit::{
     Color, ControlSize, Elevation, Image, Item, Palette, Paragraph, Point, Radius, Rect, Shape,
-    Spacing, TextAlign, TextRole, TextStyle, TextSystem,
+    Spacing, TextAlign, TextRole, TextStyle, TextSystem, WindowButtons,
 };
 use jiff::Zoned;
 
@@ -49,6 +49,7 @@ pub struct Card {
     pub count: usize,
     pub height: f32,
     width: f32,
+    close_side: WindowButtons,
     icon: Option<Image>,
     picture: Option<(Rect, Image)>,
     initial: Option<Paragraph>,
@@ -122,6 +123,7 @@ impl Card {
         age: &str,
         width: f32,
         body_lines: usize,
+        close_side: WindowButtons,
         palette: &Palette,
         text: &mut TextSystem,
     ) -> Self {
@@ -236,6 +238,7 @@ impl Card {
             count,
             height: height.round(),
             width,
+            close_side,
             icon: sender.icon,
             picture,
             initial,
@@ -257,8 +260,12 @@ impl Card {
     }
 
     pub fn bounds(&self, origin: Point) -> Rect {
+        let left = match self.close_side {
+            WindowButtons::Left => origin.x - CLOSE_REACH,
+            WindowButtons::Right => origin.x,
+        };
         Rect::new(
-            origin.x - CLOSE_REACH,
+            left,
             origin.y - CLOSE_REACH,
             self.width + CLOSE_REACH,
             self.height + self.depth() + CLOSE_REACH,
@@ -266,12 +273,12 @@ impl Card {
     }
 
     fn close_rect(&self) -> Rect {
-        Rect::new(
-            -CLOSE_SIZE / 2.0 + 2.0,
-            -CLOSE_SIZE / 2.0 + 2.0,
-            CLOSE_SIZE,
-            CLOSE_SIZE,
-        )
+        let outside = CLOSE_SIZE / 2.0 - 2.0;
+        let x = match self.close_side {
+            WindowButtons::Left => -outside,
+            WindowButtons::Right => self.width + outside - CLOSE_SIZE,
+        };
+        Rect::new(x, -outside, CLOSE_SIZE, CLOSE_SIZE)
     }
 
     pub fn part_at(&self, point: Point, hovered: bool) -> Option<Part> {
@@ -466,4 +473,50 @@ pub(crate) fn surface_with_edge(
         paint: fill.into(),
     });
     items.push(Item::lit_edge(shape, palette));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bande_toolkit::Appearance;
+
+    const WIDTH: f32 = 344.0;
+
+    fn card(close_side: WindowButtons) -> Card {
+        Card::new(
+            &Notification {
+                summary: "Hello".to_owned(),
+                ..Notification::default()
+            },
+            "app",
+            1,
+            Sender {
+                name: "App".to_owned(),
+                icon: None,
+                picture: None,
+            },
+            "now",
+            WIDTH,
+            3,
+            close_side,
+            &Appearance::default().palette(),
+            &mut TextSystem::new(),
+        )
+    }
+
+    #[test]
+    fn the_close_button_is_on_the_side_of_the_window_buttons() {
+        let (left, right) = (Point::new(-5.0, 0.0), Point::new(WIDTH + 5.0, 0.0));
+        for (side, here, there) in [
+            (WindowButtons::Left, left, right),
+            (WindowButtons::Right, right, left),
+        ] {
+            let card = card(side);
+            let bounds = card.bounds(Point::new(0.0, 0.0));
+            assert_eq!(card.part_at(here, true), Some(Part::Close));
+            assert_eq!(card.part_at(there, true), None);
+            assert!(bounds.contains(here));
+            assert!(!bounds.contains(there));
+        }
+    }
 }

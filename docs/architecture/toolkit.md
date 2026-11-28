@@ -100,8 +100,8 @@ writes a hex value, a corner radius or a font name of its own.
     within 1/255 of their exact area coverage. Glyph outlines come from `skrifa`, unhinted and in
     font units (no 26.6 rounding), are cached per glyph and size, and are drawn at fractional
     pen positions with grayscale antialiasing. Colour glyphs (COLR,
-    CBDT, sbix) are drawn once per size as images on whole pixels; one that cannot be drawn is
-    set as a plain glyph.
+    CBDT, sbix) are drawn once per size, and layered ones once per text colour too, as images on
+    whole pixels; one that cannot be drawn is set as a plain glyph.
   - What no window can show (absurd sizes and places) is left out, and so is what is over the
     renderer's room in a frame for coverage, paints, gradients and images.
   - Shadows are Gaussian with σ = blur radius / 2, as CSS `box-shadow`. Vello's blurred rounded

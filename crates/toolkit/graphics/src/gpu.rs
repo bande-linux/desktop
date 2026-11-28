@@ -1189,16 +1189,29 @@ mod tests {
             rect: Rect::new(0.0, 0.0, SIDE as f32, SIDE as f32),
             image: image.clone(),
         };
-        for image in images.iter().chain(&images) {
+        let shows = |image: &Image| {
+            let drawn = image.premultiplied_rgba();
+            pixels(&shown, &[(32, 32)]) == [[drawn[2], drawn[1], drawn[0], 255]]
+        };
+        for image in images.iter().chain(&images).chain(&images[..2]) {
             renderer
                 .present(&scene_of(&[item(image)]), 1.0, &shown, None)
                 .expect("a frame with an image");
-            let drawn = image.premultiplied_rgba();
-            assert_eq!(
-                pixels(&shown, &[(32, 32)]),
-                [[drawn[2], drawn[1], drawn[0], 255]]
-            );
+            assert!(shows(image));
         }
+        let (last, others) = images.split_last().expect("images");
+        let mut scattered: Vec<Item> = others
+            .iter()
+            .map(|image| Item::Image {
+                rect: Rect::new(2.0 * SIDE as f32, 0.0, SIDE as f32, SIDE as f32),
+                image: image.clone(),
+            })
+            .collect();
+        scattered.push(item(last));
+        renderer
+            .present(&scene_of(&scattered), 1.0, &shown, None)
+            .expect("a frame with images off screen");
+        assert!(shows(last));
         let all: Vec<Item> = images.iter().map(item).collect();
         renderer
             .present(&scene_of(&all), 1.0, &shown, None)

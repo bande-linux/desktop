@@ -1107,6 +1107,82 @@ mod tests {
     }
 
     #[test]
+    fn lines_running_far_past_the_window_cost_only_what_it_shows_of_them() {
+        let lines: Vec<Item> = (0..2000)
+            .map(|line| {
+                let x = line as f32;
+                Item::Line {
+                    from: Point::new(x - 1e6, -1e6),
+                    to: Point::new(x + 1e6, 1e6),
+                    width: 1.0,
+                    paint: Color::BLACK.into(),
+                }
+            })
+            .collect();
+        let mut canvas = Counted::default();
+        let frame = Frame {
+            scale: 1.0,
+            origin: (0, 0),
+            size: (2000, 1000),
+        };
+        let mut caches = Caches::default();
+        Recording::new(&mut caches, &lines, &frame, None).replay(&mut canvas, &mut caches);
+        assert_eq!(canvas.0, lines.len());
+    }
+
+    #[test]
+    fn only_the_images_a_frame_shows_are_handed_to_the_atlases() {
+        let image = || Image::from_rgba(30, 20, vec![255; 2400]).expect("an image");
+        let (shown, elsewhere) = (image(), image());
+        let items = [(&shown, 10.0), (&elsewhere, 5000.0)].map(|(image, x)| Item::Image {
+            rect: Rect::new(x, 10.0, 30.0, 20.0),
+            image: image.clone(),
+        });
+        let frame = Frame {
+            scale: 1.0,
+            origin: (0, 0),
+            size: (200, 100),
+        };
+        let mut caches = Caches::default();
+        let recording = Recording::new(&mut caches, &items, &frame, None);
+        let handed: Vec<u64> = recording.images(&caches).iter().map(Image::id).collect();
+        assert_eq!(handed, [shown.id()]);
+    }
+
+    #[test]
+    fn small_curves_of_huge_shapes_stay_as_round() {
+        let corner = |far: f32| {
+            let shape = |inset: f32| Shape::rounded(Rect::new(inset, inset, far, far), 24.0);
+            let scene = Scene {
+                width: 48,
+                height: 48,
+                background: Color::WHITE,
+                items: vec![
+                    Item::Fill {
+                        shape: shape(12.0),
+                        paint: Color::BLACK.into(),
+                    },
+                    Item::Stroke {
+                        shape: shape(6.0),
+                        width: 2.0,
+                        paint: Color::hex(0x2020d0).into(),
+                    },
+                ],
+            };
+            crate::cpu::CpuRenderer::new()
+                .render(&scene)
+                .expect("a frame")
+                .rgba
+        };
+        let (small, huge) = (corner(100.0), corner(1e7));
+        let differs = small
+            .iter()
+            .zip(&huge)
+            .map(|(one, other)| one.abs_diff(*other));
+        assert!(differs.max().is_some_and(|differs| differs <= 2));
+    }
+
+    #[test]
     fn absurd_sizes_and_places_are_drawn_or_left_out() {
         let mut text = TextSystem::new();
         let image = Image::from_rgba(30, 20, vec![255; 2400]).expect("an image");

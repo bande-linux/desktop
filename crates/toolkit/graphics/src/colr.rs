@@ -141,10 +141,14 @@ fn area_painted_in_font_units(
         painted: None,
         drawable: true,
     };
-    font.color_glyphs()
+    if let Err(error) = font
+        .color_glyphs()
         .get(id)?
         .paint(LocationRef::new(&coords), &mut survey)
-        .ok()?;
+    {
+        tracing::warn!("cannot read a colour glyph's layers: {error}");
+        return None;
+    }
     let area = upright(survey.painted.filter(|_| survey.drawable)?);
     (area.is_finite() && area.area() > 0.0).then_some(area)
 }
@@ -199,19 +203,23 @@ pub(crate) fn paint(
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use bande_design::Color;
+    use std::sync::Arc;
+
+    use bande_design::{Color, Typeface};
     use vello_cpu::peniko::{Blob, FontData};
 
     use super::*;
     use crate::cpu::CpuRenderer;
+    use crate::outline::GlyphOutlines;
     use crate::scene::{Item, Scene};
-    use crate::text::PositionedGlyph;
+    use crate::text::{PositionedGlyph, TextAlign, TextStyle, TextSystem};
 
     const NO_STOPS: u32 = 1;
     const BLENDED: u32 = 2;
-    const SOLID: u32 = 3;
+    pub(crate) const SOLID: u32 = 3;
     const BAD_COLOUR: u32 = 4;
-    pub(crate) const GLYPHS: [u32; 4] = [NO_STOPS, BLENDED, SOLID, BAD_COLOUR];
+    const IN_TEXT_COLOUR: u32 = 7;
+    pub(crate) const GLYPHS: [u32; 5] = [NO_STOPS, BLENDED, SOLID, BAD_COLOUR, IN_TEXT_COLOUR];
 
     pub(crate) fn font() -> FontData {
         let bytes: &[u8] = include_bytes!("../testdata/layered-colour.ttf");
@@ -219,12 +227,16 @@ pub(crate) mod tests {
     }
 
     pub(crate) fn run(font: &FontData, glyph: u32, size: f32) -> GlyphRun {
+        coloured_run(font, glyph, size, Color::BLACK)
+    }
+
+    fn coloured_run(font: &FontData, glyph: u32, size: f32, color: Color) -> GlyphRun {
         let at = PositionedGlyph {
             id: glyph,
             x: 8.3,
             y: 40.0,
         };
-        GlyphRun::new(font.clone(), size, Color::BLACK, vec![at])
+        GlyphRun::new(font.clone(), size, color, vec![at])
     }
 
     #[test]
@@ -247,7 +259,49 @@ pub(crate) mod tests {
         });
         assert_eq!(
             colours,
-            [(true, false), (true, true), (true, true), (true, false)]
+            [
+                (true, false),
+                (true, true),
+                (true, true),
+                (true, false),
+                (true, false)
+            ]
         );
+    }
+
+    #[test]
+    fn a_colour_glyph_is_drawn_again_for_another_text_colour_only_when_it_paints_in_it() {
+        let font = font();
+        let mut outlines = GlyphOutlines::default();
+        outlines.rescale(1.0);
+        let colours = [Color::hex(0xd02020), Color::hex(0x2020d0)];
+        for color in colours {
+            let run = coloured_run(&font, IN_TEXT_COLOUR, 30.0, color);
+            let drawn = outlines
+                .coloured(&run, IN_TEXT_COLOUR)
+                .expect("a glyph in the text colour")
+                .image
+                .premultiplied_rgba();
+            let opaque = drawn
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .find(|pixel| pixel[3] == 255);
+            assert_eq!(opaque, Some(&[color.r, color.g, color.b, 255]));
+        }
+        let mut text = TextSystem::new();
+        if !text.has_family(Typeface::Emoji.family()) {
+            eprintln!("skipped the bitmap half, the colour emoji font is not installed");
+            return;
+        }
+        let emoji = colours.map(|color| {
+            let style = TextStyle::new(20.0, color);
+            let paragraph = text.paragraph("\u{1f600}", style, None, TextAlign::Start);
+            let run = paragraph.glyph_runs().remove(0);
+            outlines
+                .coloured(&run, run.glyphs[0].id)
+                .expect("an emoji bitmap")
+        });
+        assert!(Arc::ptr_eq(&emoji[0], &emoji[1]));
     }
 }

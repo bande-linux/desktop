@@ -43,6 +43,7 @@ const MOST_GRADIENTS: u32 = 1 << 13;
 const FARTHEST: f64 = 1e8;
 const FARTHEST_TEXEL: f64 = 4e6;
 const PLACEABLE: f64 = 32_000.0;
+const FARTHEST_ON_SCREEN: f64 = 1e12;
 const RELATIVE_TOLERANCE: f64 = 1e-6;
 const ANTIALIASING_PIXEL: f64 = 1.0;
 const LYING_MARGIN: f64 = 2.0;
@@ -76,7 +77,6 @@ fn spot(point: Point) -> kurbo::Point {
     kurbo::Point::new(place(point.x), place(point.y))
 }
 
-/// The polygons of a flattened `path` cut to `bounds`, each edge kept on its own line.
 fn cut_to(path: &BezPath, bounds: kurbo::Rect) -> BezPath {
     let mut cut = BezPath::new();
     let mut polygon = Vec::new();
@@ -101,16 +101,41 @@ fn cut_to(path: &BezPath, bounds: kurbo::Rect) -> BezPath {
     cut
 }
 
-type Side = (fn(kurbo::Point) -> f64, f64, bool);
+type Side = (
+    fn(kurbo::Point) -> f64,
+    fn(kurbo::Point, f64) -> kurbo::Point,
+    f64,
+    bool,
+);
 
 fn within(mut polygon: Vec<kurbo::Point>, bounds: kurbo::Rect) -> Vec<kurbo::Point> {
     let sides: [Side; 4] = [
-        (|at| at.x, bounds.x0, true),
-        (|at| at.x, bounds.x1, false),
-        (|at| at.y, bounds.y0, true),
-        (|at| at.y, bounds.y1, false),
+        (
+            |at| at.x,
+            |at, x| kurbo::Point::new(x, at.y),
+            bounds.x0,
+            true,
+        ),
+        (
+            |at| at.x,
+            |at, x| kurbo::Point::new(x, at.y),
+            bounds.x1,
+            false,
+        ),
+        (
+            |at| at.y,
+            |at, y| kurbo::Point::new(at.x, y),
+            bounds.y0,
+            true,
+        ),
+        (
+            |at| at.y,
+            |at, y| kurbo::Point::new(at.x, y),
+            bounds.y1,
+            false,
+        ),
     ];
-    for (along, edge, above) in sides {
+    for (along, onto, edge, above) in sides {
         let inside = |at: kurbo::Point| (along(at) >= edge) == above || along(at) == edge;
         let Some(&last) = polygon.last() else {
             return polygon;
@@ -119,8 +144,12 @@ fn within(mut polygon: Vec<kurbo::Point>, bounds: kurbo::Rect) -> Vec<kurbo::Poi
         let mut from = last;
         for to in polygon {
             if inside(to) != inside(from) {
-                let share = (edge - along(from)) / (along(to) - along(from));
-                kept.push(from.lerp(to, share));
+                let (near, far) = match (along(from) - edge).abs() <= (along(to) - edge).abs() {
+                    true => (from, to),
+                    false => (to, from),
+                };
+                let share = (edge - along(near)) / (along(far) - along(near));
+                kept.push(onto(near.lerp(far, share), edge));
             }
             if inside(to) {
                 kept.push(to);
@@ -901,18 +930,25 @@ impl<C: Canvas> Encoder<'_, C> {
         .touches(bounds)
     }
 
-    /// `path` cut to where the renderer can place it, unchanged where it is shown.
     fn placeable<'p>(path: &'p BezPath, transform: Affine) -> Option<Cow<'p, BezPath>> {
         let reach = PLACEABLE;
-        if drawable(transform.transform_rect_bbox(path.control_box()), reach) {
+        let on_screen = transform.transform_rect_bbox(path.control_box());
+        if !on_screen.is_finite() {
+            return None;
+        }
+        if drawable(on_screen, reach) {
             return Some(Cow::Borrowed(path));
         }
-        if transform.determinant() == 0.0 {
+        let local = transform.inverse();
+        if !local.is_finite() {
             return None;
         }
         let bounds = kurbo::Rect::new(-reach, -reach, reach, reach);
         let mut cut = cut_to(&(transform * path), bounds);
-        cut.apply_affine(transform.inverse());
+        if cut.is_empty() {
+            return None;
+        }
+        cut.apply_affine(local);
         Some(Cow::Owned(cut))
     }
 
@@ -964,11 +1000,13 @@ impl<C: Canvas> Encoder<'_, C> {
         for op in ops {
             match op {
                 Op::Fill { path, paint } => {
+                    if !self.reaches(path.control_box(), transform) {
+                        continue;
+                    }
                     let Some(path) = Self::placeable(path, transform) else {
                         continue;
                     };
-                    if self.reaches(path.control_box(), transform)
-                        && self.budget.affords(&path, transform, self.drawn)
+                    if self.budget.affords(&path, transform, self.drawn)
                         && self.budget.affords_paint(paint)
                     {
                         self.canvas.set_paint(paint.clone());
@@ -984,12 +1022,14 @@ impl<C: Canvas> Encoder<'_, C> {
                     let Some(id) = self.caches.images.get(image.id()) else {
                         continue;
                     };
+                    if !self.reaches(path.control_box(), transform) {
+                        continue;
+                    }
                     let Some(path) = Self::placeable(path, transform) else {
                         continue;
                     };
                     let path = path.as_ref();
-                    if !self.reaches(path.control_box(), transform)
-                        || !self.samples(path, transform, *placement)
+                    if !self.samples(path, transform, *placement)
                         || !self.budget.affords(path, transform, self.drawn)
                         || !spend(&mut self.budget.paints)
                     {
@@ -1013,6 +1053,7 @@ impl<C: Canvas> Encoder<'_, C> {
                     let blurred = rect.inflate(reach, reach);
                     let edge = blurred.to_path(TOLERANCE);
                     if !self.reaches(blurred, transform)
+                        || !drawable(transform.transform_rect_bbox(blurred), FARTHEST_ON_SCREEN)
                         || !self.budget.affords(&edge, transform, self.drawn)
                         || !spend(&mut self.budget.paints)
                     {
@@ -1027,6 +1068,10 @@ impl<C: Canvas> Encoder<'_, C> {
                     for (outline, at) in glyphs {
                         let placed = transform * Affine::translate(*at);
                         if self.reaches(outline.bounds, placed)
+                            && drawable(
+                                placed.transform_rect_bbox(outline.bounds),
+                                FARTHEST_ON_SCREEN,
+                            )
                             && self.budget.affords(&outline.path, placed, self.drawn)
                         {
                             self.canvas.set_transform(placed);
@@ -1089,8 +1134,10 @@ impl<C: Canvas> Encoder<'_, C> {
                     self.canvas.set_paint(color(Color::BLACK).into());
                     self.canvas.fill_path(&backing);
                     let scale = transform.as_coeffs()[0];
-                    if let Some(area) = surface_area(*frame, *size, *scaling, scale) {
-                        self.punch(&path(&Shape::rect(area)), transform);
+                    if let Some(area) = surface_area(*frame, *size, *scaling, scale)
+                        && let Some(hole) = Self::placeable(&path(&Shape::rect(area)), transform)
+                    {
+                        self.punch(&hole, transform);
                     }
                 }
                 Op::Picture(picture) => {
@@ -1278,8 +1325,8 @@ mod tests {
         let black: Paint = Color::BLACK.into();
         let far = Path::new()
             .move_to(Point::new(0.0, 0.0))
-            .line_to(Point::new(2e9, 1e9))
-            .line_to(Point::new(0.0, 1e9))
+            .line_to(Point::new(0.0, 3e20))
+            .line_to(Point::new(6e20, 3e20))
             .close();
         let scene = |item: Item| Scene {
             width: 64,
@@ -1289,7 +1336,7 @@ mod tests {
         };
         let line = scene(Item::Line {
             from: Point::new(0.0, 0.0),
-            to: Point::new(1e9, 5e8),
+            to: Point::new(3e20, 1.5e20),
             width: 4.0,
             paint: black.clone(),
         });

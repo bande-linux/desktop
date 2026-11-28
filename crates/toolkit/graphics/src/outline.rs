@@ -71,7 +71,14 @@ pub(crate) struct GlyphOutlines {
     scale: f64,
     color_fonts: HashMap<FontKey, bool>,
     layered_fonts: HashMap<FontKey, bool>,
+    coloured_bytes: u64,
     frame: u64,
+}
+
+fn bitmap_bytes(entry: &Entry<GlyphBitmap>) -> u64 {
+    entry.drawn.as_ref().map_or(0, |bitmap| {
+        u64::from(bitmap.image.width()) * u64::from(bitmap.image.height()) * 4
+    })
 }
 
 #[derive(Default)]
@@ -163,27 +170,24 @@ impl GlyphOutlines {
     pub(crate) fn coloured(&mut self, run: &GlyphRun, glyph: u32) -> Option<Arc<GlyphBitmap>> {
         let (frame, scale) = (self.frame, self.scale);
         let foreground = self.is_layered_font(run).then_some(run.color);
-        let entry = self
-            .coloured
-            .entry((glyph_key(run, glyph), foreground))
-            .or_insert_with(|| Entry {
-                drawn: coloured(run, glyph, scale).map(Arc::new),
-                used: frame,
-            });
-        entry.used = frame;
+        let key = (glyph_key(run, glyph), foreground);
+        if let Some(entry) = self.coloured.get_mut(&key) {
+            entry.used = frame;
+            return entry.drawn.clone();
+        }
+        let entry = Entry {
+            drawn: coloured(run, glyph, scale).map(Arc::new),
+            used: frame,
+        };
         let drawn = entry.drawn.clone();
+        self.coloured_bytes += bitmap_bytes(&entry);
+        self.coloured.insert(key, entry);
         self.keep_coloured_within(COLOURED_BYTES);
         drawn
     }
 
     fn keep_coloured_within(&mut self, bytes: u64) {
-        let size = |entry: &Entry<GlyphBitmap>| {
-            entry.drawn.as_ref().map_or(0, |bitmap| {
-                u64::from(bitmap.image.width()) * u64::from(bitmap.image.height()) * 4
-            })
-        };
-        let mut kept: u64 = self.coloured.values().map(size).sum();
-        while kept > bytes {
+        while self.coloured_bytes > bytes {
             let Some(oldest) = self
                 .coloured
                 .iter()
@@ -194,7 +198,7 @@ impl GlyphOutlines {
                 return;
             };
             if let Some(entry) = self.coloured.remove(&oldest) {
-                kept -= size(&entry);
+                self.coloured_bytes -= bitmap_bytes(&entry);
             }
         }
     }
@@ -204,6 +208,7 @@ impl GlyphOutlines {
         if rescaled {
             self.scale = scale;
             self.coloured.clear();
+            self.coloured_bytes = 0;
         }
         rescaled
     }
@@ -212,8 +217,14 @@ impl GlyphOutlines {
         let frame = self.frame;
         self.glyphs
             .retain(|_, entry| frame - entry.used < UNUSED_FRAMES);
-        self.coloured
-            .retain(|_, entry| frame - entry.used < UNUSED_FRAMES);
+        let bytes = &mut self.coloured_bytes;
+        self.coloured.retain(|_, entry| {
+            let kept = frame - entry.used < UNUSED_FRAMES;
+            if !kept {
+                *bytes -= bitmap_bytes(entry);
+            }
+            kept
+        });
         self.frame += 1;
     }
 }
@@ -449,12 +460,7 @@ mod tests {
             outlines.coloured(&run(&font, SOLID, size as f32), SOLID);
             outlines.end_frame();
         }
-        let kept: u64 = outlines
-            .coloured
-            .values()
-            .filter_map(|entry| entry.drawn.as_ref())
-            .map(|bitmap| u64::from(bitmap.image.width()) * u64::from(bitmap.image.height()) * 4)
-            .sum();
+        let kept: u64 = outlines.coloured.values().map(bitmap_bytes).sum();
         assert!(kept <= COLOURED_BYTES, "{} MiB kept", kept >> 20);
     }
 }

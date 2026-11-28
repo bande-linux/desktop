@@ -1,0 +1,43 @@
+.TH "BANDE" "1" "" "bande" "User Commands"
+.SH NAME
+bande \- what the installed Bande programs can do
+.SH SYNOPSIS
+.B bande
+.RI [ domain
+.RI [ verb
+.RI [ arguments ...]]]
+.RB [ \-\-json ]
+.br
+.B bande undo
+.RI [ receipt ]
+.SH DESCRIPTION
+Carries out the intents of the installed programs, which it finds in
+.IR /usr/share/bande/intents .
+Without a verb it lists what can be done. A verb on something other than the domain's main noun is
+written with a hyphen, as in
+.BR "bande mail create\-draft" .
+.PP
+Required arguments follow in the order
+.B \-\-help
+shows; the others are given as
+.BI \-\- name " value"
+and may be repeated where a list is taken. Words that are left are the text to find.
+.PP
+.B bande undo
+takes back the change of a receipt, or the newest one of all programs.
+.SH OPTIONS
+.TP
+.B \-\-json
+Print the answer or the error as JSON.
+.TP
+.B \-\-help
+Show what a command takes.
+.SH EXIT STATUS
+0 when it was done, else 1.
+.SH EXAMPLES
+.nf
+bande settings find "dark mode"
+bande settings get appearance text\-size
+bande settings set appearance light
+bande undo
+.fi

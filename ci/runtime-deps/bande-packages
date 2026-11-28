@@ -1,0 +1,2 @@
+dpkg-query dpkg required
+flatpak flatpak optional

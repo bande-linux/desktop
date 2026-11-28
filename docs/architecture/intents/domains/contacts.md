@@ -28,5 +28,5 @@ Contacts app. Work package A1c.
 Phrases in Search: "open {contact}".
 
 `find` matches names, organisations, addresses and numbers, and `NICKNAME` and `RELATED` (RFC 6350),
-so "mom" can be found; the branch does not read those two. Only Contacts writes the store, so the
+so "mom" can be found; Contacts does not read those two. Only Contacts writes the store, so the
 app is the owner.

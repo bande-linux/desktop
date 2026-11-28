@@ -86,7 +86,7 @@ debhelper compat 14, built with Debian's `rustc` and `cargo` through dh-cargo's 
   `bande-login`, Bande's PAM services, its pictures and failed-session folders, and purging it
   leaving no display manager chosen), `every-package` (the
   one version, every program and file in
-  `ci/runtime-deps` without recommends, the installed compositor serving Wayland clients),
+  `ci/runtime-deps/` without recommends, the installed compositor serving Wayland clients),
   `boot-screen` (the boot screen is a `default.plymouth` alternative that only applies when no
   other theme is chosen, the initramfs carries it, its link and Inter, it installs without GRUB,
   with GRUB the generated `linux` lines carry `splash` and `loglevel=3` once, also when
@@ -130,13 +130,13 @@ are in [performance.md](performance.md).
 ## Packages
 
 - **The programs** (architecture `amd64`, `arm64`): `bande-compositor`, the session services
-  (`bande-config`, `bande-notify`, `bande-power`, `bande-printd`, `bande-reporter`, `bande-crash-reports`, `bande-sound`, `bande-spell`, `bande-clipboard`, `bande-tray`, `bande-indexer`,
+  (`bande-config`, `bande-notify`, `bande-power`, `bande-printd`, `bande-reporter`, `bande-crash-reports`, `bande-sound`, `bande-spell`, `bande-clipboard`, `bande-tray`, `bande-indexer`, `bande-system-intents`,
   `bande-automount`, `bande-backup`, `bande-polkit`, `bande-secrets` with `libpam-bande-secrets`
   and `pinentry-bande`,
   `xdg-desktop-portal-bande`), the shell clients (`bande-shell`,
   `bande-screenshot`, `bande-lock`, `bande-greeter`) and the apps (`bande-files`,
   `bande-settings`, `bande-file-chooser`, `bande-lookup`, `bande-terminal`, `bande-software`,
-  `bande-installer`, `bande-monitor`, `bande-mail`, `bande-notes`, `bande-calendar`, `bande-velox`,
+  `bande-installer`, `bande-monitor`, `bande-mail`, `bande-notes`, `bande-calendar`, `bande-contacts`, `bande-velox`,
   `bande-calculator`, `bande-player`, `bande-viewer`, `bande-clock`, `bande-text-editor`,
   `bande-disks`, `bande-archive`). Package names stay `bande-*` whatever directory the crate
   lives in ([decision 0003](../decisions/0003-repository-layout.md)); a program may ship in
@@ -146,6 +146,14 @@ are in [performance.md](performance.md).
   installs the one shell binary that hosts the desktop, the bar, the notifications, Quick
   Settings and the launcher, together with the Bande wallpapers; the crates of those parts are
   libraries and build no package of their own.
+- **`bande-cli`**: the command line `bande`, which knows only the manifests other packages install,
+  with the page `crates/services/cli/data/bande.1`. `bande-desktop` recommends it.
+- **Manifests** ([intents](intents.md#manifest)): a package whose program serves intents has the
+  line `debian/build/intents/<program>/* usr/share/bande/intents/` in its `.install`, and
+  `debian/rules` runs `<program> --write-intents` for each such line at build. The owner of the
+  settings is `/usr/libexec/bande-settings-intents` in `bande-settings`; the small system domains
+  are in `bande-system-intents`. Both have a D-Bus service file and a user unit, and no package
+  starts them: D-Bus does, at the first call.
 - **`bande-icon-theme`** (architecture `all`): the Bande icon theme and its accent variants from `data/icons`. Every
   package that draws icons depends on it, so a symbol never goes missing because the shell is
   not installed.
@@ -183,7 +191,7 @@ are in [performance.md](performance.md).
   folders in Files, `.deb` files in the Package Installer, every type a Bande app declares
   in that app (plain text, Markdown, RTF, source code and logs in Text Editor when it is
   installed, pictures and PDF in Viewer, audio and video in Player), web pages and links in the Browser,
-  `mailto:` links in Mail, calendar files and `webcal:` links in Calendar, and archives (zip, tar,
+  `mailto:` links in Mail, calendar files and `webcal:` links in Calendar, vCard files in Contacts, and archives (zip, tar,
   gzip, bzip2, xz, zstd, 7-Zip) in Archives, which also makes Files' Compress; Files expands an archive
   itself only when no app opens it; other types open in an installed app
   whose desktop entry declares them, and a person's own choice in
@@ -300,7 +308,7 @@ depends on it) or the fonts, PackageKit, AppStream, UPower, UDisks, NetworkManag
 - `mesa-vulkan-drivers` and `libvulkan1` come with `bande-compositor`.
 
 Every program Bande runs and every system file it reads by path is listed in
-`ci/runtime-deps` with the Debian package that ships it ([ci.md](ci.md#runtime-dependencies)).
+`ci/runtime-deps/<crate>` with the Debian package that ships it ([ci.md](ci.md#runtime-dependencies)).
 
 No package depends on an X server, XWayland or an X session; the `desktop` autopkgtest checks that none
 comes along.

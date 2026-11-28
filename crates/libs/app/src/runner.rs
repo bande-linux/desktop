@@ -19,6 +19,7 @@ use rustix::event::{PollFd, PollFlags, Timespec, poll};
 
 use crate::cx::Content;
 use crate::instance::{self, Claim, Instance, Request};
+use crate::intents::Intents;
 use crate::menus::assemble;
 use crate::resume::{ReopenPrompt, Resume};
 use crate::{Cx, Error, Info, Program, Saved, WindowId};
@@ -28,6 +29,7 @@ enum Source {
     Menu,
     Instance,
     Installs,
+    Intents,
     Program(usize),
     View(WindowId, usize),
 }
@@ -37,11 +39,13 @@ struct Runner<P: Program> {
     cx: Cx<P>,
     menu: Option<AppMenu>,
     instance: Option<Instance>,
+    intents: Option<Intents<P>>,
     sources: RefCell<Vec<Source>>,
 }
 
 const BACKGROUND_FLAG: &str = "--background";
 const NO_WINDOW_FLAG: &str = "--no-window";
+const INTENTS_FLAG: &str = "--intents";
 
 pub(crate) fn run<P: Program>(
     info: &'static Info,
@@ -57,7 +61,10 @@ pub(crate) fn run<P: Program>(
     let given = arguments.len();
     arguments.retain(|argument| argument != NO_WINDOW_FLAG);
     let windowless = arguments.len() < given;
-    if !background && !windowless {
+    let given = arguments.len();
+    arguments.retain(|argument| argument != INTENTS_FLAG);
+    let serves_only = arguments.len() < given;
+    if !background && !windowless && !serves_only {
         TextSystem::preload();
     }
     let session = bande_bus::session()
@@ -65,6 +72,15 @@ pub(crate) fn run<P: Program>(
             tracing::warn!("no session bus, so no app menus and no single instance: {error}");
         })
         .ok();
+    let mut intents = session.as_ref().and_then(|session| {
+        Intents::<P>::serve(session)
+            .inspect_err(|error| tracing::warn!("cannot serve intents: {error}"))
+            .ok()
+            .flatten()
+    });
+    if serves_only && intents.is_none() {
+        return Ok(());
+    }
     let claimed = session
         .as_ref()
         .map(|session| instance::claim(session, info.id))
@@ -72,14 +88,36 @@ pub(crate) fn run<P: Program>(
         .inspect_err(|error| tracing::warn!("cannot claim {}: {error}", info.id))
         .ok()
         .flatten();
-    let instance = match (claimed, &session) {
-        (Some(Claim::Running), _) if background || windowless => return Ok(()),
+    let mut instance = match (claimed, &session) {
+        (Some(Claim::Running), _) if background || windowless || serves_only => return Ok(()),
         (Some(Claim::Running), Some(session)) => {
             return instance::forward(session, info.id, Request::from_launch(arguments)?);
         }
         (Some(Claim::First(instance)), _) => Some(instance),
         _ => None,
     };
+    let mut activation = None;
+    if serves_only {
+        let (Some(intents), Some(session), Some(instance)) =
+            (&mut intents, &session, &mut instance)
+        else {
+            return Ok(());
+        };
+        let Some(request) = intents.wait_for_launch(session, info.id, instance)? else {
+            return Ok(());
+        };
+        if let Some(directory) = request.directory
+            && let Err(error) = std::env::set_current_dir(&directory)
+        {
+            tracing::warn!("cannot start in {}: {error}", directory.display());
+        }
+        arguments = request.arguments;
+        activation = request.token;
+        TextSystem::preload();
+    }
+    if let Some(intents) = &intents {
+        intents.begin();
+    }
     let link = match display {
         Some(display) => AppConnection::connect_on(display, info.id)?,
         None => AppConnection::connect(info.id)?,
@@ -92,6 +130,7 @@ pub(crate) fn run<P: Program>(
         link.keep_running();
     }
     let mut cx = Cx::new(info, link, session, background, resume);
+    cx.activation = activation;
     let mut program = match P::start(&mut cx, arguments) {
         Ok(program) => program,
         Err(error) => {
@@ -107,6 +146,11 @@ pub(crate) fn run<P: Program>(
     let prompted = !background && !windowless && reopen_saved_windows(&mut program, &mut cx);
     if plain_launch && !prompted && !cx.resume.has_main_window() {
         program.reopen(&mut cx);
+    }
+    if let Some(token) = cx.activation.take()
+        && let Some(window) = cx.views.last().map(|(id, _)| *id)
+    {
+        cx.raise(window, Some(token));
     }
     if cx.windows.is_empty() && !background && !windowless && !P::waits_for_activation() {
         cx.resume.discard(&mut cx.link);
@@ -131,12 +175,14 @@ pub(crate) fn run<P: Program>(
         cx,
         menu,
         instance,
+        intents,
         sources: RefCell::new(Vec::new()),
     };
     let ran = runner.run();
     if ran.is_err() {
         runner.cx.resume.finish_writing();
     }
+    runner.finish_intents();
     ran
 }
 
@@ -348,6 +394,27 @@ impl<P: Program> Runner<P> {
         if let Err(error) = self.cx.link.flush() {
             tracing::warn!("cannot say goodbye to the compositor: {error}");
         }
+    }
+
+    fn finish_intents(&mut self) {
+        let Some(mut intents) = self.intents.take() else {
+            return;
+        };
+        if !intents.is_working() {
+            return;
+        }
+        if let (Some(instance), Some(session)) = (self.instance.take(), self.cx.session()) {
+            instance.release(session, self.cx.info.id);
+        }
+        let shown: Vec<WindowId> = self.cx.views.iter().map(|(window, _)| *window).collect();
+        for window in shown {
+            self.cx.close(window);
+        }
+        self.reap_closed();
+        if let Err(error) = self.cx.link.flush() {
+            tracing::debug!("cannot close the windows: {error}");
+        }
+        intents.finish(self.cx.resume.session_ending);
     }
 
     fn save_windows(&mut self) {
@@ -709,6 +776,10 @@ impl<P: Program> Surfaces for Runner<P> {
             fds.push(instance.fd());
             sources.push(Source::Instance);
         }
+        if let Some(intents) = &self.intents {
+            fds.push(intents.fd());
+            sources.push(Source::Intents);
+        }
         if let Some(Some(installs)) = self.cx.installs.get() {
             fds.push(installs.fd());
             sources.push(Source::Installs);
@@ -750,6 +821,15 @@ impl<P: Program> Surfaces for Runner<P> {
                     .map(Instance::take_requests)
                     .unwrap_or_default();
                 for request in requests {
+                    self.activated(request);
+                }
+            }
+            Some(Source::Intents) => {
+                let launches = match &mut self.intents {
+                    Some(intents) => intents.run_errands(&mut self.program, &mut self.cx),
+                    None => Vec::new(),
+                };
+                for request in launches {
                     self.activated(request);
                 }
             }

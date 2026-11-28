@@ -7,16 +7,18 @@ use std::sync::mpsc::{Sender, channel};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use crate::{
-    Action, AppInfo, Catalog, Clips, Hit, ICON_SIZE, Kind, Launcher, Loaded, Mode, PaneInfo, Reply,
-    Request, SettingInfo, SystemCommand, Target,
+    Action, AppInfo, Catalog, Clips, Hit, ICON_SIZE, Kind, Launcher, Loaded, Mode, OfferInfo,
+    Offers, PaneInfo, Reply, Request, SettingInfo, SystemCommand, Target,
 };
 use accesskit::TreeUpdate;
 use bande_config::{Config, SearchCategory, config_path};
 use bande_content::{Preview, preview};
 use bande_fs::Entry;
 use bande_inbox::Inbox;
+use bande_intents::MANIFESTS;
+use bande_intents::phrases::Offer;
 use bande_search::{RecentlyUsed, SearchService, Usage, recently_used_path, usage_path};
-use bande_settings_panes::PaneId;
+use bande_settings_panes::Computer;
 use bande_status::devices::Hardware;
 use bande_thumbnails::{Cache, ThumbnailSize, Thumbnailers, thumbnail};
 use bande_toolkit::{
@@ -33,6 +35,7 @@ const FALLBACK_DOCUMENT: &str = "application-x-generic";
 const CLIP_TEXT: &str = "text-x-generic";
 const CLIP_IMAGE: &str = "image-x-generic";
 const CLIP_FILES: &str = "folder";
+const OFFER_GLYPH: &str = "preferences-system-symbolic";
 const SETTINGS_APP: &str = "org.bande.Settings";
 
 struct Library {
@@ -72,13 +75,16 @@ impl Library {
 
 impl Library {
     fn command_glyph(&mut self, command: SystemCommand) -> Option<Image> {
-        let name = match command {
+        self.glyph(match command {
             SystemCommand::LockScreen => "system-lock-screen-symbolic",
             SystemCommand::Sleep => "weather-clear-night-symbolic",
             SystemCommand::LogOut => "system-log-out-symbolic",
             SystemCommand::Restart => "system-reboot-symbolic",
             SystemCommand::ShutDown => "system-shutdown-symbolic",
-        };
+        })
+    }
+
+    fn glyph(&mut self, name: &str) -> Option<Image> {
         let data_dirs = &self.data_dirs;
         self.icons
             .entry(name.to_owned())
@@ -139,6 +145,7 @@ impl Catalog for Library {
             (Target::Clip(_), Kind::CopiedFiles) => self.named_icon(&[CLIP_FILES.to_owned()]),
             (Target::Clip(_), _) => self.named_icon(&[CLIP_TEXT.to_owned()]),
             (Target::Command(command), _) => self.command_glyph(*command),
+            (Target::Offer { .. }, _) => self.glyph(OFFER_GLYPH),
             (Target::Value(_) | Target::Emoji(_), _) => None,
         }
     }
@@ -211,6 +218,8 @@ pub struct LauncherShell {
     index: Option<SearchService>,
     previewer: Option<Previewer>,
     clips: Option<Clips>,
+    offers: Option<Offers>,
+    offered: Vec<Offer>,
     cannot_sleep: Option<Inbox<()>>,
     sleeps: bool,
     hardware: Hardware,
@@ -350,9 +359,13 @@ impl LauncherShell {
         {
             tracing::warn!("cannot show the menu: {error}");
         }
-        if let (Some(index), Some((generation, query))) = (&self.index, self.launcher.file_query())
-        {
-            index.query(generation, &query);
+        if let Some((generation, query)) = self.launcher.file_query() {
+            if let Some(index) = &self.index {
+                index.query(generation, &query);
+            }
+            if let Some(offers) = &self.offers {
+                offers.ask(generation, query);
+            }
         }
         if let (Some(previewer), Some(path)) = (&self.previewer, self.launcher.preview_request()) {
             let _ = previewer.requests.send(path);
@@ -444,6 +457,7 @@ impl LauncherShell {
             Target::Command(command) => {
                 Some(carry_out(window, *command).map_err(LaunchError::Spawn))
             }
+            Target::Offer { intent, title } => self.perform(intent, title),
             Target::Value(_) | Target::Emoji(_) | Target::Clip(_) => None,
         };
         match opened {
@@ -456,6 +470,15 @@ impl LauncherShell {
             None => tracing::warn!("nothing opens {target:?}"),
         }
         self.close(window);
+    }
+
+    fn perform(&mut self, intent: &str, title: &str) -> Option<Result<(), LaunchError>> {
+        let at = self
+            .offered
+            .iter()
+            .position(|offer| offer.intent == intent && offer.title == title)?;
+        self.offers.as_ref()?.perform(self.offered.remove(at));
+        Some(Ok(()))
     }
 
     fn reveal(&mut self, window: &mut Window, path: &Path) {
@@ -539,6 +562,7 @@ impl App for LauncherShell {
                     .map(|previewer| previewer.results.fd()),
             )
             .chain(self.clips.iter().map(Clips::fd))
+            .chain(self.offers.iter().map(Offers::fd))
             .chain(self.cannot_sleep.iter().map(Inbox::fd))
             .chain(self.recently_used.iter().map(RecentlyUsed::fd))
             .collect()
@@ -550,6 +574,19 @@ impl App for LauncherShell {
         }
         if let Some(results) = self.index.as_mut().and_then(SearchService::take) {
             self.launcher.set_files(results);
+        }
+        if let Some((generation, offers)) = self.offers.as_mut().and_then(Offers::take) {
+            let infos = offers
+                .iter()
+                .map(|offer| OfferInfo {
+                    title: offer.title.clone(),
+                    detail: offer.detail.clone(),
+                    intent: offer.intent.clone(),
+                })
+                .collect();
+            if self.launcher.set_offers(generation, infos) {
+                self.offered = offers;
+            }
         }
         let previews = self
             .previewer
@@ -629,17 +666,11 @@ fn folder_stamps(data_dirs: &[PathBuf]) -> Vec<Option<SystemTime>> {
 }
 
 fn settings_panes(sleeps: bool, hardware: Hardware) -> Vec<PaneInfo> {
-    let mut panes = bande_settings_panes::panes();
-    if !sleeps {
-        bande_settings_panes::without_sleep(&mut panes);
-    }
-    if !hardware.battery {
-        bande_settings_panes::without_battery(&mut panes);
-    }
-    panes.retain(|pane| match pane.id {
-        PaneId::Wifi => hardware.wifi,
-        PaneId::Bluetooth => hardware.bluetooth,
-        _ => true,
+    let panes = bande_settings_panes::panes_of(Computer {
+        battery: hardware.battery,
+        wifi: hardware.wifi,
+        bluetooth: hardware.bluetooth,
+        sleeps,
     });
     panes
         .into_iter()
@@ -725,6 +756,14 @@ impl LauncherShell {
                 .inspect_err(|error| tracing::warn!("cannot read the clipboard history: {error}"))
                 .ok()
         });
+        let offers = session.and_then(|_| {
+            Offers::spawn(MANIFESTS)
+                .inspect_err(|error| tracing::warn!("cannot offer what can be done: {error}"))
+                .ok()
+        });
+        if offers.is_some() {
+            launcher.ask_offers();
+        }
         let mut shell = Self {
             launcher,
             entries,
@@ -733,6 +772,8 @@ impl LauncherShell {
             index: None,
             previewer,
             clips,
+            offers,
+            offered: Vec::new(),
             cannot_sleep: bande_status::devices::hear_if_cannot_sleep()
                 .inspect_err(|error| tracing::warn!("cannot ask whether sleep works: {error}"))
                 .ok(),

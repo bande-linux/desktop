@@ -6,7 +6,7 @@ import subprocess
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-TABLE = ROOT / "ci" / "runtime-deps"
+TABLES = ROOT / "ci" / "runtime-deps"
 KINDS = {"depends", "required", "optional"}
 PATH = re.compile(r'"((?:/usr)?/(?:s?bin|libexec|share|lib)/[A-Za-z0-9._+/-]+)"')
 PROGRAM = re.compile(r'Command::new\(\s*"([A-Za-z0-9._+-]+)"\s*\)')
@@ -90,16 +90,26 @@ def ours(package):
     return package.startswith(("bande-", "libpam-bande-", "xdg-desktop-portal-bande"))
 
 
+def listed(crates, problems):
+    tables = {}
+    for source in sorted(TABLES.iterdir()):
+        if source.name not in crates:
+            problems.append(f"{source.relative_to(ROOT)}: no crate has this name")
+        table = tables[source.name] = {}
+        for number, line in enumerate(source.read_text(encoding="utf-8").splitlines(), 1):
+            fields = line.split()
+            if len(fields) != 3 or fields[2] not in KINDS:
+                problems.append(f"{source.relative_to(ROOT)}:{number}:"
+                                f" expected <path or program> <package> <{'|'.join(sorted(KINDS))}>")
+                continue
+            table[fields[0]] = (fields[1], fields[2])
+    return tables
+
+
 def main():
     problems = []
-    table = {}
-    for number, line in enumerate(TABLE.read_text(encoding="utf-8").splitlines(), 1):
-        fields = line.split()
-        if len(fields) != 3 or fields[2] not in KINDS:
-            problems.append(f"{TABLE.name}:{number}: expected <path or program> <package> <{'|'.join(sorted(KINDS))}>")
-            continue
-        table[fields[0]] = (fields[1], fields[2])
     crates = packages()
+    tables = listed(crates, problems)
     shipping = {}
     for name, crate in crates.items():
         if crate["deb"] is not None:
@@ -107,9 +117,10 @@ def main():
                 shipping.setdefault(library, []).append(crate["deb"])
     for library, debs in sorted(shipping.items()):
         own = crates[library]["deb"]
+        table = tables.get(library, {})
         for item, source in sorted(referenced(crates[library]["root"]).items()):
             if item not in table:
-                problems.append(f"{source}: runs or reads {item}, which ci/runtime-deps does not list")
+                problems.append(f"{source}: runs or reads {item}, which ci/runtime-deps/{library} does not list")
                 continue
             package, kind = table[item]
             if kind != "depends" or ours(package):
@@ -122,7 +133,7 @@ def main():
     for problem in problems:
         print(problem)
     if problems:
-        print("every program the desktop runs and every system file it reads is listed in ci/runtime-deps:"
+        print("every program the desktop runs and every system file it reads is listed in ci/runtime-deps/<crate>:"
               " see docs/architecture/ci.md")
         return 1
     return 0

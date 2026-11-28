@@ -25,7 +25,7 @@ jiff.workspace = true
 bande-app-menu.workspace = true
 bande-inbox.workspace = true
 bande-l10n.workspace = true
-bande-rich-text.workspace = true
+bande-rich-text = { workspace = true, features = ["html"] }
 bande-toolkit.workspace = true
 bande-xdg.workspace = true
 bande-watch.workspace = true

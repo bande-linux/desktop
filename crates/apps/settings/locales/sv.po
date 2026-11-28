@@ -13,6 +13,18 @@ msgstr "{family} ({cores} kärnor)"
 msgid "The computer name service"
 msgstr "Tjänsten för datorns namn"
 
+msgid "Looking for what was done…"
+msgstr "Letar efter vad som har gjorts …"
+
+msgid "Changes made from Search, the command line and other programs appear here, where you can undo them for a day."
+msgstr "Ändringar som görs från Sök, kommandoraden och andra program visas här, där du kan ångra dem i ett dygn."
+
+msgid "Undo"
+msgstr "Ångra"
+
+msgid "Undo “{change}”"
+msgstr "Ångra ”{change}”"
+
 msgid "Choose a Folder to Keep Out of Search"
 msgstr "Välj en mapp att utesluta från sökning"
 

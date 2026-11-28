@@ -21,7 +21,8 @@ a regional file lists only what differs from its language: `en-GB.po` holds Brit
 **Lookup** (`bande-l10n`). A program reads its folder once, on its first string, and takes the
 first language in `LANGUAGE`, `LC_ALL`, `LC_MESSAGES`, `LANG` that has a catalog there (`pt-BR`,
 then `pt`), else the development catalog. A string is looked up in that catalog, its language
-without the region, the development catalog, and finally shown as the English in the code. A
+without the region, the development catalog, and finally shown as the English in the code. `Program::named` opens another program's catalogs the same way,
+for text it declares in a file, such as the titles in an [intents](intents.md#manifest) manifest. A
 catalog is read into memory and searched in place; fallbacks are opened only on a miss. Since the
 key is the English, a translation is only ever used for the English it was made for. A language
 change applies at the next start of each program.

@@ -53,10 +53,11 @@ pub enum PaneId {
     SoftwareUpdate,
     Diagnostics,
     Backup,
+    Activity,
 }
 
 impl PaneId {
-    const KEYWORDS: [(Self, &'static str); 32] = [
+    const KEYWORDS: [(Self, &'static str); 33] = [
         (Self::Wifi, "wifi"),
         (Self::Bluetooth, "bluetooth"),
         (Self::Network, "network"),
@@ -89,6 +90,7 @@ impl PaneId {
         (Self::SoftwareUpdate, "software-update"),
         (Self::Diagnostics, "diagnostics"),
         (Self::Backup, "backup"),
+        (Self::Activity, "activity"),
     ];
 
     pub fn group(self) -> Option<Group> {
@@ -111,6 +113,7 @@ impl PaneId {
             | Self::Users
             | Self::Passwords
             | Self::PrivacySecurity
+            | Self::Activity
             | Self::Apps
             | Self::LanguageTime
             | Self::SoftwareUpdate
@@ -160,6 +163,7 @@ impl PaneId {
             Self::Backup => "document-open-recent-symbolic",
             Self::SoftwareUpdate => "view-refresh-symbolic",
             Self::Diagnostics => "dialog-warning-symbolic",
+            Self::Activity => "edit-undo-symbolic",
         }
     }
 
@@ -197,6 +201,7 @@ impl PaneId {
             Self::SoftwareUpdate => tr!("Software Update"),
             Self::Diagnostics => tr!("Diagnostics"),
             Self::Backup => tr!("Backup"),
+            Self::Activity => tr!("Activity"),
         }
     }
 
@@ -242,6 +247,7 @@ impl PaneId {
             Self::SoftwareUpdate => tr!("Updates for Bande, Debian apps and firmware"),
             Self::Diagnostics => tr!("Problem reports from this computer"),
             Self::Backup => tr!("Hourly encrypted versions on an external disk"),
+            Self::Activity => tr!("What was changed for you, and undoing it"),
         }
     }
 
@@ -317,6 +323,7 @@ impl PaneId {
             Self::Backup => {
                 tr!("restore, versions, external disk, history, recover")
             }
+            Self::Activity => tr!("undo, history, changes, receipts, what happened, log"),
         }
     }
 
@@ -527,6 +534,394 @@ pub enum SettingId {
     LockMessage,
     ShowPreviews,
     SavedPasswords,
+    Activity,
+}
+
+impl SettingId {
+    /// The setting's word, which is also the token of its reference.
+    pub fn word(self) -> &'static str {
+        match self {
+            Self::WifiPower => "wifi-power",
+            Self::KnownNetworks => "known-networks",
+            Self::Networks => "networks",
+            Self::WifiAddress => "wifi-address",
+            Self::WifiRouter => "wifi-router",
+            Self::WifiDns => "wifi-dns",
+            Self::WifiIpv6Address => "wifi-ipv6-address",
+            Self::WifiIpv6Router => "wifi-ipv6-router",
+            Self::OtherNetwork => "other-network",
+            Self::Hotspot => "hotspot",
+            Self::HotspotName => "hotspot-name",
+            Self::BluetoothPower => "bluetooth-power",
+            Self::PairedDevices => "paired-devices",
+            Self::NearbyDevices => "nearby-devices",
+            Self::DoNotDisturb => "do-not-disturb",
+            Self::FocusScheduled => "focus-scheduled",
+            Self::FocusFrom => "focus-from",
+            Self::FocusTo => "focus-to",
+            Self::OutputBalance => "output-balance",
+            Self::OutputVolume => "output-volume",
+            Self::OutputMuted => "output-muted",
+            Self::OutputDevice => "output-device",
+            Self::DeviceProfiles => "device-profiles",
+            Self::InputVolume => "input-volume",
+            Self::InputMuted => "input-muted",
+            Self::InputDevice => "input-device",
+            Self::InputLevel => "input-level",
+            Self::AppVolumes => "app-volumes",
+            Self::AlertSound => "alert-sound",
+            Self::AlertVolume => "alert-volume",
+            Self::SoundEffects => "sound-effects",
+            Self::VolumeFeedback => "volume-feedback",
+            Self::Appearance => "appearance",
+            Self::Style => "style",
+            Self::WindowButtons => "window-buttons",
+            Self::ScreenReader => "screen-reader",
+            Self::Zoom => "zoom",
+            Self::IncreaseContrast => "increase-contrast",
+            Self::ReduceTransparency => "reduce-transparency",
+            Self::ReduceMotion => "reduce-motion",
+            Self::CursorSize => "cursor-size",
+            Self::LoginAccessibility => "login-accessibility",
+            Self::FlashScreen => "flash-screen",
+            Self::StickyKeys => "sticky-keys",
+            Self::SlowKeys => "slow-keys",
+            Self::BounceKeys => "bounce-keys",
+            Self::Accent => "accent",
+            Self::TintedFrame => "tinted-frame",
+            Self::Wallpaper => "wallpaper",
+            Self::WallpaperFit => "wallpaper-fit",
+            Self::BarEdge => "bar-edge",
+            Self::BarIconSize => "bar-icon-size",
+            Self::BarAutoHide => "bar-auto-hide",
+            Self::BarFloating => "bar-floating",
+            Self::BarGap => "bar-gap",
+            Self::DisplayUse => "display-use",
+            Self::DisplayResolution => "display-resolution",
+            Self::DisplayScale => "display-scale",
+            Self::RefreshRate => "refresh-rate",
+            Self::DisplayRotation => "display-rotation",
+            Self::VariableRefresh => "variable-refresh",
+            Self::DeepColour => "deep-colour",
+            Self::Hdr => "hdr",
+            Self::ScreenSaverAfter => "screen-saver-after",
+            Self::DisplayOffAfter => "display-off-after",
+            Self::RequirePasswordAfter => "require-password-after",
+            Self::SleepAfter => "sleep-after",
+            Self::BatteryDisplayOffAfter => "battery-display-off-after",
+            Self::BatterySleepAfter => "battery-sleep-after",
+            Self::KeyRepeatRate => "key-repeat-rate",
+            Self::KeyRepeatDelay => "key-repeat-delay",
+            Self::InputSources => "input-sources",
+            Self::CapsLock => "caps-lock",
+            Self::ComposeKey => "compose-key",
+            Self::SystemLayoutSwitch => "system-layout-switch",
+            Self::Shortcuts => "shortcuts",
+            Self::TrackpadTapToClick => "trackpad-tap-to-click",
+            Self::TrackpadNaturalScrolling => "trackpad-natural-scrolling",
+            Self::TrackpadSpeed => "trackpad-speed",
+            Self::TrackpadSecondaryClick => "trackpad-secondary-click",
+            Self::TrackpadDisableWhileTyping => "trackpad-disable-while-typing",
+            Self::TrackpadWorkspaceSwipe => "trackpad-workspace-swipe",
+            Self::TrackpadOverviewSwipe => "trackpad-overview-swipe",
+            Self::TrackpadDesktopSpread => "trackpad-desktop-spread",
+            Self::TrackpadLauncherPinch => "trackpad-launcher-pinch",
+            Self::TrackpadAcceleration => "trackpad-acceleration",
+            Self::TrackpadDragging => "trackpad-dragging",
+            Self::TrackpadScrollMethod => "trackpad-scroll-method",
+            Self::MousePrimaryButton => "mouse-primary-button",
+            Self::MouseNaturalScrolling => "mouse-natural-scrolling",
+            Self::MouseSpeed => "mouse-speed",
+            Self::MouseAcceleration => "mouse-acceleration",
+            Self::ComputerName => "computer-name",
+            Self::AboutThisComputer => "about-this-computer",
+            Self::StorageUsage => "storage-usage",
+            Self::LargeFiles => "large-files",
+            Self::AutomaticTime => "automatic-time",
+            Self::DateAndTime => "date-and-time",
+            Self::TimeZone => "time-zone",
+            Self::ClockFormat => "clock-format",
+            Self::LoginItems => "login-items",
+            Self::ReopenApps => "reopen-apps",
+            Self::RememberRecentFiles => "remember-recent-files",
+            Self::AutomaticUpdates => "automatic-updates",
+            Self::UpdateCheckEvery => "update-check-every",
+            Self::BatteryLevel => "battery-level",
+            Self::PowerMode => "power-mode",
+            Self::LowPowerOnBattery => "low-power-on-battery",
+            Self::PowerStatus => "power-status",
+            Self::SleepStatus => "sleep-status",
+            Self::LidOnPower => "lid-on-power",
+            Self::AppNotifications => "app-notifications",
+            Self::SoftwareUpdates => "software-updates",
+            Self::BackupStatus => "backup-status",
+            Self::Ethernet => "ethernet",
+            Self::EthernetAddress => "ethernet-address",
+            Self::EthernetRouter => "ethernet-router",
+            Self::EthernetDns => "ethernet-dns",
+            Self::EthernetIpv6Address => "ethernet-ipv6-address",
+            Self::EthernetIpv6Router => "ethernet-ipv6-router",
+            Self::Vpns => "vpns",
+            Self::AirplaneMode => "airplane-mode",
+            Self::Proxy => "proxy",
+            Self::ProxyHttp => "proxy-http",
+            Self::ProxyHttps => "proxy-https",
+            Self::ProxyIgnore => "proxy-ignore",
+            Self::Language => "language",
+            Self::AppLanguages => "app-languages",
+            Self::Region => "region",
+            Self::StoragePage => "storage-page",
+            Self::DiagnosticsPage => "diagnostics-page",
+            Self::ReportSending => "report-sending",
+            Self::SendReport => "send-report",
+            Self::Reports => "reports",
+            Self::ShortcutsPage => "shortcuts-page",
+            Self::Spelling => "spelling",
+            Self::TextReplacements => "text-replacements",
+            Self::ClipboardHistory => "clipboard-history",
+            Self::KeyboardAccess => "keyboard-access",
+            Self::SecurityStatus => "security-status",
+            Self::DefaultApps => "default-apps",
+            Self::Brightness => "brightness",
+            Self::NightLight => "night-light",
+            Self::NightSchedule => "night-schedule",
+            Self::NightFrom => "night-from",
+            Self::NightTo => "night-to",
+            Self::NightWarmth => "night-warmth",
+            Self::TextSize => "text-size",
+            Self::TextSizeLink => "text-size-link",
+            Self::CameraPage => "camera-page",
+            Self::MicrophonePage => "microphone-page",
+            Self::ScreenshotsPage => "screenshots-page",
+            Self::ScreenSharingPage => "screen-sharing-page",
+            Self::LocationPage => "location-page",
+            Self::AppPermissions => "app-permissions",
+            Self::SearchApplications => "search-applications",
+            Self::SearchRecentApps => "search-recent-apps",
+            Self::SearchRecentDocuments => "search-recent-documents",
+            Self::SearchDocuments => "search-documents",
+            Self::SearchMail => "search-mail",
+            Self::SearchEvents => "search-events",
+            Self::SearchContacts => "search-contacts",
+            Self::SearchFolders => "search-folders",
+            Self::SearchSettings => "search-settings",
+            Self::SearchSystem => "search-system",
+            Self::SearchCalculator => "search-calculator",
+            Self::SearchConversion => "search-conversion",
+            Self::SearchExcluded => "search-excluded",
+            Self::Printers => "printers",
+            Self::NearbyPrinters => "nearby-printers",
+            Self::Sharing => "sharing",
+            Self::Accounts => "accounts",
+            Self::FullName => "full-name",
+            Self::LockMessage => "lock-message",
+            Self::ShowPreviews => "show-previews",
+            Self::SavedPasswords => "saved-passwords",
+            Self::Activity => "activity",
+        }
+    }
+
+    /// What a program may do with the setting, and for setting it what that can cause: giving it
+    /// `value`, or any value.
+    pub fn mark(self, value: Option<&Value>) -> Mark {
+        match self {
+            Self::InputMuted => match value {
+                Some(Value::Flag(true)) => Mark::Change,
+                _ => Mark::Disrupt,
+            },
+            Self::DoNotDisturb
+            | Self::FocusScheduled
+            | Self::FocusFrom
+            | Self::FocusTo
+            | Self::OutputBalance
+            | Self::OutputVolume
+            | Self::OutputMuted
+            | Self::OutputDevice
+            | Self::AppVolumes
+            | Self::AlertSound
+            | Self::AlertVolume
+            | Self::SoundEffects
+            | Self::VolumeFeedback
+            | Self::Appearance
+            | Self::Style
+            | Self::WindowButtons
+            | Self::Zoom
+            | Self::IncreaseContrast
+            | Self::ReduceTransparency
+            | Self::ReduceMotion
+            | Self::CursorSize
+            | Self::FlashScreen
+            | Self::StickyKeys
+            | Self::SlowKeys
+            | Self::BounceKeys
+            | Self::Accent
+            | Self::TintedFrame
+            | Self::Wallpaper
+            | Self::WallpaperFit
+            | Self::BarEdge
+            | Self::BarIconSize
+            | Self::BarAutoHide
+            | Self::BarFloating
+            | Self::BarGap
+            | Self::KeyRepeatRate
+            | Self::KeyRepeatDelay
+            | Self::InputSources
+            | Self::CapsLock
+            | Self::ComposeKey
+            | Self::TrackpadTapToClick
+            | Self::TrackpadNaturalScrolling
+            | Self::TrackpadSpeed
+            | Self::TrackpadSecondaryClick
+            | Self::TrackpadDisableWhileTyping
+            | Self::TrackpadWorkspaceSwipe
+            | Self::TrackpadOverviewSwipe
+            | Self::TrackpadDesktopSpread
+            | Self::TrackpadLauncherPinch
+            | Self::TrackpadAcceleration
+            | Self::TrackpadDragging
+            | Self::TrackpadScrollMethod
+            | Self::MousePrimaryButton
+            | Self::MouseNaturalScrolling
+            | Self::MouseSpeed
+            | Self::MouseAcceleration
+            | Self::ClockFormat
+            | Self::RememberRecentFiles
+            | Self::PowerMode
+            | Self::Brightness
+            | Self::NightLight
+            | Self::NightSchedule
+            | Self::NightFrom
+            | Self::NightTo
+            | Self::NightWarmth
+            | Self::TextSize
+            | Self::SearchApplications
+            | Self::SearchRecentApps
+            | Self::SearchRecentDocuments
+            | Self::SearchDocuments
+            | Self::SearchMail
+            | Self::SearchEvents
+            | Self::SearchContacts
+            | Self::SearchFolders
+            | Self::SearchSettings
+            | Self::SearchSystem
+            | Self::SearchCalculator
+            | Self::SearchConversion => Mark::Change,
+            Self::WifiPower
+            | Self::BluetoothPower
+            | Self::InputVolume
+            | Self::InputDevice
+            | Self::ScreenReader
+            | Self::DisplayUse
+            | Self::DisplayResolution
+            | Self::DisplayScale
+            | Self::RefreshRate
+            | Self::DisplayRotation
+            | Self::VariableRefresh
+            | Self::DeepColour
+            | Self::Hdr
+            | Self::ScreenSaverAfter
+            | Self::DisplayOffAfter
+            | Self::BatteryDisplayOffAfter
+            | Self::AirplaneMode
+            | Self::AppLanguages => Mark::Disrupt,
+            Self::KnownNetworks
+            | Self::SleepAfter
+            | Self::BatterySleepAfter
+            | Self::ComputerName
+            | Self::AutomaticTime
+            | Self::TimeZone
+            | Self::LoginItems
+            | Self::AutomaticUpdates
+            | Self::UpdateCheckEvery
+            | Self::LidOnPower
+            | Self::Proxy
+            | Self::ProxyHttp
+            | Self::ProxyHttps
+            | Self::ProxyIgnore
+            | Self::Language
+            | Self::Region
+            | Self::ReportSending
+            | Self::DefaultApps
+            | Self::SearchExcluded => Mark::Critical,
+            Self::StorageUsage
+            | Self::BatteryLevel
+            | Self::PowerStatus
+            | Self::SleepStatus
+            | Self::SoftwareUpdates
+            | Self::BackupStatus
+            | Self::Ethernet
+            | Self::EthernetAddress
+            | Self::EthernetRouter
+            | Self::EthernetDns
+            | Self::EthernetIpv6Address
+            | Self::EthernetIpv6Router
+            | Self::SecurityStatus => Mark::Read,
+            Self::Networks
+            | Self::WifiAddress
+            | Self::WifiRouter
+            | Self::WifiDns
+            | Self::WifiIpv6Address
+            | Self::WifiIpv6Router
+            | Self::OtherNetwork
+            | Self::Hotspot
+            | Self::HotspotName
+            | Self::PairedDevices
+            | Self::NearbyDevices
+            | Self::DeviceProfiles
+            | Self::InputLevel
+            | Self::LoginAccessibility
+            | Self::RequirePasswordAfter
+            | Self::SystemLayoutSwitch
+            | Self::Shortcuts
+            | Self::AboutThisComputer
+            | Self::LargeFiles
+            | Self::DateAndTime
+            | Self::ReopenApps
+            | Self::LowPowerOnBattery
+            | Self::AppNotifications
+            | Self::Vpns
+            | Self::StoragePage
+            | Self::DiagnosticsPage
+            | Self::SendReport
+            | Self::Reports
+            | Self::ShortcutsPage
+            | Self::Spelling
+            | Self::TextReplacements
+            | Self::ClipboardHistory
+            | Self::KeyboardAccess
+            | Self::TextSizeLink
+            | Self::CameraPage
+            | Self::MicrophonePage
+            | Self::ScreenshotsPage
+            | Self::ScreenSharingPage
+            | Self::LocationPage
+            | Self::AppPermissions
+            | Self::Printers
+            | Self::NearbyPrinters
+            | Self::Sharing
+            | Self::Accounts
+            | Self::FullName
+            | Self::LockMessage
+            | Self::ShowPreviews
+            | Self::SavedPasswords
+            | Self::Activity => Mark::Hidden,
+        }
+    }
+}
+
+/// What a program may do with a setting.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Mark {
+    /// Nothing: it does not exist for programs.
+    Hidden,
+    /// Read it.
+    Read,
+    /// Set it, which only the person notices and can undo.
+    Change,
+    /// Set it, which may cut a connection or interrupt work.
+    Disrupt,
+    /// Set it, which lowers a protection or reaches the whole computer.
+    Critical,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -590,6 +985,7 @@ pub enum List {
     SearchExcluded,
     Permissions(Permission),
     Passwords,
+    Activity,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -1949,6 +2345,7 @@ fn system_panes() -> Vec<Pane> {
             )],
         ),
         privacy_pane(),
+        activity_pane(),
         pane(
             PaneId::Apps,
             vec![
@@ -2142,6 +2539,21 @@ fn privacy_pane() -> Pane {
     )
 }
 
+fn activity_pane() -> Pane {
+    pane(
+        PaneId::Activity,
+        vec![section(
+            None,
+            vec![list(
+                SettingId::Activity,
+                tr!("Activity"),
+                tr!("undo, undo changes, history, take back"),
+                List::Activity,
+            )],
+        )],
+    )
+}
+
 fn software_update_pane() -> Pane {
     pane(
         PaneId::SoftwareUpdate,
@@ -2290,6 +2702,32 @@ fn power_pane() -> Pane {
             ),
         ],
     )
+}
+
+/// What a computer has that some settings need.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Computer {
+    pub battery: bool,
+    pub wifi: bool,
+    pub bluetooth: bool,
+    pub sleeps: bool,
+}
+
+/// The panes of `computer`, without the settings it does not have.
+pub fn panes_of(computer: Computer) -> Vec<Pane> {
+    let mut panes = panes();
+    if !computer.sleeps {
+        without_sleep(&mut panes);
+    }
+    if !computer.battery {
+        without_battery(&mut panes);
+    }
+    panes.retain(|pane| match pane.id {
+        PaneId::Wifi => computer.wifi,
+        PaneId::Bluetooth => computer.bluetooth,
+        _ => true,
+    });
+    panes
 }
 
 pub fn without_battery(panes: &mut [Pane]) {

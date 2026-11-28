@@ -11,8 +11,7 @@ use bande_app::{
 use bande_app_menu::{Entry, edit_submenu};
 use bande_app_settings::{SettingsWatch, Stored, settings_folder};
 use bande_calendar::alerts::{Due, due_between, last_checked, save_checked};
-use bande_calendar::caldav::{Discovered, RemoteCalendar};
-use bande_calendar::ical::{CalendarObject, read_file};
+use bande_calendar::ical::CalendarObject;
 use bande_calendar::notice::{Notice, Notices, OPEN, SNOOZE as SNOOZE_ACTION, Subject};
 use bande_calendar::online::System;
 use bande_calendar::settings::{CalendarSettings, Change, listen};
@@ -25,7 +24,10 @@ use bande_calendar::ui::{
 };
 use bande_calendar::wake::WallAlarm;
 use bande_calendar::worker::{Job, Reply, Worker};
+use bande_content_lines::read_file;
 use bande_datetime::DateFormats;
+use bande_dav::offer::{self, Answer, Offer};
+use bande_dav::{Discovered, RemoteCalendar, Service};
 use bande_design::{Accent, Scheme};
 use bande_inbox::Inbox;
 use bande_l10n::{Text, text, tr, trn};
@@ -434,6 +436,9 @@ impl CalendarApp {
             self.next_push = None;
             self.synced = Some(now);
         }
+        if caldav || !offer::waiting(Service::CalDav).is_empty() {
+            self.worker.send(Job::Adopt);
+        }
         if calendars.is_empty() {
             return;
         }
@@ -496,12 +501,25 @@ impl CalendarApp {
     fn setup_done(&mut self, view: &mut CalendarView, done: Done) {
         let (account, user, password) = match done {
             Done::Added {
+                address,
                 server,
                 user,
                 password,
                 found,
+                also_contacts,
             } => {
                 let id = new_uid();
+                if also_contacts {
+                    self.worker.send(Job::Offer {
+                        offer: Offer {
+                            id: id.clone(),
+                            address,
+                            server: server.clone(),
+                            user: user.clone(),
+                        },
+                        password: password.clone(),
+                    });
+                }
                 let name = match user.contains('@') {
                     true => user.clone(),
                     false => format!("{user}@{}", host_of(&found.principal)),
@@ -616,7 +634,17 @@ impl CalendarApp {
         for reply in replies {
             match reply {
                 Reply::Synced(outcome) => {
-                    for title in apply(view.library_mut(), outcome, false) {
+                    for (title, status) in &outcome.refused {
+                        self.errors.push(tr!(
+                            "The server did not accept “{title}” ({status}). Your change is kept on this computer and sent again at the next sync.",
+                            title = title.clone(),
+                            status = *status
+                        ));
+                    }
+                    let calendar = outcome.calendar.clone();
+                    let applied = apply(view.library_mut(), outcome, false);
+                    view.follow(&calendar, &applied.moved);
+                    for title in applied.conflicts {
                         self.sync_again = true;
                         self.errors.push(tr!(
                             "“{title}” was changed elsewhere; both versions are kept.",
@@ -725,12 +753,54 @@ impl CalendarApp {
                     };
                     view.set_status(Some(status));
                 }
+                Reply::Adopted { offer, answer } => match answer {
+                    Answer::Ask => {
+                        if self.main.is_some() {
+                            view.ask_offer(offer);
+                        }
+                    }
+                    Answer::Found(credentials, found)
+                        if view.library().accounts.iter().any(|account| {
+                            matches!(&account.kind, AccountKind::CalDav { user, home, .. }
+                                if *user == credentials.user && *home == found.home)
+                        }) =>
+                    {
+                        tracing::info!("Calendar already has the offered account");
+                    }
+                    Answer::Found(credentials, found) => self.setup_done(
+                        view,
+                        Done::Added {
+                            address: offer.address,
+                            server: offer.server,
+                            user: credentials.user,
+                            password: credentials.password,
+                            found,
+                            also_contacts: false,
+                        },
+                    ),
+                    Answer::Failed(error) => {
+                        tracing::warn!("cannot use {} for Calendar: {error}", offer.address);
+                        view.set_status(Some(tr!(
+                            "{address} could not be used for Calendar: {error}",
+                            address = offer.address,
+                            error = error.to_string()
+                        )));
+                    }
+                },
+                Reply::OfferFailed(error) => {
+                    tracing::warn!("cannot offer the account to Contacts: {error}");
+                    view.set_status(Some(tr!(
+                        "The account could not be offered to Contacts: {error}",
+                        error = error
+                    )));
+                }
                 Reply::ChangeFailed(error) => {
                     tracing::warn!("cannot change a calendar: {error}");
                     view.set_status(Some(error));
                 }
                 Reply::Finished => {
                     self.syncing = false;
+                    view.refresh_birthdays();
                     let now = Zoned::now().with_time_zone(self.zone.clone());
                     let status = self.errors.first().cloned().unwrap_or_else(|| {
                         tr!("Updated {time}", time = clock(&self.formats, &now))
@@ -770,6 +840,15 @@ impl CalendarApp {
                 Request::RemoveAccount(id) => {
                     view.library_mut().remove_account(&id);
                     self.worker.send(Job::Forget(id));
+                }
+                Request::AnswerOffer(offer, accepted) => {
+                    self.worker.send(match accepted {
+                        true => Job::Accept(offer),
+                        false => Job::Decline(offer),
+                    });
+                    if accepted {
+                        self.worker.send(Job::Adopt);
+                    }
                 }
                 Request::Changed => {
                     self.push_soon(PUSH_DELAY);
@@ -1145,7 +1224,9 @@ impl Program for CalendarApp {
         let title = view.title();
         let directory = std::env::current_dir().unwrap_or_default();
         open_arguments(&mut view, &arguments, &directory);
-        if let Some(file) = cx.state_file(WELCOME_FILE) {
+        if offer::waiting(Service::CalDav).is_empty()
+            && let Some(file) = cx.state_file(WELCOME_FILE)
+        {
             view.welcome(file);
         }
         let worker = Worker::start()?;

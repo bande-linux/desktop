@@ -15,3 +15,8 @@ debian/build/l10n/development/bande-locale-helper/* usr/share/bande/l10n/bande-l
 debian/build/l10n/development/bande-network-helper/* usr/share/bande/l10n/bande-network-helper/
 debian/build/l10n/development/bande-settings/* usr/share/bande/l10n/bande-settings/
 debian/build/l10n/development/bande-sharing-helper/* usr/share/bande/l10n/bande-sharing-helper/
+debian/build/bin/bande-settings-intents usr/libexec/
+crates/services/settings-intents/data/bande-settings-intents.service usr/lib/systemd/user/
+crates/services/settings-intents/data/org.bande.Intents.Settings.service usr/share/dbus-1/services/
+debian/build/intents/bande-settings-intents/* usr/share/bande/intents/
+debian/build/l10n/development/bande-settings-intents/* usr/share/bande/l10n/bande-settings-intents/

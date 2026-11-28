@@ -7,6 +7,9 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
+msgid "The app is busy. Try again in a moment."
+msgstr "Appen är upptagen. Försök igen om en stund."
+
 msgid "{app} quit while reopening its windows"
 msgstr "{app} avslutades när fönstren öppnades igen"
 

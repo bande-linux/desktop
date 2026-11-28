@@ -11,13 +11,13 @@ use bande_packages::Client;
 use bande_screen_sharing::setup::{
     self as screen_sharing, KEYRING_APPLICATION, PASSWORD_KEY, SHORTEST_PASSWORD,
 };
+use bande_settings_client::ConfigProxyBlocking;
 use bande_toolkit::Spacing;
 use bande_toolkit::ui::{
     Alert, Axis, Button, CheckState, Checkbox, SecureField, Stack, Toggle, Widget,
 };
 use zbus::blocking::Connection;
 
-use crate::client::ConfigProxyBlocking;
 use crate::follow::{Command as Order, Update, Updates, spawn};
 use crate::pages::{FIELD_SIZE, Widgets, boxed, submit};
 use crate::view::{Anchor, Intent, SettingsView, intent};

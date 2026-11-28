@@ -1,0 +1,3 @@
+/usr/share/bande/l10n bande-compositor optional
+/usr/share/i18n/SUPPORTED locales depends
+/usr/share/i18n/locales locales depends

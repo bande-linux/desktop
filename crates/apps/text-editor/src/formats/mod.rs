@@ -1,5 +1,4 @@
 pub mod docx;
-pub mod markdown;
 pub mod odt;
 pub mod rtf;
 
@@ -8,8 +7,8 @@ use std::io::{Read, Seek};
 use bande_toolkit::ui::RichText;
 
 pub use bande_rich_text::{
-    Builder, HEADINGS, MAX_NESTING, MONOSPACE, Paragraph, code, family, heading, heading_level,
-    html, is_code, link, paragraphs,
+    Builder, HEADINGS, MAX_NESTING, MONOSPACE, family, heading, heading_level, html, link,
+    markdown, paragraphs,
 };
 
 const MAX_PART_BYTES: u64 = 64 << 20;

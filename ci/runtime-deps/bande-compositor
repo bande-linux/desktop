@@ -1,0 +1,6 @@
+/usr/bin/bande-clipboard bande-clipboard depends
+/usr/bin/bande-greeter bande-greeter depends
+/usr/bin/bande-lock bande-lock depends
+/usr/bin/bande-review bande-review optional
+/usr/bin/bande-screenshot bande-screenshot depends
+/usr/bin/bande-shell bande-shell depends

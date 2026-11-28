@@ -2,8 +2,8 @@ use jiff::civil::{Date, DateTime};
 use jiff::tz::TimeZone;
 use jiff::{Span, Timestamp, Zoned};
 
-use super::lines::Property;
 use super::tz::Zones;
+use bande_content_lines::Property;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Moment {

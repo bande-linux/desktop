@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>org.bande.Contacts</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT OR Apache-2.0</project_license>
+  <name>Contacts</name>
+  <summary>Keep the people you know, on this computer and on CardDAV servers</summary>
+  <summary xml:lang="sv">Håll ordning på dem du känner, på datorn och på CardDAV-servrar</summary>
+  <description>
+    <p>An address book on this computer and on CardDAV servers, kept offline and in sync: names, organizations, email addresses, phone numbers, addresses, birthdays, notes, photos and groups, with search, .vcf import and export, and merging of duplicates. Mail completes addresses from it and Calendar completes invitees and can show birthdays.</p>
+  </description>
+  <developer id="org.bande">
+    <name>Bande</name>
+  </developer>
+  <launchable type="desktop-id">org.bande.Contacts.desktop</launchable>
+  <url type="homepage">https://github.com/bande-linux/desktop</url>
+  <content_rating type="oars-1.1"/>
+</component>

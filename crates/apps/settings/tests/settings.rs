@@ -4,9 +4,10 @@ use std::sync::Arc;
 
 use bande_config::SoftwareUpdates;
 use bande_config::{Config, ConfigService, ConfigStore};
+use bande_intents::Receipt;
 use bande_settings::{
-    Command, Display, Mode, PaneId, Problem, ScreenSharing, SettingId, SettingsClient,
-    SettingsView, SharingCommand, SharingState, Update, Value,
+    ActivityCommand, Command, Display, Mode, PaneId, Problem, ScreenSharing, SettingId,
+    SettingsClient, SettingsView, SharingCommand, SharingState, Update, Value,
 };
 use bande_test_bus::SessionBus;
 use bande_toolkit::ui::{Event, Key, Modifiers};
@@ -322,4 +323,39 @@ fn two_displays_of_one_model_are_told_apart_and_arranged_from_the_keyboard() {
         .map(|placement| (placement.x, placement.y, placement.main))
         .collect();
     assert_eq!(places, [(0, 0, true), (0, 1080, false)]);
+}
+
+#[test]
+fn what_was_changed_is_listed_in_activity_and_undone_from_the_keyboard() {
+    let mut view = SettingsView::new(Palette::for_scheme(Scheme::Light), TextSystem::new());
+    view.scene(SIZE.0, SIZE.1);
+    view.select_pane(PaneId::Activity);
+    assert!(
+        view.take_commands()
+            .contains(&Command::Activity(ActivityCommand::Refresh))
+    );
+    view.apply(vec![Update::Activity(vec![Receipt {
+        receipt: "settings:1".to_owned(),
+        intent: "settings.set".to_owned(),
+        summary: "Appearance: Dark to Light".to_owned(),
+        references: Vec::new(),
+        made: 1_800_000_000,
+        agent: String::new(),
+    }])]);
+    view.scene(SIZE.0, SIZE.1);
+    assert!(shows(&view, "Appearance: Dark to Light"));
+    let (undo, _) = node_labelled(&view, "Undo").expect("Undo");
+    view.perform(&accesskit::ActionRequest {
+        action: accesskit::Action::Focus,
+        target_tree: accesskit::TreeId::ROOT,
+        target_node: undo,
+        data: None,
+    });
+    press(&mut view, Key::Space);
+    assert_eq!(
+        view.take_commands(),
+        [Command::Activity(ActivityCommand::Undo(
+            "settings:1".to_owned()
+        ))]
+    );
 }

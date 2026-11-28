@@ -480,6 +480,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
+name = "bande-address-book"
+version = "0.2.0"
+dependencies = [
+ "bande-content-lines",
+ "bande-dav",
+ "bande-fs",
+ "bande-test-bus",
+ "bande-xdg",
+ "base64 0.22.1",
+ "jiff",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tracing",
+]
+
+[[package]]
 name = "bande-app"
 version = "0.2.0"
 dependencies = [
@@ -488,6 +505,7 @@ dependencies = [
  "bande-bus",
  "bande-compositor",
  "bande-inbox",
+ "bande-intents",
  "bande-l10n",
  "bande-log",
  "bande-notify",
@@ -686,30 +704,43 @@ name = "bande-calendar"
 version = "0.2.0"
 dependencies = [
  "accesskit",
+ "bande-address-book",
  "bande-app",
  "bande-app-menu",
  "bande-app-settings",
+ "bande-content-lines",
  "bande-datetime",
+ "bande-dav",
  "bande-design",
  "bande-discovery",
- "bande-https",
  "bande-inbox",
  "bande-keyring",
  "bande-l10n",
  "bande-network",
  "bande-notify",
  "bande-search",
+ "bande-test-bus",
  "bande-toolkit",
  "bande-xdg",
- "base64 0.22.1",
  "jiff",
  "md-5 0.10.6",
- "roxmltree 0.21.2",
  "rustix 1.1.6",
  "serde",
  "serde_json",
- "sha2 0.11.1",
  "tempfile",
+ "tracing",
+ "zbus",
+]
+
+[[package]]
+name = "bande-cli"
+version = "0.2.0"
+dependencies = [
+ "bande-bus",
+ "bande-intents",
+ "bande-l10n",
+ "bande-log",
+ "serde_json",
  "tracing",
  "zbus",
 ]
@@ -815,6 +846,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "bande-contacts"
+version = "0.2.0"
+dependencies = [
+ "accesskit",
+ "bande-address-book",
+ "bande-app",
+ "bande-app-menu",
+ "bande-content-lines",
+ "bande-datetime",
+ "bande-dav",
+ "bande-discovery",
+ "bande-fs",
+ "bande-inbox",
+ "bande-keyring",
+ "bande-l10n",
+ "bande-network",
+ "bande-search",
+ "bande-toolkit",
+ "bande-xdg",
+ "image",
+ "jiff",
+ "tempfile",
+ "tracing",
+ "zbus",
+ "zeroize",
+]
+
+[[package]]
 name = "bande-content"
 version = "0.2.0"
 dependencies = [
@@ -834,6 +893,13 @@ dependencies = [
  "serde_json",
  "tracing",
  "zip",
+]
+
+[[package]]
+name = "bande-content-lines"
+version = "0.2.0"
+dependencies = [
+ "rustix 1.1.6",
 ]
 
 [[package]]
@@ -861,6 +927,23 @@ dependencies = [
  "tracing",
  "writeable",
  "zbus",
+]
+
+[[package]]
+name = "bande-dav"
+version = "0.2.0"
+dependencies = [
+ "bande-discovery",
+ "bande-https",
+ "bande-keyring",
+ "bande-xdg",
+ "base64 0.22.1",
+ "md-5 0.10.6",
+ "roxmltree 0.21.2",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "tracing",
 ]
 
 [[package]]
@@ -1140,6 +1223,37 @@ dependencies = [
 ]
 
 [[package]]
+name = "bande-intents"
+version = "0.2.0"
+dependencies = [
+ "bande-bus",
+ "bande-intents-macros",
+ "bande-l10n",
+ "bande-notify",
+ "bande-xdg",
+ "blocking",
+ "futures-lite",
+ "jiff",
+ "rustix 1.1.6",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "signal-hook",
+ "tempfile",
+ "tracing",
+ "zbus",
+]
+
+[[package]]
+name = "bande-intents-macros"
+version = "0.2.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
 name = "bande-keyboard"
 version = "0.2.0"
 dependencies = [
@@ -1151,6 +1265,7 @@ dependencies = [
 name = "bande-keyring"
 version = "0.2.0"
 dependencies = [
+ "tracing",
  "zbus",
 ]
 
@@ -1194,12 +1309,16 @@ name = "bande-launcher"
 version = "0.2.0"
 dependencies = [
  "accesskit",
+ "bande-bus",
  "bande-config",
  "bande-content",
  "bande-fs",
  "bande-inbox",
+ "bande-intents",
  "bande-l10n",
+ "bande-notify",
  "bande-search",
+ "bande-settings-intents",
  "bande-settings-panes",
  "bande-status",
  "bande-thumbnails",
@@ -1207,6 +1326,7 @@ dependencies = [
  "bande-volumes",
  "bande-xdg",
  "image",
+ "tempfile",
  "tracing",
  "zbus",
 ]
@@ -1296,6 +1416,7 @@ name = "bande-mail"
 version = "0.2.0"
 dependencies = [
  "accesskit",
+ "bande-address-book",
  "bande-app",
  "bande-app-menu",
  "bande-app-settings",
@@ -1672,7 +1793,7 @@ dependencies = [
 name = "bande-rich-text"
 version = "0.2.0"
 dependencies = [
- "bande-toolkit",
+ "bande-design",
  "html5ever",
 ]
 
@@ -1826,6 +1947,7 @@ dependencies = [
  "bande-edid",
  "bande-fs",
  "bande-https",
+ "bande-intents",
  "bande-keyboard",
  "bande-keyring",
  "bande-l10n",
@@ -1836,6 +1958,7 @@ dependencies = [
  "bande-pdf",
  "bande-printers",
  "bande-screen-sharing",
+ "bande-settings-client",
  "bande-settings-panes",
  "bande-sound",
  "bande-status",
@@ -1862,6 +1985,41 @@ dependencies = [
  "xkbcommon 0.9.0",
  "zbus",
  "zeroize",
+]
+
+[[package]]
+name = "bande-settings-client"
+version = "0.2.0"
+dependencies = [
+ "bande-config",
+ "bande-notify",
+ "bande-settings-panes",
+ "serde",
+ "tracing",
+ "zbus",
+]
+
+[[package]]
+name = "bande-settings-intents"
+version = "0.2.0"
+dependencies = [
+ "bande-cli",
+ "bande-config",
+ "bande-intents",
+ "bande-keyboard",
+ "bande-l10n",
+ "bande-log",
+ "bande-notify",
+ "bande-settings-client",
+ "bande-settings-panes",
+ "bande-status",
+ "bande-test-bus",
+ "bande-test-intents",
+ "bande-xdg",
+ "jiff",
+ "serde_json",
+ "tempfile",
+ "zbus",
 ]
 
 [[package]]
@@ -1991,6 +2149,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "bande-system-intents"
+version = "0.2.0"
+dependencies = [
+ "bande-intents",
+ "bande-log",
+]
+
+[[package]]
 name = "bande-taskbar-model"
 version = "0.2.0"
 dependencies = [
@@ -2056,6 +2222,16 @@ dependencies = [
 name = "bande-test-bus"
 version = "0.2.0"
 dependencies = [
+ "tempfile",
+ "zbus",
+]
+
+[[package]]
+name = "bande-test-intents"
+version = "0.2.0"
+dependencies = [
+ "bande-intents",
+ "bande-test-bus",
  "tempfile",
  "zbus",
 ]
@@ -2265,6 +2441,7 @@ dependencies = [
  "accesskit",
  "bande-graphics",
  "bande-l10n",
+ "bande-rich-text",
  "bande-spring",
  "parley",
  "zeroize",

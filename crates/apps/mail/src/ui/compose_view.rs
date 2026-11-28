@@ -4,6 +4,7 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant, SystemTime};
 
+use bande_address_book::completes;
 use bande_app::{Dropping, FileDrop, local_files};
 use bande_l10n::{Text, text, tr, trn};
 
@@ -129,18 +130,6 @@ fn joined(addresses: &[Address]) -> String {
         .map(Address::full)
         .collect::<Vec<_>>()
         .join(", ")
-}
-
-fn completes(candidate: &str, token: &str) -> Option<String> {
-    let mut rest = candidate.char_indices();
-    for typed in token.chars() {
-        let (_, known) = rest.next()?;
-        if !known.to_lowercase().eq(typed.to_lowercase()) {
-            return None;
-        }
-    }
-    let rest = rest.as_str();
-    (!rest.is_empty()).then(|| rest.to_owned())
 }
 
 fn rows(from: bool, bcc: bool) -> Vec<Text> {
@@ -824,13 +813,15 @@ impl ComposeView {
             self.typed.push((field, text));
             return;
         };
-        let before = std::mem::replace(&mut self.typed[at].1, text.clone());
-        if let Some(completion) = completion
-            && let Some(separator) = text.strip_prefix(completion.typed.as_str())
-            && [",", ";"].contains(&separator)
-        {
-            self.set_field(field, &format!("{}, ", completion.shown), None);
-            return;
+        let mut before = std::mem::replace(&mut self.typed[at].1, text.clone());
+        if let Some(completion) = completion {
+            if let Some(separator) = text.strip_prefix(completion.typed.as_str())
+                && [",", ";"].contains(&separator)
+            {
+                self.set_field(field, &format!("{}, ", completion.shown), None);
+                return;
+            }
+            before = completion.typed;
         }
         let selection = self
             .ui

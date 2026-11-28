@@ -100,8 +100,8 @@ The workflows and what starts them:
   Bande's Browser ([`browser/README.md`](../../browser/README.md)) only when Debian's version or
   the hash of `browser/`'s inputs (`browser/scripts/inputs.sh`) has no build yet, one run at a
   time. A scheduled run with nothing to build deletes the scheduled run before it when that one had
-  nothing to build too, so the list keeps the builds and the latest check. Only runs on `main`
-  count as built.
+  nothing to build too, so the list keeps the builds and the latest check. Only green runs on
+  `main` count as built, so a run that failed on one architecture is built again.
 - `reproducible.yml`: weekly and on dispatch; below.
 - `debian-mode.yml`: weekly, on dispatch and on pull requests that change `Cargo.toml`,
   `Cargo.lock` or `debian/control`; below.

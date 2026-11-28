@@ -5,12 +5,15 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 repository.workspace = true
-description = "Rich text for Bande's Text Editor and Notes: HTML read into the toolkit's rich text and written back"
+description = "Rich text for Bande: its model, and Markdown and HTML read into it and written back"
 publish = false
 
 [dependencies]
-bande-toolkit.workspace = true
-html5ever.workspace = true
+bande-design.workspace = true
+html5ever = { workspace = true, optional = true }
+
+[features]
+html = ["dep:html5ever"]
 
 [lints]
 workspace = true

@@ -1,9 +1,13 @@
 use std::sync::Arc;
 
-use bande_toolkit::Color;
-use bande_toolkit::ui::{ParagraphAttributes, RichText, TextAttributes};
+use bande_design::Color;
 
+#[cfg(feature = "html")]
 pub mod html;
+pub mod markdown;
+mod model;
+
+pub use model::{Alignment, ListMarker, ParagraphAttributes, RichText, TextAttributes};
 
 pub const MONOSPACE: &str = "JetBrains Mono";
 pub const HEADINGS: [f32; 6] = [26.0, 22.0, 18.0, 16.0, 15.0, 14.0];

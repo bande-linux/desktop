@@ -8,7 +8,7 @@ local gate call it, so CI holds no check the gate skips:
 | Stage | What it runs |
 |---|---|
 | `lint` | `actionlint` (pinned release binary, with shellcheck) over the workflows, `ci/deb/version-test.sh`, then `ci/release/lint.sh`: `cargo fmt --all --check`, workspace clippy `-D warnings`, the dependency rules (no session service except the polkit agent depends on the widget crates; graphics and widgets stay off Wayland), `ci/check-apps.sh` (every app in `crates/apps`, the template included, is a `bande-app` app packaged like the others: package `bande-<dir>`, the app id naming its `.desktop` file, `Icon=` and metainfo, `Exec=`, `StartupNotify=true`, a default in `data/x-bande-mimeapps.list` for every type its `.desktop` file declares, the toolkit's fonts in its `debian/control` Depends, no loop or menu export of its own), `ci/check-runtime-deps.py`, `ci/copyright.py --check` and `ci/deb/build-depends.py --check` (`debian/copyright` and the `librust-*-dev` Build-Depends follow `Cargo.lock`), and `data/icons/src/generate.py --check` (the committed icon themes and hicolor app icons are exactly what the generator makes, with no extra icons in its directories) |
-| `test` | the workspace tests, every app's included, each binary under `ci/hermetic.sh` (a temporary home, no session, its own test bus) with lavapipe, with `xandikos` installed for Calendar's scheduling test |
+| `test` | the workspace tests, every app's included, each binary under `ci/hermetic.sh` (a temporary home, no session, its own test bus) with lavapipe, with `xandikos` installed for Calendar's scheduling test and the address books' sync test |
 | `debs` | the source package (`ci/deb/source.sh`), every binary package built from it offline (`ci/deb/build.sh --build=binary`, without the tests, which `test` ran), `ci/release/check-debs.sh` and `lintian --fail-on error,warning` on the `.changes` |
 | `gate` | `lint test debs` |
 
@@ -76,13 +76,13 @@ covers the change:
 
 ## Runtime dependencies
 
-`ci/runtime-deps` lists every program Bande runs (`Command::new`) and every system path it
-reads (`/usr/...`, `/bin`, `/sbin`), each with the Debian package that ships it and a kind:
+`ci/runtime-deps/<crate>` lists every program that crate runs (`Command::new`) and every system
+path it reads (`/usr/...`, `/bin`, `/sbin`), each with the Debian package that ships it and a kind:
 `required` (Debian priority required), `depends` (the package that runs or reads it, or for a
 shared library one package using it, declares it in Depends), `optional` (the code checks
 first and shows the user why a feature is off). `ci/check-runtime-deps.py` in `lint` fails on a
-path or program missing from the list and on a `depends` entry its package does not declare, so
-a new one is declared in the change that adds it; the `every-package` autopkgtest checks that
+path or program missing from its crate's file, on a file that names no crate and on a `depends`
+entry its package does not declare, so a new one is declared in the change that adds it; the `every-package` autopkgtest checks that
 every `required` and `depends` entry is on a system installed with `--no-install-recommends`.
 
 ## GitHub CI

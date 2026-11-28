@@ -18,7 +18,7 @@ bande-inbox.workspace = true
 bande-keyring.workspace = true
 bande-l10n.workspace = true
 bande-mail-core.workspace = true
-bande-rich-text.workspace = true
+bande-rich-text = { workspace = true, features = ["html"] }
 bande-toolkit.workspace = true
 bande-xdg.workspace = true
 jiff.workspace = true

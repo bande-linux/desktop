@@ -1,0 +1,5 @@
+busctl systemd depends
+eu-stack elfutils optional
+journalctl systemd depends
+systemctl systemd depends
+systemd-ac-power systemd depends

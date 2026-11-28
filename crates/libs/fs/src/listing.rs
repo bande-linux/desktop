@@ -8,7 +8,7 @@ use std::sync::LazyLock;
 use std::time::{Duration, SystemTime};
 
 use bande_l10n::{tr, trn};
-use icu_collator::options::CollatorOptions;
+use icu_collator::options::{CollatorOptions, Strength};
 use icu_collator::preferences::CollationNumericOrdering;
 use icu_collator::{CollatorBorrowed, CollatorPreferences};
 use icu_decimal::input::Decimal;
@@ -21,17 +21,26 @@ use crate::trash::{Trash, TrashItem};
 
 use crate::DATES;
 
-static NAMES: LazyLock<Option<CollatorBorrowed<'static>>> = LazyLock::new(|| {
+static NAMES: LazyLock<Option<CollatorBorrowed<'static>>> =
+    LazyLock::new(|| collator(CollatorOptions::default()));
+
+static LETTERS: LazyLock<Option<CollatorBorrowed<'static>>> = LazyLock::new(|| {
+    let mut options = CollatorOptions::default();
+    options.strength = Some(Strength::Primary);
+    collator(options)
+});
+
+fn collator(options: CollatorOptions) -> Option<CollatorBorrowed<'static>> {
     let mut preferences = CollatorPreferences::from(&bande_datetime::env_locale(&[
         "LC_ALL",
         "LC_COLLATE",
         "LANG",
     ]));
     preferences.numeric_ordering = Some(CollationNumericOrdering::True);
-    CollatorBorrowed::try_new(preferences, CollatorOptions::default())
+    CollatorBorrowed::try_new(preferences, options)
         .inspect_err(|error| tracing::warn!("cannot sort names for this language: {error}"))
         .ok()
-});
+}
 
 thread_local! {
     static NUMBERS: Option<DecimalFormatter> = {
@@ -377,6 +386,15 @@ pub fn natural_order(a: &str, b: &str) -> Ordering {
         None => a.to_lowercase().cmp(&b.to_lowercase()),
     }
     .then_with(|| a.cmp(b))
+}
+
+/// Whether the person's language sorts the letters `a` and `b` as one, such as E and É, or A
+/// and Å where they are not letters of their own.
+pub fn same_letter(a: &str, b: &str) -> bool {
+    match &*LETTERS {
+        Some(collator) => collator.compare(a, b) == Ordering::Equal,
+        None => a == b,
+    }
 }
 
 fn decimal(value: f64, decimals: i32) -> String {

@@ -57,7 +57,7 @@ apt install bande-mail
   so a local bridge or test server still works. Passwords live in the Secret Service,
   under `application=org.bande.Mail`, never in a file.
 - **Window.** A window that was open at log out comes back in its place, showing the mailbox it showed. Each pane owns its part of the header: New Message over the sidebar (a symbol when the window buttons sit on that side), Search over the list, and over the reader Reply, Reply All, Forward, Archive, Junk, Delete, Flag and More (Move To, Mark as Read or Unread, a flag colour, Apply Rules); the window title is not painted, but stays the window's name. The list's own header shows the mailbox, its unread count, All, Unread and Flagged, and the sort order (date, sender, subject, size or unread first, either way). Width decides the layout: from 1040 points the sidebar, list and reader sit side by side; narrower, the sidebar slides over the list from the header's sidebar button and takes the keyboard while it is open; below 720 one pane shows at a time, the reader with Back (or Escape) to the list. View ▸ Hide Sidebar (Shift+Ctrl+S) hides it at any width. The sidebar and list edges can be dragged, and their widths are kept; the list gives way where the reader’s actions would not fit beside the window buttons. The reader's cards stay at most 860 points wide, centred. The foot of the sidebar says whether Mail is getting mail, which accounts are offline (with Try Again) or when it last updated, next to Get Mail. The sidebar lists Inbox, Flagged, Drafts, Sent, Archive, Junk and Trash across all
-  accounts, then each account's folders with unread counts, under the account's name; clicking the name, or Left and Right in the sidebar, folds and unfolds them. The list shows sender, subject, a
+  accounts, then each account's folders with unread counts, under the account's name; clicking the name, or Left and Right in the sidebar, folds and unfolds them. The list shows sender (by the name it has in Contacts, when it is there), subject, a
   preview, the date, an unread dot, a flag and a paperclip, under day labels (Today, Yesterday,
   This Week, then months) when sorted by date; in a mailbox of all accounts a coloured mark tells
   the accounts apart. Under the pointer a row's date gives way to Archive, Delete and Flag, and a
@@ -83,7 +83,8 @@ apt install bande-mail
   desktop's file chooser) or to the Downloads folder.
   The reader's text can be selected with the pointer (a double-click selects a word) or, with
   the reader focused, Select All (Ctrl+A) for the chosen message, and copied with Copy (Ctrl+C)
-  or its context menu; a name or address offers New Message and Copy Address, a link Open Link
+  or its context menu; a name or address offers New Message, Copy Address and, for an address
+  Contacts does not have yet, Add to Contacts, which opens it there to fill in; a link Open Link
   and Copy Link. Pointing at a link shows where it goes, and a link whose text names another
   host than the one it leads to asks before it opens, with Cancel as the default.
   Files dropped or shared while no account is set up wait through account setup and then start
@@ -150,7 +151,7 @@ apt install bande-mail
   to is synced right after the move. Mailbox ▸ New Mailbox… and a mailbox's menu in the sidebar
   create, rename and delete mailboxes on the server; the special mailboxes keep their names.
 - **Compose** opens its own window, with From when there are several accounts, and Bcc when
-  View ▸ Bcc Address Field is on or the message has Bcc recipients. To, Cc and Bcc complete an address as you type it, from the senders of
+  View ▸ Bcc Address Field is on or the message has Bcc recipients. To, Cc and Bcc complete an address as you type it, from Contacts first, then the senders of
   your mail and the recipients of mail you sent, as found in the offline store; Tab, a comma or
   End takes the suggestion. Replies quote the
   message and thread it (`In-Reply-To`, `References`); forwards keep the attachments. The account's

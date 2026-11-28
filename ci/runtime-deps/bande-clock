@@ -1,0 +1,2 @@
+/usr/bin/bande-clock bande-clock depends
+/usr/share/zoneinfo/iso3166.tab tzdata depends

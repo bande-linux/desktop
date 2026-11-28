@@ -1,0 +1,3 @@
+/bin/sh dash required
+/proc/self/exe bande-greeter depends
+/usr/libexec/bande-greeter-session bande-greeter depends

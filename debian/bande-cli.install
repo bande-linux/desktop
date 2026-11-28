@@ -1,0 +1,2 @@
+debian/build/bin/bande usr/bin/
+debian/build/l10n/development/bande/* usr/share/bande/l10n/bande/

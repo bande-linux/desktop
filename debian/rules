@@ -18,6 +18,7 @@ export CFLAGS += -ffile-prefix-map=$(CARGO_TARGET_DIR)=/build/target
 PROFILE ?= dist
 OUT := $(CARGO_TARGET_DIR)/$(DEB_HOST_RUST_TYPE)/$(if $(filter dev,$(PROFILE)),debug,$(PROFILE))
 BUILD := debian/build
+SERVING := $(sort $(shell sed -n 's|^debian/build/intents/\([^/]*\)/.*|\1|p' debian/*.install))
 PROGRAMS := $(sort $(shell sed -n 's|^debian/build/bin/\([^ ]*\) .*|\1|p' debian/*.install))
 
 ifneq (,$(filter pkg.bande.vendor,$(DEB_BUILD_PROFILES)))
@@ -57,9 +58,9 @@ endif
 override_dh_auto_build-arch:
 	$(CARGO) build $(LOCKED) --profile $(PROFILE) --bin bande-l10n-tool --bin bande-cursor-theme $(PROGRAMS:%=--bin %)
 	$(CARGO) build $(LOCKED) --profile $(PROFILE) --package libpam-bande-secrets --lib
-	$(MAKE) -f debian/rules l10n bin security cursors metainfo
+	$(MAKE) -f debian/rules l10n bin security cursors metainfo intents
 
-.PHONY: bin security cursors metainfo plymouth l10n
+.PHONY: bin security cursors metainfo intents plymouth l10n
 
 bin:
 	mkdir -p $(BUILD)
@@ -75,6 +76,11 @@ cursors:
 metainfo:
 	mkdir -p $(BUILD)/metainfo
 	debian/metainfo.py $(BUILD)/metainfo crates/*/*/data/*.metainfo.xml
+
+intents:
+	for program in $(SERVING); do \
+		$(OUT)/$$program --write-intents $(BUILD)/intents/$$program || exit 1; \
+	done
 
 plymouth:
 	$(OUT)/bande-plymouth-theme $(BUILD)/plymouth/bande

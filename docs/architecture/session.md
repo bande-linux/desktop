@@ -330,6 +330,11 @@ UI.
 - Every toolkit widget produces an AccessKit node, published on AT-SPI2 for screen readers
   ([toolkit](toolkit.md)).
 
+### Intent owners
+
+- `bande-settings-intents` and `bande-system-intents` serve [intents](intents.md) (`org.bande.Intents.*`).
+  Both are D-Bus activated user units outside every target and end after an idle minute.
+
 ### Keyring (`bande-secrets`)
 
 - `crates/services/secrets` is the session's `org.freedesktop.secrets` (`plain` and
@@ -364,7 +369,10 @@ UI.
   password system-wide; Enterprise (802.1X) passwords and private-key passwords set in Settings
   are agent-owned, so they stay in the keyring.
 - Items record the app that saved them (`bande:creator`); another app sees them locked until the
-  user confirms with the keyring password (`bande:allowed` remembers "Always Allow"). Prompts
+  user confirms with the keyring password (`bande:allowed` remembers "Always Allow"). The saving
+  app, unless it is a Flatpak, may name in `bande:shared` the programs that read and remove its
+  item without a question; they never save into it, saving again names them anew, and nobody can
+  change who owns the item. Prompts
   are `bande-secrets-prompt` processes, so the daemon never links the toolkit; the daemon is not
   dumpable.
 - GnuPG's passphrases and smartcard PINs are asked by the same prompt: `pinentry-bande`
@@ -385,6 +393,13 @@ UI.
   and `--message` for `SSH_ASKPASS_PROMPT=confirm` and `none` (a security key's touch, whose prompt
   closes when SSH ends the askpass), and prints the passphrase on standard output. Outside a Bande
   session it executes `ksshaskpass`, `gnome-ssh-askpass` or `lxqt-openssh-askpass`.
+- Calendar and Contacts keep their account passwords under their app ids (`bande_keyring::Passwords`,
+  attribute `account`). "Also use this account for …" leaves the password under
+  `org.bande.AccountOffers` (attribute `offer`) with the server and user in
+  `~/.local/share/bande/account-offers/`; the item names the other app in `bande:shared`, so it
+  reads the password without a question when it adopts the account, saves it as its own and removes
+  the offer. The password goes to the offered server, else to the HTTPS server the address's
+  domain points to; when that is outside the domain, the app first asks "Sign in at …?". Removing the account first withdraws the offer.
 
 ### Updates during a session
 

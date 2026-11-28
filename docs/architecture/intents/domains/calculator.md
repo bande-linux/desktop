@@ -13,7 +13,7 @@ noun `entry`. Owner: `bande-system-intents`. Work package D21.
 | `calculator.compute` | `expression`; gives a text | `read` |  | ready (`bande_search::calculate`, units included, no network) | A |
 | `dictionary.open` | `word` | `show`; refused while an online source is on |  | ready | B |
 
-Phrases in Search: "{expression}", "define {word}".
+Phrases in Search: "define {word}". Search shows results of its own for expressions.
 
 `dictionary.find` uses installed dictionaries only and returns the entries' text. The calculator's
 tape, adding dictionaries and online sources have no intent.

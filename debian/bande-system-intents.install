@@ -1,0 +1,5 @@
+debian/build/bin/bande-system-intents usr/libexec/
+crates/services/system-intents/data/bande-system-intents.service usr/lib/systemd/user/
+crates/services/system-intents/data/org.bande.Intents.System.service usr/share/dbus-1/services/
+debian/build/intents/bande-system-intents/* usr/share/bande/intents/
+debian/build/l10n/development/bande-system-intents/* usr/share/bande/l10n/bande-system-intents/

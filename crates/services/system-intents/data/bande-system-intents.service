@@ -1,0 +1,8 @@
+[Unit]
+Description=Bande system operations for other programs
+
+[Service]
+Slice=session.slice
+Type=dbus
+BusName=org.bande.Intents.System
+ExecStart=/usr/libexec/bande-system-intents

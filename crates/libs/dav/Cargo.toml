@@ -1,0 +1,25 @@
+[package]
+name = "bande-dav"
+description = "CalDAV and CardDAV client with offline sync, shared by Calendar and Contacts"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+bande-discovery.workspace = true
+bande-https.workspace = true
+bande-keyring.workspace = true
+bande-xdg.workspace = true
+base64.workspace = true
+md-5.workspace = true
+roxmltree.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tracing.workspace = true
+
+[lints]
+workspace = true

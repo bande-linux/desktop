@@ -1,0 +1,4 @@
+[D-BUS Service]
+Name=org.bande.Intents.System
+Exec=/usr/libexec/bande-system-intents
+SystemdService=bande-system-intents.service

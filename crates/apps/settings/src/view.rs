@@ -24,6 +24,7 @@ use bande_toolkit::{Appearance, Image, Palette, Rect, SHEET_INSET, Scene, Sessio
 use jiff::Zoned;
 
 use crate::about::{About, AboutCommand};
+use crate::activity::ActivityCommand;
 use crate::backup::{BackupIntent, BackupView};
 use crate::battery::{BatteryCommand, PowerState};
 use crate::defaults::{DefaultApp, DefaultAppCommand};
@@ -177,6 +178,7 @@ pub(crate) enum Intent {
     DefaultApp(&'static str, String),
     Grant(Permission, String, bool),
     KeyboardAccess(String, bool),
+    UndoActivity(String),
     Spelling(crate::spelling::SpellingCommand),
     Battery(BatteryCommand),
     EditReplacement(Option<String>),
@@ -368,6 +370,7 @@ pub struct SettingsView {
     pub(crate) refused: Vec<Privilege>,
     pub(crate) default_apps: Option<Vec<DefaultApp>>,
     pub(crate) permissions: Grants,
+    pub(crate) activity: Option<Vec<bande_intents::Receipt>>,
     pub(crate) keyboard_access: Vec<crate::consent::KeyboardAccess>,
     pub(crate) spelling: crate::spelling::SpellingState,
     pub(crate) replacing: Option<crate::spelling::Replacing>,
@@ -493,6 +496,7 @@ impl SettingsView {
             refused: Vec::new(),
             default_apps: None,
             permissions: Vec::new(),
+            activity: None,
             keyboard_access: Vec::new(),
             spelling: Default::default(),
             replacing: None,
@@ -746,6 +750,7 @@ impl SettingsView {
                 &[SettingId::StorageUsage, SettingId::LargeFiles],
             ),
             Update::Backup(_) => (Some(PaneId::Backup), &[SettingId::BackupStatus]),
+            Update::Activity(_) => (Some(PaneId::Activity), &[SettingId::Activity]),
             Update::Software(_)
             | Update::SoftwareChecked(_)
             | Update::SoftwareHint(_)
@@ -1009,6 +1014,7 @@ impl SettingsView {
                 self.sharing = Some(state);
             }
             Update::KeyboardAccess(access) => self.keyboard_access = access,
+            Update::Activity(receipts) => self.activity = Some(receipts),
             Update::Spelling(state) => self.spelling = state,
             Update::Security(status) => self.security = status,
             Update::Printers(printers) => {
@@ -1151,6 +1157,7 @@ impl SettingsView {
             | PaneId::Storage
             | PaneId::Diagnostics
             | PaneId::Backup
+            | PaneId::Activity
             | PaneId::Mouse
             | PaneId::Trackpad
             | PaneId::SoftwareUpdate => true,
@@ -1656,6 +1663,7 @@ impl SettingsView {
                 }
                 Intent::Grant(permission, app, on) => self.grant(permission, app, on),
                 Intent::KeyboardAccess(line, on) => self.change_keyboard_access(line, on),
+                Intent::UndoActivity(receipt) => self.undo_activity(receipt),
                 Intent::Spelling(command) => self.change_spelling(command),
                 Intent::Battery(command) => self.commands.push(Command::Battery(command)),
                 Intent::EditReplacement(original) => self.edit_replacement(original),
@@ -2171,6 +2179,9 @@ impl SettingsView {
                 .commands
                 .push(Command::Storage(StorageCommand::Measure)),
             PaneId::Backup => self.backup_opened(),
+            PaneId::Activity => self
+                .commands
+                .push(Command::Activity(ActivityCommand::Refresh)),
             PaneId::Apps => {
                 self.commands.push(Command::Login(LoginCommand::Refresh));
                 self.commands

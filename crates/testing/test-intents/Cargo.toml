@@ -1,0 +1,18 @@
+[package]
+name = "bande-test-intents"
+description = "The test every owner of Bande Intents passes"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+bande-intents.workspace = true
+bande-test-bus.workspace = true
+tempfile.workspace = true
+zbus.workspace = true
+
+[lints]
+workspace = true

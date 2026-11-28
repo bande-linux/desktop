@@ -1,48 +1,6 @@
 use std::ops::Range;
-use std::sync::Arc;
 
-use bande_graphics::Color;
-
-#[derive(Debug, Clone, PartialEq, Default)]
-pub struct TextAttributes {
-    pub bold: bool,
-    pub italic: bool,
-    pub underline: bool,
-    pub strikethrough: bool,
-    pub family: Option<Arc<str>>,
-    pub size: Option<f32>,
-    pub color: Option<Color>,
-    pub link: Option<Arc<str>>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum Alignment {
-    #[default]
-    Start,
-    Center,
-    End,
-    Justify,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ListMarker {
-    Bullet,
-    Number,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct ParagraphAttributes {
-    pub alignment: Alignment,
-    pub list: Option<ListMarker>,
-    pub level: u8,
-}
-
-#[derive(Debug, Clone, PartialEq, Default)]
-pub struct RichText {
-    pub text: String,
-    pub runs: Vec<(Range<usize>, TextAttributes)>,
-    pub paragraphs: Vec<ParagraphAttributes>,
-}
+pub use bande_rich_text::{Alignment, ListMarker, ParagraphAttributes, RichText, TextAttributes};
 
 pub(super) type Runs = Vec<(usize, TextAttributes)>;
 
@@ -145,35 +103,33 @@ impl Fragment {
     }
 }
 
-impl RichText {
-    pub(super) fn line_runs(&self) -> Vec<Runs> {
-        let mut lines = Vec::new();
-        let mut start = 0;
-        for line in self.text.split('\n') {
-            let range = start..start + line.len();
-            let runs = self
-                .runs
-                .iter()
-                .filter_map(|(run, attributes)| {
-                    let (from, to) = (run.start.max(range.start), run.end.min(range.end));
-                    (from < to).then(|| (from - range.start..to - range.start, attributes))
-                })
-                .scan(0, |at, (run, attributes)| {
-                    let gap = (run.start - *at, TextAttributes::default());
-                    *at = run.end;
-                    Some([gap, (run.len(), attributes.clone())])
-                })
-                .flatten()
-                .collect::<Runs>();
-            let covered: usize = runs.iter().map(|(length, _)| length).sum();
-            let mut runs = runs;
-            runs.push((
-                line.len().saturating_sub(covered),
-                TextAttributes::default(),
-            ));
-            lines.push(normalize(runs));
-            start = range.end + 1;
-        }
-        lines
+pub(super) fn line_runs(rich: &RichText) -> Vec<Runs> {
+    let mut lines = Vec::new();
+    let mut start = 0;
+    for line in rich.text.split('\n') {
+        let range = start..start + line.len();
+        let runs = rich
+            .runs
+            .iter()
+            .filter_map(|(run, attributes)| {
+                let (from, to) = (run.start.max(range.start), run.end.min(range.end));
+                (from < to).then(|| (from - range.start..to - range.start, attributes))
+            })
+            .scan(0, |at, (run, attributes)| {
+                let gap = (run.start - *at, TextAttributes::default());
+                *at = run.end;
+                Some([gap, (run.len(), attributes.clone())])
+            })
+            .flatten()
+            .collect::<Runs>();
+        let covered: usize = runs.iter().map(|(length, _)| length).sum();
+        let mut runs = runs;
+        runs.push((
+            line.len().saturating_sub(covered),
+            TextAttributes::default(),
+        ));
+        lines.push(normalize(runs));
+        start = range.end + 1;
     }
+    lines
 }

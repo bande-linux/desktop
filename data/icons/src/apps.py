@@ -259,6 +259,17 @@ def calendar():
     return tile('#F27463', red, body)
 
 
+def contacts():
+    top, bottom = hue_field(195, 0.60, 0.11)
+    body = (rect(11, 10, 26, 28, 4, PAPER)
+            + rect(37, 15, 2.4, 5, 1.2, PAPER, 'opacity="0.7"')
+            + rect(37, 22, 2.4, 5, 1.2, PAPER, 'opacity="0.7"')
+            + rect(37, 29, 2.4, 5, 1.2, EMBER)
+            + circle(24, 20.5, 4.6, bottom, 'opacity="0.85"')
+            + path('M15.5 33.5a8.5 7 0 0 1 17 0Z', bottom, 'opacity="0.85"'))
+    return tile(top, bottom, body)
+
+
 ICONS = {
     'org.bande.Files': files,
     'org.bande.Terminal': terminal,
@@ -287,6 +298,7 @@ ICONS = {
     'org.bande.Mail': mail,
     'org.bande.Notes': notes,
     'org.bande.Calendar': calendar,
+    'org.bande.Contacts': contacts,
 }
 
 HICOLOR = {
@@ -294,6 +306,7 @@ HICOLOR = {
     'org.bande.Calculator': 'crates/apps/calculator/data/org.bande.Calculator.svg',
     'org.bande.Calendar': 'crates/apps/calendar/data/org.bande.Calendar.svg',
     'org.bande.Clock': 'crates/apps/clock/data/org.bande.Clock.svg',
+    'org.bande.Contacts': 'crates/apps/contacts/data/org.bande.Contacts.svg',
     'org.bande.Disks': 'crates/apps/disks/data/org.bande.Disks.svg',
     'org.bande.Files': 'crates/apps/files/data/org.bande.Files.svg',
     'org.bande.Installer': 'crates/apps/installer/data/org.bande.Installer.svg',

@@ -22,6 +22,7 @@ use std::rc::Rc;
 
 use accesskit::{ActionRequest, TreeUpdate};
 use bande_datetime::DateFormats;
+use bande_dav::offer::Offer;
 use bande_inbox::Outbox;
 use bande_l10n::{tr, trn};
 use bande_toolkit::ui::{Alert, ClipboardRequest, Context, Cursor, FreeLayout, Menu, Ui, WidgetId};
@@ -109,6 +110,7 @@ pub enum Request {
         url: String,
         change: crate::worker::Change,
     },
+    AnswerOffer(Offer, bool),
     Changed,
     Mail(String),
     Read(Vec<std::path::PathBuf>),
@@ -258,6 +260,7 @@ pub(crate) enum Confirm {
     Import(Vec<CalendarObject>, usize),
     DeleteCalendar(usize),
     Welcome(PathBuf),
+    Offer(Offer),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -289,6 +292,7 @@ pub(crate) struct Selection {
 
 pub struct CalendarView {
     library: Library,
+    contacts: bande_address_book::Directory,
     ui: Ui,
     host: WidgetId,
     access: WidgetId,
@@ -353,8 +357,9 @@ impl CalendarView {
         let host_id = bande_toolkit::ui::Widget::id(&host);
         let today = now.date();
         let cx = Context::new(text, palette);
-        Self {
+        let mut view = Self {
             library,
+            contacts: bande_address_book::Directory::open(),
             ui: Ui::new(Box::new(host), cx),
             host: host_id,
             access: WidgetId::next(),
@@ -400,7 +405,11 @@ impl CalendarView {
             pending_open: None,
             undo: Vec::new(),
             redo: Vec::new(),
+        };
+        if view.settings.birthdays {
+            view.refresh_birthdays();
         }
+        view
     }
 
     pub fn library(&self) -> &Library {
@@ -470,7 +479,28 @@ impl CalendarView {
         if settings.day_start != self.settings.day_start {
             self.scroll = f32::from(settings.day_start) * self.hour_height;
         }
+        let birthdays = settings.birthdays != self.settings.birthdays;
         self.settings = settings;
+        if birthdays {
+            self.refresh_birthdays();
+        }
+    }
+
+    /// Shows the birthdays of Contacts while the setting is on.
+    pub fn refresh_birthdays(&mut self) {
+        self.contacts.refresh();
+        let people: Vec<_> = match self.settings.birthdays {
+            true => self
+                .contacts
+                .people()
+                .iter()
+                .filter_map(|person| {
+                    Some((person.uid.clone(), person.name.clone(), person.birthday?))
+                })
+                .collect(),
+            false => Vec::new(),
+        };
+        self.library.set_birthdays(&people);
     }
 
     pub(crate) fn first_weekday(&self) -> Weekday {
@@ -542,6 +572,8 @@ impl CalendarView {
     pub fn set_focused(&mut self, focused: bool) {
         if !focused {
             self.press = None;
+        } else if self.settings.birthdays {
+            self.refresh_birthdays();
         }
     }
 
@@ -1526,6 +1558,51 @@ impl CalendarView {
         };
         keep(&mut self.undo, snapshot);
         self.redo.clear();
+    }
+
+    /// Lets undo and redo of events that a sync kept as copies change the copies.
+    pub fn follow(&mut self, calendar: &str, moved: &[(String, String)]) {
+        let Some(index) = self.library.calendar_index(calendar) else {
+            return;
+        };
+        for (from, to) in moved {
+            let Some(uid) = self
+                .stored_at(index, to)
+                .and_then(|object| self.library.object(index, object))
+                .map(|object| object.uid().to_owned())
+            else {
+                continue;
+            };
+            for step in self.undo.iter_mut().chain(&mut self.redo) {
+                if step.calendar == calendar && step.href == *from {
+                    step.href.clone_from(to);
+                    step.data = step
+                        .data
+                        .take()
+                        .map(|data| crate::sync::copied(&data, &uid).unwrap_or(data));
+                }
+            }
+        }
+    }
+
+    /// Asks whether to sign in at the server of an account Contacts offered; asked again at a
+    /// later sync when another dialog is open.
+    pub fn ask_offer(&mut self, offer: Offer) {
+        if self.ui.has_sheet() || self.confirm.is_some() {
+            return;
+        }
+        let alert = Alert::new(
+            &tr!("Sign in at {host}?", host = offer.host()),
+            &tr!(
+                "The calendars of {address} are on this server. Check that it belongs to your provider before Calendar sends your password to it.",
+                address = offer.address.clone()
+            ),
+            self.choice(),
+        )
+        .cancel(&tr!("Not Now"), "cancel")
+        .primary(&tr!("Sign In"), "accept");
+        self.confirm = Some(Confirm::Offer(offer));
+        self.ui.present_dialog(alert);
     }
 
     fn stored_at(&self, calendar: usize, href: &str) -> Option<usize> {

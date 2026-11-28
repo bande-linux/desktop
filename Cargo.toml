@@ -121,6 +121,7 @@ zeroize = { version = "1.8.1", features = ["serde"] }
 zip = { version = "9.1.3", default-features = false, features = ["aes-crypto", "bzip2", "deflate-flate2", "deflate64", "lzma"] }
 bande-app = { path = "crates/libs/app" }
 bande-app-menu = { path = "crates/libs/app-menu" }
+bande-address-book = { path = "crates/libs/address-book" }
 bande-app-settings = { path = "crates/libs/app-settings" }
 bande-audio = { path = "crates/libs/audio" }
 bande-automount = { path = "crates/services/automount" }
@@ -129,13 +130,16 @@ bande-bar = { path = "crates/shell/bar" }
 bande-bench = { path = "crates/testing/bench" }
 bande-bluetooth = { path = "crates/libs/bluetooth" }
 bande-bus = { path = "crates/libs/bus" }
+bande-cli = { path = "crates/services/cli" }
 bande-clipboard = { path = "crates/services/clipboard" }
 bande-colour = { path = "crates/libs/colour" }
 bande-compositor = { path = "crates/platform/compositor" }
 bande-config = { path = "crates/services/config" }
 bande-content = { path = "crates/libs/content" }
+bande-content-lines = { path = "crates/libs/content-lines" }
 bande-crash-reports = { path = "crates/services/crash-reports" }
 bande-datetime = { path = "crates/libs/datetime" }
+bande-dav = { path = "crates/libs/dav" }
 bande-design = { path = "crates/toolkit/design" }
 bande-desktop-surface = { path = "crates/shell/desktop" }
 bande-dict = { path = "crates/libs/dict" }
@@ -149,6 +153,8 @@ bande-greeter = { path = "crates/shell/greeter" }
 bande-https = { path = "crates/libs/https" }
 bande-inbox = { path = "crates/libs/inbox" }
 bande-indexer = { path = "crates/services/index" }
+bande-intents = { path = "crates/libs/intents" }
+bande-intents-macros = { path = "crates/libs/intents-macros" }
 bande-keyboard = { path = "crates/libs/keyboard" }
 bande-keyring = { path = "crates/libs/keyring" }
 bande-l10n = { path = "crates/libs/l10n" }
@@ -184,6 +190,8 @@ bande-screenshot = { path = "crates/shell/screenshot" }
 bande-search = { path = "crates/libs/search" }
 bande-secrets = { path = "crates/services/secrets" }
 bande-settings = { path = "crates/apps/settings" }
+bande-settings-client = { path = "crates/libs/settings-client" }
+bande-settings-intents = { path = "crates/services/settings-intents" }
 bande-settings-panes = { path = "crates/libs/settings-panes" }
 bande-shell = { path = "crates/shell/shell" }
 bande-screen-sharing = { path = "crates/services/screen-sharing", default-features = false }
@@ -194,6 +202,7 @@ bande-status = { path = "crates/libs/status" }
 bande-taskbar-model = { path = "crates/libs/taskbar-model" }
 bande-terminal-view = { path = "crates/libs/terminal-view" }
 bande-test-bus = { path = "crates/testing/test-bus" }
+bande-test-intents = { path = "crates/testing/test-intents" }
 bande-test-wayland = { path = "crates/testing/test-wayland" }
 bande-thumbnails = { path = "crates/libs/thumbnails" }
 bande-toolkit = { path = "crates/toolkit/toolkit" }

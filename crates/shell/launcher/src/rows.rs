@@ -144,7 +144,7 @@ pub fn icon_items(
 ) {
     match (hit.kind, icon) {
         (Kind::Calculation, _) => calculation_badge(cx, rect, selected, items),
-        (Kind::Command, glyph) => {
+        (Kind::Command | Kind::Offer, glyph) => {
             badge(cx, rect, selected, items);
             let inset = (rect.width * COMMAND_GLYPH_INSET).round();
             items.extend(glyph.map(|glyph| Item::Image {
@@ -228,6 +228,7 @@ pub fn hit_menu(hit: &Hit, model: &Model) -> Menu {
             MenuItem::separator(),
             MenuItem::new(&tr!("Copy Path"), COPY).shortcut("Ctrl+C"),
         ],
+        Target::Offer { .. } => vec![MenuItem::new(&tr!("Do It"), OPEN).shortcut("Return")],
         Target::App(_) | Target::Settings(_) | Target::Command(_) | Target::Item { .. } => {
             vec![MenuItem::new(&tr!("Open"), OPEN).shortcut("Return")]
         }

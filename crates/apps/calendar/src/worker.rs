@@ -1,15 +1,16 @@
-use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::os::fd::{AsFd, BorrowedFd};
 use std::os::unix::net::UnixStream;
 use std::sync::mpsc::{Receiver, Sender, channel};
 
-use bande_keyring::Keyring;
+use bande_keyring::Passwords;
 
-use crate::caldav::{Availability, Client, Credentials, Error, Principal, RemoteCalendar};
+use crate::caldav::{Availability, Principal, availability, scheduling, search_principals};
 use crate::ical::freebusy::Period;
 use crate::store::{AccountKind, Calendar};
 use crate::sync::{Outcome, sync_calendar};
+use bande_dav::offer::{self, Answer, Offer};
+use bande_dav::{Client, Credentials, Discovered, Error, RemoteCalendar, Service};
 
 const KEYRING: &str = "org.bande.Calendar";
 
@@ -17,6 +18,13 @@ const KEYRING: &str = "org.bande.Calendar";
 pub enum Job {
     Sync(Vec<(AccountKind, String, Calendar)>),
     Forget(String),
+    Adopt,
+    Accept(Offer),
+    Decline(Offer),
+    Offer {
+        offer: Offer,
+        password: String,
+    },
     SetPassword {
         account: String,
         user: String,
@@ -61,6 +69,11 @@ pub enum Change {
 #[derive(Debug)]
 pub enum Reply {
     Synced(Outcome),
+    Adopted {
+        offer: Offer,
+        answer: Answer<Discovered>,
+    },
+    OfferFailed(String),
     Refreshed {
         calendar: String,
         data: String,
@@ -108,61 +121,44 @@ pub fn http_url(url: &str) -> String {
     }
 }
 
-struct Passwords {
-    keyring: Option<Keyring>,
-    known: HashMap<String, String>,
-}
-
-impl Passwords {
-    fn keyring(&mut self) -> Option<&Keyring> {
-        if self.keyring.is_none() {
-            self.keyring = Keyring::open(KEYRING)
-                .map_err(|error| tracing::warn!("cannot open the keyring: {error}"))
-                .ok();
-        }
-        self.keyring.as_ref()
-    }
-
-    fn get(&mut self, account: &str) -> Option<String> {
-        if let Some(password) = self.known.get(account) {
-            return Some(password.clone());
-        }
-        let password = self
-            .keyring()?
-            .password(&[("account", account)])
-            .map_err(|error| tracing::warn!("cannot read the password: {error}"))
-            .ok()
-            .flatten()?;
-        self.known.insert(account.to_owned(), password.clone());
-        Some(password)
-    }
-}
-
 fn signed_in(passwords: &mut Passwords, account: &str, user: String) -> Client {
     let credentials = passwords
         .get(account)
         .map(|password| Credentials { user, password });
-    Client::new(credentials.as_ref())
+    Client::new(Service::CalDav, credentials.as_ref())
 }
 
 fn run(job: Job, passwords: &mut Passwords, reply: &mut dyn FnMut(Reply)) {
     match job {
         Job::Sync(calendars) => {
             for (kind, account, calendar) in calendars {
+                let failed = |error: Error| Reply::Failed {
+                    calendar: calendar.info.id.clone(),
+                    error: error.to_string(),
+                };
                 let result = match &kind {
                     AccountKind::CalDav { user, .. } => {
                         let credentials = passwords.get(&account).map(|password| Credentials {
                             user: user.clone(),
                             password,
                         });
-                        sync_calendar(&Client::new(credentials.as_ref()), &calendar)
-                            .map(Reply::Synced)
+                        sync_calendar(
+                            &Client::new(Service::CalDav, credentials.as_ref()),
+                            &calendar,
+                        )
+                        .and_then(|mut outcome| {
+                            let error = outcome.error.take();
+                            reply(Reply::Synced(outcome));
+                            error.map_or(Ok(None), Err)
+                        })
                     }
-                    AccountKind::Subscription { url, .. } => Client::new(None)
+                    AccountKind::Subscription { url, .. } => Client::new(Service::CalDav, None)
                         .get(&http_url(url))
-                        .map(|resource| Reply::Refreshed {
-                            calendar: calendar.info.id.clone(),
-                            data: resource.data,
+                        .map(|resource| {
+                            Some(Reply::Refreshed {
+                                calendar: calendar.info.id.clone(),
+                                data: resource.data,
+                            })
                         }),
                     AccountKind::Local => continue,
                 };
@@ -171,10 +167,9 @@ fn run(job: Job, passwords: &mut Passwords, reply: &mut dyn FnMut(Reply)) {
                         account: account.clone(),
                     });
                 }
-                reply(result.unwrap_or_else(|error: Error| Reply::Failed {
-                    calendar: calendar.info.id.clone(),
-                    error: error.to_string(),
-                }));
+                if let Some(answer) = result.unwrap_or_else(|error| Some(failed(error))) {
+                    reply(answer);
+                }
             }
             reply(Reply::Finished);
         }
@@ -183,13 +178,7 @@ fn run(job: Job, passwords: &mut Passwords, reply: &mut dyn FnMut(Reply)) {
             user,
             password,
         } => {
-            let label = format!("Calendar: {user}");
-            if let Some(keyring) = passwords.keyring()
-                && let Err(error) = keyring.save(&[("account", &account)], &label, &password)
-            {
-                tracing::warn!("cannot keep the password: {error}");
-            }
-            passwords.known.insert(account, password);
+            passwords.set(&account, &format!("Calendar: {user}"), &password);
         }
         Job::Collection {
             account,
@@ -224,11 +213,8 @@ fn run(job: Job, passwords: &mut Passwords, reply: &mut dyn FnMut(Reply)) {
             window,
         } => {
             let client = signed_in(passwords, &account, user);
-            let answers = client
-                .scheduling(&home)
-                .and_then(|scheduling| {
-                    client.availability(&scheduling, &organizer, &attendees, window)
-                })
+            let answers = scheduling(&client, &home)
+                .and_then(|found| availability(&client, &found, &organizer, &attendees, window))
                 .map_err(|error| error.to_string());
             reply(Reply::Availability(answers));
         }
@@ -239,9 +225,8 @@ fn run(job: Job, passwords: &mut Passwords, reply: &mut dyn FnMut(Reply)) {
             text,
         } => {
             let client = signed_in(passwords, &account, user);
-            let found = client
-                .scheduling(&home)
-                .and_then(|scheduling| client.search_principals(&scheduling.principal, &text))
+            let found = scheduling(&client, &home)
+                .and_then(|found| search_principals(&client, &found.principal, &text))
                 .map_err(|error| error.to_string());
             reply(Reply::Directory(found));
         }
@@ -261,11 +246,26 @@ fn run(job: Job, passwords: &mut Passwords, reply: &mut dyn FnMut(Reply)) {
             });
         }
         Job::Forget(account) => {
-            passwords.known.remove(&account);
-            if let Some(keyring) = passwords.keyring()
-                && let Err(error) = keyring.forget(&[("account", &account)])
-            {
-                tracing::warn!("cannot forget the password: {error}");
+            passwords.forget(&account);
+            offer::withdraw(Service::CardDav, &account);
+        }
+        Job::Adopt => {
+            let answered = offer::adopt(Service::CalDav, |client, server| {
+                client.discover_calendars(server)
+            });
+            for (offer, answer) in answered {
+                reply(Reply::Adopted { offer, answer });
+            }
+        }
+        Job::Accept(offer) => {
+            if let Err(error) = offer::accept(Service::CalDav, &offer) {
+                tracing::warn!("cannot accept the offered account: {error}");
+            }
+        }
+        Job::Decline(offer) => offer::withdraw(Service::CalDav, &offer.id),
+        Job::Offer { offer, password } => {
+            if let Err(error) = offer::make(Service::CardDav, &offer, &password) {
+                reply(Reply::OfferFailed(error));
             }
         }
     }
@@ -280,10 +280,7 @@ impl Worker {
         std::thread::Builder::new()
             .name("sync".to_owned())
             .spawn(move || {
-                let mut passwords = Passwords {
-                    keyring: None,
-                    known: HashMap::new(),
-                };
+                let mut passwords = Passwords::new(KEYRING);
                 for job in inbox {
                     run(job, &mut passwords, &mut |reply| {
                         if outbox.send(reply).is_ok() {

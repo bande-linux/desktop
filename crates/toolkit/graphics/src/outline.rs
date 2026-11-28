@@ -25,6 +25,7 @@ const COLOR_TABLES: [Tag; 4] = [
     Tag::new(b"SVG "),
 ];
 const UNUSED_FRAMES: u64 = 64;
+const COLOURED_BYTES: u64 = 64 << 20;
 const KNOWN_BOUNDS: usize = 16384;
 const COLOUR_GLYPH: kurbo::Rect = kurbo::Rect::new(-1.0, -2.0, 2.0, 1.0);
 const GLYPH_TOLERANCE: f64 = 1e-5;
@@ -170,7 +171,32 @@ impl GlyphOutlines {
                 used: frame,
             });
         entry.used = frame;
-        entry.drawn.clone()
+        let drawn = entry.drawn.clone();
+        self.keep_coloured_within(COLOURED_BYTES);
+        drawn
+    }
+
+    fn keep_coloured_within(&mut self, bytes: u64) {
+        let size = |entry: &Entry<GlyphBitmap>| {
+            entry.drawn.as_ref().map_or(0, |bitmap| {
+                u64::from(bitmap.image.width()) * u64::from(bitmap.image.height()) * 4
+            })
+        };
+        let mut kept: u64 = self.coloured.values().map(size).sum();
+        while kept > bytes {
+            let Some(oldest) = self
+                .coloured
+                .iter()
+                .filter(|(_, entry)| entry.used < self.frame)
+                .min_by_key(|(_, entry)| entry.used)
+                .map(|(key, _)| key.clone())
+            else {
+                return;
+            };
+            if let Some(entry) = self.coloured.remove(&oldest) {
+                kept -= size(&entry);
+            }
+        }
     }
 
     pub(crate) fn rescale(&mut self, scale: f64) -> bool {
@@ -407,4 +433,28 @@ pub(crate) fn ink(runs: &[GlyphRun]) -> Option<Rect> {
         painted.width() as f32,
         painted.height() as f32,
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::colr::tests::{SOLID, font, run};
+
+    #[test]
+    fn colour_glyphs_kept_for_later_frames_stay_within_their_room() {
+        let font = font();
+        let mut outlines = GlyphOutlines::default();
+        outlines.rescale(1.0);
+        for size in (1000..2000).step_by(25) {
+            outlines.coloured(&run(&font, SOLID, size as f32), SOLID);
+            outlines.end_frame();
+        }
+        let kept: u64 = outlines
+            .coloured
+            .values()
+            .filter_map(|entry| entry.drawn.as_ref())
+            .map(|bitmap| u64::from(bitmap.image.width()) * u64::from(bitmap.image.height()) * 4)
+            .sum();
+        assert!(kept <= COLOURED_BYTES, "{} MiB kept", kept >> 20);
+    }
 }

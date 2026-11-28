@@ -70,11 +70,16 @@ jobs:
             published=
           fi
           inputs=bande-inputs-$debian-$(scripts/inputs.sh)
-          built=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=$(jq -rn --arg name "$inputs" '$name | @uri')" \
-            --jq '[.artifacts[] | select((.expired | not) and .workflow_run.head_branch == "main")] | length')
+          built=0
+          for run in $(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=$(jq -rn --arg name "$inputs" '$name | @uri')" \
+            --jq '[.artifacts[] | select((.expired | not) and .workflow_run.head_branch == "main") | .workflow_run.id] | unique | .[]'); do
+            if [ "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run" --jq .conclusion)" = success ]; then
+              built=$((built + 1))
+            fi
+          done
           if [ -z "$published" ] && [ -z "$TEST_VERSION" ] && [ "$FORCE" != true ]; then
             if [ "$built" -eq 0 ]; then
-              echo "::error::The archive serves no bande-browser in $SUITE and none is built from these inputs; dispatch with force to build one"
+              echo "::error::The archive serves no bande-browser in $SUITE and no green run built these inputs; dispatch with force to build one"
               exit 1
             fi
             echo "::warning::The archive serves no bande-browser in $SUITE; its publish takes the one built from these inputs"

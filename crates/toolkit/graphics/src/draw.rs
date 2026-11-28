@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::{Arc, Weak};
 use vello_cpu::color::{AlphaColor, Srgb};
@@ -41,7 +42,7 @@ const MOST_PAINTS: u32 = 1 << 20;
 const MOST_GRADIENTS: u32 = 1 << 13;
 const FARTHEST: f64 = 1e8;
 const FARTHEST_TEXEL: f64 = 4e6;
-const FARTHEST_ON_SCREEN: f64 = 1e12;
+const PLACEABLE: f64 = 32_000.0;
 const RELATIVE_TOLERANCE: f64 = 1e-6;
 const ANTIALIASING_PIXEL: f64 = 1.0;
 const LYING_MARGIN: f64 = 2.0;
@@ -62,6 +63,73 @@ fn coordinate(value: f32) -> f64 {
 
 fn point(point: Point) -> kurbo::Point {
     kurbo::Point::new(coordinate(point.x), coordinate(point.y))
+}
+
+fn place(value: f32) -> f64 {
+    match value.is_nan() {
+        true => 0.0,
+        false => f64::from(value).clamp(-f64::from(f32::MAX), f64::from(f32::MAX)),
+    }
+}
+
+fn spot(point: Point) -> kurbo::Point {
+    kurbo::Point::new(place(point.x), place(point.y))
+}
+
+/// The polygons of a flattened `path` cut to `bounds`, each edge kept on its own line.
+fn cut_to(path: &BezPath, bounds: kurbo::Rect) -> BezPath {
+    let mut cut = BezPath::new();
+    let mut polygon = Vec::new();
+    let mut close = |polygon: &mut Vec<kurbo::Point>| {
+        let kept = within(std::mem::take(polygon), bounds);
+        if let Some((first, rest)) = kept.split_first() {
+            cut.move_to(*first);
+            rest.iter().for_each(|corner| cut.line_to(*corner));
+            cut.close_path();
+        }
+    };
+    kurbo::flatten(path, TOLERANCE, |element| match element {
+        kurbo::PathEl::MoveTo(at) => {
+            close(&mut polygon);
+            polygon.push(at);
+        }
+        kurbo::PathEl::LineTo(at) => polygon.push(at),
+        kurbo::PathEl::ClosePath => close(&mut polygon),
+        kurbo::PathEl::QuadTo(..) | kurbo::PathEl::CurveTo(..) => {}
+    });
+    close(&mut polygon);
+    cut
+}
+
+type Side = (fn(kurbo::Point) -> f64, f64, bool);
+
+fn within(mut polygon: Vec<kurbo::Point>, bounds: kurbo::Rect) -> Vec<kurbo::Point> {
+    let sides: [Side; 4] = [
+        (|at| at.x, bounds.x0, true),
+        (|at| at.x, bounds.x1, false),
+        (|at| at.y, bounds.y0, true),
+        (|at| at.y, bounds.y1, false),
+    ];
+    for (along, edge, above) in sides {
+        let inside = |at: kurbo::Point| (along(at) >= edge) == above || along(at) == edge;
+        let Some(&last) = polygon.last() else {
+            return polygon;
+        };
+        let mut kept = Vec::with_capacity(polygon.len() + 2);
+        let mut from = last;
+        for to in polygon {
+            if inside(to) != inside(from) {
+                let share = (edge - along(from)) / (along(to) - along(from));
+                kept.push(from.lerp(to, share));
+            }
+            if inside(to) {
+                kept.push(to);
+            }
+            from = to;
+        }
+        polygon = kept;
+    }
+    polygon
 }
 
 fn tolerance(longest_curve: f64) -> f64 {
@@ -118,10 +186,10 @@ fn affine(transform: Transform) -> Affine {
 
 fn rect(rect: Rect) -> kurbo::Rect {
     kurbo::Rect::new(
-        coordinate(rect.x),
-        coordinate(rect.y),
-        coordinate(rect.x + rect.width),
-        coordinate(rect.y + rect.height),
+        place(rect.x),
+        place(rect.y),
+        place(rect.x + rect.width),
+        place(rect.y + rect.height),
     )
 }
 
@@ -146,6 +214,11 @@ fn flattened(path: &BezPath) -> BezPath {
 
 fn std_deviation(blur_radius: f32) -> f32 {
     (coordinate(blur_radius).max(0.0) / 2.0 * std::f64::consts::SQRT_2) as f32
+}
+
+fn shadowed(area: kurbo::Rect) -> kurbo::Rect {
+    let bounds = kurbo::Rect::new(-FARTHEST, -FARTHEST, FARTHEST, FARTHEST);
+    area.intersect(bounds)
 }
 
 fn path(shape: &Shape) -> BezPath {
@@ -249,10 +322,10 @@ fn bezier(path: &Path) -> BezPath {
     let mut bezier = BezPath::new();
     for element in &path.elements {
         match *element {
-            PathElement::Move(to) => bezier.move_to(point(to)),
-            PathElement::Line(to) => bezier.line_to(point(to)),
+            PathElement::Move(to) => bezier.move_to(spot(to)),
+            PathElement::Line(to) => bezier.line_to(spot(to)),
             PathElement::Cubic(first, second, to) => {
-                bezier.curve_to(point(first), point(second), point(to));
+                bezier.curve_to(spot(first), spot(second), spot(to));
             }
             PathElement::Close => bezier.close_path(),
         }
@@ -353,8 +426,7 @@ impl Reach<'_> {
             .transform
             .transform_rect_bbox(bounds)
             .inflate(ANTIALIASING_PIXEL, ANTIALIASING_PIXEL);
-        drawable(on_screen, FARTHEST_ON_SCREEN)
-            && self.drawn.iter().any(|drawn| drawn.overlaps(on_screen))
+        on_screen.is_finite() && self.drawn.iter().any(|drawn| drawn.overlaps(on_screen))
     }
 
     fn lies_within(self, shape: &Shape, inset: f32) -> bool {
@@ -498,7 +570,7 @@ fn record_item(item: &Item, caches: &mut Caches, ops: &mut Vec<Op>, reach: Optio
             blur_radius,
             color: shadow,
         } => ops.push(Op::Shadow {
-            rect: rect(shape.rect) + point(*offset).to_vec2(),
+            rect: shadowed(rect(shape.rect)) + point(*offset).to_vec2(),
             radius: coordinate(shape.radius) as f32,
             std_dev: std_deviation(*blur_radius),
             color: color(*shadow),
@@ -515,7 +587,7 @@ fn record_item(item: &Item, caches: &mut Caches, ops: &mut Vec<Op>, reach: Optio
             outside.extend(path(shape).reverse_subpaths().iter());
             ops.push(Op::Clip(outside));
             ops.push(Op::Shadow {
-                rect: rect(shape.rect) + point(*offset).to_vec2(),
+                rect: shadowed(rect(shape.rect)) + point(*offset).to_vec2(),
                 radius: coordinate(shape.radius) as f32,
                 std_dev: std_deviation(*blur_radius),
                 color: color(*shadow),
@@ -574,7 +646,7 @@ fn record_item(item: &Item, caches: &mut Caches, ops: &mut Vec<Op>, reach: Optio
             paint: stroke,
         } => ops.push(Op::Fill {
             path: stroked(
-                kurbo::Line::new(point(*from), point(*to)).to_path(TOLERANCE),
+                kurbo::Line::new(spot(*from), spot(*to)).to_path(TOLERANCE),
                 &Stroke::new(coordinate(*width)).with_caps(kurbo::Cap::Round),
             ),
             paint: paint(stroke),
@@ -829,6 +901,21 @@ impl<C: Canvas> Encoder<'_, C> {
         .touches(bounds)
     }
 
+    /// `path` cut to where the renderer can place it, unchanged where it is shown.
+    fn placeable<'p>(path: &'p BezPath, transform: Affine) -> Option<Cow<'p, BezPath>> {
+        let reach = PLACEABLE;
+        if drawable(transform.transform_rect_bbox(path.control_box()), reach) {
+            return Some(Cow::Borrowed(path));
+        }
+        if transform.determinant() == 0.0 {
+            return None;
+        }
+        let bounds = kurbo::Rect::new(-reach, -reach, reach, reach);
+        let mut cut = cut_to(&(transform * path), bounds);
+        cut.apply_affine(transform.inverse());
+        Some(Cow::Owned(cut))
+    }
+
     fn samples(&self, path: &BezPath, transform: Affine, placement: Affine) -> bool {
         let to_texels = (transform * placement).inverse();
         let on_screen = transform.transform_rect_bbox(path.control_box());
@@ -876,15 +963,18 @@ impl<C: Canvas> Encoder<'_, C> {
         self.canvas.set_transform(transform);
         for op in ops {
             match op {
-                Op::Fill { path, paint }
+                Op::Fill { path, paint } => {
+                    let Some(path) = Self::placeable(path, transform) else {
+                        continue;
+                    };
                     if self.reaches(path.control_box(), transform)
-                        && self.budget.affords(path, transform, self.drawn)
-                        && self.budget.affords_paint(paint) =>
-                {
-                    self.canvas.set_paint(paint.clone());
-                    self.canvas.fill_path(path);
+                        && self.budget.affords(&path, transform, self.drawn)
+                        && self.budget.affords_paint(paint)
+                    {
+                        self.canvas.set_paint(paint.clone());
+                        self.canvas.fill_path(&path);
+                    }
                 }
-                Op::Fill { .. } => {}
                 Op::Image {
                     path,
                     image,
@@ -894,6 +984,10 @@ impl<C: Canvas> Encoder<'_, C> {
                     let Some(id) = self.caches.images.get(image.id()) else {
                         continue;
                     };
+                    let Some(path) = Self::placeable(path, transform) else {
+                        continue;
+                    };
+                    let path = path.as_ref();
                     if !self.reaches(path.control_box(), transform)
                         || !self.samples(path, transform, *placement)
                         || !self.budget.affords(path, transform, self.drawn)
@@ -942,14 +1036,11 @@ impl<C: Canvas> Encoder<'_, C> {
                     self.canvas.set_transform(transform);
                 }
                 Op::Clip(clip) => {
-                    let shown = drawable(
-                        transform.transform_rect_bbox(clip.control_box()),
-                        FARTHEST_ON_SCREEN,
-                    );
-                    let shown = shown && self.budget.affords(clip, transform, self.drawn);
-                    let clip = match shown {
-                        true => clip.clone(),
-                        false => BezPath::new(),
+                    let clip = match Self::placeable(clip, transform) {
+                        Some(clip) if self.budget.affords(&clip, transform, self.drawn) => {
+                            clip.into_owned()
+                        }
+                        _ => BezPath::new(),
                     };
                     self.canvas.push_clip_layer(&clip);
                     self.clips.push((clip, transform));
@@ -991,12 +1082,12 @@ impl<C: Canvas> Encoder<'_, C> {
                     size,
                     scaling,
                 } => {
-                    let backing = rect(*frame);
-                    if !drawable(transform.transform_rect_bbox(backing), FARTHEST_ON_SCREEN) {
+                    let backing = rect(*frame).to_path(TOLERANCE);
+                    let Some(backing) = Self::placeable(&backing, transform) else {
                         continue;
-                    }
+                    };
                     self.canvas.set_paint(color(Color::BLACK).into());
-                    self.canvas.fill_path(&backing.to_path(TOLERANCE));
+                    self.canvas.fill_path(&backing);
                     let scale = transform.as_coeffs()[0];
                     if let Some(area) = surface_area(*frame, *size, *scaling, scale) {
                         self.punch(&path(&Shape::rect(area)), transform);
@@ -1180,6 +1271,41 @@ mod tests {
             .zip(&huge)
             .map(|(one, other)| one.abs_diff(*other));
         assert!(differs.max().is_some_and(|differs| differs <= 2));
+    }
+
+    #[test]
+    fn what_runs_far_past_the_window_keeps_its_direction() {
+        let black: Paint = Color::BLACK.into();
+        let far = Path::new()
+            .move_to(Point::new(0.0, 0.0))
+            .line_to(Point::new(2e9, 1e9))
+            .line_to(Point::new(0.0, 1e9))
+            .close();
+        let scene = |item: Item| Scene {
+            width: 64,
+            height: 64,
+            background: Color::WHITE,
+            items: vec![item],
+        };
+        let line = scene(Item::Line {
+            from: Point::new(0.0, 0.0),
+            to: Point::new(1e9, 5e8),
+            width: 4.0,
+            paint: black.clone(),
+        });
+        let filled = scene(Item::FillPath {
+            path: far,
+            paint: black,
+        });
+        let mut renderer = crate::cpu::CpuRenderer::new();
+        let shade = |scene: &Scene, renderer: &mut crate::cpu::CpuRenderer| {
+            let drawn = renderer.render(scene).expect("a frame").rgba;
+            move |x: usize, y: usize| drawn[(y * 64 + x) * 4]
+        };
+        let along = shade(&line, &mut renderer);
+        assert_eq!((along(40, 20), along(40, 40)), (0, 255));
+        let inside = shade(&filled, &mut renderer);
+        assert_eq!((inside(40, 30), inside(40, 10)), (0, 255));
     }
 
     #[test]

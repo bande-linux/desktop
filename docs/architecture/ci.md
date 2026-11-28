@@ -99,7 +99,8 @@ The workflows and what starts them:
   pushes to `main` that change `browser/` other than its Markdown docs, and dispatch; builds
   Bande's Browser ([`browser/README.md`](../../browser/README.md)) only when Debian's version or
   the hash of `browser/`'s inputs (`browser/scripts/inputs.sh`) has no build yet, one run at a
-  time.
+  time. A scheduled run with nothing to build deletes the run before it when that one was a
+  scheduled run with nothing to build too, so the list keeps the builds and the latest check.
 - `reproducible.yml`: weekly and on dispatch; below.
 - `debian-mode.yml`: weekly, on dispatch and on pull requests that change `Cargo.toml`,
   `Cargo.lock` or `debian/control`; below.
